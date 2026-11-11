@@ -30,6 +30,7 @@ const ACCESS_KEY_RECORD_KEYS = {
   confirm_inline_wait_seconds: true,
   persona: true,
   notes: true,
+  oauth_enabled: true,
   rate_limit_requests: true,
   rate_limit_burst: true,
   permissions: true,

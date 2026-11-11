@@ -1,11 +1,24 @@
 ---
-{"id": "topic.connecting", "title": "连接外部应用", "parent": "topic.about", "order": 20, "keywords": ["MCP 客户端", "连接", "设置", "外部智能体"], "sectionKeywords": {"commands": ["Claude Code", "Gemini CLI", "Antigravity", "Codex", "Cursor", "DeepSeek Harness", "代码片段", "命令"], "credentials": ["机密", "泄露", "保护", "Bearer"], "several-keys": ["多个配置", "多个密钥", "服务器名称"], "connection": ["URL", "端点", "Streamable HTTP", "SSE", "协议", "会话"], "reconnect": ["工具已更改", "刷新工具"], "primer": ["指令", "备注", "技能", "SKILL.md"], "ha-mcp-server": ["Home Assistant MCP Server", "/api/mcp", "托管", "连接器"], "problems": ["401", "403", "429", "503", "未授权", "禁止", "排查"], "remote": ["远程访问", "Nabu Casa", "外出", "VPN", "Tailscale", "反向代理", "https"]}}
+{"id": "topic.connecting", "title": "连接外部应用", "parent": "topic.about", "order": 20, "keywords": ["MCP 客户端", "连接", "设置", "外部智能体"], "sectionKeywords": {"methods": ["OAuth", "访问密钥", "哪种方式", "标头"], "commands": ["Claude Code", "Gemini CLI", "Antigravity", "Codex", "Cursor", "DeepSeek Harness", "代码片段", "命令"], "credentials": ["机密", "泄露", "保护", "Bearer"], "several-keys": ["多个配置", "多个密钥", "服务器名称"], "connection": ["URL", "端点", "Streamable HTTP", "SSE", "协议", "会话"], "reconnect": ["工具已更改", "刷新工具"], "primer": ["指令", "备注", "技能", "SKILL.md"], "oauth": ["OAuth", "ChatGPT", "Claude", "自定义连接器", "手机应用", "托管", "登录"], "oauth-approve": ["批准", "拒绝", "登录请求", "同意"], "ha-mcp-server": ["Home Assistant MCP Server", "/api/mcp"], "problems": ["401", "403", "429", "503", "未授权", "禁止", "排查"], "remote": ["远程访问", "Nabu Casa", "外出", "VPN", "Tailscale", "反向代理", "https"]}}
 ---
-外部应用，例如编码助手或桌面聊天应用，使用一个访问密钥连接到 Phoenix。应用自己的模型负责思考，Phoenix 决定它可以做什么。
+外部应用，例如编码助手或桌面聊天应用，使用一个访问密钥连接到 Phoenix。应用自己的模型负责思考，Phoenix 决定它可以做什么。只接受服务器地址的应用会改为[通过 OAuth 登录](guide:#oauth)，而不发送密钥。
+
+## 两种连接方式 {#methods}
+
+连接说明以一个选择开始：
+
+- **{{label:wizard.methodKey}}**：应用在每个请求中都发送访问密钥。适用于编码助手和其他允许你设置标头的应用。
+- **{{label:wizard.methodOAuth}}**：应用只接受一个地址，并通过 Home Assistant 登录。适用于 ChatGPT、Claude 及其手机应用。不会复制任何机密内容。
+
+如果密钥已经允许 OAuth，说明会直接打开 OAuth 方式。每种方式只列出支持它的应用。
 
 ## 获取设置命令 {#commands}
 
-Phoenix 会显示 Claude Code、Gemini CLI、Antigravity CLI、Codex、Cursor 和 DeepSeek Harness 的确切命令或配置，并为其他 MCP 应用提供一个通用版本。它们出现在三个位置：
+Phoenix 会显示 Claude Code、Gemini CLI、Antigravity CLI、Codex、Cursor 和 DeepSeek Harness 的确切命令或配置，并为其他 MCP 应用提供一个通用版本。Claude Code 位于 Claude 选项卡，Codex 位于 ChatGPT 选项卡。
+
+在 **{{label:wizard.methodOAuth}}** 下，Phoenix 会显示 Claude、ChatGPT、VS Code 和 Antigravity 的登录步骤。Claude 选项卡也涵盖 Claude Code，ChatGPT 选项卡涵盖 ChatGPT 桌面应用。
+
+这些说明出现在三个位置：
 
 - [{{label:accessKeys.setUpAgent}}](guide:wizard.connect) 的连接步骤。
 - **{{label:accessKeys.postCreateConnectTitle}}**，就在你创建密钥之后。
@@ -33,11 +46,35 @@ Phoenix 会显示 Claude Code、Gemini CLI、Antigravity CLI、Codex、Cursor �
 
 Phoenix 通过 Streamable HTTP 使用 MCP。使用 SSE 传输的旧应用设置无法连接。耗时较长的操作会每 15 秒发送一条消息来保持连接。
 
+## 通过 OAuth 登录的应用 {#oauth}
+
+ChatGPT、Claude 及其手机应用无法发送访问密钥。它们只接受服务器地址，并改为登录。为此，Phoenix 运行自己的登录流程，与 Home Assistant 的登录分开。
+
+1. 在连接说明中选择 **{{label:wizard.methodOAuth}}**，或打开密钥的[密钥设置](guide:window.keySettings#oauth-sign-in)。开启 **{{label:oauth.switchLabel}}**。
+2. 选择你的应用的选项卡，并按其中的步骤操作。每个应用都使用 Phoenix 显示的地址。如有客户端 ID 和机密，请留空。
+3. 应用会在你的浏览器中打开 Home Assistant。以管理员身份登录，然后在 Phoenix 中批准该请求。
+
+Claude、ChatGPT、VS Code 和 Antigravity 可以通过这种方式登录，包括 Claude Code。Codex CLI、Cursor、Gemini CLI 和 DeepSeek Harness 不能；请改为给它们密钥。Codex CLI 会要求自行注册，而 Phoenix 不允许这样做。
+
+之后，应用会使用你为它批准的密钥，并遵循该密钥的权限、能力、审批和速率限制。它的请求会以该密钥的名义显示在审计日志中。
+
+应用必须能从互联网通过 HTTPS 访问 Home Assistant，地址就是 Phoenix 显示的那个。家庭网络或 VPN 地址对托管应用无效。
+
+### 批准登录 {#oauth-approve}
+
+Phoenix 会显示应用自报的名称、识别它的站点，以及它返回的地址。请检查这些是否与你刚连接的应用一致。
+
+选择应用获得的密钥，然后选择 **{{label:oauth.approve}}**。只有开启了 OAuth 且登录窗口期正在开放的密钥才会列出。你的浏览器会回到应用，应用随即完成连接。
+
+对于不是你发起的登录，请选择 **{{label:oauth.deny}}**。Phoenix 会拒绝它无法验证的应用，并且只从公共互联网地址获取应用的描述。
+
+只有 Home Assistant 管理员可以批准。应用只会获得密钥的权利，绝不会获得你的权利。对话框会倒计时显示该密钥的登录窗口期，并且只能通过它的按钮关闭，因为被关掉的请求无法找回。如果时间到了，请从应用重新开始。
+
 ## 从家庭网络外连接 {#remote}
 
 Phoenix 没有自己的远程服务。家庭网络外的应用会像浏览器一样访问它：通过你的 Nabu Casa 地址、你自己的域名，或 Tailscale 等 VPN。把设置命令中的 URL 改为该地址，后面加上 /api/phoenix-mcp。
 
-在家庭网络外请使用 https 地址，因为密钥会随每个请求发送。反向代理必须传递 Authorization 标头，并允许长时间响应。托管应用从其提供商的服务器连接，因此家庭网络或 VPN 地址对它们无效。
+在家庭网络外请使用 https 地址，因为密钥会随每个请求发送。反向代理必须传递 Authorization 标头、允许长时间响应，并传递原始主机和 https。托管应用从其提供商的服务器连接，因此家庭网络或 VPN 地址对它们无效。
 
 ## 工具发生变化时 {#reconnect}
 
@@ -53,7 +90,7 @@ Phoenix 没有自己的远程服务。家庭网络外的应用会像浏览器一
 
 ## 通过 Home Assistant 的 MCP Server {#ha-mcp-server}
 
-登录 Home Assistant 本身的应用，例如托管连接器，可以通过 Home Assistant 的 Model Context Protocol 集成访问 Phoenix 的工具。在 2026.11 之前，它叫 MCP Server。它们使用绑定到 [Assist 工具提供商](guide:topic.homeAssistantFeatures#assist-tool-provider)的密钥。
+登录 Home Assistant 本身的应用也可以通过 Home Assistant 的 Model Context Protocol 集成访问 Phoenix 的工具。对大多数应用来说，[OAuth 登录](guide:#oauth)更简单，并把它们限定在一个密钥上。在 2026.11 之前，它叫 MCP Server。它们使用绑定到 [Assist 工具提供商](guide:topic.homeAssistantFeatures#assist-tool-provider)的密钥。
 
 在 2026.11 上，请使用 /api/mcp/phoenix_mcp，它需要管理员登录。Home Assistant 2026.7 没有这个地址，2026.11 之前的其他版本也可能没有，因此请在这些版本上使用 /api/mcp。
 
@@ -67,7 +104,7 @@ Phoenix 没有自己的远程服务。家庭网络外的应用会像浏览器一
 
 ## 无法连接时 {#problems}
 
-- **未授权 (401)**：密钥错误、已吊销或已过期，或者被放在 URL 中而不是 Authorization 头中。
+- **未授权 (401)**：密钥错误、已吊销或已过期，或者被放在 URL 中而不是 Authorization 头中。对于已登录的应用，登录已结束：请重新批准。
 - **禁止 (403)**：某个网页试图从其他站点连接。桌面应用和命令行应用不受影响。
 - **请求过多 (429)**：密钥达到速率限制，或同时打开的连接过多。应用应等待后重试。
 - **不可用 (503)**：紧急停止开关已开启，或 Phoenix 仍在启动。

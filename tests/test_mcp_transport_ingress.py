@@ -933,7 +933,7 @@ async def test_the_first_refusal_in_the_contract_order_wins(env, hass, start):
     if request["auth"]:
         head.append(b"Authorization: Bearer " + raw.encode())
 
-    async def authenticate(*args):
+    async def authenticate(*args, **_kwargs):
         result = await async_get_authenticated_access_key(*args)
         if request["lose"]:
             key.revoked = True
@@ -978,7 +978,7 @@ async def test_a_refusal_audits_the_record_the_request_holds_at_that_moment(env,
     key, raw = await _key(data)
     replaced = replace(key, name="renamed")
 
-    async def authenticate(*args):
+    async def authenticate(*args, **_kwargs):
         result = await async_get_authenticated_access_key(*args)
         data.store._access_keys[key.id] = replaced
         return result
@@ -1012,7 +1012,7 @@ async def test_rate_limit_headers_report_the_record_read_after_the_body(env):
     key.rate_limit_requests = 50
     replaced = replace(key, rate_limit_requests=70)
 
-    async def authenticate(*args):
+    async def authenticate(*args, **_kwargs):
         result = await async_get_authenticated_access_key(*args)
         data.store._access_keys[key.id] = replaced
         return result
@@ -1037,7 +1037,7 @@ async def test_authority_lost_while_reading_answers_by_what_was_lost(env, hass, 
     client, data = env
     key, raw = await _key(data)
 
-    async def authenticate(*args):
+    async def authenticate(*args, **_kwargs):
         result = await async_get_authenticated_access_key(*args)
         lose(hass, data, key)
         return result
@@ -1058,7 +1058,7 @@ async def test_authority_lost_before_a_session_delete_is_audited(env, hass, lose
     client, data = env
     key, raw = await _key(data)
 
-    async def authenticate(*args):
+    async def authenticate(*args, **_kwargs):
         result = await async_get_authenticated_access_key(*args)
         lose(hass, data, key)
         return result
@@ -1494,3 +1494,36 @@ async def test_a_reply_holding_a_value_json_cannot_write_is_stringified(env):
         response = await client.post(ROUTE, headers=headers, json=PING)
     assert response.status == 200
     assert (await response.json())["result"]["value"] == "<class 'set'>"
+
+
+async def test_a_client_opening_sessions_at_once_is_not_refused_for_its_handshake(env):
+    """Initialized notifications and session closes count toward the minute, never the burst."""
+    client, data = env
+    key, raw = await _key(data)
+    key.rate_limit_requests, key.rate_limit_burst = 60, 4
+    sessions = []
+    for _ in range(3):
+        opened = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+        assert opened.status == 200
+        headers = _headers(raw, **{"Mcp-Session-Id": opened.headers["Mcp-Session-Id"]})
+        notified = await client.post(ROUTE, headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+        assert notified.status == 202
+        sessions.append(headers)
+    closed = await client.delete(ROUTE, headers=sessions[0])
+    assert closed.status == 204
+    # Three initialize requests used the burst; the four handshake messages did not.
+    assert len(data.rate_limiter._windows[key.id]) == 3
+    assert len(data.rate_limiter._quiet[key.id]) == 4
+    # With the burst full, handshake messages still pass and real requests are refused.
+    key.rate_limit_burst = 3
+    notified = await client.post(ROUTE, headers=sessions[1], json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    assert notified.status == 202
+    refused = await client.post(ROUTE, headers=sessions[1], json={**PING, "id": 9})
+    assert refused.status == 429 and int(refused.headers["Retry-After"]) >= 1
+    assert _audit_rows(data)[0] == ("POST", "/api/phoenix-mcp", "rate_limited")
+    garbage = await client.post(ROUTE, headers=sessions[1], data=b"not json")
+    assert garbage.status == 429
+    # A notification that carries an id is a request, and a batch never qualifies.
+    assert not mcp_transport._is_handshake_notification({"jsonrpc": "2.0", "id": 1, "method": "notifications/initialized"})
+    assert not mcp_transport._is_handshake_notification([{"jsonrpc": "2.0", "method": "notifications/initialized"}])
+    assert not mcp_transport._is_handshake_notification({"jsonrpc": "2.0", "method": "tools/list"})

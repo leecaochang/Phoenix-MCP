@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.adminApiKeys", "title": "Access Key Endpoints", "parent": "topic.adminApi", "order": 10, "keywords": ["access key API", "token API", "phx_", "create key", "permissions API", "capabilities API"], "sectionKeywords": { "access-keys": ["access key record", "key list"], "capability-fields": ["cap_", "deny", "allow", "confirm", "capability field"], "key-create": ["new key", "access_key", "raw value", "201"], "key-change": ["PATCH", "persona", "notes", "rename", "unknownFields"], "key-revoke": ["delete key", "revoke", "phoenix_mcp_access_key_revoked"], "key-rotate": ["rotate", "new value", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-audit": ["audit rows", "outcome filter", "client IP"], "key-archived": ["archived keys", "expired keys", "revoked keys"], "presets": ["preset", "saved settings", "access_key_presets_enabled"], "permissions": ["permission tree", "nodes", "domains", "devices", "entities"], "permissions-replace": ["PUT", "replace tree", "clear all"], "permissions-node": ["single node", "set state"], "bulk-select": ["area", "label", "integration", "selector"], "integration-options": ["config entry", "integration list"], "entity-hints": ["hint", "global hint", "entity_hints"], "entities": ["entity tree", "scope", "resolve", "force_reload"], "resolve": ["resolution_path", "effective permission", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] }, "covers": ["custom_components/phoenix_mcp/admin/access_keys.py", "custom_components/phoenix_mcp/admin/permissions.py", "custom_components/phoenix_mcp/access_key_store.py"] }
+{ "id": "topic.adminApiKeys", "title": "Access Key Endpoints", "parent": "topic.adminApi", "order": 10, "keywords": ["access key API", "token API", "phx_", "create key", "permissions API", "capabilities API"], "sectionKeywords": { "access-keys": ["access key record", "key list"], "capability-fields": ["cap_", "deny", "allow", "confirm", "capability field"], "oauth": ["OAuth", "sign-in", "connector", "window"], "key-create": ["new key", "access_key", "raw value", "201"], "key-change": ["PATCH", "persona", "notes", "rename", "unknownFields"], "key-revoke": ["delete key", "revoke", "phoenix_mcp_access_key_revoked"], "key-rotate": ["rotate", "new value", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-audit": ["audit rows", "outcome filter", "client IP"], "key-archived": ["archived keys", "expired keys", "revoked keys"], "presets": ["preset", "saved settings", "access_key_presets_enabled"], "permissions": ["permission tree", "nodes", "domains", "devices", "entities"], "permissions-replace": ["PUT", "replace tree", "clear all"], "permissions-node": ["single node", "set state"], "bulk-select": ["area", "label", "integration", "selector"], "integration-options": ["config entry", "integration list"], "entity-hints": ["hint", "global hint", "entity_hints"], "entities": ["entity tree", "scope", "resolve", "force_reload"], "resolve": ["resolution_path", "effective permission", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] }, "covers": ["custom_components/phoenix_mcp/admin/access_keys.py", "custom_components/phoenix_mcp/admin/permissions.py", "custom_components/phoenix_mcp/access_key_store.py", "custom_components/phoenix_mcp/admin/oauth.py", "custom_components/phoenix_mcp/oauth_grants.py"] }
 ---
 These endpoints manage access keys: creating them, changing their settings and capabilities, and setting what each one may read and control. Every path starts with `/api/phoenix-mcp/admin` and needs an administrator.
 
@@ -19,6 +19,10 @@ POST   /api/phoenix-mcp/admin/access-keys/{id}/rotate
 GET    /api/phoenix-mcp/admin/access-keys/{id}/stats
 GET    /api/phoenix-mcp/admin/access-keys/{id}/connection
 GET    /api/phoenix-mcp/admin/access-keys/{id}/audit
+GET    /api/phoenix-mcp/admin/access-keys/{id}/oauth
+POST   /api/phoenix-mcp/admin/access-keys/{id}/oauth/window
+DELETE /api/phoenix-mcp/admin/access-keys/{id}/oauth/window
+DELETE /api/phoenix-mcp/admin/access-keys/{id}/oauth/sign-ins/{sign_in_id}
 GET    /api/phoenix-mcp/admin/access-keys/archived
 DELETE /api/phoenix-mcp/admin/access-keys/archived/{id}
 ```
@@ -53,6 +57,7 @@ Most endpoints answer with the key's record. It never contains the key itself.
 | `rate_limit_burst` | integer | Requests per second. |
 | `persona` | string | The persona label. |
 | `notes` | string or null | Notes for the agent. |
+| `oauth_enabled` | boolean | Whether apps may sign in with OAuth to use this key. See [OAuth sign-in](guide:#oauth). |
 | `permissions` | object | The permission tree, as in [Permissions](guide:#permissions). |
 | `presets` | array | Saved presets, as in [Presets](guide:#presets). |
 | `active_preset_id` | string or null | The preset the key matches. |
@@ -116,6 +121,7 @@ Related: [Deny, Allow and Confirm](guide:window.capabilities#modes)
 | `expires_at` | string | Optional. An ISO 8601 time in the future. Without a time zone, Phoenix reads it as Home Assistant's local time and stores it in UTC. Leave the field out for no expiry; `null` is refused. |
 | `rate_limit_requests` | integer | 0 to 100000 (default 60). Set to 0 to turn rate limiting off. |
 | `rate_limit_burst` | integer | 0 to 100000 (default 10). Stored as 0 when `rate_limit_requests` is 0. |
+| `oauth_enabled` | boolean | Default `false`. `true` also opens the key's sign-in window. |
 
 Create reads only these fields. A new key starts with persona `custom`, every capability `deny`, an empty permission tree, `confirm_inline_wait_seconds` 0 and `announce_all_tools` off. Set the rest with [a PATCH](guide:#key-change) afterwards.
 
@@ -125,8 +131,10 @@ The response is `201` with the new record plus `access_key`, the key itself: `ph
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.nameRequired` | `name` is missing. |
 | 400 | `invalid_request` | `adminError.accessKeyNameLengthPattern` | `name` breaks the naming rule. `message_params` has `min` and `max`. |
-| 400 | `invalid_request` | `adminError.booleanRequired` | `pass_through` or `use_assist_exposure` isn't a boolean. `message_params` names the `field`. |
+| 400 | `invalid_request` | `adminError.booleanRequired` | `pass_through`, `use_assist_exposure` or `oauth_enabled` isn't a boolean. `message_params` names the `field`. |
 | 400 | `invalid_request` | `adminError.passThroughConfirmationRequired` | `pass_through` is `true` without `confirm_pass_through: true`. |
+| 503 | `service_unavailable` | `adminError.oauthKillSwitch` | `oauth_enabled` is `true` while the kill switch is on. |
+| 400 | `invalid_request` | `adminError.oauthNoHttps` | `oauth_enabled` is `true` but Home Assistant has no HTTPS address. |
 | 400 | `invalid_request` | `adminError.badExpiresAt` | `expires_at` isn't a usable time. |
 | 400 | `invalid_request` | `adminError.expiresInPast` | `expires_at` isn't in the future. |
 | 400 | `invalid_request` | `adminError.rateLimitsInteger` | A rate limit isn't a whole number. |
@@ -154,6 +162,7 @@ The response is `201` with the new record plus `access_key`, the key itself: `ph
 | `rate_limit_burst` | integer | 0 to 100000. |
 | `persona` | string | One of `home_companion`, `read_only`, `voice_assistant`, `automation_builder`, `power_user`, `home_admin`, `new_user`, `dashboard_designer`, `maintenance`, `esphome`, `custom`. |
 | `notes` | string or null | At most 2000 characters, after line endings become LF and surrounding spaces are trimmed. Control, bidirectional override and tag characters are refused. `null` or `""` clears the notes. |
+| `oauth_enabled` | boolean | Turning it on opens the sign-in window. Turning it off ends every OAuth sign-in of the key. |
 | `cap_*` | string | Any [capability field](guide:#capability-fields): `deny`, `allow` or `confirm`. |
 
 PATCH refuses any field not in this table, and `expires_at` can't be changed at all.
@@ -174,6 +183,8 @@ Renaming a key changes the display name of its sensors and device in Home Assist
 | 400 | `invalid_request` | `adminError.booleanRequired` | A boolean field has another type. `message_params` names the `field`. |
 | 400 | `invalid_request` | `adminError.passThroughConfirmationRequired` | `pass_through` turns on without `confirm_pass_through: true`. |
 | 400 | `invalid_request` | `adminError.assistExposurePassThroughOnly` | `use_assist_exposure` without pass-through. |
+| 503 | `service_unavailable` | `adminError.oauthKillSwitch` | `oauth_enabled` turns on while the kill switch is on. |
+| 400 | `invalid_request` | `adminError.oauthNoHttps` | `oauth_enabled` turns on but Home Assistant has no HTTPS address. |
 | 400 | `invalid_request` | `adminError.inlineWaitRange` | `confirm_inline_wait_seconds` is out of range. `message_params` gives `min` and `max`. |
 | 400 | `invalid_request` | `adminError.integerRequired` | A rate limit isn't a whole number. `message_params` names the `field`. |
 | 400 | `invalid_request` | `adminError.nonNegativeRequired` | A rate limit is negative. `message_params` names the `field`. |
@@ -195,13 +206,14 @@ Renaming a key changes the display name of its sensors and device in Home Assist
 - Removes the key from the Assist, Voice Agent, AI Task and Decisions bindings. An Assist pipeline, AI Task entity or Decisions entity that Phoenix created for the key goes too.
 - Cancels the key's queued approvals and releases its MESA leases.
 - Drops its rate-limit state and request counters, and removes its sensors.
+- Ends every OAuth sign-in of the key.
 - Fires the `phoenix_mcp_access_key_revoked` event with `access_key_id`, `access_key_name`, `revoked_by` and `timestamp`.
 
 Related: [{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
 
 ### Rotate a key {#key-rotate}
 
-`POST /access-keys/{id}/rotate` gives the key a new value and takes no body. The old value stops working straight away. The key keeps its rate-limit state and counters.
+`POST /access-keys/{id}/rotate` gives the key a new value and takes no body. The old value and every OAuth sign-in of the key stop working straight away. The key keeps its rate-limit state and counters.
 
 The response is `200` with the record plus `access_key`, the new value. As on create, Phoenix shows it only once. Phoenix fires the `phoenix_mcp_access_key_rotated` event with `access_key_id`, `access_key_name`, `rotated_by` and `timestamp`.
 
@@ -224,6 +236,56 @@ Related: [{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)
 ### Connection check {#key-connection}
 
 `GET /access-keys/{id}/connection` answers with `last_used_at` and `request_count`. Every request an agent sends with a valid key raises `request_count`, so poll this to see whether an app has connected.
+
+### OAuth sign-in {#oauth}
+
+```
+GET    /api/phoenix-mcp/admin/access-keys/{id}/oauth
+POST   /api/phoenix-mcp/admin/access-keys/{id}/oauth/window
+DELETE /api/phoenix-mcp/admin/access-keys/{id}/oauth/window
+DELETE /api/phoenix-mcp/admin/access-keys/{id}/oauth/sign-ins/{sign_in_id}
+GET    /api/phoenix-mcp/admin/oauth/summary
+GET    /api/phoenix-mcp/admin/oauth/requests/{request_id}
+POST   /api/phoenix-mcp/admin/oauth/requests/{request_id}/approve
+POST   /api/phoenix-mcp/admin/oauth/requests/{request_id}/deny
+```
+
+`GET /access-keys/{id}/oauth` answers with the key's sign-in status:
+
+| Field | Type | Notes |
+|---|---|---|
+| `oauth_enabled` | boolean | |
+| `window_open_until` | string or null | When the sign-in window closes, or `null` when it's closed. |
+| `kill_switch` | boolean | |
+| `public_url` | string or null | The HTTPS address apps should use, or `null` when Home Assistant has none. |
+| `max_sign_ins` | integer | The most sign-ins one key may have (10). |
+| `sign_ins` | array | Each with `id`, `client_id`, `client_name`, `redirect_host`, `created_at`, `created_by` and `last_used_at`. |
+
+`GET /oauth/summary` answers with `keys`, keyed by the ID of each key that allows OAuth sign-in. Each entry has `sign_ins`, the number of signed-in apps, and `window_open_until`. It also has `kill_switch`.
+
+`POST /access-keys/{id}/oauth/window` opens the sign-in window for 10 minutes and answers with the same status. It takes no body.
+
+`DELETE /access-keys/{id}/oauth/window` closes the window early and answers with the same status. It works while the kill switch is on.
+
+`DELETE /access-keys/{id}/oauth/sign-ins/{sign_in_id}` ends one sign-in and answers `204`. It works while the kill switch is on.
+
+`GET /oauth/requests/{request_id}` answers with a waiting request. Its fields are `client_id`, `client_host`, `client_name`, `verified`, `problem` and `redirect_host`. It also has `loopback_only`, `created_at`, `expires_at` and `keys`. Opening it fetches the app's metadata document once. `keys` lists the keys a request may be approved for now.
+
+`POST /oauth/requests/{request_id}/approve` takes `access_key_id` and answers with `redirect_to`, the app's address with `code`, `state` and `iss`. Send the browser there. `POST .../deny` answers with `redirect_to`, or `null` when the app wasn't verified.
+
+| Status | `error` | `message_key` | When |
+|---|---|---|---|
+| 503 | `service_unavailable` | `adminError.oauthKillSwitch` | The kill switch is on. Removing a sign-in still works. |
+| 404 | `not_found` | `adminError.oauthRequestExpired` | The request ended, was answered or never existed. |
+| 400 | `invalid_request` | `adminError.oauthClientNotVerified` | Approving a request whose app wasn't verified. |
+| 400 | `invalid_request` | `adminError.oauthKeyNotEligible` | The key is missing, has OAuth off, or has no open window. |
+| 409 | `conflict` | `adminError.oauthSignInLimit` | The key already has `max` sign-ins. |
+| 400 | `invalid_request` | `adminError.oauthNotEnabled` | Opening a window on a key with OAuth off. |
+| 400 | `invalid_request` | `adminError.oauthNoHttps` | Opening a window while Home Assistant has no HTTPS address. |
+| 404 | `not_found` | `adminError.oauthSignInNotFound` | No sign-in of this key has this ID. |
+| 503 | `service_unavailable` | `adminError.oauthSaveFailed` | The sign-in could not be removed. |
+
+Related: [OAuth sign-in for apps](guide:topic.connecting#oauth), [Agent endpoints](guide:topic.agentEndpoints#oauth)
 
 ### Key audit log {#key-audit}
 

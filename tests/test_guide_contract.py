@@ -104,7 +104,7 @@ def test_admin_api_documents_every_sse_frame() -> None:
 
 
 @pytest.mark.parametrize("pages,module_names", [
-    (("topic.agentEndpoints",), ("mcp_transport", "skill_view")),
+    (("topic.agentEndpoints",), ("mcp_transport", "skill_view", "oauth_views")),
     ((), (*(name.removesuffix(".py").replace("/", ".") for name in ADMIN_FILES), "agent_chat_views")),
 ])
 def test_route_reference_matches_methods_and_paths(pages, module_names) -> None:
@@ -128,7 +128,7 @@ def test_route_reference_matches_methods_and_paths(pages, module_names) -> None:
     source = _page(*pages) if pages else _admin_api_pages()
     documented = {
         (method, re.sub(r"\{[^}]+\}", "{}", path))
-        for methods, path in re.findall(r"\b((?:GET|POST|PUT|PATCH|DELETE)(?:/(?:GET|POST|PUT|PATCH|DELETE))*)\s+(/api/[\w/{}.-]+)", source)
+        for methods, path in re.findall(r"\b((?:GET|POST|PUT|PATCH|DELETE)(?:/(?:GET|POST|PUT|PATCH|DELETE))*)\s+(/(?:api|\.well-known)/[\w/{}.-]+)", source)
         for method in methods.split("/")
     }
     # The agent endpoint page names its missing GET handler to say it answers

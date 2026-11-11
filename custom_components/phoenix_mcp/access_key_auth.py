@@ -16,11 +16,16 @@ from .approvals import (
     REASON_ACCESS_KEY_EXPIRED, async_cancel_approvals_for_access_key, dismiss_approval_notification,
     fire_approval_resolved_event,
 )
-from .const import ACCESS_KEY_LENGTH, ACCESS_KEY_PREFIX
+from .const import (
+    ACCESS_KEY_LENGTH, ACCESS_KEY_PREFIX, OAUTH_ACCESS_TOKEN_LENGTH, OAUTH_ACCESS_TOKEN_PREFIX,
+    OAUTH_GRANT_REQUEST_KEY,
+)
 from .helpers import (
     build_error_response, cancel_expiry_timer, fire_rate_limit_events, get_client_ip, log_request,
 )
 from .mesa import release_access_key_leases
+from .oauth_flow import async_end_sign_ins, bearer_challenge
+from .oauth_grants import secret_hash
 from .voice_agent import async_remove_assist_pipeline
 
 if TYPE_CHECKING:
@@ -31,10 +36,14 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-def unauthorized_response(request_id: str) -> web.Response:
-    """The 401 for a bearer key that is absent, unknown or no longer valid."""
+def unauthorized_response(request_id: str, challenge: str = 'Bearer realm="Phoenix MCP"') -> web.Response:
+    """The 401 for a bearer key that is absent, unknown or no longer valid.
+
+    ``challenge`` comes from oauth_flow.bearer_challenge, which leaves the plain realm
+    unless a key offers OAuth sign-in.
+    """
     response = build_error_response("unauthorized", "Unauthorized.", 401, request_id)
-    response.headers["WWW-Authenticate"] = 'Bearer realm="Phoenix MCP"'
+    response.headers["WWW-Authenticate"] = challenge
     return response
 
 
@@ -44,11 +53,18 @@ async def async_get_authenticated_access_key(
     data: PhoenixData,
     request_id: str,
     resource: str,
+    *,
+    burst: bool = True,
 ) -> tuple[AccessKeyRecord, RateLimitResult] | web.Response:
     """Validate the Phoenix MCP bearer access key and check rate limits.
 
+    ``burst`` False charges the per-minute limit only: for closing a session, a handshake message,
+    and for a POST, whose burst is charged once its body shows it isn't one (RateLimiter.charge_burst).
+
     Returns (access_key, rl_result), or an aiohttp Response on failure. Checks readiness, kill
     switch, query-param leakage, format, hash, revocation, expiry and rate limits, in order.
+    An OAuth access token resolves to the key its sign-in is bound to and then takes the same
+    path; the sign-in ID is left on the request under OAUTH_GRANT_REQUEST_KEY.
     """
     if not data.ready or data.shutting_down:
         return build_error_response("service_unavailable", "Service unavailable.", 503, request_id)
@@ -59,7 +75,7 @@ async def async_get_authenticated_access_key(
         # at runtime, so the routes stay and refuse service with 503.
         return build_error_response("service_unavailable", "Service unavailable.", 503, request_id)
 
-    _401 = unauthorized_response(request_id)
+    _401 = unauthorized_response(request_id, bearer_challenge(hass, data, request))
 
     for key in ("token", "access_token"):
         if key in request.query:
@@ -71,19 +87,26 @@ async def async_get_authenticated_access_key(
 
     presented = auth_header[7:]
     # Non-ASCII includes bytes that are not UTF-8, which aiohttp keeps as surrogates.
-    if not presented.startswith(ACCESS_KEY_PREFIX) or len(presented) != ACCESS_KEY_LENGTH or not presented.isascii():
-        return _401
+    if presented.startswith(OAUTH_ACCESS_TOKEN_PREFIX):
+        if len(presented) != OAUTH_ACCESS_TOKEN_LENGTH or not presented.isascii():
+            return _401
+        access_key = _access_key_for_oauth_token(data, request, presented)
+        if access_key is None:
+            return unauthorized_response(request_id, bearer_challenge(hass, data, request, invalid_token=True))
+    else:
+        if not presented.startswith(ACCESS_KEY_PREFIX) or len(presented) != ACCESS_KEY_LENGTH or not presented.isascii():
+            return _401
 
-    access_key_hash = hashlib.sha256(presented.encode()).hexdigest()
-    access_key = data.store.get_access_key_by_hash(access_key_hash)
+        access_key_hash = hashlib.sha256(presented.encode()).hexdigest()
+        access_key = data.store.get_access_key_by_hash(access_key_hash)
 
-    if access_key is None:
-        return _401
+        if access_key is None:
+            return _401
 
-    if not access_key.is_valid():
-        if access_key.is_expired():
-            await async_archive_expired_access_key(hass, data, access_key)
-        return _401
+        if not access_key.is_valid():
+            if access_key.is_expired():
+                await async_archive_expired_access_key(hass, data, access_key)
+            return _401
 
     # Update last_used before the rate limit check so last_access reflects every
     # attempted request, not just allowed ones. This keeps last_access consistent
@@ -94,6 +117,7 @@ async def async_get_authenticated_access_key(
         access_key.id,
         access_key.rate_limit_requests,
         access_key.rate_limit_burst,
+        burst=burst,
     )
 
     if not rl_result.allowed:
@@ -112,6 +136,24 @@ async def async_get_authenticated_access_key(
         return resp
 
     return access_key, rl_result
+
+
+def _access_key_for_oauth_token(data: PhoenixData, request: web.Request, presented: str) -> AccessKeyRecord | None:
+    """The access key an OAuth access token presents, or None when it presents nothing.
+
+    The lookup in Phoenix's own sign-in store is the audience check: no other server's
+    token can be found there. The sign-in it names is left on the request for
+    RequestAuthority, which rechecks it at every authority boundary.
+    """
+    grant = data.oauth_grants.find_by_access_hash(secret_hash(presented))
+    if grant is None:
+        return None
+    access_key = data.store.get_access_key_by_id(grant.access_key_id)
+    if access_key is None or not grant.is_live(access_key):
+        return None
+    data.oauth_grants.touch(grant.id, utcnow())
+    request[OAUTH_GRANT_REQUEST_KEY] = grant.id
+    return access_key
 
 
 def schedule_expiry_timer(hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord) -> None:
@@ -211,6 +253,7 @@ async def async_archive_expired_access_key(
     data.rate_limit_notified.pop(current.id, None)
     data.access_key_counters.pop(current.id, None)
     data.stale_tools_advised.pop(current.id, None)
+    await async_end_sign_ins(data, current.id)
     hass.bus.async_fire("phoenix_mcp_access_key_expired", {
         "access_key_id": current.id,
         "access_key_name": current.name,

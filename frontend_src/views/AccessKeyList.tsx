@@ -1,17 +1,18 @@
 import { useState, useEffect, type ReactNode } from "react";
-import type { AccessKeyRecord, ArchivedAccessKeyRecord } from "../types";
+import type { AccessKeyRecord, ArchivedAccessKeyRecord, OAuthSummary } from "../types";
 import { AccessKeyCreateForm } from "../components/AccessKeyCreate";
 import { ArchivedAccessKeyTable } from "../components/ArchivedAccessKeyTable";
 import { api } from "../api";
 import { Loading, ErrorMsg, ResultCount } from "../components/common";
 import { formatDate, accessKeyStatus, accessKeyStatusLabel } from "../utils";
-import { localeDateTime, t } from "../i18n";
+import { localeDateTime, t, tn } from "../i18n";
 import { useToolbarTools, type ToolGroup } from "../shell/tools";
 import { InlineTools } from "../shell/windowTools";
 import { useWindowVisible } from "../shell/visibility";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { Icon } from "../ui/Icon";
 import { AccessKeyStatus } from "../components/AccessKeyStatus";
+import { useOAuthChanges } from "../components/AccessKeyOAuth";
 import { EditableAccessKeyName } from "./AccessKeyDetail";
 
 const MAX_ACTIVE_ACCESS_KEYS_WARNING = 50;
@@ -39,6 +40,34 @@ function AccessKeyMode({ passThrough }: { passThrough: boolean }) {
       {t("accessKeys.passThrough")}
     </span>
   );
+}
+
+type OAuthEntry = OAuthSummary["keys"][string];
+
+/** How apps connect with the key: the key itself, and OAuth sign-in when it's on. */
+function connectionText(k: AccessKeyRecord, entry: OAuthEntry | undefined): string {
+  if (!k.oauth_enabled) return t("accessKeys.connKey");
+  if (entry?.window_open_until && Date.parse(entry.window_open_until) > Date.now()) return t("accessKeys.connSignInOpen");
+  const apps = entry?.sign_ins ?? 0;
+  return apps > 0 ? tn("accessKeys.connOAuthApps", apps) : t("accessKeys.connOAuth");
+}
+
+/** Each OAuth key's signed-in apps and open window, refreshed with the list. */
+function useOAuthSummary(accessKeys: AccessKeyRecord[]): OAuthSummary["keys"] {
+  const [keys, setKeys] = useState<OAuthSummary["keys"]>({});
+  // A window opened, stopped or used elsewhere on the page shows here at once.
+  const [changes, setChanges] = useState(0);
+  useOAuthChanges(() => setChanges((n) => n + 1));
+  const anyOAuth = accessKeys.some((k) => k.oauth_enabled);
+  useEffect(() => {
+    if (!anyOAuth) { setKeys({}); return; }
+    let live = true;
+    const load = () => api.getOAuthSummary().then((s) => { if (live) setKeys(s.keys); }).catch(() => {});
+    load();
+    const timer = window.setInterval(() => { if (!document.hidden) load(); }, UPDATE_MS);
+    return () => { live = false; window.clearInterval(timer); };
+  }, [anyOAuth, accessKeys, changes]);
+  return keys;
 }
 
 const BY_NAME = { column: "name", dir: "asc" } as const;
@@ -116,6 +145,8 @@ export function AccessKeyListView({
     return () => clearInterval(timer);
   }, [visible, onUpdate]);
 
+  const oauth = useOAuthSummary(accessKeys);
+
   const filtered = accessKeys.filter((k) => {
     const q = filter.toLowerCase();
     if (!q) return true;
@@ -134,6 +165,9 @@ export function AccessKeyListView({
         : <span className="access-key-name" onDoubleClick={onStartRename ? () => onStartRename(k.id) : undefined}
           onMouseDown={(e) => { if (e.detail > 1 && onStartRename) e.preventDefault(); }}>{k.name}</span>) },
     { id: "mode", label: t("accessKeys.colMode"), width: 130, sortValue: (k) => (k.pass_through ? 1 : 0), cell: (k) => <AccessKeyMode passThrough={k.pass_through} /> },
+    { id: "connection", label: t("accessKeys.colConnection"), width: 170,
+      sortValue: (k) => (k.oauth_enabled ? 1 + (oauth[k.id]?.sign_ins ?? 0) : 0),
+      cell: (k) => <span data-help="accessKeys.connectionHelp">{connectionText(k, oauth[k.id])}</span> },
     { id: "status", label: t("accessKeys.colStatus"), width: 120, sortValue: (k) => accessKeyStatusLabel(accessKeyStatus(k)), cell: (k) => <AccessKeyStatus status={accessKeyStatus(k)} /> },
     { id: "created", label: t("accessKeys.colCreated"), width: 120, sortValue: (k) => k.created_at ?? "",
       title: (k) => (k.created_at ? localeDateTime(k.created_at) : undefined), cell: (k) => formatDate(k.created_at) },

@@ -461,6 +461,11 @@ async def _apply_settings_side_effects(
     if "mesa_mode" in patchable and data.mesa is not None:
         data.mesa.set_mode(updated.mesa_mode)
 
+    if "kill_switch" in patchable and updated.kill_switch and not old_kill_switch:
+        # Nothing begun before the kill switch may finish after it: open sign-in windows,
+        # parked requests and unredeemed codes go. Approved sign-ins stay, paused.
+        data.oauth.clear()
+
     if "kill_switch" in patchable and old_kill_switch and not updated.kill_switch:
         # Kill switch just deactivated: re-register routes if not already registered.
         if not data.routes_registered and data.async_register_routes:
@@ -980,6 +985,8 @@ class PhoenixAdminWipeView(PhoenixView):
                         # can render, not user data, but a wipe must not leave a file
                         # behind. The panel re-harvests on its next load.
                         await data.card_catalog.async_clear()
+                        data.oauth.clear()
+                        await data.oauth_grants.async_clear()
 
                         for _tid in list(data.expiry_timers):
                             cancel_expiry_timer(data, _tid)

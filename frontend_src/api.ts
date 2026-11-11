@@ -37,9 +37,12 @@ import type {
   ResolveResult,
   ScopeResult,
   AccessKeyConnection,
+  AccessKeyOAuthStatus,
   AccessKeyCreateResponse,
   AccessKeyRecord,
   AccessKeyStats,
+  OAuthSignInRequest,
+  OAuthSummary,
   VersionListResponse,
   VersionRecord,
   VersionRestoreResponse,
@@ -193,6 +196,20 @@ export const api = {
     req<AccessKeyRecord>("PATCH", `/access-keys/${id}`, body),
   revokeAccessKey: (id: string) => req<void>("DELETE", `/access-keys/${id}`),
   rotateAccessKey: (id: string) => req<AccessKeyCreateResponse>("POST", `/access-keys/${id}/rotate`),
+
+  getOAuthSummary: () => req<OAuthSummary>("GET", "/oauth/summary"),
+  getAccessKeyOAuth: (id: string) => req<AccessKeyOAuthStatus>("GET", `/access-keys/${id}/oauth`),
+  openOAuthWindow: (id: string) => req<AccessKeyOAuthStatus>("POST", `/access-keys/${id}/oauth/window`),
+  closeOAuthWindow: (id: string) => req<AccessKeyOAuthStatus>("DELETE", `/access-keys/${id}/oauth/window`),
+  removeOAuthSignIn: (id: string, signInId: string) =>
+    req<void>("DELETE", `/access-keys/${id}/oauth/sign-ins/${encodeURIComponent(signInId)}`),
+  getOAuthRequest: (requestId: string) =>
+    req<OAuthSignInRequest>("GET", `/oauth/requests/${encodeURIComponent(requestId)}`),
+  approveOAuthRequest: (requestId: string, accessKeyId: string) =>
+    req<{ redirect_to: string }>("POST", `/oauth/requests/${encodeURIComponent(requestId)}/approve`,
+                                 { access_key_id: accessKeyId }),
+  denyOAuthRequest: (requestId: string) =>
+    req<{ redirect_to: string | null }>("POST", `/oauth/requests/${encodeURIComponent(requestId)}/deny`),
 
   createPreset: (accessKeyId: string, name: string) =>
     req<AccessKeyRecord>("POST", `/access-keys/${accessKeyId}/presets`, { name }),

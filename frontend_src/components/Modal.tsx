@@ -1,6 +1,7 @@
 /**Accessible modal with focus trap, ARIA dialog role, and Escape to close.*/
 import React, { useContext, useEffect, useRef, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
+import { ActionButton } from "../ui/ActionButton";
 import { MenuRootContext } from "../ui/Menu";
 import { isImeKey } from "../utils/ime";
 
@@ -16,6 +17,12 @@ interface Props {
   wide?: boolean;
   /** Opened from inside a window: draw it over the whole workspace, so the window cannot clip it. */
   overWorkspace?: boolean;
+  /**
+   * What closes the dialog besides its own buttons. "all" (the default): Escape and a click
+   * outside it. "escape": Escape only, for a dialog that shows something once and must not be
+   * lost to a stray click. "buttons": neither, for a decision that cannot be started again here.
+   */
+  dismiss?: "all" | "escape" | "buttons";
   children: React.ReactNode;
 }
 
@@ -135,7 +142,7 @@ function touchScrollOwner(
   return null;
 }
 
-export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, recordNavigation, wide, overWorkspace, children }: Props) {
+export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, recordNavigation, wide, overWorkspace, dismiss = "all", children }: Props) {
   const shellRoot = useContext(MenuRootContext);
   const backdropRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -145,6 +152,8 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
   const onNavigatePreviousRef = useRef(onNavigatePrevious);
   const onNavigateNextRef = useRef(onNavigateNext);
   const recordNavigationRef = useRef(recordNavigation);
+  const dismissRef = useRef(dismiss);
+  dismissRef.current = dismiss;
   onCloseRef.current = onClose;
   onNavigatePreviousRef.current = onNavigatePrevious;
   onNavigateNextRef.current = onNavigateNext;
@@ -207,8 +216,9 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
       if (modalStack[modalStack.length - 1] !== close) return;
       if (isImeKey(e)) return;
       if (e.key === "Escape") {
+        // Taken even when it closes nothing, so it cannot reach a dialog or window behind this one.
         e.stopPropagation();
-        close();
+        if (dismissRef.current !== "buttons") close();
         return;
       }
       if (
@@ -265,7 +275,7 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
   }, []);
 
   const dialog = (
-    <div ref={backdropRef} className="modal-backdrop" onClick={onClose}>
+    <div ref={backdropRef} className="modal-backdrop" onClick={dismiss === "all" ? onClose : undefined}>
       <div
         ref={modalRef}
         className={`modal${wide ? " modal-wide" : ""}`}
@@ -281,4 +291,27 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
     </div>
   );
   return overWorkspace && shellRoot ? createPortal(dialog, shellRoot) : dialog;
+}
+
+/**
+ * A dialog's title row, held at the top while its content scrolls, with the close button at
+ * its right so a long dialog can always be closed. `closeTitle` explains a close that is
+ * not yet allowed.
+ */
+export function ModalHeader({ id, title, closeLabel, onClose, closeDisabled = false, closeTitle }: {
+  id: string;
+  title: React.ReactNode;
+  closeLabel: string;
+  onClose: () => void;
+  closeDisabled?: boolean;
+  closeTitle?: string;
+}) {
+  return (
+    <div className="modal-header">
+      <h3 className="modal-title" id={id}>{title}</h3>
+      {/* Follows the display mode like every other action: icon, or icon and the word. */}
+      <ActionButton icon="close" label={closeLabel} className="btn btn-ghost btn-sm modal-close"
+        title={closeTitle} disabled={closeDisabled} onClick={onClose} />
+    </div>
+  );
 }

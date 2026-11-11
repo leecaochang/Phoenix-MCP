@@ -37,6 +37,10 @@ Makes the key skip the permissions tree, so it can reach every entity. Off by de
 
 Related: [What pass-through opens](guide:topic.passThrough)
 
+### {{label:oauth.switchLabel}} {#key-oauth}
+
+Lets apps that take only a server address, such as ChatGPT or Claude, sign in to use this key. Off by default. You can turn it on later in [Key Settings](guide:window.keySettings#oauth-sign-in).
+
 ### After you create the key {#key-created}
 
 Phoenix asks how you'll use the new key:

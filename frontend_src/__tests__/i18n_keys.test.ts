@@ -71,7 +71,7 @@ function collectLiterals(): Set<string> {
 // No literal for each catalog entry exists here.
 const BACKEND_NAMED = [
   "diff.", "approvalSummary.", "version.", "mesaSuggestion.", "agentchat.notice.",
-  "agentchat.progress.", "adminError.",
+  "agentchat.progress.", "adminError.", "oauth.problem.",
   "settings.provider", "settings.agentcliApiKey", "settings.agentcliBaseUrl",
   "settings.agentcliServerUrl", "settings.agentcliZai",
   "settings.agentcliSite", "settings.agentcliSingapore",

@@ -25,7 +25,8 @@ PKG = REPO / "custom_components" / "phoenix_mcp"
 
 # Names that hold a secret or its digest. A == against any of these is forbidden:
 # access keys are compared with hmac.compare_digest on their SHA-256 hashes.
-SECRET_NAMES = {"access_key_hash", "presented_hash", "stored_hash", "presented_access_key", "raw_access_key"}
+SECRET_NAMES = {"access_key_hash", "presented_hash", "stored_hash", "presented_access_key", "raw_access_key",
+                "token_hash", "code_hash", "code_challenge"}
 
 
 def _package_files() -> list[pathlib.Path]:
@@ -100,6 +101,17 @@ def test_authentication_lookups_route_through_the_helper():
         assert "hmac_compare(" in body, (
             f"{node.name} looks up an access key by hash without hmac_compare"
         )
+
+
+def test_oauth_token_lookups_route_through_the_helper():
+    """Sign-in tokens are found by hash the same way: never with == on a digest."""
+    from custom_components.phoenix_mcp import oauth_grants
+    tree = ast.parse(pathlib.Path(oauth_grants.__file__).read_text())
+    lookups = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+               and n.name in ("find_by_access_hash", "_find_by_refresh_hash")]
+    assert len(lookups) == 2, "an OAuth token lookup was renamed; update this guard"
+    for node in lookups:
+        assert "hmac_compare(" in ast.unparse(node), f"{node.name} compares token hashes without hmac_compare"
 
 
 @pytest.mark.parametrize("mutated_source,should_flag", [

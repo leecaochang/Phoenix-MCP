@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.agentEndpoints", "title": "Agent Endpoints", "parent": "topic.adminApi", "order": 60, "keywords": ["MCP endpoint", "JSON-RPC", "agent API", "phx_", "Streamable HTTP"], "sectionKeywords": { "routes": ["405", "trailing slash", "kill switch"], "bearer": ["Authorization", "Bearer", "401", "WWW-Authenticate", "unauthorized", "suggestions"], "origin": ["Origin", "browser", "403", "CORS"], "mcp": ["POST", "JSON-RPC", "batch", "-32700", "-32600", "-32601", "SSE", "text/event-stream", "protocol version", "2026-07-28", "2025-03-26"], "sessions": ["Mcp-Session-Id", "legacy", "session limit", "initialize"], "end-session": ["DELETE", "close session"], "context": ["context document", "format=json", "entities"], "skill": ["SKILL.md", "skill guide", "Markdown"], "rate-limit": ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After", "429", "rate_limited", "burst"] }, "covers": ["custom_components/phoenix_mcp/mcp_transport.py", "custom_components/phoenix_mcp/skill_view.py", "custom_components/phoenix_mcp/rate_limiter.py"] }
+{ "id": "topic.agentEndpoints", "title": "Agent Endpoints", "parent": "topic.adminApi", "order": 60, "keywords": ["MCP endpoint", "JSON-RPC", "agent API", "phx_", "Streamable HTTP"], "sectionKeywords": { "routes": ["405", "trailing slash", "kill switch"], "oauth": ["OAuth", "PKCE", "well-known", "token endpoint", "refresh token", "phxo_", "phxr_", "Client ID Metadata Document"], "bearer": ["Authorization", "Bearer", "401", "WWW-Authenticate", "unauthorized", "suggestions"], "origin": ["Origin", "browser", "403", "CORS"], "mcp": ["POST", "JSON-RPC", "batch", "-32700", "-32600", "-32601", "SSE", "text/event-stream", "protocol version", "2026-07-28", "2025-03-26"], "sessions": ["Mcp-Session-Id", "legacy", "session limit", "initialize"], "end-session": ["DELETE", "close session"], "context": ["context document", "format=json", "entities"], "skill": ["SKILL.md", "skill guide", "Markdown"], "rate-limit": ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After", "429", "rate_limited", "burst"] }, "covers": ["custom_components/phoenix_mcp/mcp_transport.py", "custom_components/phoenix_mcp/skill_view.py", "custom_components/phoenix_mcp/rate_limiter.py", "custom_components/phoenix_mcp/oauth_views.py", "custom_components/phoenix_mcp/oauth_flow.py", "custom_components/phoenix_mcp/oauth_client_metadata.py", "custom_components/phoenix_mcp/access_key_auth.py"] }
 ---
 Agents reach Phoenix through these routes with a Phoenix access key (`phx_...`), not a Home Assistant token. This page is for developers building an MCP client or checking one.
 
@@ -14,7 +14,7 @@ GET    /api/phoenix-mcp/context
 GET    /api/phoenix-mcp/skill
 ```
 
-Agents send MCP requests to the first route, read their key's context from the second, and fetch the skill guide from the last.
+Agents send MCP requests to the first route, read their key's context from the second, and fetch the skill guide from the last. Apps that sign in with OAuth also use [the sign-in routes](guide:#oauth).
 
 - POST and DELETE also work with a trailing slash, `/api/phoenix-mcp/`.
 - `GET /api/phoenix-mcp` answers `405`, since the endpoint has no GET handler.
@@ -23,6 +23,8 @@ Agents send MCP requests to the first route, read their key's context from the s
 ## Sending the key {#bearer}
 
 Send the key in the `Authorization` header as `Bearer phx_...`. The key is `phx_` followed by 64 characters. Never put it in the URL: a `token` or `access_token` query parameter is refused even when the header is right.
+
+An app that signed in with OAuth sends its access token the same way, as `Bearer phxo_...`. It stands for the key the sign-in was approved for, and every check below applies to that key.
 
 Every route but the skill checks the key, in this order:
 
@@ -37,7 +39,7 @@ Every route but the skill checks the key, in this order:
 | 401 | `unauthorized` | The key is revoked or has expired. An expired key moves to the archive. |
 | 429 | `rate_limited` | The key is over its rate limit. See [Rate limits](guide:#rate-limit). |
 
-Every `401` carries `WWW-Authenticate: Bearer realm="Phoenix MCP"`. A key that passes gets its `last_used_at` updated before the rate limit check.
+Every `401` carries `WWW-Authenticate: Bearer realm="Phoenix MCP"`. While a key allows OAuth sign-in and the request came over HTTPS, it also names `resource_metadata`, and adds `error="invalid_token"` for an ended OAuth token. A key that passes gets its `last_used_at` updated before the rate limit check.
 
 Errors on these routes have a simpler body than the admin API's: `error` and `message`, sometimes with a `suggestions` array. They carry `X-Phoenix-Request-ID` but no `message_key` and no `Cache-Control`.
 
@@ -46,6 +48,29 @@ Errors on these routes have a simpler body than the admin API's: `error` and `me
 ```
 
 Related: [Errors](guide:topic.adminApi#errors)
+
+## OAuth sign-in {#oauth}
+
+Phoenix runs its own OAuth 2.1 server for apps that can't send a key. Home Assistant's own sign-in is never used, and its tokens are refused.
+
+```
+GET    /.well-known/oauth-protected-resource/api/phoenix-mcp
+GET    /.well-known/oauth-authorization-server/api/phoenix-mcp/oauth
+GET    /api/phoenix-mcp/oauth/authorize
+POST   /api/phoenix-mcp/oauth/token
+POST   /api/phoenix-mcp/oauth/revoke
+```
+
+- The issuer is your HTTPS address followed by `/api/phoenix-mcp/oauth`. Its document is also served at both OpenID discovery paths.
+- Apps name themselves with a Client ID Metadata Document: `client_id` is an https address. There's no dynamic registration.
+- Only S256 PKCE is accepted. `resource`, when sent, must be your address followed by `/api/phoenix-mcp`.
+- Authorize sends the browser to the Phoenix panel, where an administrator approves the sign-in for one key. Authorization responses carry `iss`.
+- Access tokens (`phxo_`) last one hour. Each refresh replaces the refresh token (`phxr_`). A replaced one still works for 60 seconds, then using it ends the sign-in.
+- Revoke takes either token and ends the whole sign-in.
+
+The routes answer `404` until a key allows OAuth sign-in, and to any request that didn't arrive over HTTPS. While the kill switch is on they answer `503`. Each address may make 30 requests a minute to them.
+
+Related: [Apps that sign in with OAuth](guide:topic.connecting#oauth), [OAuth sign-in endpoints](guide:topic.adminApiKeys#oauth)
 
 ## Browser origins {#origin}
 
@@ -129,6 +154,8 @@ Related: [What the agent is told](guide:topic.connecting#primer)
 ## Rate limits {#rate-limit}
 
 Each key has two limits. `rate_limit_requests` counts requests over a sliding 60 seconds. `rate_limit_burst` counts requests in any one second; 0 turns the burst limit off. A `rate_limit_requests` of 0 turns both off.
+
+A lone `notifications/initialized` and a session `DELETE` count toward the minute but never the burst. A client that opens several sessions at once sends many of them together.
 
 Related: [{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)
 

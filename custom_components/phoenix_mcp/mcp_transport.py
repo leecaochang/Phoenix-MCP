@@ -24,6 +24,7 @@ from .const import (
     MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS,
     MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS,
     PHOENIX_VERSION, MAX_REQUEST_BODY_BYTES as _MAX_BODY, MCP_BODY_READ_TIMEOUT_SECONDS,
+    OAUTH_GRANT_REQUEST_KEY,
 )
 from .conversation_log import transport_session
 from .data import PhoenixData
@@ -34,6 +35,7 @@ from .access_key_auth import (
     async_get_authenticated_access_key as _async_get_authenticated_access_key,
     unauthorized_response,
 )
+from .oauth_flow import bearer_challenge
 from .rate_limiter import RateLimitResult
 from .request_authority import AuthorityChangedError, request_authority, RequestAuthority
 from .tool_common import _progress_ctx, _ProgressBus, _tool_success
@@ -906,6 +908,12 @@ async def _read_post_body(post: _McpPost) -> list[bytes] | web.Response:
     return chunks
 
 
+def _oauth_grant_id(request: web.Request) -> str | None:
+    """The OAuth sign-in that authenticated this request, if one did."""
+    grant_id = request.get(OAUTH_GRANT_REQUEST_KEY)
+    return grant_id if isinstance(grant_id, str) else None
+
+
 def _authority_lost_response(
     hass: HomeAssistant,
     data: PhoenixData,
@@ -915,12 +923,13 @@ def _authority_lost_response(
     *,
     method: str,
     resource: str,
+    request: web.Request | None = None,
 ) -> web.Response:
     """Audit and answer a request whose authority ended after it was admitted."""
     _log(data, access_key, request_id=request_id, method=method, resource=resource, outcome="denied", client_ip=client_ip)
     if not data.ready or data.shutting_down or data.store.get_settings().kill_switch or hass.data.get(DOMAIN) is not data:
         return _error("service_unavailable", "Service unavailable.", 503, request_id)
-    return unauthorized_response(request_id)
+    return unauthorized_response(request_id, bearer_challenge(hass, data, request))
 
 
 def _batch_refusal(post: _McpPost, parsed: list) -> web.Response | None:
@@ -1313,6 +1322,22 @@ async def _post_message(
     return await _dispatch_post_message(post, message, rl_headers, wants_sse, base_url)
 
 
+_HANDSHAKE_NOTIFICATIONS = frozenset({"notifications/initialized", "initialized"})
+_UNPARSED = object()
+
+
+def _is_handshake_notification(parsed: object) -> bool:
+    """Whether a POST body is one JSON-RPC ``initialized`` notification and nothing else.
+
+    A notification has no ``id``. A batch never qualifies, so the exemption cannot carry work.
+    """
+    return (
+        isinstance(parsed, dict)
+        and "id" not in parsed
+        and parsed.get("method") in _HANDSHAKE_NOTIFICATIONS
+    )
+
+
 class PhoenixMcpView(PhoenixView):
     """POST/DELETE /api/phoenix-mcp - MCP Streamable HTTP transport.
 
@@ -1362,19 +1387,24 @@ class PhoenixMcpView(PhoenixView):
         if rejected is not None:
             return rejected
 
+        # Closing a session is handshake traffic: a client that opens several sessions at once
+        # closes some straight away, so it counts toward the minute's limit and not the burst.
         result = await _async_get_authenticated_access_key(
-            hass, request, data, request_id, "/api/phoenix-mcp"
+            hass, request, data, request_id, "/api/phoenix-mcp", burst=False,
         )
         if isinstance(result, web.Response):
             return result
         access_key, _rl_result = result
-        authority = RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
+        authority = RequestAuthority(
+            hass, data, access_key.id, access_key.access_key_hash, _oauth_grant_id(request),
+        )
         request_authority.set(authority)
         try:
             access_key = authority.current_access_key()
         except AuthorityChangedError:
             return _authority_lost_response(
                 hass, data, access_key, request_id, client_ip, method="DELETE", resource="mcp:session",
+                request=request,
             )
 
         session_id = request.headers.get("Mcp-Session-Id")
@@ -1424,8 +1454,9 @@ class PhoenixMcpView(PhoenixView):
     async def _post(self, request: web.Request) -> web.Response:
         """Authenticate, read, and dispatch one Streamable HTTP request.
 
-        Refuses in order: readiness, Origin, then authentication with its kill switch and rate
-        limit, body size and read, current authority, parse, Host, then the message itself.
+        Refuses in order: readiness, Origin, then authentication with its kill switch and the
+        per-minute rate limit, body size and read, current authority, parse, the burst limit
+        (never for a lone ``initialized`` handshake notification), Host, then the message itself.
         """
         hass = self.hass
         request_id = generate_request_id()
@@ -1440,13 +1471,17 @@ class PhoenixMcpView(PhoenixView):
         if rejected is not None:
             return rejected
 
+        # The minute's limit is charged here; the burst once the body shows what the request
+        # is, since a client's "initialized" handshake notification never counts toward it.
         result = await _async_get_authenticated_access_key(
-            hass, request, data, request_id, "/api/phoenix-mcp"
+            hass, request, data, request_id, "/api/phoenix-mcp", burst=False,
         )
         if isinstance(result, web.Response):
             return result
         access_key, rl_result = result
-        authority = RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
+        authority = RequestAuthority(
+            hass, data, access_key.id, access_key.access_key_hash, _oauth_grant_id(request),
+        )
         request_authority.set(authority)
         post = _McpPost(request, hass, data, access_key, request_id, client_ip)
 
@@ -1458,17 +1493,33 @@ class PhoenixMcpView(PhoenixView):
         except AuthorityChangedError:
             return _authority_lost_response(
                 hass, data, access_key, request_id, client_ip, method="POST", resource="/api/phoenix-mcp",
+                request=request,
             )
         body_bytes = b"".join(chunks)
-        if not body_bytes:
-            return post.parse_error_response()
-        try:
-            parsed = parse_json_body(body_bytes)
-        except (ValueError, RecursionError):  # Invalid JSON or text, numeric overflow, or excessive nesting.
-            _LOGGER.warning(
-                "MCP POST: invalid JSON body (%d bytes read, Content-Length %s) rid=%s",
-                len(body_bytes), request.content_length, request_id,
+        parsed: object = _UNPARSED
+        if body_bytes:
+            try:
+                parsed = parse_json_body(body_bytes)
+            except (ValueError, RecursionError):  # Invalid JSON or text, numeric overflow, or excessive nesting.
+                _LOGGER.warning(
+                    "MCP POST: invalid JSON body (%d bytes read, Content-Length %s) rid=%s",
+                    len(body_bytes), request.content_length, request_id,
+                )
+        if not _is_handshake_notification(parsed):
+            rl_result = data.rate_limiter.charge_burst(
+                post.access_key.id, post.access_key.rate_limit_requests, post.access_key.rate_limit_burst,
+                rl_result.stamp,
             )
+            if not rl_result.allowed:
+                _fire_rate_limit_events(hass, data, post.access_key)
+                _log(
+                    data, post.access_key, request_id=request_id, method="POST",
+                    resource="/api/phoenix-mcp", outcome="rate_limited", client_ip=client_ip,
+                )
+                resp = _error("rate_limited", "Rate limit exceeded.", 429, request_id)
+                resp.headers["Retry-After"] = str(rl_result.retry_after)
+                return resp
+        if parsed is _UNPARSED:
             return post.parse_error_response()
 
         # Response framing, not a session: an SSE-capable client gets the SAME

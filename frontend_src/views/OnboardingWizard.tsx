@@ -14,6 +14,7 @@ import { PersonaPicker } from "../components/PersonaPicker";
 import { EntityTree } from "../components/EntityTree";
 import { CopyButton } from "../ui/CopyButton";
 import { ConnectInstructions } from "../components/ConnectInstructions";
+import { useOAuthChanges } from "../components/AccessKeyOAuth";
 import { ProviderAddForm } from "../components/ProviderAddForm";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
 import { buildTestPrompt, firstGreenTarget, freeAccessKeyName } from "../wizard_helpers";
@@ -93,6 +94,8 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
   const [showAllDomains, setShowAllDomains] = useState(false);
 
   const [connected, setConnected] = useState(false);
+  // The app that signed in with OAuth, when that is how the agent connected.
+  const [signedInApp, setSignedInApp] = useState<string | null>(null);
 
   useEffect(() => {
     api.getEntityTree().then(setEntityTree).catch(() => null);
@@ -176,20 +179,29 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
     }
   }
 
-  // Poll for connection while on the Test step.
+  // Poll for a connection on the Connect and Test steps. An agent that sends the key shows as
+  // requests; an app that signs in with OAuth shows as a sign-in on this key, usually in
+  // another tab, so the Connect step can finish without the Test step.
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const poll = useCallback(async () => {
     if (!accessKeyId) return;
     try {
-      const c = await api.getAccessKeyConnection(accessKeyId);
-      if (c.request_count > 0) setConnected(true);
+      const [c, oauth] = await Promise.all([
+        api.getAccessKeyConnection(accessKeyId),
+        api.getAccessKeyOAuth(accessKeyId).catch(() => null),
+      ]);
+      const app = oauth?.sign_ins[0];
+      if (app) setSignedInApp(app.client_name || t("oauth.unnamedApp"));
+      if (c.request_count > 0 || app) setConnected(true);
     } catch {
       // transient; keep polling
     }
   }, [accessKeyId]);
+  // An approval in this tab shows at once.
+  useOAuthChanges(() => { if (step === "connect" || step === "test") void poll(); }, accessKeyId ?? undefined);
 
   useEffect(() => {
-    if (step !== "test" || connected) {
+    if ((step !== "test" && step !== "connect") || connected) {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       return;
     }
@@ -372,11 +384,23 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
         return (
           <>
             <h3 className="wizard-title">{t("wizard.connectAgentTitle")}</h3>
-            {rawAccessKey && <div data-guide-part><ConnectInstructions accessKey={rawAccessKey} accessKeyName={name} /></div>}
+            {rawAccessKey && <div data-guide-part><ConnectInstructions accessKey={rawAccessKey} accessKeyName={name} accessKeyId={accessKeyId ?? undefined} /></div>}
+            {connected && (
+              <div className="wizard-connect-status wizard-connect-status-ok" role="status">
+                {signedInApp ? t("wizard.signedInConnected", { app: signedInApp }) : t("wizard.connected")}
+              </div>
+            )}
             <div className="wizard-actions">
               <ActionButton icon="back" label={t("wizard.back")} help="help.wizardBack" className="btn btn-text" onClick={() => setStep("access")} />
-              <ActionButton icon="pending" label={t("wizard.connectLater")} help="help.wizardConnectLater" className="btn btn-ghost" onClick={() => setStep("done")} />
-              <ActionButton icon="probe" label={t("wizard.testConnection")} help="help.wizardTestConnection" className="btn btn-primary" onClick={() => setStep("test")} />
+              {connected ? (
+                // Already connected: the Test step has nothing left to wait for.
+                <ActionButton icon="forward" label={t("wizard.next")} help="help.wizardNextTest" className="btn btn-primary" onClick={() => setStep("done")} />
+              ) : (
+                <>
+                  <ActionButton icon="pending" label={t("wizard.connectLater")} help="help.wizardConnectLater" className="btn btn-ghost" onClick={() => setStep("done")} />
+                  <ActionButton icon="probe" label={t("wizard.testConnection")} help="help.wizardTestConnection" className="btn btn-primary" onClick={() => setStep("test")} />
+                </>
+              )}
             </div>
           </>
         );
@@ -416,7 +440,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
               <p className="wizard-hint wizard-hint-warning" role="status">{t("wizard.companionNoVoiceProvider")}</p>
             )}
             <div className={`wizard-connect-status${connected ? " wizard-connect-status-ok" : ""}`} role="status">
-              {connected ? t("wizard.connected") : t("wizard.waitingForAgent")}
+              {connected ? (signedInApp ? t("wizard.signedInConnected", { app: signedInApp }) : t("wizard.connected")) : t("wizard.waitingForAgent")}
             </div>
             <div className="wizard-actions">
               <ActionButton icon="back" label={t("wizard.back")} help="help.wizardBack" className="btn btn-text" onClick={() => setStep("connect")} />

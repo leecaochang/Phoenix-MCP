@@ -28,6 +28,7 @@ from ..const import (
 from ..data import PhoenixData
 from ..helpers import cancel_expiry_timer
 from ..mesa import release_access_key_leases
+from ..oauth_flow import async_end_sign_ins, configured_public_url
 from ..sensor import async_rename_access_key_sensors
 from ..view_base import PhoenixView, _err
 from ..voice_agent import async_remove_assist_pipeline
@@ -138,6 +139,22 @@ class PhoenixAdminAccessKeysView(PhoenixView):
             )
         if not pass_through:
             use_assist_exposure = False
+        oauth_enabled = body.get("oauth_enabled", False)
+        if not isinstance(oauth_enabled, bool):
+            return _err(
+                "invalid_request", "oauth_enabled must be a boolean.", 400, rid,
+                key="booleanRequired", params={"field": "oauth_enabled"},
+            )
+        if oauth_enabled and data.store.get_settings().kill_switch:
+            return _err(
+                "service_unavailable", "Phoenix MCP is stopped by the kill switch.", 503, rid,
+                key="oauthKillSwitch",
+            )
+        if oauth_enabled and configured_public_url(hass) is None:
+            return _err(
+                "invalid_request", "Home Assistant has no HTTPS address, so apps can't reach sign-in.",
+                400, rid, key="oauthNoHttps",
+            )
 
         expires_at = None
         if "expires_at" in body:
@@ -193,7 +210,10 @@ class PhoenixAdminAccessKeysView(PhoenixView):
                 use_assist_exposure=use_assist_exposure,
                 rate_limit_requests=rate_limit_requests,
                 rate_limit_burst=rate_limit_burst,
+                oauth_enabled=oauth_enabled,
             )
+        if record.oauth_enabled:
+            data.oauth.open_window(record.id)
 
         if data.async_on_access_key_created:
             await data.async_on_access_key_created(record)
@@ -223,7 +243,8 @@ _RATE_LIMIT_MAX = 100_000
 
 
 def _validated_access_key_patch(
-    body: dict, access_key: Any, access_key_id: str, data: PhoenixData, rid: str
+    body: dict, access_key: Any, access_key_id: str, data: PhoenixData, rid: str,
+    hass: HomeAssistant | None = None,
 ) -> tuple[dict, web.Response | None]:
     """Filter an access key PATCH body to writable fields and validate them.
 
@@ -276,7 +297,7 @@ def _validated_access_key_patch(
 
     patchable = {k: v for k, v in body.items() if k in _PATCHABLE_ACCESS_KEY_FIELDS}
 
-    for bool_field in ("announce_all_tools", "use_assist_exposure"):
+    for bool_field in ("announce_all_tools", "use_assist_exposure", "oauth_enabled"):
         if bool_field in patchable and not isinstance(patchable[bool_field], bool):
             return {}, _err(
                 "invalid_request", f"{bool_field} must be a boolean.", 400, rid,
@@ -319,6 +340,19 @@ def _validated_access_key_patch(
             return {}, _err(
                 "invalid_request", f"{cap_name} does not support 'allow' mode.",
                 400, rid, key="capabilityAllowUnsupported", params={"capability": cap_name},
+            )
+
+    if patchable.get("oauth_enabled") is True and not access_key.oauth_enabled:
+        if data.store.get_settings().kill_switch:
+            return {}, _err(
+                "service_unavailable", "Phoenix MCP is stopped by the kill switch.", 503, rid,
+                key="oauthKillSwitch",
+            )
+        # Apps reach sign-in only over HTTPS: without such an address, turning it on does nothing.
+        if hass is not None and configured_public_url(hass) is None:
+            return {}, _err(
+                "invalid_request", "Home Assistant has no HTTPS address, so apps can't reach sign-in.",
+                400, rid, key="oauthNoHttps",
             )
 
     if "persona" in patchable and not _in_menu(patchable["persona"], PERSONA_NAMES):
@@ -434,8 +468,9 @@ class PhoenixAdminAccessKeyView(PhoenixView):
             if access_key is None:
                 return _err("not_found", "Access key not found.", 404, rid, key="accessKeyNotFound")
             old_name = access_key.name
+            oauth_was_enabled = access_key.oauth_enabled
 
-            patchable, invalid = _validated_access_key_patch(body, access_key, access_key_id, data, rid)
+            patchable, invalid = _validated_access_key_patch(body, access_key, access_key_id, data, rid, self.hass)
             if invalid is not None:
                 return invalid
             updated = await data.store.async_patch_access_key(access_key_id, **patchable)
@@ -459,6 +494,11 @@ class PhoenixAdminAccessKeyView(PhoenixView):
 
         if updated is not None and old_name is not None and updated.name != old_name:
             await _rename_access_key_sensors(self.hass, access_key_id, old_name, updated)
+
+        if updated.oauth_enabled and not oauth_was_enabled:
+            data.oauth.open_window(access_key_id)
+        elif oauth_was_enabled and not updated.oauth_enabled:
+            await async_end_sign_ins(data, access_key_id)
 
         return _ok(updated.to_dict(), request_id=rid)
 
@@ -534,6 +574,7 @@ class PhoenixAdminAccessKeyView(PhoenixView):
         data.rate_limit_notified.pop(access_key_id, None)
         data.access_key_counters.pop(access_key_id, None)
         data.stale_tools_advised.pop(access_key_id, None)
+        await async_end_sign_ins(data, access_key_id)
 
         hass.bus.async_fire("phoenix_mcp_access_key_revoked", {
             "access_key_id": access_key_id,
@@ -839,6 +880,7 @@ class PhoenixAdminAccessKeyRotateView(PhoenixView):
             return _err("not_found", "Access key not found.", 404, rid, key="accessKeyNotFound")
 
         access_key, raw_access_key = result
+        await async_end_sign_ins(data, access_key.id)
 
         hass.bus.async_fire("phoenix_mcp_access_key_rotated", {
             "access_key_id": access_key.id,

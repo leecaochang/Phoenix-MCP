@@ -144,6 +144,8 @@ export interface AgentBlock {
   code?: string;
   // Labeled key/value pairs to copy individually (e.g. a GUI header key + value).
   fields?: { label: string; value: string }[];
+  // Numbered steps to follow in the client's own screens.
+  steps?: string[];
 }
 export interface AgentTab {
   key: string;
@@ -163,7 +165,7 @@ export function buildAgentTabs(url: string, accessKey: string, accessKeyName: st
   return [
     {
       key: "claude",
-      label: "Claude Code",
+      label: "Claude",
       href: "https://code.claude.com/docs/en/mcp",
       blocks: [
         { hint: t("wizard.agentClaudeHint"), code: buildClaudeCommand(url, accessKey, serverName) },
@@ -184,7 +186,7 @@ export function buildAgentTabs(url: string, accessKey: string, accessKeyName: st
     },
     {
       key: "codex",
-      label: "Codex",
+      label: "ChatGPT",
       href: "https://learn.chatgpt.com/docs/extend/mcp?surface=cli",
       intro: t("wizard.agentCodexIntro"),
       blocks: [
@@ -240,6 +242,59 @@ export function buildAgentTabs(url: string, accessKey: string, accessKeyName: st
       href: "https://modelcontextprotocol.io/",
       intro: t("wizard.agentOtherIntro"),
       blocks: [{ code: buildMcpJson(url, accessKey, serverName) }],
+    },
+  ];
+}
+
+// Apps that sign in with OAuth: nothing secret is pasted. `url` is the instance's HTTPS
+// address, the one apps must use. Only clients that identify themselves with a Client ID
+// Metadata Document can sign in, since Phoenix has no dynamic registration; the Codex CLI,
+// Cursor, Gemini CLI and DeepSeek Harness can't, so they appear only with the key.
+export function buildOAuthTabs(url: string): AgentTab[] {
+  const approve = t("wizard.oauthStepApprove");
+  return [
+    {
+      // One tab for Claude: a connector added in Claude also reaches Claude Code on the same account.
+      key: "claude",
+      label: "Claude",
+      href: "https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp",
+      blocks: [
+        { steps: [t("wizard.oauthClaudeStep1"), t("wizard.oauthClaudeStep2"), t("wizard.oauthClaudeStep3"),
+          t("wizard.oauthClaudeStep4"), approve] },
+        { hint: t("wizard.oauthClaudeNote") },
+        { title: t("wizard.oauthClaudeCodeTitle"), hint: t("wizard.oauthClaudeCodeNote"),
+          code: `claude mcp add --transport http phoenix ${shellArg(url)}` },
+        { steps: [t("wizard.oauthClaudeCodeStep1"), t("wizard.oauthClaudeCodeStep2"), approve] },
+      ],
+    },
+    {
+      // One tab for ChatGPT: the Codex app is part of the ChatGPT desktop app. The Codex CLI signs in only by
+      // dynamic registration, which Phoenix doesn't offer, so it appears only with the key.
+      key: "chatgpt",
+      label: "ChatGPT",
+      href: "https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt",
+      blocks: [
+        { steps: [t("wizard.oauthChatgptStep1"), t("wizard.oauthChatgptStep2"), t("wizard.oauthChatgptStep3"),
+          t("wizard.oauthChatgptStep4"), approve] },
+        { hint: t("wizard.oauthChatgptNote") },
+        { title: t("wizard.oauthCodexAppTitle"), steps: [t("wizard.oauthCodexAppStep1"), t("wizard.oauthCodexAppStep2"), approve] },
+        { hint: t("wizard.oauthCodexCliNote") },
+      ],
+    },
+    {
+      key: "vscode",
+      label: "VS Code",
+      href: "https://code.visualstudio.com/docs/copilot/chat/mcp-servers",
+      blocks: [{ steps: [t("wizard.oauthVscodeStep1"), t("wizard.oauthVscodeStep2"), approve] }],
+    },
+    {
+      key: "antigravity",
+      label: "Antigravity",
+      href: "https://antigravity.google/docs/mcp",
+      blocks: [
+        { steps: [t("wizard.oauthAntigravityStep1"), t("wizard.oauthAntigravityStep2"), approve, t("wizard.oauthAntigravityStep4")] },
+        { hint: t("wizard.oauthAntigravityNote") },
+      ],
     },
   ];
 }

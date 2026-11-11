@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   createAccessKey: vi.fn(),
   patchAccessKey: vi.fn(),
   getAccessKeyConnection: vi.fn(),
+  getAccessKeyOAuth: vi.fn(),
   getAgentCliProviders: vi.fn(),
   listAccessKeys: vi.fn().mockResolvedValue([]),
 }));
@@ -47,6 +48,7 @@ beforeEach(() => {
   mocks.createAccessKey.mockResolvedValue({ access_key: "phx_" + "a".repeat(64), ...RECORD });
   mocks.patchAccessKey.mockResolvedValue(RECORD);
   mocks.getAccessKeyConnection.mockResolvedValue({ request_count: 0 });
+  mocks.getAccessKeyOAuth.mockResolvedValue({ sign_ins: [] });
   mocks.getAgentCliProviders.mockResolvedValue({ instances: [], provider_types: [] });
 });
 
@@ -120,6 +122,22 @@ describe("the setup wizard", () => {
     press("Connect Later");
     expect(heading()).toBe("You're all set");
     expect(current()).toBe("Done");
+  });
+
+  it("finishes the Connect step when an app signs in with this key, skipping the test", async () => {
+    render(<OnboardingWizard onCancel={vi.fn()} onFinish={vi.fn()} />);
+    await toAccess("Connect an External App");
+    press("Grant desk");
+    press("Next");
+    expect(heading()).toBe("Connect Phoenix MCP to Your AI Agent");
+    expect(screen.queryByRole("status")).toBeNull();
+    // Claude signs in with this key from another tab; the step's poll sees it.
+    mocks.getAccessKeyOAuth.mockResolvedValue({ sign_ins: [{ id: "s1", client_name: "Claude" }] });
+    await act(async () => { window.dispatchEvent(new CustomEvent("phx-oauth-changed", { detail: "k1" })); });
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected! Claude signed in with this key."));
+    expect(screen.queryByRole("button", { name: "Test Connection" })).toBeNull();
+    press("Next");
+    expect(heading()).toBe("You're all set");
   });
 
   it("takes the Agent Chat path from Access to the provider, whose Back returns to Access", async () => {

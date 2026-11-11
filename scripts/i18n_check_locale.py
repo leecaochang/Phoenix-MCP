@@ -157,6 +157,7 @@ ALLOW_IDENTICAL = frozenset({
     "panel.mesa.colId",               # "ID"
     "panel.accessKeys.namePlaceholder",   # "my_access_key", a literal example value
     "panel.changes.typeEsphomeYaml",  # "ESPHome YAML": a product name plus a format name
+    "panel.accessKeys.tabOAuth",      # "OAuth", a protocol name used as a tab label
     # Product and plan names are proper nouns rather than translatable prose.
     "panel.settings.agentcliZaiCoding",
     "panel.settings.agentcliZaiStandard",
@@ -252,6 +253,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "panel.wizard.oauthClaudeCodeTitle",  # "In Claude Code", the same preposition in German plus a product name
         "panel.common.codeBlock",  # "Code", the same word in German
         "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
         "entity.sensor.status.name",  # "Status", the same word in this language
@@ -393,6 +395,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepPersona",
     }),
     "it": frozenset({
+        "panel.wizard.oauthClaudeCodeTitle",  # "In Claude Code", the same preposition in Italian plus a product name
         "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
@@ -494,6 +497,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "panel.wizard.oauthClaudeCodeTitle",  # "In Claude Code", the same preposition in Dutch plus a product name
         "panel.common.codeBlock",  # "Code", the same word in Dutch
         "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
         "entity.sensor.status.name",  # "Status", the same word in this language

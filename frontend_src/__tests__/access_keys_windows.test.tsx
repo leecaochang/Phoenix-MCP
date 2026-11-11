@@ -145,16 +145,23 @@ describe("Capabilities", () => {
 });
 
 describe("Key Settings", () => {
-  it("shows Guidance, Agent Behavior and Rate Limiting with every explanation in Help", async () => {
+  it("shows Guidance, Agent Behavior and OAuth on tabs, with every explanation in Help", async () => {
     const { container } = show(<KeySettingsWindow />);
-    await screen.findByRole("heading", { name: "Guidance" });
-    expect(screen.getAllByRole("heading").map((h) => h.textContent)).toEqual(["Guidance", "Agent Behavior", "Rate Limiting"]);
+    const tabs = await screen.findAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Guidance", "Agent Behavior", "OAuth"]);
+    for (const tab of tabs) expect(tab).toHaveAttribute("data-help");
+    fireEvent.click(screen.getByRole("tab", { name: "Guidance" }));
+    expect(screen.getByRole("tab", { name: "Guidance" })).toHaveAttribute("aria-selected", "true");
     expect(container.querySelectorAll(".toggle-label small")).toHaveLength(0);
     expect(container.querySelector(".access-key-notes-help")).toBeNull();
     const guidance = screen.getByRole("textbox", { name: /Notes for agents/ });
     expect(guidance).toHaveAttribute("data-help", "help.guidance");
     // Who receives it is part of its Help text, not a line under the box.
     expect(guidance).toHaveAttribute("aria-description", t("help.guidance"));
+    // Agent Behavior holds the tool and approval settings and Rate Limiting.
+    fireEvent.click(screen.getByRole("tab", { name: "Agent Behavior" }));
+    expect(screen.queryByRole("textbox", { name: /Notes for agents/ })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Rate Limiting" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /inline approval wait/i })).toHaveAttribute("data-help", "help.inlineWait");
     expect(screen.getByRole("checkbox", { name: "Always announce all tools" })).toHaveAttribute("data-help", "accessKeys.announceAllHelp");
     // The labels say 0 turns rate limiting off; no separate line repeats it.
@@ -166,6 +173,7 @@ describe("Key Settings", () => {
   it("offers Assist exposure on a pass-through key", async () => {
     current = accessKey({ pass_through: true });
     show(<KeySettingsWindow />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Agent Behavior" }));
     expect(await screen.findByRole("checkbox", { name: "Limit to Assist-exposed entities" })).toBeInTheDocument();
   });
 });
@@ -464,8 +472,10 @@ describe("the Guide", () => {
     caps.unmount();
 
     const settings = inWindow("keySettings", <KeySettingsWindow />);
-    await screen.findByRole("heading", { name: "Guidance" });
+    fireEvent.click(await screen.findByRole("tab", { name: "Guidance" }));
     expect(guideTargetFor(screen.getByRole("textbox", { name: /Notes for agents/ }))).toMatchObject({ topic: "window.keySettings", anchor: "guidance" });
+    expect(guideTargetFor(screen.getByRole("tab", { name: "OAuth" }))).toMatchObject({ anchor: "oauth-sign-in" });
+    fireEvent.click(screen.getByRole("tab", { name: "Agent Behavior" }));
     expect(guideTargetFor(screen.getByRole("combobox", { name: /inline approval wait/i }))).toMatchObject({ anchor: "inline-wait" });
     expect(guideTargetFor(screen.getByRole("checkbox", { name: "Always announce all tools" }))).toMatchObject({ anchor: "announce-all" });
     settings.unmount();

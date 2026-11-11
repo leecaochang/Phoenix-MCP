@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.adminApiKeys", "title": "存取金鑰端點", "parent": "topic.adminApi", "order": 10, "keywords": ["存取金鑰 API", "權杖 API", "phx_", "建立金鑰", "權限 API", "能力 API"], "sectionKeywords": { "access-keys": ["存取金鑰記錄", "金鑰清單"], "capability-fields": ["cap_", "deny", "allow", "confirm", "能力欄位"], "key-create": ["新金鑰", "access_key", "原始值", "201"], "key-change": ["PATCH", "角色", "備註", "重新命名", "unknownFields"], "key-revoke": ["刪除金鑰", "撤銷", "phoenix_mcp_access_key_revoked"], "key-rotate": ["輪換", "新值", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-audit": ["稽核列", "結果篩選", "用戶端 IP"], "key-archived": ["已歸檔金鑰", "已過期金鑰", "已撤銷金鑰"], "presets": ["預設", "已儲存設定", "access_key_presets_enabled"], "permissions": ["權限樹", "節點", "域", "裝置", "實體"], "permissions-replace": ["PUT", "替換樹", "清除全部"], "permissions-node": ["單一節點", "設定狀態"], "bulk-select": ["分區", "分類", "整合", "選擇器"], "integration-options": ["設定條目", "整合清單"], "entity-hints": ["提示", "全域提示", "entity_hints"], "entities": ["實體樹", "範圍", "解析", "force_reload"], "resolve": ["resolution_path", "有效權限", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] } }
+{ "id": "topic.adminApiKeys", "title": "存取金鑰端點", "parent": "topic.adminApi", "order": 10, "keywords": ["存取金鑰 API", "權杖 API", "phx_", "建立金鑰", "權限 API", "能力 API"], "sectionKeywords": { "access-keys": ["存取金鑰記錄", "金鑰清單"], "capability-fields": ["cap_", "deny", "allow", "confirm", "能力欄位"], "oauth": ["OAuth", "登入", "連接器", "登入時段"], "key-create": ["新金鑰", "access_key", "原始值", "201"], "key-change": ["PATCH", "角色", "備註", "重新命名", "unknownFields"], "key-revoke": ["刪除金鑰", "撤銷", "phoenix_mcp_access_key_revoked"], "key-rotate": ["輪換", "新值", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-audit": ["稽核列", "結果篩選", "用戶端 IP"], "key-archived": ["已歸檔金鑰", "已過期金鑰", "已撤銷金鑰"], "presets": ["預設", "已儲存設定", "access_key_presets_enabled"], "permissions": ["權限樹", "節點", "域", "裝置", "實體"], "permissions-replace": ["PUT", "替換樹", "清除全部"], "permissions-node": ["單一節點", "設定狀態"], "bulk-select": ["分區", "分類", "整合", "選擇器"], "integration-options": ["設定條目", "整合清單"], "entity-hints": ["提示", "全域提示", "entity_hints"], "entities": ["實體樹", "範圍", "解析", "force_reload"], "resolve": ["resolution_path", "有效權限", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] } }
 ---
 這些端點管理存取金鑰：建立金鑰、變更其設定和能力，以及設定每個金鑰可以讀取和控制什麼。每個路徑都以 `/api/phoenix-mcp/admin` 開頭，並且需要管理員。
 
@@ -19,6 +19,10 @@ POST   /api/phoenix-mcp/admin/access-keys/{id}/rotate
 GET    /api/phoenix-mcp/admin/access-keys/{id}/stats
 GET    /api/phoenix-mcp/admin/access-keys/{id}/connection
 GET    /api/phoenix-mcp/admin/access-keys/{id}/audit
+GET    /api/phoenix-mcp/admin/access-keys/{id}/oauth
+POST   /api/phoenix-mcp/admin/access-keys/{id}/oauth/window
+DELETE /api/phoenix-mcp/admin/access-keys/{id}/oauth/window
+DELETE /api/phoenix-mcp/admin/access-keys/{id}/oauth/sign-ins/{sign_in_id}
 GET    /api/phoenix-mcp/admin/access-keys/archived
 DELETE /api/phoenix-mcp/admin/access-keys/archived/{id}
 ```
@@ -53,6 +57,7 @@ DELETE /api/phoenix-mcp/admin/access-keys/archived/{id}
 | `rate_limit_burst` | integer | 每秒請求數。 |
 | `persona` | string | 角色標籤。 |
 | `notes` | string 或 null | 給智慧體的備註。 |
+| `oauth_enabled` | boolean | 應用程式是否可以透過 OAuth 登入來使用此金鑰。參見[OAuth 登入](guide:#oauth)。 |
 | `permissions` | object | 權限樹，如[權限](guide:#permissions)所述。 |
 | `presets` | array | 已儲存的預設，如[預設](guide:#presets)所述。 |
 | `active_preset_id` | string 或 null | 金鑰符合的預設。 |
@@ -116,6 +121,7 @@ DELETE /api/phoenix-mcp/admin/access-keys/archived/{id}
 | `expires_at` | string | 選填。未來的 ISO 8601 時間。沒有時區時，Phoenix 依 Home Assistant 的本地時間讀取，並以 UTC 儲存。省略該欄位表示無有效期；`null` 會被拒絕。 |
 | `rate_limit_requests` | integer | 0 到 100000（預設 60）。設為 0 可關閉速率限制。 |
 | `rate_limit_burst` | integer | 0 到 100000（預設 10）。當 `rate_limit_requests` 為 0 時存為 0。 |
+| `oauth_enabled` | boolean | 預設 `false`。`true` 還會開啟金鑰的登入時段。 |
 
 建立只讀取這些欄位。新金鑰從角色 `custom`、每項能力 `deny`、空權限樹、`confirm_inline_wait_seconds` 為 0、`announce_all_tools` 關閉開始。之後用 [PATCH](guide:#key-change) 設定其餘內容。
 
@@ -125,8 +131,10 @@ DELETE /api/phoenix-mcp/admin/access-keys/archived/{id}
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.nameRequired` | 缺少 `name`。 |
 | 400 | `invalid_request` | `adminError.accessKeyNameLengthPattern` | `name` 違反命名規則。`message_params` 包含 `min` 和 `max`。 |
-| 400 | `invalid_request` | `adminError.booleanRequired` | `pass_through` 或 `use_assist_exposure` 不是布林值。`message_params` 指明 `field`。 |
+| 400 | `invalid_request` | `adminError.booleanRequired` | `pass_through`、`use_assist_exposure` 或 `oauth_enabled` 不是布林值。`message_params` 指明 `field`。 |
 | 400 | `invalid_request` | `adminError.passThroughConfirmationRequired` | `pass_through` 為 `true`，但沒有 `confirm_pass_through: true`。 |
+| 503 | `service_unavailable` | `adminError.oauthKillSwitch` | 緊急停止開關開啟時 `oauth_enabled` 為 `true`。 |
+| 400 | `invalid_request` | `adminError.oauthNoHttps` | `oauth_enabled` 為 `true`，但 Home Assistant 沒有 HTTPS 位址。 |
 | 400 | `invalid_request` | `adminError.badExpiresAt` | `expires_at` 不是可用的時間。 |
 | 400 | `invalid_request` | `adminError.expiresInPast` | `expires_at` 不在未來。 |
 | 400 | `invalid_request` | `adminError.rateLimitsInteger` | 速率限制不是整數。 |
@@ -154,6 +162,7 @@ DELETE /api/phoenix-mcp/admin/access-keys/archived/{id}
 | `rate_limit_burst` | integer | 0 到 100000。 |
 | `persona` | string | 以下之一：`home_companion`、`read_only`、`voice_assistant`、`automation_builder`、`power_user`、`home_admin`、`new_user`、`dashboard_designer`、`maintenance`、`esphome`、`custom`。 |
 | `notes` | string 或 null | 最多 2000 個字元，在行尾變成 LF 並去除首尾空白之後。控制字元、雙向覆寫字元和標籤字元會被拒絕。`null` 或 `""` 會清除備註。 |
+| `oauth_enabled` | boolean | 開啟它會開啟登入時段。關閉它會結束該金鑰的每個 OAuth 登入。 |
 | `cap_*` | string | 任意[能力欄位](guide:#capability-fields)：`deny`、`allow` 或 `confirm`。 |
 
 PATCH 拒絕不在此表中的任何欄位，且 `expires_at` 根本無法變更。
@@ -174,6 +183,8 @@ PATCH 拒絕不在此表中的任何欄位，且 `expires_at` 根本無法變更
 | 400 | `invalid_request` | `adminError.booleanRequired` | 某個布林欄位使用了其他類型。`message_params` 指明 `field`。 |
 | 400 | `invalid_request` | `adminError.passThroughConfirmationRequired` | `pass_through` 開啟但沒有 `confirm_pass_through: true`。 |
 | 400 | `invalid_request` | `adminError.assistExposurePassThroughOnly` | 沒有直通模式卻使用了 `use_assist_exposure`。 |
+| 503 | `service_unavailable` | `adminError.oauthKillSwitch` | 緊急停止開關開啟時開啟 `oauth_enabled`。 |
+| 400 | `invalid_request` | `adminError.oauthNoHttps` | 開啟 `oauth_enabled`，但 Home Assistant 沒有 HTTPS 位址。 |
 | 400 | `invalid_request` | `adminError.inlineWaitRange` | `confirm_inline_wait_seconds` 超出範圍。`message_params` 給出 `min` 和 `max`。 |
 | 400 | `invalid_request` | `adminError.integerRequired` | 速率限制不是整數。`message_params` 指明 `field`。 |
 | 400 | `invalid_request` | `adminError.nonNegativeRequired` | 速率限制為負數。`message_params` 指明 `field`。 |
@@ -195,13 +206,14 @@ PATCH 拒絕不在此表中的任何欄位，且 `expires_at` 根本無法變更
 - 從 Assist、語音智慧體、AI 任務和決策綁定中移除金鑰。Phoenix 為該金鑰建立的 Assist 管線、AI 任務實體或決策實體也會被移除。
 - 取消該金鑰排隊的核准，並釋放其 MESA 租約。
 - 捨棄其速率限制狀態和請求計數，並移除其感測器。
+- 結束該金鑰的每個 OAuth 登入。
 - 觸發 `phoenix_mcp_access_key_revoked` 事件，包含 `access_key_id`、`access_key_name`、`revoked_by` 和 `timestamp`。
 
 相關：[{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
 
 ### 輪換金鑰 {#key-rotate}
 
-`POST /access-keys/{id}/rotate` 為金鑰提供新值，不接受本文。舊值立即失效。金鑰保留其速率限制狀態和計數。
+`POST /access-keys/{id}/rotate` 為金鑰提供新值，不接受本文。舊值以及該金鑰的每個 OAuth 登入都會立即失效。金鑰保留其速率限制狀態和計數。
 
 回應為 `200`，包含記錄以及 `access_key`，即新值。與建立時一樣，Phoenix 只顯示一次。Phoenix 觸發 `phoenix_mcp_access_key_rotated` 事件，包含 `access_key_id`、`access_key_name`、`rotated_by` 和 `timestamp`。
 
@@ -224,6 +236,56 @@ PATCH 拒絕不在此表中的任何欄位，且 `expires_at` 根本無法變更
 ### 連線檢查 {#key-connection}
 
 `GET /access-keys/{id}/connection` 傳回 `last_used_at` 和 `request_count`。智慧體用有效金鑰傳送的每個請求都會增加 `request_count`，因此輪詢此端點可查看應用程式是否已連線。
+
+### OAuth 登入 {#oauth}
+
+```
+GET    /api/phoenix-mcp/admin/access-keys/{id}/oauth
+POST   /api/phoenix-mcp/admin/access-keys/{id}/oauth/window
+DELETE /api/phoenix-mcp/admin/access-keys/{id}/oauth/window
+DELETE /api/phoenix-mcp/admin/access-keys/{id}/oauth/sign-ins/{sign_in_id}
+GET    /api/phoenix-mcp/admin/oauth/summary
+GET    /api/phoenix-mcp/admin/oauth/requests/{request_id}
+POST   /api/phoenix-mcp/admin/oauth/requests/{request_id}/approve
+POST   /api/phoenix-mcp/admin/oauth/requests/{request_id}/deny
+```
+
+`GET /access-keys/{id}/oauth` 傳回金鑰的登入狀態：
+
+| 欄位 | 類型 | 說明 |
+|---|---|---|
+| `oauth_enabled` | boolean | |
+| `window_open_until` | string 或 null | 登入時段關閉的時間；已關閉時為 `null`。 |
+| `kill_switch` | boolean | |
+| `public_url` | string 或 null | 應用程式應使用的 HTTPS 位址；Home Assistant 沒有該位址時為 `null`。 |
+| `max_sign_ins` | integer | 一個金鑰最多可有的登入數（10）。 |
+| `sign_ins` | array | 每項包含 `id`、`client_id`、`client_name`、`redirect_host`、`created_at`、`created_by` 和 `last_used_at`。 |
+
+`GET /oauth/summary` 傳回 `keys`，以每個允許 OAuth 登入的金鑰 ID 為鍵。每一項包含 `sign_ins`（已登入應用程式的數量）和 `window_open_until`。它也包含 `kill_switch`。
+
+`POST /access-keys/{id}/oauth/window` 把登入時段開啟 10 分鐘，並傳回同樣的狀態。它不接受本文。
+
+`DELETE /access-keys/{id}/oauth/window` 提前關閉登入時段，並傳回同樣的狀態。緊急停止開關開啟時它也能使用。
+
+`DELETE /access-keys/{id}/oauth/sign-ins/{sign_in_id}` 結束一個登入並傳回 `204`。緊急停止開關開啟時它也能使用。
+
+`GET /oauth/requests/{request_id}` 傳回一個等待中的請求。其欄位為 `client_id`、`client_host`、`client_name`、`verified`、`problem` 和 `redirect_host`。它還有 `loopback_only`、`created_at`、`expires_at` 和 `keys`。開啟它會擷取一次應用程式的中繼資料文件。`keys` 列出此請求目前可以核准使用的金鑰。
+
+`POST /oauth/requests/{request_id}/approve` 接受 `access_key_id`，並傳回 `redirect_to`，即帶有 `code`、`state` 和 `iss` 的應用程式位址。請把瀏覽器轉到那裡。`POST .../deny` 傳回 `redirect_to`；如果應用程式未經驗證，則傳回 `null`。
+
+| 狀態 | `error` | `message_key` | 條件 |
+|---|---|---|---|
+| 503 | `service_unavailable` | `adminError.oauthKillSwitch` | 緊急停止開關已開啟。移除登入仍然可用。 |
+| 404 | `not_found` | `adminError.oauthRequestExpired` | 請求已結束、已得到答覆或從未存在。 |
+| 400 | `invalid_request` | `adminError.oauthClientNotVerified` | 核准一個應用程式未經驗證的請求。 |
+| 400 | `invalid_request` | `adminError.oauthKeyNotEligible` | 金鑰不存在、已關閉 OAuth，或沒有開放的登入時段。 |
+| 409 | `conflict` | `adminError.oauthSignInLimit` | 金鑰已有 `max` 個登入。 |
+| 400 | `invalid_request` | `adminError.oauthNotEnabled` | 在已關閉 OAuth 的金鑰上開啟登入時段。 |
+| 400 | `invalid_request` | `adminError.oauthNoHttps` | 在 Home Assistant 沒有 HTTPS 位址時開啟登入時段。 |
+| 404 | `not_found` | `adminError.oauthSignInNotFound` | 此金鑰沒有使用此 ID 的登入。 |
+| 503 | `service_unavailable` | `adminError.oauthSaveFailed` | 無法移除該登入。 |
+
+相關：[應用程式的 OAuth 登入](guide:topic.connecting#oauth)、[智慧體端點](guide:topic.agentEndpoints#oauth)
 
 ### 金鑰稽核日誌 {#key-audit}
 

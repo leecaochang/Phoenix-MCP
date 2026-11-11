@@ -19,6 +19,8 @@ from .template_limits import TEMPLATE_WORKER_CONCURRENCY
 from .card_catalog import CardCatalogStore
 from .rate_limiter import RateLimiter
 from .access_key_store import AccessKeyStore
+from .oauth_flow import OAuthRuntime
+from .oauth_grants import OAuthGrantStore
 from .version_store import VersionStore
 
 if TYPE_CHECKING:
@@ -48,6 +50,7 @@ class DurableState:
     routing_statistics: RoutingStatistics
     decision_budget: DecisionRequestBudget
     calendar_writes: CalendarWriteJournal
+    oauth_grants: OAuthGrantStore = field(default_factory=OAuthGrantStore)
     # Set by the first load that succeeds. A load that failed leaves nothing here, so the
     # next reload reads the file again, which is how a repaired store comes back.
     mesa: MesaStorage | None = None
@@ -90,6 +93,11 @@ class PhoenixData:
     # frontend. Always present: __init__ supplies a persistent store; direct
     # constructions get an in-memory default that reads as never-harvested.
     card_catalog: CardCatalogStore = field(default_factory=CardCatalogStore)
+    # Approved OAuth sign-ins. __init__ supplies the persistent store; direct
+    # constructions keep them in memory.
+    oauth_grants: OAuthGrantStore = field(default_factory=OAuthGrantStore)
+    # OAuth sign-in windows, pending requests and codes: memory only.
+    oauth: OAuthRuntime = field(default_factory=OAuthRuntime)
     # MESA semantic-safety runtime (store, resolver, enforcer, validator).
     # None only if MESA setup failed; views guard accordingly.
     mesa: MesaRuntime | None = None

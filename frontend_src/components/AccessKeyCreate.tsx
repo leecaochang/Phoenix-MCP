@@ -10,7 +10,7 @@ import type { AccessKeyRecord, CreateAccessKeyBody } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
-import { Modal } from "./Modal";
+import { Modal, ModalHeader } from "./Modal";
 import { ConnectInstructions, CopyCodeBox } from "./ConnectInstructions";
 import { ActionButton } from "../ui/ActionButton";
 import { Icon, type IconName } from "../ui/Icon";
@@ -60,6 +60,8 @@ export function RawAccessKeyDisplay({ rawAccessKey, note }: { rawAccessKey: stri
 interface PostCreateProps {
   rawAccessKey: string;
   accessKeyName: string;
+  accessKeyId: string;
+  oauthEnabled: boolean;
   onOpenSettings: () => void;   // "Use This Access Key in Home Assistant" closes this dialog and opens Settings
   onDone: () => void;           // finish -> refresh + open the new access key's detail page
 }
@@ -68,7 +70,7 @@ interface PostCreateProps {
 // access key immediately: connect an external agent, set up in-panel Agent Chat, or
 // just reveal the access key to copy. It is drawn over the whole workspace, not inside
 // the Access Keys window, with plain rows and icons, no coloured accents.
-function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }: PostCreateProps) {
+function PostCreateModal({ rawAccessKey, accessKeyName, accessKeyId, oauthEnabled, onOpenSettings, onDone }: PostCreateProps) {
   const [view, setView] = useState<"choice" | "connect" | "access-key">("choice");
 
   // On view switches the clicked control unmounts; refocus the first control
@@ -92,8 +94,9 @@ function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }
   const done = <ActionButton icon="check" label={t("accessKeys.done")} className="btn btn-primary btn-sm" onClick={onDone} />;
 
   return (
-    <Modal titleId="created-access-key-title" onClose={onDone} overWorkspace>
-      <h3 className="modal-title" id="created-access-key-title">{t("accessKeys.accessKeyCreatedTitle", { name: accessKeyName })}</h3>
+    <Modal titleId="created-access-key-title" onClose={onDone} overWorkspace dismiss="escape">
+      <ModalHeader id="created-access-key-title" title={t("accessKeys.accessKeyCreatedTitle", { name: accessKeyName })}
+        closeLabel={t("common.close")} onClose={onDone} />
       <div ref={viewsRef} style={{ display: "contents" }}>
 
       {view === "choice" && (
@@ -118,7 +121,7 @@ function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }
 
       {view === "connect" && (
         <>
-          <ConnectInstructions accessKey={rawAccessKey} accessKeyName={accessKeyName} />
+          <ConnectInstructions accessKey={rawAccessKey} accessKeyName={accessKeyName} accessKeyId={accessKeyId} oauthEnabled={oauthEnabled} />
           <div className="modal-actions">{back}{done}</div>
         </>
       )}
@@ -141,6 +144,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
   const [ttlValue, setTtlValue] = useState("24");
   const [passThrough, setPassThrough] = useState(false);
   const [ptConfirmed, setPtConfirmed] = useState(false);
+  const [oauthEnabled, setOauthEnabled] = useState(false);
   const [rateLimitRequests, setRateLimitRequests] = useState("60");
   const [rateLimitBurst, setRateLimitBurst] = useState("10");
   const [saving, setSaving] = useState(false);
@@ -211,6 +215,7 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
         confirm_pass_through: passThrough ? true : undefined,
         rate_limit_requests: parseInt(rateLimitRequests, 10) || 0,
         rate_limit_burst: burstNum,
+        oauth_enabled: oauthEnabled || undefined,
       };
       const resp = await api.createAccessKey(body);
       const { access_key: rawAccessKey, ...record } = resp;
@@ -230,6 +235,8 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
       <PostCreateModal
         rawAccessKey={createdAccessKey.raw}
         accessKeyName={createdAccessKey.record.name}
+        accessKeyId={createdAccessKey.record.id}
+        oauthEnabled={!!createdAccessKey.record.oauth_enabled}
         onOpenSettings={() => { onClose(); onOpenSettings(); }}
         onDone={() => {
           onCreated(createdAccessKey.record, createdAccessKey.raw);
@@ -331,19 +338,37 @@ export function AccessKeyCreateForm({ existingNames, onCreated, onClose, onOpenS
         )}
       </div>
 
-      {/* What pass-through does is in Help. */}
-      <div className="toggle-row access-key-create-pt" data-help="accessKeys.passThroughModeHelp" data-help-controls="" data-guide="window.accessKeys#key-pass-through">
-        <label className="toggle-switch">
-          <input
-            type="checkbox"
-            aria-label={t("accessKeys.passThroughMode")}
-            aria-description={t("accessKeys.passThroughModeHelp")}
-            checked={passThrough}
-            onChange={(e) => { setPassThrough(e.target.checked); setPtConfirmed(false); }}
-          />
-          <span className="toggle-switch-track" />
-        </label>
-        <div className="toggle-label"><span>{t("accessKeys.passThroughMode")}</span></div>
+      {/* Both optional switches share one row: what each does is in Help. */}
+      <div className="access-key-create-toggles">
+        {/* What pass-through does is in Help. */}
+        <div className="toggle-row access-key-create-pt" data-help="accessKeys.passThroughModeHelp" data-help-controls="" data-guide="window.accessKeys#key-pass-through">
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              aria-label={t("accessKeys.passThroughMode")}
+              aria-description={t("accessKeys.passThroughModeHelp")}
+              checked={passThrough}
+              onChange={(e) => { setPassThrough(e.target.checked); setPtConfirmed(false); }}
+            />
+            <span className="toggle-switch-track" />
+          </label>
+          <div className="toggle-label"><span>{t("accessKeys.passThroughMode")}</span></div>
+        </div>
+
+        {/* Optional: apps that take only a server address sign in instead of sending the key. */}
+        <div className="toggle-row access-key-create-pt" data-help="oauth.switchHelp" data-help-controls="" data-guide="window.accessKeys#key-oauth">
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              aria-label={t("oauth.switchLabel")}
+              aria-description={t("oauth.switchHelp")}
+              checked={oauthEnabled}
+              onChange={(e) => setOauthEnabled(e.target.checked)}
+            />
+            <span className="toggle-switch-track" />
+          </label>
+          <div className="toggle-label"><span>{t("oauth.switchLabel")}</span></div>
+        </div>
       </div>
 
       {passThrough && (

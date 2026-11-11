@@ -33,6 +33,11 @@ from .mesa import (
     PhoenixAdminMesaSuggestionDismissView, PhoenixAdminMesaSuggestionRestoreView,
     PhoenixAdminMesaVocabularyView,
 )
+from .oauth import (
+    PhoenixAdminAccessKeyOAuthSignInView, PhoenixAdminAccessKeyOAuthView,
+    PhoenixAdminAccessKeyOAuthWindowView, PhoenixAdminOAuthRequestApproveView,
+    PhoenixAdminOAuthRequestDenyView, PhoenixAdminOAuthRequestView, PhoenixAdminOAuthSummaryView,
+)
 from .permissions import (
     PhoenixAdminEntityHintView, PhoenixAdminEntityHintsView, PhoenixAdminEntityTreeView,
     PhoenixAdminPermissionBulkSelectView, PhoenixAdminPermissionDeviceView,
@@ -73,6 +78,13 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminEntityHintView,
     PhoenixAdminAccessKeyStatsView,
     PhoenixAdminAccessKeyConnectionView,
+    PhoenixAdminAccessKeyOAuthView,
+    PhoenixAdminAccessKeyOAuthWindowView,
+    PhoenixAdminAccessKeyOAuthSignInView,
+    PhoenixAdminOAuthRequestView,
+    PhoenixAdminOAuthRequestApproveView,
+    PhoenixAdminOAuthRequestDenyView,
+    PhoenixAdminOAuthSummaryView,
     PhoenixAdminAccessKeyAuditView,
     PhoenixAdminAuditView,
     PhoenixAdminConversationsView,

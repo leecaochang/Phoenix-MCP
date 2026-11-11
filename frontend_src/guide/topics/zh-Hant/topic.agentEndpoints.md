@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.agentEndpoints", "title": "智慧體端點", "parent": "topic.adminApi", "order": 60, "keywords": ["MCP 端點", "JSON-RPC", "智慧體 API", "phx_", "Streamable HTTP"], "sectionKeywords": { "routes": ["405", "尾隨斜線", "緊急停止開關"], "bearer": ["Authorization", "Bearer", "401", "WWW-Authenticate", "未授權", "建議"], "origin": ["Origin", "瀏覽器", "403", "CORS"], "mcp": ["POST", "JSON-RPC", "批次", "-32700", "-32600", "-32601", "SSE", "text/event-stream", "協定版本", "2026-07-28", "2025-03-26"], "sessions": ["Mcp-Session-Id", "舊版", "工作階段限制", "initialize"], "end-session": ["DELETE", "關閉工作階段"], "context": ["內容文件", "format=json", "實體"], "skill": ["SKILL.md", "技能指南", "Markdown"], "rate-limit": ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After", "429", "rate_limited", "突發"] } }
+{ "id": "topic.agentEndpoints", "title": "智慧體端點", "parent": "topic.adminApi", "order": 60, "keywords": ["MCP 端點", "JSON-RPC", "智慧體 API", "phx_", "Streamable HTTP"], "sectionKeywords": { "routes": ["405", "尾隨斜線", "緊急停止開關"], "oauth": ["OAuth", "PKCE", "well-known", "權杖端點", "重新整理權杖", "phxo_", "phxr_", "Client ID Metadata Document"], "bearer": ["Authorization", "Bearer", "401", "WWW-Authenticate", "未授權", "建議"], "origin": ["Origin", "瀏覽器", "403", "CORS"], "mcp": ["POST", "JSON-RPC", "批次", "-32700", "-32600", "-32601", "SSE", "text/event-stream", "協定版本", "2026-07-28", "2025-03-26"], "sessions": ["Mcp-Session-Id", "舊版", "工作階段限制", "initialize"], "end-session": ["DELETE", "關閉工作階段"], "context": ["內容文件", "format=json", "實體"], "skill": ["SKILL.md", "技能指南", "Markdown"], "rate-limit": ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After", "429", "rate_limited", "突發"] } }
 ---
 智慧體使用 Phoenix 存取金鑰（`phx_...`）透過這些路由存取 Phoenix，而不是 Home Assistant 權杖。本頁面向建置或檢查 MCP 用戶端的開發者。
 
@@ -14,7 +14,7 @@ GET    /api/phoenix-mcp/context
 GET    /api/phoenix-mcp/skill
 ```
 
-智慧體向第一個路由傳送 MCP 請求，從第二個路由讀取其金鑰的內容，並從最後一個路由取得技能指南。
+智慧體向第一個路由傳送 MCP 請求，從第二個路由讀取其金鑰的內容，並從最後一個路由取得技能指南。透過 OAuth 登入的應用程式還會使用[登入路由](guide:#oauth)。
 
 - POST 和 DELETE 也支援帶尾隨斜線的 `/api/phoenix-mcp/`。
 - `GET /api/phoenix-mcp` 傳回 `405`，因為該端點沒有 GET 處理常式。
@@ -23,6 +23,8 @@ GET    /api/phoenix-mcp/skill
 ## 傳送金鑰 {#bearer}
 
 在 `Authorization` 標頭中把金鑰作為 `Bearer phx_...` 傳送。金鑰是 `phx_` 後接 64 個字元。絕不要把它放在 URL 中：即使標頭正確，`token` 或 `access_token` 查詢參數也會被拒絕。
+
+透過 OAuth 登入的應用程式會以同樣方式傳送其存取權杖，即 `Bearer phxo_...`。該權杖代表登入時被核准的金鑰，下方每項檢查都適用於該金鑰。
 
 除技能外的每個路由都會依此順序檢查金鑰：
 
@@ -37,7 +39,7 @@ GET    /api/phoenix-mcp/skill
 | 401 | `unauthorized` | 金鑰已被撤銷或已過期。已過期的金鑰會移到歸檔。 |
 | 429 | `rate_limited` | 金鑰超過其速率限制。參見[速率限制](guide:#rate-limit)。 |
 
-每個 `401` 都帶有 `WWW-Authenticate: Bearer realm="Phoenix MCP"`。通過檢查的金鑰會在速率限制檢查前更新其 `last_used_at`。
+每個 `401` 都帶有 `WWW-Authenticate: Bearer realm="Phoenix MCP"`。當金鑰允許 OAuth 登入且請求透過 HTTPS 送達時，它還會指明 `resource_metadata`；對於已結束的 OAuth 權杖，還會加上 `error="invalid_token"`。通過檢查的金鑰會在速率限制檢查前更新其 `last_used_at`。
 
 這些路由上的錯誤本文比管理 API 更簡單：`error` 和 `message`，有時帶一個 `suggestions` 陣列。它們帶有 `X-Phoenix-Request-ID`，但沒有 `message_key`，也沒有 `Cache-Control`。
 
@@ -46,6 +48,29 @@ GET    /api/phoenix-mcp/skill
 ```
 
 相關：[錯誤](guide:topic.adminApi#errors)
+
+## OAuth 登入 {#oauth}
+
+Phoenix 為無法傳送金鑰的應用程式執行自己的 OAuth 2.1 伺服器。它從不使用 Home Assistant 自己的登入，並拒絕 Home Assistant 的權杖。
+
+```
+GET    /.well-known/oauth-protected-resource/api/phoenix-mcp
+GET    /.well-known/oauth-authorization-server/api/phoenix-mcp/oauth
+GET    /api/phoenix-mcp/oauth/authorize
+POST   /api/phoenix-mcp/oauth/token
+POST   /api/phoenix-mcp/oauth/revoke
+```
+
+- 簽發者是你的 HTTPS 位址加上 `/api/phoenix-mcp/oauth`。它的文件也會在兩個 OpenID 探索路徑上提供。
+- 應用程式用 Client ID Metadata Document 表明身分：`client_id` 是一個 https 位址。不支援動態註冊。
+- 只接受 S256 PKCE。如果傳送了 `resource`，它必須是你的位址加上 `/api/phoenix-mcp`。
+- 授權會把瀏覽器轉到 Phoenix 面板，由管理員為一個金鑰核准此次登入。授權回應帶有 `iss`。
+- 存取權杖（`phxo_`）有效期為一小時。每次重新整理都會替換重新整理權杖（`phxr_`）。被替換的重新整理權杖在 60 秒內仍然有效，之後再使用它會結束此次登入。
+- 撤銷端點接受任一種權杖，並結束整個登入。
+
+在有金鑰允許 OAuth 登入之前，以及對任何不是透過 HTTPS 送達的請求，這些路由都會傳回 `404`。緊急停止開關開啟時，它們會傳回 `503`。每個位址每分鐘最多可向它們發出 30 個請求。
+
+相關：[透過 OAuth 登入的應用程式](guide:topic.connecting#oauth)、[OAuth 登入端點](guide:topic.adminApiKeys#oauth)
 
 ## 瀏覽器來源 {#origin}
 
@@ -129,6 +154,8 @@ Phoenix 正在啟動或關閉，或緊急停止開關開啟時，它傳回 `503`
 ## 速率限制 {#rate-limit}
 
 每個金鑰有兩個限制。`rate_limit_requests` 統計滑動 60 秒內的請求。`rate_limit_burst` 統計任意一秒內的請求；0 會關閉突發限制。`rate_limit_requests` 為 0 會同時關閉兩者。
+
+單獨的 `notifications/initialized` 和工作階段 `DELETE` 計入每分鐘限制，但從不計入突發限制。同時開啟多個工作階段的用戶端會一次傳送很多這類訊息。
 
 相關：[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)
 

@@ -43,6 +43,7 @@
     "last_used_at",
     "name",
     "notes",
+    "oauth_enabled",
     "pass_through",
     "permissions",
     "persona",

@@ -22,7 +22,8 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-_PHOENIX_ACCESS_KEY_SCRUB_RE = re.compile(r"phx_[0-9a-f]{64}", re.IGNORECASE)
+# Access keys and the OAuth access token, refresh token and code shapes.
+_PHOENIX_ACCESS_KEY_SCRUB_RE = re.compile(r"phx[cor]?_[0-9a-f]{64}", re.IGNORECASE)
 
 # Home Assistant long-lived access tokens (and other JWTs) are three base64url
 # segments whose header always begins "eyJ". Redact so a leaked LLAT in a log

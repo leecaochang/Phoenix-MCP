@@ -75,6 +75,9 @@ class RequestAuthority:
     data: PhoenixData
     access_key_id: str
     access_key_hash: str
+    # Set when an OAuth sign-in presented the key: removing that sign-in, switching
+    # OAuth off or rotating the key then ends the request like a revoked key.
+    oauth_grant_id: str | None = None
 
     def current_access_key(self) -> AccessKeyRecord:
         data = self.data
@@ -83,6 +86,8 @@ class RequestAuthority:
             raise AuthorityChangedError("Service unavailable.")
         access_key = data.store.get_access_key_by_hash(self.access_key_hash)
         if access_key is None or access_key.id != self.access_key_id or not access_key.is_valid():
+            raise AuthorityChangedError("Unauthorized.")
+        if self.oauth_grant_id is not None and not data.oauth_grants.is_live(self.oauth_grant_id, access_key):
             raise AuthorityChangedError("Unauthorized.")
         return access_key
 

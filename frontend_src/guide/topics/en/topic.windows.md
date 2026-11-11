@@ -71,7 +71,7 @@ Quick Help comes back from the **{{label:shell.help}}** menu, and Needs Attentio
 
 ## How arrangements are saved {#saved}
 
-Your arrangement is saved as you work, for your Home Assistant user. Another computer picks it up the next time it loads Phoenix. Phones keep an arrangement of their own.
+Your arrangement is saved as you work, for your Home Assistant user. Another computer picks it up the next time it loads Phoenix. Phones keep an arrangement of their own. A maximized window is saved at its place in the arrangement, not maximized.
 
 ## On a phone {#phones}
 

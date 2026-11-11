@@ -37,6 +37,7 @@ Phoenix 在写入任何内容之前检查每个值。第一个问题会拒绝整
 
 - 它会取消正在进行的决策工作，并使进行中的路由结果和命令审批失效。
 - 开启 `access_key_presets_enabled` 会给每个密钥一个“默认”预设。
+- 开启 `kill_switch` 会丢弃开放中的 OAuth 登录时段和等待批准的登录。已批准的登录会保留并暂停。
 - 关闭 `kill_switch` 会重新打开智能体路由。
 - Phoenix 会立即应用 `mesa_mode`，并更新语音智能体、AI 任务和 Assist 工具提供商。
 - `mesa_inject_enabled` 和 `agentcli_global` 会在页面下次完整加载时生效。
@@ -163,6 +164,7 @@ DELETE /api/phoenix-mcp/admin/wipe
 `wipe_core` 会清除：
 
 - 访问密钥、已归档密钥、实体提示，以及所有重置为默认值的设置。
+- 所有 OAuth 登录，以及开放中的登录时段和等待批准的登录。
 - 待处理审批。Phoenix 会消除其通知并报告它们已解决。
 - 审计日志、对话日志、版本历史，以及结果未知的智能体写入记录。
 - 路由统计、决策请求计数、卡片目录缓存和路由澄清。

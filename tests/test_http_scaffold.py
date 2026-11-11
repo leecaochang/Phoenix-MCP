@@ -15,9 +15,10 @@ def _client_view_classes():
     """Return the complete kill-switch-gated client route set."""
     from custom_components.phoenix_mcp.agent_chat_views import ALL_AGENT_CHAT_CHAT_VIEWS
     from custom_components.phoenix_mcp.mcp_transport import ALL_MCP_VIEWS
+    from custom_components.phoenix_mcp.oauth_views import ALL_OAUTH_VIEWS
     from custom_components.phoenix_mcp.skill_view import ALL_SKILL_VIEWS
 
-    return list(ALL_MCP_VIEWS) + list(ALL_SKILL_VIEWS) + list(ALL_AGENT_CHAT_CHAT_VIEWS)
+    return list(ALL_MCP_VIEWS) + list(ALL_SKILL_VIEWS) + list(ALL_AGENT_CHAT_CHAT_VIEWS) + list(ALL_OAUTH_VIEWS)
 
 
 def _all_view_classes():
@@ -45,12 +46,17 @@ async def client_routes(hass: HomeAssistant, hass_client_no_auth):
 
 
 def test_client_route_list_contains_no_rest_proxy() -> None:
-    """The only access-key-facing routes are MCP, context, skill, and Agent Chat."""
+    """The only access-key-facing routes are MCP, context, skill, Agent Chat and OAuth sign-in."""
     assert {view.url for view in _client_view_classes()} == {
         "/api/phoenix-mcp",
         "/api/phoenix-mcp/context",
         "/api/phoenix-mcp/skill",
         "/api/phoenix-mcp/agentcli/chat",
+        "/.well-known/oauth-protected-resource/api/phoenix-mcp",
+        "/.well-known/oauth-authorization-server/api/phoenix-mcp/oauth",
+        "/api/phoenix-mcp/oauth/authorize",
+        "/api/phoenix-mcp/oauth/token",
+        "/api/phoenix-mcp/oauth/revoke",
     }
 
 

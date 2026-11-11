@@ -108,6 +108,8 @@ export interface AccessKeyRecord extends CapabilityFlagsMap {
   persona: Persona;
   // Administrator notes for the agents using this access key; null when none.
   notes: string | null;
+  // Whether apps may sign in with OAuth to present this access key.
+  oauth_enabled?: boolean;
   rate_limit_requests: number;
   rate_limit_burst: number;
   permissions: PermissionTree;
@@ -555,11 +557,65 @@ export interface CreateAccessKeyBody {
   confirm_pass_through?: boolean;
   rate_limit_requests?: number;
   rate_limit_burst?: number;
+  oauth_enabled?: boolean;
+}
+
+// One app's approved OAuth sign-in to an access key.
+export interface OAuthSignIn {
+  id: string;
+  client_id: string;
+  client_name: string;
+  redirect_host: string;
+  created_at: string;
+  created_by: string;
+  last_used_at: string | null;
+}
+
+// OAuth sign-in status of one access key. window_open_until is runtime state.
+export interface AccessKeyOAuthStatus {
+  oauth_enabled?: boolean;
+  window_open_until: string | null;
+  kill_switch: boolean;
+  public_url: string | null;
+  max_sign_ins: number;
+  sign_ins: OAuthSignIn[];
+}
+
+// Per key that allows OAuth sign-in: its signed-in apps and open window, for the key list.
+export interface OAuthSummary {
+  keys: Record<string, { sign_ins: number; window_open_until: string | null }>;
+  kill_switch: boolean;
+}
+
+// A key an OAuth sign-in request may be approved for.
+export interface OAuthEligibleKey {
+  id: string;
+  name: string;
+  persona: Persona;
+  pass_through: boolean;
+  window_open_until: string;
+  at_cap: boolean;
+}
+
+// An app's OAuth sign-in request waiting for an administrator.
+export interface OAuthSignInRequest {
+  id: string;
+  client_id: string;
+  client_host: string;
+  client_name: string;
+  verified: boolean;
+  problem: string | null;
+  redirect_host: string;
+  loopback_only: boolean;
+  created_at: string;
+  expires_at: string;
+  keys: OAuthEligibleKey[];
 }
 
 export interface PatchAccessKeyBody {
   name?: string;
   notes?: string | null;
+  oauth_enabled?: boolean;
   pass_through?: boolean;
   confirm_pass_through?: boolean;
   rate_limit_requests?: number;

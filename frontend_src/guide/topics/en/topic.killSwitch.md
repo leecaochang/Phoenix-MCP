@@ -11,10 +11,12 @@ The kill switch cuts off every way an AI can reach your home through Phoenix. It
 - The AI Task entity becomes unavailable.
 - Assist Tool Provider offers no tools.
 - Approving a waiting request cancels it instead. A configuration recovery review is the exception: it still runs.
+- Apps signed in with OAuth are paused, and no app can start a new sign-in. Approved sign-ins work again once the switch is off.
+- Open sign-in periods and sign-ins waiting for approval are dropped, so an app that was signing in starts again afterwards.
 
 ## What keeps working {#keeps}
 
-This panel keeps working, so you can review what happened and turn the switch off again. You can still restore a change in Changes and edit MESA profiles, and the in-context profile buttons stay.
+This panel keeps working, so you can review what happened and turn the switch off again. You can still restore a change in Changes and edit MESA profiles, and the in-context profile buttons stay. You can still see and remove the apps signed in to a key.
 
 ## After a restart {#restart}
 

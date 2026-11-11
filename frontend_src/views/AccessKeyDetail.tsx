@@ -1,16 +1,17 @@
 import { BusyInput, BusySelect } from "../components/BusyButton";
-import { createContext, Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createContext, Fragment, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { AccessKeyRecord, EntityTree as EntityTreeData, PatchAccessKeyBody, PermissionTree } from "../types";
 import { api } from "../api";
 import { Loading, ErrorMsg, StatusRegion } from "../components/common";
 import type { LinkScope } from "../components/MesaProfileLink";
-import { Modal } from "../components/Modal";
+import { Modal, ModalHeader } from "../components/Modal";
 import { RawAccessKeyDisplay } from "../components/AccessKeyCreate";
 import { ConnectInstructions } from "../components/ConnectInstructions";
 import { CapabilityMatrix, CAP_NAMES, capLabel, capModeLabel } from "../components/CapabilityMatrix";
 import type { EsphomeAvailability } from "../components/CapabilityMatrix";
 import { PersonaPicker } from "../components/PersonaPicker";
 import { AccessKeyNotes } from "../components/AccessKeyNotes";
+import { AccessKeyOAuth, announceOAuthChange } from "../components/AccessKeyOAuth";
 import { RateLimitConfig } from "../components/RateLimitConfig";
 import { PassThroughNotice } from "../components/PassThroughNotice";
 import { useCompanionDomains } from "../utils/companion_reach";
@@ -51,7 +52,7 @@ function toolGatingChanged(a: AccessKeyRecord, b: AccessKeyRecord): boolean {
 // Exactly one can be open or in flight at a time; see the `action` state below.
 type AccessKeyAction = "revoke" | "rotate" | "passThrough" | "clearPerms";
 
-function RotatedAccessKeyModal({ rawAccessKey, accessKeyName, onClose }: { rawAccessKey: string; accessKeyName: string; onClose: () => void }) {
+function RotatedAccessKeyModal({ rawAccessKey, accessKeyName, accessKeyId, oauthEnabled, onClose }: { rawAccessKey: string; accessKeyName: string; accessKeyId: string; oauthEnabled: boolean; onClose: () => void }) {
   const [closeEnabled, setCloseEnabled] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -61,8 +62,10 @@ function RotatedAccessKeyModal({ rawAccessKey, accessKeyName, onClose }: { rawAc
   }, []);
 
   return (
-    <Modal titleId="rotated-access-key-title" onClose={closeEnabled ? onClose : undefined} overWorkspace>
-      <h3 className="modal-title" id="rotated-access-key-title">{t("accessKeys.accessKeyRotatedTitle", { name: accessKeyName })}</h3>
+    <Modal titleId="rotated-access-key-title" onClose={closeEnabled ? onClose : undefined} overWorkspace dismiss="escape">
+      <ModalHeader id="rotated-access-key-title" title={t("accessKeys.accessKeyRotatedTitle", { name: accessKeyName })}
+        closeLabel={t("common.close")} onClose={onClose} closeDisabled={!closeEnabled}
+        closeTitle={closeEnabled ? undefined : t("accessKeys.waitBeforeClose")} />
       <RawAccessKeyDisplay
         rawAccessKey={rawAccessKey}
         note={<p>{tRich("accessKeys.rotatedNote", { strong: (c) => <strong>{c}</strong> })}</p>}
@@ -70,7 +73,7 @@ function RotatedAccessKeyModal({ rawAccessKey, accessKeyName, onClose }: { rawAc
       <p className="modal-body-text">{t("accessKeys.rotatedBanner")}</p>
       <details className="connect-details">
         <summary>{t("accessKeys.helpConnect")}</summary>
-        <ConnectInstructions accessKey={rawAccessKey} accessKeyName={accessKeyName} />
+        <ConnectInstructions accessKey={rawAccessKey} accessKeyName={accessKeyName} accessKeyId={accessKeyId} oauthEnabled={oauthEnabled} />
       </details>
       <div className="modal-actions">
         <ActionButton icon="close" label={closeEnabled ? t("common.close") : t("accessKeys.closeCountdown")} className="btn btn-outline btn-sm"
@@ -803,6 +806,7 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
       // from its own list and reselects/clears, instead of continuing to show
       // (and let the user submit against) an access key that no longer works.
       window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
+      announceOAuthChange(accessKeyId);
       onDeselect();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("accessKeys.revokeFailed"));
@@ -813,7 +817,11 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
   async function rotate() {
     try {
       const resp = await api.rotateAccessKey(accessKeyId);
-      const { access_key: rawAccessKey } = resp;
+      const { access_key: rawAccessKey, ...record } = resp;
+      // The new record (its updated time) tells the OAuth section its sign-ins just ended;
+      // the announcement tells every other OAuth view on the page.
+      setAccessKey(record);
+      announceOAuthChange(accessKeyId);
       setRotatedRawAccessKey(rawAccessKey);
       onRefresh?.();
     } catch (e: unknown) {
@@ -910,7 +918,7 @@ const SelectedAccessKey = memo(function SelectedAccessKey({
   return (
     <>
       {rotatedRawAccessKey && accessKey && (
-        <RotatedAccessKeyModal rawAccessKey={rotatedRawAccessKey} accessKeyName={accessKey.name} onClose={() => setRotatedRawAccessKey(null)} />
+        <RotatedAccessKeyModal rawAccessKey={rotatedRawAccessKey} accessKeyName={accessKey.name} accessKeyId={accessKey.id} oauthEnabled={!!accessKey.oauth_enabled} onClose={() => setRotatedRawAccessKey(null)} />
       )}
 
       {mesaEdit && (
@@ -968,8 +976,24 @@ const KEY_ACTION_GUIDE: Record<Exclude<AccessKeyAction, "clearPerms">, string> =
   passThrough: "window.accessKeys#enable-pass-through",
 };
 
+/** How many apps an OAuth sign-in ends with this key's rotation or revocation; 0 when unknown. */
+function useSignInCount(accessKey: AccessKeyRecord | null, asking: boolean): number {
+  const [count, setCount] = useState(0);
+  const id = accessKey?.id;
+  const enabled = !!accessKey?.oauth_enabled;
+  useEffect(() => {
+    setCount(0);
+    if (!asking || !id || !enabled) return;
+    let live = true;
+    api.getAccessKeyOAuth(id).then((s) => { if (live) setCount(s.sign_ins.length); }).catch(() => {});
+    return () => { live = false; };
+  }, [asking, id, enabled]);
+  return count;
+}
+
 function KeyActionConfirmation({ detail }: { detail: AccessKeyDetail }) {
   const a = detail.action;
+  const signIns = useSignInCount(detail.accessKey, a?.kind === "rotate" || a?.kind === "revoke");
   if (!a || a.kind === "clearPerms") return null;
   // The acknowledgement names the key, so the box says which key it acts on.
   const name = { name: detail.accessKey?.name ?? "" };
@@ -988,7 +1012,9 @@ function KeyActionConfirmation({ detail }: { detail: AccessKeyDetail }) {
     <div data-guide={KEY_ACTION_GUIDE[a.kind]}>
     <InlineConfirm key={a.kind} label={text.title} tone={text.tone} acknowledge={text.check} acknowledgeLabel={text.checkLabel} help={text.help}
       confirmLabel={text.confirm} confirmIcon={text.icon} confirmClassName={text.className}
-      cancelLabel={t("accessKeys.cancel")} busy={a.busy} onConfirm={detail.runAction} onCancel={detail.cancelAction} />
+      cancelLabel={t("accessKeys.cancel")} busy={a.busy} onConfirm={detail.runAction} onCancel={detail.cancelAction}>
+      {a.kind !== "passThrough" && signIns > 0 ? <p>{tn("oauth.endsSignIns", signIns)}</p> : undefined}
+    </InlineConfirm>
     </div>
   );
 }
@@ -1085,28 +1111,64 @@ export function CapabilitiesWindow() {
   );
 }
 
+type KeySettingsTab = "guidance" | "behavior" | "oauth";
+const KEY_SETTINGS_TABS: readonly KeySettingsTab[] = ["guidance", "behavior", "oauth"];
+const KEY_TAB_LABEL: Record<KeySettingsTab, string> = { guidance: "accessKeys.cardGuidance", behavior: "accessKeys.cardAgentBehavior", oauth: "accessKeys.tabOAuth" };
+const KEY_TAB_HELP: Record<KeySettingsTab, string> = { guidance: "accessKeys.tabGuidanceHelp", behavior: "accessKeys.tabBehaviorHelp", oauth: "accessKeys.tabOAuthHelp" };
+const KEY_TAB_GUIDE: Record<KeySettingsTab, string> = { guidance: "window.keySettings#guidance", behavior: "window.keySettings#agent-behavior", oauth: "window.keySettings#oauth-sign-in" };
+const keyTabId = (tab: KeySettingsTab) => `phx-key-tab-${tab}`;
+const keyPanelId = (tab: KeySettingsTab) => `phx-key-panel-${tab}`;
+/** The tab last shown, kept while another key is selected, as the Home Assistant settings keep theirs. */
+let lastKeySettingsTab: KeySettingsTab = "guidance";
+
 /**
- * The key's specialized settings in three sections: Guidance
- * for its agents, how its agents behave (tool announcement, the inline approval
- * wait, and Assist exposure for pass-through keys), and Rate Limiting.
+ * The key's specialized settings on local tabs: Guidance for its agents; Agent Behavior
+ * (tool announcement, the inline approval wait, Assist exposure for pass-through keys, and
+ * rate limiting); and OAuth sign-in. Each tab keeps its state while another is shown.
  */
 export function KeySettingsWindow() {
   const k = useLoadedKey();
+  const [current, setCurrent] = useState<KeySettingsTab>(lastKeySettingsTab);
   if ("placeholder" in k) return <>{k.placeholder}</>;
+  const choose = (tab: KeySettingsTab) => { lastKeySettingsTab = tab; setCurrent(tab); };
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const at = KEY_SETTINGS_TABS.indexOf(current);
+    const last = KEY_SETTINGS_TABS.length - 1;
+    const next = e.key === "ArrowRight" ? KEY_SETTINGS_TABS[(at + 1) % KEY_SETTINGS_TABS.length]
+      : e.key === "ArrowLeft" ? KEY_SETTINGS_TABS[(at + last) % KEY_SETTINGS_TABS.length]
+        : e.key === "Home" ? KEY_SETTINGS_TABS[0] : e.key === "End" ? KEY_SETTINGS_TABS[last] : null;
+    if (!next) return;
+    e.preventDefault();
+    choose(next);
+    (e.currentTarget.parentElement?.querySelector(`#${keyTabId(next)}`) as HTMLElement | null)?.focus();
+  };
   return (
     <KeyPad k={k} className="phx-window-pad phx-key-settings">
-      <section className="phx-key-settings-section" aria-labelledby="phx-key-guidance" data-guide="window.keySettings#guidance">
-        <h3 id="phx-key-guidance" className="phx-section-title">{t("accessKeys.cardGuidance")}</h3>
+      <div className="phx-local-tabs" role="tablist" aria-label={t("workspace.keySettings")}>
+        {KEY_SETTINGS_TABS.map((tab) => (
+          <button key={tab} id={keyTabId(tab)} type="button" role="tab" className="phx-local-tab" aria-selected={tab === current}
+            data-guide={KEY_TAB_GUIDE[tab]} data-help={KEY_TAB_HELP[tab]} aria-controls={keyPanelId(tab)}
+            tabIndex={tab === current ? 0 : -1} onClick={() => choose(tab)} onKeyDown={onKeyDown}>
+            {t(KEY_TAB_LABEL[tab])}
+          </button>
+        ))}
+      </div>
+      <div id={keyPanelId("guidance")} role="tabpanel" aria-labelledby={keyTabId("guidance")} hidden={current !== "guidance"}
+        className="phx-key-settings-panel" data-guide="window.keySettings#guidance">
         <AccessKeyNotes accessKey={k.accessKey} onUpdate={k.detail.setAccessKey} />
-      </section>
-      <section className="phx-key-settings-section" aria-labelledby="phx-key-behaviour" data-guide="window.keySettings#agent-behavior">
-        <h3 id="phx-key-behaviour" className="phx-section-title">{t("accessKeys.cardAgentBehavior")}</h3>
+      </div>
+      <div id={keyPanelId("behavior")} role="tabpanel" aria-labelledby={keyTabId("behavior")} hidden={current !== "behavior"}
+        className="phx-key-settings-panel" data-guide="window.keySettings#agent-behavior">
         <ToolAnnouncementToggle accessKey={k.accessKey} onUpdate={k.detail.applyUpdate} />
-      </section>
-      <section className="phx-key-settings-section" aria-labelledby="phx-key-rate" data-guide="window.keySettings#rate-limiting">
-        <h3 id="phx-key-rate" className="phx-section-title">{t("accessKeys.cardRateLimiting")}</h3>
-        <RateLimitConfig accessKey={k.accessKey} onUpdate={k.detail.setAccessKey} />
-      </section>
+        <section className="phx-key-settings-section" aria-labelledby="phx-key-rate" data-guide="window.keySettings#rate-limiting">
+          <h3 id="phx-key-rate" className="phx-section-title">{t("accessKeys.cardRateLimiting")}</h3>
+          <RateLimitConfig accessKey={k.accessKey} onUpdate={k.detail.setAccessKey} />
+        </section>
+      </div>
+      <div id={keyPanelId("oauth")} role="tabpanel" aria-labelledby={keyTabId("oauth")} hidden={current !== "oauth"}
+        className="phx-key-settings-panel" data-guide="window.keySettings#oauth-sign-in">
+        <AccessKeyOAuth accessKeyId={k.accessKey.id} version={k.accessKey.updated_at} onUpdate={k.detail.setAccessKey} />
+      </div>
     </KeyPad>
   );
 }

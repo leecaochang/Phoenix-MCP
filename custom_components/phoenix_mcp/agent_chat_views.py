@@ -27,6 +27,7 @@ from .data import PhoenixData
 from .helpers import get_client_ip
 from .catalog_text import LocalizedReason
 from .home_companion import is_companion
+from .net_guard import ip_is_blocked
 from .llm.accounts import (
     _default_base_url, _default_model, _get_secret_store, _provider_catalog,
     DuplicateProviderError, PROVIDER_DEFINITIONS, provider_purpose, ProviderConfig,
@@ -250,35 +251,6 @@ class PhoenixAgentCliChatView(PhoenixView):
         return cast(web.Response, resp)
 
 
-# Cloud metadata endpoints that the link-local and reserved ranges do not cover.
-_METADATA_ADDRESSES = frozenset(ipaddress.ip_address(address) for address in (
-    "100.100.100.200", "168.63.129.16", "192.0.0.192", "fd00:ec2::254",
-))
-
-
-def _ip_is_blocked(
-    ip: ipaddress.IPv4Address | ipaddress.IPv6Address, *, allow_private: bool,
-) -> bool:
-    """Return whether an operator-supplied endpoint may not target this address.
-
-    IPv4-carrying IPv6 is judged by its IPv4, and Teredo by its client as well as itself.
-    Remote providers must be globally routable; a local server is refused only metadata
-    addresses. Loopback comes first: ::1 counts as reserved.
-    """
-    if isinstance(ip, ipaddress.IPv6Address):
-        if carried := ip.ipv4_mapped or ip.sixtofour:
-            return _ip_is_blocked(carried, allow_private=allow_private)
-        if ip.teredo and _ip_is_blocked(ip.teredo[1], allow_private=allow_private):
-            return True
-    if ip.is_loopback:
-        return not allow_private
-    return (
-        ip in _METADATA_ADDRESSES
-        or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified
-        or (not allow_private and not ip.is_global)
-    )
-
-
 async def _validate_base_url(
     url: str, *, allow_private: bool = True,
 ) -> ProbeConfigError | None:
@@ -321,7 +293,7 @@ async def _validate_base_url(
     except ValueError:
         literal = None
     if literal is not None:
-        if _ip_is_blocked(literal, allow_private=allow_private):
+        if ip_is_blocked(literal, allow_private=allow_private):
             if allow_private:
                 return ProbeConfigError(
                     "The server URL must not point at a link-local or metadata address.",
@@ -359,7 +331,7 @@ async def _validate_base_url(
             scoped = True
             continue
         usable = True
-        if _ip_is_blocked(ip, allow_private=allow_private):
+        if ip_is_blocked(ip, allow_private=allow_private):
             if allow_private:
                 return ProbeConfigError(
                     "The server URL resolves to a link-local or metadata address.",

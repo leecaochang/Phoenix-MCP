@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { load } from "js-yaml";
-import { buildAgentTabs, buildBearerValue, buildClaudeCommand, buildCodexCommand, buildCodexConfig, buildCursorJson, buildGeminiCommand, buildHarnessConfig, buildMcpJson, buildMcpUrl, buildSkillInstall, buildTestPrompt, codexAccessKeyEnv, firstGreenEntity, firstGreenTarget, freeAccessKeyName, harnessServerName, mcpServerName, skillUrlFromMcp } from "../wizard_helpers";
+import { buildAgentTabs, buildBearerValue, buildOAuthTabs, buildClaudeCommand, buildCodexCommand, buildCodexConfig, buildCursorJson, buildGeminiCommand, buildHarnessConfig, buildMcpJson, buildMcpUrl, buildSkillInstall, buildTestPrompt, codexAccessKeyEnv, firstGreenEntity, firstGreenTarget, freeAccessKeyName, harnessServerName, mcpServerName, skillUrlFromMcp } from "../wizard_helpers";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
 import type { EntityTree, PermissionTree } from "../types";
 
@@ -124,6 +124,24 @@ describe("buildAgentTabs", () => {
       expect(t.href).toMatch(/^https:\/\//);
       expect(t.blocks.length).toBeGreaterThan(0);
     }
+  });
+
+  it("offers OAuth steps only for clients that sign in with a client metadata document", () => {
+    const tabs = buildOAuthTabs("https://ha.example/api/phoenix-mcp");
+    expect(tabs.map((t) => t.key)).toEqual(["claude", "chatgpt", "vscode", "antigravity"]);
+    for (const t of tabs) {
+      expect(t.href).toMatch(/^https:\/\//);
+      expect(t.blocks.some((b) => b.steps && b.steps.length > 0)).toBe(true);
+      expect(JSON.stringify(t)).not.toMatch(/phx_|Bearer/);
+    }
+    // Claude Code sits in the Claude tab, and the ChatGPT desktop app in the ChatGPT tab; the commands carry the HTTPS address and no header.
+    const codes = (key: string) => tabs.find((t) => t.key === key)!.blocks.map((b) => b.code).filter(Boolean);
+    expect(codes("claude")).toEqual(["claude mcp add --transport http phoenix https://ha.example/api/phoenix-mcp"]);
+    // The Codex CLI registers dynamically, which Phoenix doesn't offer: no command that would fail.
+    expect(codes("chatgpt")).toEqual([]);
+    expect(tabs.find((t) => t.key === "chatgpt")!.href).toBe("https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt");
+    // Clients that can't sign in this way are left to the key.
+    expect(tabs.map((t) => t.key)).not.toContain("cursor");
   });
 
   it("threads the access-key-derived server name into every tab", () => {

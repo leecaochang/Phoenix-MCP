@@ -113,6 +113,17 @@ def _load_bool(value: object) -> bool:
     return value is True
 
 
+def _load_generation(value: object) -> int:
+    """Load a stored OAuth generation; anything but a non-negative int reads as 0.
+
+    A sign-in issued under another generation is dead, so a corrupt value can only end
+    sign-ins, never revive one.
+    """
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return 0
+
+
 @dataclass
 class PermissionNode:
     """Permission state for one node in the hierarchy (domain, device, or entity).
@@ -351,6 +362,11 @@ class AccessKeyRecord:
     # Administrator notes: advisory prose for the agents using this access key.
     # Key-level like the name, so presets never carry or replace them.
     notes: str | None = None
+    # OAuth sign-in: key-level like notes, so presets never carry it. A sign-in is
+    # valid only while its key's oauth_generation equals the one it was issued
+    # under; rotation and switching OAuth off advance it (storage only).
+    oauth_enabled: bool = False
+    oauth_generation: int = 0
     permissions: PermissionTree = field(default_factory=PermissionTree)
     # Settings presets (the workspace model): active_preset_id is sticky.
     # Manual edits never clear it; they are the active preset's unsaved state,
@@ -414,6 +430,7 @@ class AccessKeyRecord:
             "rate_limit_burst": self.rate_limit_burst,
             "persona": self.persona,
             "notes": self.notes,
+            "oauth_enabled": self.oauth_enabled,
             "permissions": self.permissions.to_dict(),
             "presets": [p.to_dict() for p in self.presets],
             "active_preset_id": self.active_preset_id,
@@ -435,6 +452,7 @@ class AccessKeyRecord:
         d["tools_catalog_fingerprint"] = self.tools_catalog_fingerprint
         d["notes_version"] = self.notes_version
         d["notes_delivered_version"] = self.notes_delivered_version
+        d["oauth_generation"] = self.oauth_generation
         return d
 
     @classmethod
@@ -484,6 +502,8 @@ class AccessKeyRecord:
             rate_limit_burst=_load_rate(data.get("rate_limit_burst", DEFAULT_RATE_LIMIT_BURST), DEFAULT_RATE_LIMIT_BURST),
             persona=persona,
             notes=_load_notes(data.get("notes"), data.get("id", "?")),
+            oauth_enabled=_load_bool(data.get("oauth_enabled")),
+            oauth_generation=_load_generation(data.get("oauth_generation")),
             updated_at=_parse_dt(data.get("updated_at")),
             permissions=PermissionTree.from_dict(permissions_raw),
             presets=presets,
@@ -1093,6 +1113,7 @@ class AccessKeyStore:
         use_assist_exposure: bool = False,
         rate_limit_requests: int = DEFAULT_RATE_LIMIT_REQUESTS,
         rate_limit_burst: int = DEFAULT_RATE_LIMIT_BURST,
+        oauth_enabled: bool = False,
     ) -> tuple[AccessKeyRecord, str]:
         """Generate a new access key, store it, and return (record, raw_access_key).
 
@@ -1114,6 +1135,7 @@ class AccessKeyStore:
             confirm_inline_wait_seconds=DEFAULT_CONFIRM_INLINE_WAIT_SECONDS,
             rate_limit_requests=rate_limit_requests,
             rate_limit_burst=rate_limit_burst if rate_limit_requests > 0 else 0,
+            oauth_enabled=oauth_enabled is True,
             updated_at=now,
         )
         # While presets are enabled, every access key carries an active preset from
@@ -1230,6 +1252,11 @@ class AccessKeyStore:
                     value = normalize_notes(value)
                     if value != access_key.notes:
                         access_key.notes_version += 1
+                if key == "oauth_enabled":
+                    value = value is True
+                    if access_key.oauth_enabled and not value:
+                        # Switching OAuth off ends every sign-in of this key in the same save.
+                        access_key.oauth_generation += 1
                 setattr(access_key, key, value)
         if access_key.persona == PERSONA_HOME_COMPANION:
             access_key.pass_through = False
@@ -1249,7 +1276,9 @@ class AccessKeyStore:
         # tool list nor the caps, so like name it must not fire a spurious advisory.
         # Notes are advisory prose, never authority, so they must not invalidate
         # admitted work either.
-        non_invalidating = {"name", "confirm_inline_wait_seconds", "notes"}
+        # OAuth sign-in is another way to present the key, not authority: bearer work
+        # admitted on the same key stays valid when it changes.
+        non_invalidating = {"name", "confirm_inline_wait_seconds", "notes", "oauth_enabled"}
         if cap_changed or any(k not in non_invalidating for k in kwargs):
             previous_version = access_key.settings_version
             access_key.settings_version += 1
@@ -1445,6 +1474,8 @@ class AccessKeyStore:
             return None
         raw_access_key = ACCESS_KEY_PREFIX + secrets.token_hex(ACCESS_KEY_HEX_LENGTH // 2)
         access_key.access_key_hash = hashlib.sha256(raw_access_key.encode()).hexdigest()
+        # Rotation ends the key's OAuth sign-ins in the same save as the new secret.
+        access_key.oauth_generation += 1
         access_key.updated_at = utcnow()
         await self.async_save()
         return access_key, raw_access_key

@@ -12,9 +12,9 @@
 - 沒有有效權杖時，Home Assistant 本身會在 Phoenix 執行前傳回 `401`，沒有 JSON 本文。
 - 已登入但不是管理員的使用者會收到 `403`，錯誤為 `forbidden`。
 - Phoenix 仍在啟動時，除目錄外的每個端點都會傳回 `503`，錯誤為 `service_unavailable`。
-- Phoenix 存取金鑰（`phx_...`）無法開啟這些端點。它們僅供智慧體使用。
+- Phoenix 存取金鑰（`phx_...`）以及應用程式透過 OAuth 登入取得的權杖都無法開啟這些端點。它們僅供智慧體使用。
 
-緊急停止開關開啟時，管理 API 仍會運作。
+緊急停止開關開啟時，管理 API 仍會運作。只有 OAuth 登入步驟會拒絕：開放登入時段，以及載入或核准應用程式的登入。
 
 相關：[管理員這一側](guide:topic.security#admin)
 

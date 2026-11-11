@@ -37,6 +37,7 @@ An accepted change has these effects:
 
 - It cancels decision work in progress, and invalidates routing results and command approvals still in flight.
 - Turning `access_key_presets_enabled` on gives every key a Default preset.
+- Turning `kill_switch` on drops open OAuth sign-in periods and sign-ins waiting for approval. Approved sign-ins stay, paused.
 - Turning `kill_switch` off opens the agent routes again.
 - Phoenix applies `mesa_mode` straight away, and updates the Voice Agent, AI Task and Assist Tool Provider.
 - `mesa_inject_enabled` and `agentcli_global` take effect on the next full page load.
@@ -163,6 +164,7 @@ A missing flag, or one that isn't a boolean, uses its default. So `{"confirm": "
 `wipe_core` clears:
 
 - Access keys, archived keys, entity hints, and every setting back to its default.
+- Every OAuth sign-in, with open sign-in periods and sign-ins waiting for approval.
 - Pending approvals. Phoenix dismisses their notifications and reports them resolved.
 - The audit log, the Conversation Log, version history and the journal of agent writes with an unknown outcome.
 - Routing statistics, the decision request count, the card catalog cache and routing clarifications.

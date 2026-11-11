@@ -570,3 +570,58 @@ class TestChargeBatch:
         limiter.check("t1", 60, 0)
         result = limiter.charge_batch("t1", 60, 0, 49)
         assert result.remaining == 10
+
+
+# ---------------------------------------------------------------------------
+# Handshake messages: the minute's ceiling, never the burst
+# ---------------------------------------------------------------------------
+
+
+class TestHandshakeExemption:
+    def test_handshake_traffic_never_fills_the_burst(self):
+        """A client opening several sessions at once sends many handshake messages in one second."""
+        rl = _rl()
+        for _ in range(5):
+            assert rl.check("tok", rate_limit_requests=60, rate_limit_burst=3, burst=False).allowed
+        assert _check(rl, requests=60, burst=3).allowed
+
+    def test_handshake_traffic_still_counts_toward_the_minute(self):
+        rl = _rl()
+        for _ in range(4):
+            assert rl.check("tok", rate_limit_requests=5, rate_limit_burst=10, burst=False).allowed
+        assert rl.check("tok", rate_limit_requests=5, rate_limit_burst=10).allowed
+        refused = rl.check("tok", rate_limit_requests=5, rate_limit_burst=10, burst=False)
+        assert refused.allowed is False and refused.retry_after > 0
+        assert rl.charge_batch("tok", 5, 10, 1).allowed is False
+
+    def test_a_request_known_only_after_parsing_takes_the_burst_then(self):
+        rl = _rl()
+        first = rl.check("tok", rate_limit_requests=60, rate_limit_burst=1, burst=False)
+        assert rl.charge_burst("tok", 60, 1, first.stamp).allowed
+        second = rl.check("tok", rate_limit_requests=60, rate_limit_burst=1, burst=False)
+        refused = rl.charge_burst("tok", 60, 1, second.stamp)
+        assert refused.allowed is False and refused.retry_after >= 1
+        # A refused request is recorded nowhere, as check records nothing it refuses.
+        assert len(rl._windows["tok"]) == 1 and len(rl._quiet["tok"]) == 0
+
+    def test_charging_the_burst_for_a_vanished_entry_charges_it_afresh(self):
+        rl = _rl()
+        stamp = rl.check("tok", rate_limit_requests=60, rate_limit_burst=3, burst=False).stamp
+        rl.destroy("tok")
+        assert rl.charge_burst("tok", 60, 3, stamp).allowed
+        assert len(rl._windows["tok"]) == 1
+        assert rl.charge_burst("tok", 0, 0, None).rate_limiting_enabled is False
+
+    def test_destroy_clears_the_handshake_record(self):
+        rl = _rl()
+        rl.check("tok", rate_limit_requests=5, rate_limit_burst=3, burst=False)
+        rl.destroy_all()
+        assert rl._quiet == {}
+
+    def test_handshake_entries_expire_with_the_window(self):
+        rl = _rl()
+        with patch("custom_components.phoenix_mcp.rate_limiter.time.monotonic", return_value=1000.0):
+            for _ in range(5):
+                rl.check("tok", rate_limit_requests=5, rate_limit_burst=3, burst=False)
+        with patch("custom_components.phoenix_mcp.rate_limiter.time.monotonic", return_value=1000.0 + WINDOW_SECONDS + 1):
+            assert _check(rl).allowed

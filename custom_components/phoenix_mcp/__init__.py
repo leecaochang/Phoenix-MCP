@@ -29,7 +29,8 @@ from .const import (
     APPROVAL_SWEEP_INTERVAL, AUDIT_STORAGE_KEY, AUDIT_STORAGE_VERSION, CARD_CATALOG_STORAGE_KEY,
     CARD_CATALOG_STORAGE_VERSION, CONFIG_RECOVERY_SWEEP_INTERVAL, CONVERSATION_LOG_FLUSH_SECONDS,
     CONVERSATION_LOG_STORAGE_KEY, DASHBOARD_RESOURCE_OWNERSHIP_STORAGE_KEY, DOMAIN,
-    EXPIRY_CHECK_INTERVAL, FLUSH_INTERVAL, MIN_HA_VERSION, RUNTIME_READY_KEY, SENSOR_PUSH_INTERVAL,
+    EXPIRY_CHECK_INTERVAL, FLUSH_INTERVAL, MIN_HA_VERSION, OAUTH_GRANTS_STORAGE_KEY,
+    OAUTH_GRANTS_STORAGE_VERSION, RUNTIME_READY_KEY, SENSOR_PUSH_INTERVAL,
     VERSION_STORAGE_KEY, VERSION_STORAGE_VERSION,
 )
 from .provider_constants import AGENT_CHAT_CATALOG_TICK_INTERVAL
@@ -88,8 +89,8 @@ _SETUP_MODULES = (
     "access_key_auth", "admin.registry", "agent_chat", "agent_chat_views", "ai_task", "approvals",
     "assist_api", "config_reconciliation", "config_recovery", "conversation_log",
     "dashboard_resource_ownership", "debug_capture", "durable_storage", "llm.accounts",
-    "log_read", "logger_control", "mcp_transport", "mesa", "mesa_audit", "mesa_core",
-    "mesa_suggestions", "panel", "recovery_storage", "routing.decision_budget",
+    "log_read", "logger_control", "mcp_transport", "mesa", "mesa_audit", "mesa_core", "oauth_views",
+    "mesa_suggestions", "oauth_grants", "panel", "recovery_storage", "routing.decision_budget",
     "routing.routing_statistics", "sensor", "skill_view", "template_sandbox", "tool_registration",
     "tools.calendar", "voice_agent", "ws_dispatch",
 )
@@ -403,6 +404,12 @@ async def _async_durable_state(hass: HomeAssistant) -> DurableState:
     decision_budget = DecisionRequestBudget(DurableStore(hass, 1, DECISION_BUDGET_STORAGE_KEY, atomic_writes=True))
     await decision_budget.async_load()
 
+    from .oauth_grants import OAuthGrantStore
+    # Private: it names the apps that signed in and where they return to.
+    oauth_grants = OAuthGrantStore(DurableStore(
+        hass, OAUTH_GRANTS_STORAGE_VERSION, OAUTH_GRANTS_STORAGE_KEY, private=True, atomic_writes=True))
+    await oauth_grants.async_load()
+
     from .tools.calendar import CalendarWriteJournal
     calendar_writes = CalendarWriteJournal(hass)
     try:
@@ -424,6 +431,7 @@ async def _async_durable_state(hass: HomeAssistant) -> DurableState:
         routing_statistics=routing_statistics,
         decision_budget=decision_budget,
         calendar_writes=calendar_writes,
+        oauth_grants=oauth_grants,
     )
     hass.data[_DURABLE_STATE_KEY] = state
 
@@ -461,6 +469,7 @@ async def _async_build_runtime(hass: HomeAssistant) -> tuple[PhoenixData, Durabl
         routing_statistics=state.routing_statistics,
         conversations=state.conversations,
         card_catalog=state.card_catalog,
+        oauth_grants=state.oauth_grants,
         approvals_in_progress=state.approvals_in_progress,
         ready=False,
     )
@@ -568,7 +577,8 @@ async def _async_register_surfaces(hass: HomeAssistant, data: PhoenixData) -> No
         from .mcp_transport import ALL_MCP_VIEWS
         from .skill_view import ALL_SKILL_VIEWS
         from .agent_chat_views import ALL_AGENT_CHAT_CHAT_VIEWS
-        _register_views(hass, ALL_MCP_VIEWS + ALL_SKILL_VIEWS + ALL_AGENT_CHAT_CHAT_VIEWS)
+        from .oauth_views import ALL_OAUTH_VIEWS
+        _register_views(hass, ALL_MCP_VIEWS + ALL_SKILL_VIEWS + ALL_AGENT_CHAT_CHAT_VIEWS + ALL_OAUTH_VIEWS)
 
     data.async_register_routes = _register_routes
     if not settings.kill_switch:
@@ -1224,6 +1234,16 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     for record in changed:
         dismiss_approval_notification(hass, record.id)
         fire_approval_resolved_event(hass, record)
+    # Every key is archived above, so no sign-in can be used; the file goes with them.
+    try:
+        if state is not None:
+            await state.oauth_grants.async_clear()
+        else:
+            from .durable_storage import DurableStore
+            await DurableStore(hass, OAUTH_GRANTS_STORAGE_VERSION, OAUTH_GRANTS_STORAGE_KEY,
+                               private=True).async_remove()
+    except Exception:  # removal retires credentials regardless
+        _LOGGER.exception("Phoenix MCP: could not remove the OAuth sign-in file during removal")
     await async_wipe_agentcli_secrets(hass)
 
 

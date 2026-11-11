@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AgentCliWindow } from "../components/AgentCliWindow";
 import { ErrorBoundary } from "../components/ErrorBoundary";
+import { OAuthRequestHost } from "../components/OAuthRequestDialog";
 import { resolveLanguage, t } from "../i18n";
 import { ContextMenuHost, MenuRootContext, useContextMenu, type MenuEntry } from "../ui/Menu";
 import { SelectPopupHost } from "../ui/SelectPopup";
@@ -983,6 +984,8 @@ export function Shell() {
         <Toasts center={notifications} />
         {/* Home Assistant away: one notice over the panel, cleared when it answers again. */}
         <Reconnecting root={rootEl} />
+        {/* An app's OAuth sign-in, reached by the link Phoenix's authorize endpoint sends. */}
+        <OAuthRequestHost />
       </div>
     </AccessKeyDetailProvider>
     </WizardGuideContext.Provider>

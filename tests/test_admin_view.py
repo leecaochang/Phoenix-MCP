@@ -1904,7 +1904,7 @@ async def test_entity_tree_force_reload_bypasses_cache():
 
 
 def test_all_admin_views_exported():
-    assert len(ALL_ADMIN_VIEWS) == 68
+    assert len(ALL_ADMIN_VIEWS) == 75
 
 
 def test_archived_views_before_access_key_view():

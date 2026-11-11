@@ -154,6 +154,15 @@ describe("saved layout sanitizer", () => {
     expect(clean.activeGroup).toBe("2");
   });
 
+  it("never keeps a maximized window, which Dockview would maximize again on load", () => {
+    const layout = saved({ type: "branch", data: [leaf("1", ["audit"]), leaf("2", ["conversations"])], size: 600 },
+      { audit: panel("audit"), conversations: panel("conversations") });
+    (layout.grid as Record<string, unknown>).maximizedNode = { location: [0] };
+    const clean = sanitizeLayout(layout, known)!;
+    expect(clean.grid).not.toHaveProperty("maximizedNode");
+    expect(clean.grid.width).toBe(800);
+  });
+
   it("drops a retired window and the empty slot it leaves", () => {
     const layout = saved({ type: "branch", data: [leaf("1", ["audit"]), leaf("2", ["retired"])], size: 600 },
       { audit: panel("audit"), retired: panel("retired") }, { activeGroup: "2" });

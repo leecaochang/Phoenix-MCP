@@ -735,6 +735,23 @@
 .access-key-status-expired { color: var(--phx-warning); }
 .access-key-status-revoked { color: var(--phx-error); }
 .access-key-mode-pass-through > svg { color: var(--phx-warning); }
+.phx-oauth > .command-field { margin-top: 8px; }
+.phx-oauth-window { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; min-height: 32px; font-variant-numeric: tabular-nums; }
+.phx-oauth-http { display: flex; align-items: flex-start; gap: 8px; }
+.phx-oauth-http > svg { flex: none; margin-top: 1px; color: var(--phx-warning); }
+/* The outcome line is a live region kept in place; while empty it takes no room, so the button starts at the left edge. */
+.phx-oauth-window > [role="status"]:empty { position: absolute; }
+.phx-oauth-sign-ins { margin-top: 12px; }
+.phx-oauth-list { list-style: none; margin: 0; padding: 0; }
+.phx-oauth-list > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--phx-divider); }
+.phx-oauth-list > li:first-child { border-top: 0; }
+.phx-oauth-request { max-width: 560px; }
+.phx-oauth-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 12px 0; }
+.phx-oauth-facts dt { font-weight: 600; }
+.phx-oauth-facts dd { margin: 0; overflow-wrap: anywhere; }
+.phx-oauth-keys { border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); padding: 8px 12px; margin: 12px 0; }
+.phx-oauth-keys > legend { padding: 0 4px; font-weight: 600; }
+.phx-oauth-key { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 
 /* Log Details: a record's heading, compact fields, then its larger evidence. */
 .phx-log-record { display: flex; flex-direction: column; gap: 12px; }
@@ -959,6 +976,8 @@
 .phx-window-pad { padding-top: 12px; }
 .phx-window-pad > .tree-header-actions { margin-bottom: 12px; }
 .phx-section-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.phx-key-settings-panel { padding-top: 12px; }
+.phx-key-settings-panel > .phx-key-settings-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--phx-border); }
 .phx-key-settings-section + .phx-key-settings-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--phx-border); }
 .access-keys-list .access-key-name-input { border-color: var(--phx-field-border); }
 @media (pointer: coarse) {
@@ -1475,7 +1494,7 @@ select.input:not(.agentcli-select) { flex: 0 0 auto; width: clamp(10rem, 33%, 18
 /* In Settings a group's rows run on without rules; rules mark groups and folded sections. */
 .phx-settings .toggle-row { border-bottom: none; }
 /* A folded section or a divider draws its own rule above it, so the row before it does not add a second. */
-.toggle-row:has(+ .phx-disclosure, + .settings-divider) { border-bottom: none; }
+.toggle-row:has(+ .phx-disclosure, + .settings-divider, + .phx-key-settings-section) { border-bottom: none; }
 .toggle-label { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .toggle-label span, .toggle-label > label { font-size: 14px; font-weight: 500; }
 /* A switch's name flips it (ui/toggleNames.ts), so the name is only as wide as its text. */
@@ -1572,6 +1591,15 @@ select.input:not(.agentcli-select) { flex: 0 0 auto; width: clamp(10rem, 33%, 18
 }
 /* Wider dialog for side-by-side diffs (approval review). */
 .modal-wide { max-width: 920px; }
+/* A title row that stays at the top of a scrolling dialog, flush with its edges, with the close button at its right. */
+.modal-header {
+  position: sticky; top: -28px; z-index: 1;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  margin: -28px -28px 12px; padding: 20px 20px 12px 28px;
+  background: var(--phx-surface); border-bottom: 1px solid var(--phx-divider);
+}
+.modal-header > .modal-title { margin: 6px 0 0; }
+.modal-header > .modal-close { flex: none; }
 /* The dialog heading: weights stay within 400 to 600, no colour. */
 .modal-title { font-size: 16px; font-weight: 600; margin: 0 0 12px 0; color: var(--phx-text); }
 .modal-body-text { margin: 0 0 16px; color: var(--phx-text-2); line-height: 1.5; }
@@ -2041,6 +2069,12 @@ select.input:not(.agentcli-select) { flex: 0 0 auto; width: clamp(10rem, 33%, 18
 .access-key-create-expiry-row { display: flex; gap: 8px; }
 .access-key-create-hint { grid-column: 1 / -1; margin: -6px 0 0; font-size: 12px; color: var(--phx-text-2); }
 .access-key-create-pt { justify-content: flex-start; gap: 10px; margin-top: 10px; padding: 0; border-bottom: none; }
+/* Pass-through and OAuth sign-in side by side on the fields' own columns, so each switch starts at its
+   column's left edge; one column in a narrow window, as the fields are. */
+.access-key-create-toggles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  column-gap: 16px; max-width: 36rem;
+}
 .access-key-create-pt .toggle-label { flex: 0 1 auto; }
 
 /* ============================================================

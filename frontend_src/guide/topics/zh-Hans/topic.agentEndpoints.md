@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.agentEndpoints", "title": "智能体端点", "parent": "topic.adminApi", "order": 60, "keywords": ["MCP 端点", "JSON-RPC", "智能体 API", "phx_", "Streamable HTTP"], "sectionKeywords": { "routes": ["405", "尾随斜杠", "紧急停止开关"], "bearer": ["Authorization", "Bearer", "401", "WWW-Authenticate", "未授权", "建议"], "origin": ["Origin", "浏览器", "403", "CORS"], "mcp": ["POST", "JSON-RPC", "批处理", "-32700", "-32600", "-32601", "SSE", "text/event-stream", "协议版本", "2026-07-28", "2025-03-26"], "sessions": ["Mcp-Session-Id", "旧版", "会话限制", "initialize"], "end-session": ["DELETE", "关闭会话"], "context": ["上下文文档", "format=json", "实体"], "skill": ["SKILL.md", "技能指南", "Markdown"], "rate-limit": ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After", "429", "rate_limited", "突发"] } }
+{ "id": "topic.agentEndpoints", "title": "智能体端点", "parent": "topic.adminApi", "order": 60, "keywords": ["MCP 端点", "JSON-RPC", "智能体 API", "phx_", "Streamable HTTP"], "sectionKeywords": { "routes": ["405", "尾随斜杠", "紧急停止开关"], "oauth": ["OAuth", "PKCE", "well-known", "令牌端点", "刷新令牌", "phxo_", "phxr_", "Client ID Metadata Document"], "bearer": ["Authorization", "Bearer", "401", "WWW-Authenticate", "未授权", "建议"], "origin": ["Origin", "浏览器", "403", "CORS"], "mcp": ["POST", "JSON-RPC", "批处理", "-32700", "-32600", "-32601", "SSE", "text/event-stream", "协议版本", "2026-07-28", "2025-03-26"], "sessions": ["Mcp-Session-Id", "旧版", "会话限制", "initialize"], "end-session": ["DELETE", "关闭会话"], "context": ["上下文文档", "format=json", "实体"], "skill": ["SKILL.md", "技能指南", "Markdown"], "rate-limit": ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After", "429", "rate_limited", "突发"] } }
 ---
 智能体使用 Phoenix 访问密钥（`phx_...`）通过这些路由访问 Phoenix，而不是 Home Assistant 令牌。本页面向构建或检查 MCP 客户端的开发者。
 
@@ -14,7 +14,7 @@ GET    /api/phoenix-mcp/context
 GET    /api/phoenix-mcp/skill
 ```
 
-智能体向第一个路由发送 MCP 请求，从第二个路由读取其密钥的上下文，并从最后一个路由获取技能指南。
+智能体向第一个路由发送 MCP 请求，从第二个路由读取其密钥的上下文，并从最后一个路由获取技能指南。通过 OAuth 登录的应用还会使用[登录路由](guide:#oauth)。
 
 - POST 和 DELETE 也支持带尾随斜杠的 `/api/phoenix-mcp/`。
 - `GET /api/phoenix-mcp` 返回 `405`，因为该端点没有 GET 处理器。
@@ -23,6 +23,8 @@ GET    /api/phoenix-mcp/skill
 ## 发送密钥 {#bearer}
 
 在 `Authorization` 头中把密钥作为 `Bearer phx_...` 发送。密钥是 `phx_` 后跟 64 个字符。绝不要把它放在 URL 中：即使头正确，`token` 或 `access_token` 查询参数也会被拒绝。
+
+通过 OAuth 登录的应用以同样方式发送其访问令牌，即 `Bearer phxo_...`。该令牌代表登录时被批准的密钥，下面的每项检查都适用于该密钥。
 
 除技能外的每个路由都会按此顺序检查密钥：
 
@@ -37,7 +39,7 @@ GET    /api/phoenix-mcp/skill
 | 401 | `unauthorized` | 密钥已被吊销或已过期。已过期的密钥会移到归档。 |
 | 429 | `rate_limited` | 密钥超过其速率限制。参见[速率限制](guide:#rate-limit)。 |
 
-每个 `401` 都带有 `WWW-Authenticate: Bearer realm="Phoenix MCP"`。通过检查的密钥会在速率限制检查前更新其 `last_used_at`。
+每个 `401` 都带有 `WWW-Authenticate: Bearer realm="Phoenix MCP"`。当密钥允许 OAuth 登录且请求通过 HTTPS 到达时，它还会指明 `resource_metadata`；对于已结束的 OAuth 令牌，还会添加 `error="invalid_token"`。通过检查的密钥会在速率限制检查前更新其 `last_used_at`。
 
 这些路由上的错误正文比管理 API 更简单：`error` 和 `message`，有时带一个 `suggestions` 数组。它们带有 `X-Phoenix-Request-ID`，但没有 `message_key`，也没有 `Cache-Control`。
 
@@ -46,6 +48,29 @@ GET    /api/phoenix-mcp/skill
 ```
 
 相关：[错误](guide:topic.adminApi#errors)
+
+## OAuth 登录 {#oauth}
+
+Phoenix 为无法发送密钥的应用运行自己的 OAuth 2.1 服务器。它从不使用 Home Assistant 自己的登录，并拒绝 Home Assistant 的令牌。
+
+```
+GET    /.well-known/oauth-protected-resource/api/phoenix-mcp
+GET    /.well-known/oauth-authorization-server/api/phoenix-mcp/oauth
+GET    /api/phoenix-mcp/oauth/authorize
+POST   /api/phoenix-mcp/oauth/token
+POST   /api/phoenix-mcp/oauth/revoke
+```
+
+- 颁发者是你的 HTTPS 地址加上 `/api/phoenix-mcp/oauth`。它的文档也在两个 OpenID 发现路径上提供。
+- 应用用 Client ID Metadata Document 表明身份：`client_id` 是一个 https 地址。不支持动态注册。
+- 只接受 S256 PKCE。如果发送了 `resource`，它必须是你的地址加上 `/api/phoenix-mcp`。
+- 授权会把浏览器转到 Phoenix 面板，由管理员为一个密钥批准此次登录。授权响应带有 `iss`。
+- 访问令牌（`phxo_`）有效期为一小时。每次刷新都会替换刷新令牌（`phxr_`）。被替换的刷新令牌在 60 秒内仍然有效，之后再使用它会结束此次登录。
+- 吊销端点接受任一种令牌，并结束整个登录。
+
+在有密钥允许 OAuth 登录之前，以及对任何不是通过 HTTPS 到达的请求，这些路由都返回 `404`。紧急停止开关开启时，它们返回 `503`。每个地址每分钟最多可向它们发出 30 个请求。
+
+相关：[通过 OAuth 登录的应用](guide:topic.connecting#oauth)、[OAuth 登录端点](guide:topic.adminApiKeys#oauth)
 
 ## 浏览器来源 {#origin}
 
@@ -129,6 +154,8 @@ Phoenix 正在启动或关闭，或紧急停止开关开启时，它返回 `503`
 ## 速率限制 {#rate-limit}
 
 每个密钥有两个限制。`rate_limit_requests` 统计滑动 60 秒内的请求。`rate_limit_burst` 统计任意一秒内的请求；0 会关闭突发限制。`rate_limit_requests` 为 0 会同时关闭两者。
+
+单独的 `notifications/initialized` 和会话 `DELETE` 计入每分钟限制，但从不计入突发限制。同时打开多个会话的客户端会一次发送很多这类消息。
 
 相关：[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)
 

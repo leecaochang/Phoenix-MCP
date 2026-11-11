@@ -1,11 +1,24 @@
 ---
-{"id": "topic.connecting", "title": "Connecting External Apps", "parent": "topic.about", "order": 20, "keywords": ["MCP client", "connect", "setup", "external agent", "remote"], "sectionKeywords": {"commands": ["Claude Code", "Gemini CLI", "Antigravity", "Codex", "Cursor", "DeepSeek Harness", "snippet", "command"], "credentials": ["secret", "leak", "protect", "bearer"], "several-keys": ["profiles", "more than one key", "server name"], "connection": ["URL", "endpoint", "Streamable HTTP", "SSE", "protocol", "session"], "reconnect": ["tools changed", "refresh tools"], "primer": ["instructions", "notes", "skill", "SKILL.md"], "ha-mcp-server": ["Home Assistant MCP Server", "/api/mcp", "hosted", "connector"], "problems": ["401", "403", "429", "503", "unauthorized", "forbidden", "troubleshooting"], "remote": ["remote access", "Nabu Casa", "outside the home", "away from home", "VPN", "Tailscale", "reverse proxy", "https"]}, "covers": ["frontend_src/components/ConnectInstructions.tsx", "frontend_src/wizard_helpers.ts", "custom_components/phoenix_mcp/mcp_transport.py", "custom_components/phoenix_mcp/helpers.py", "custom_components/phoenix_mcp/skill_view.py", "custom_components/phoenix_mcp/assist_api.py"]}
+{"id": "topic.connecting", "title": "Connecting External Apps", "parent": "topic.about", "order": 20, "keywords": ["MCP client", "connect", "setup", "external agent", "remote"], "sectionKeywords": {"methods": ["OAuth", "access key", "which method", "header"], "commands": ["Claude Code", "Gemini CLI", "Antigravity", "Codex", "Cursor", "DeepSeek Harness", "snippet", "command"], "credentials": ["secret", "leak", "protect", "bearer"], "several-keys": ["profiles", "more than one key", "server name"], "connection": ["URL", "endpoint", "Streamable HTTP", "SSE", "protocol", "session"], "reconnect": ["tools changed", "refresh tools"], "primer": ["instructions", "notes", "skill", "SKILL.md"], "oauth": ["OAuth", "ChatGPT", "Claude", "custom connector", "phone app", "hosted", "sign in"], "oauth-approve": ["approve", "deny", "sign-in request", "consent"], "ha-mcp-server": ["Home Assistant MCP Server", "/api/mcp"], "problems": ["401", "403", "429", "503", "unauthorized", "forbidden", "troubleshooting"], "remote": ["remote access", "Nabu Casa", "outside the home", "away from home", "VPN", "Tailscale", "reverse proxy", "https"]}, "covers": ["frontend_src/components/ConnectInstructions.tsx", "frontend_src/wizard_helpers.ts", "custom_components/phoenix_mcp/mcp_transport.py", "custom_components/phoenix_mcp/helpers.py", "custom_components/phoenix_mcp/skill_view.py", "custom_components/phoenix_mcp/assist_api.py", "frontend_src/components/OAuthRequestDialog.tsx", "custom_components/phoenix_mcp/net_guard.py"]}
 ---
-An external app, such as a coding assistant or a desktop chat app, connects to Phoenix with one access key. The app's own model does the thinking, and Phoenix decides what it may do.
+An external app, such as a coding assistant or a desktop chat app, connects to Phoenix with one access key. The app's own model does the thinking, and Phoenix decides what it may do. Apps that take only a server address [sign in with OAuth](guide:#oauth) instead of sending the key.
+
+## Two ways to connect {#methods}
+
+The connect instructions start with a choice:
+
+- **{{label:wizard.methodKey}}**: the app sends the access key with every request. Use it for coding assistants and other apps that let you set a header.
+- **{{label:wizard.methodOAuth}}**: the app takes only an address and signs in through Home Assistant. Use it for ChatGPT, Claude and their phone apps. Nothing secret is copied.
+
+The instructions open on OAuth when the key already allows it. Each method lists only the apps that support it.
 
 ## Getting the setup commands {#commands}
 
-Phoenix shows the exact command or configuration for Claude Code, Gemini CLI, Antigravity CLI, Codex, Cursor and DeepSeek Harness, plus a general one for any other MCP app. They appear in three places:
+Phoenix shows the exact command or configuration for Claude Code, Gemini CLI, Antigravity CLI, Codex, Cursor and DeepSeek Harness, plus a general one for any other MCP app. Claude Code is on the Claude tab, and Codex on the ChatGPT tab.
+
+Under **{{label:wizard.methodOAuth}}**, Phoenix shows sign-in steps for Claude, ChatGPT, VS Code and Antigravity. The Claude tab covers Claude Code too, and the ChatGPT tab covers the ChatGPT desktop app.
+
+The instructions appear in three places:
 
 - The **Connect** step of [{{label:accessKeys.setUpAgent}}](guide:wizard.connect).
 - **{{label:accessKeys.postCreateConnectTitle}}**, right after you create a key.
@@ -33,11 +46,35 @@ Apps connect to your Home Assistant address followed by /api/phoenix-mcp, sendin
 
 Phoenix speaks MCP over Streamable HTTP. Older app settings that use the SSE transport won't connect. Long actions keep the connection alive with a message every 15 seconds.
 
+## Apps that sign in with OAuth {#oauth}
+
+ChatGPT, Claude and their phone apps can't send an access key. They take only a server address and sign in instead. Phoenix runs its own sign-in for this, separate from Home Assistant's.
+
+1. In the connect instructions, choose **{{label:wizard.methodOAuth}}**, or open the key's [Key Settings](guide:window.keySettings#oauth-sign-in). Turn on **{{label:oauth.switchLabel}}**.
+2. Choose your app's tab and follow its steps. Each uses the address Phoenix shows. Leave any client ID and secret empty.
+3. The app opens Home Assistant in your browser. Sign in as an administrator, then approve the request in Phoenix.
+
+Claude, ChatGPT, VS Code and Antigravity can sign in this way, including Claude Code. The Codex CLI, Cursor, Gemini CLI and DeepSeek Harness can't; give them the key instead. The Codex CLI asks to register itself, which Phoenix doesn't allow.
+
+The app then uses the key you approved it for, with the key's permissions, capabilities, approvals and rate limit. Its requests show in the audit log under that key.
+
+The app must reach Home Assistant over HTTPS from the internet, at the address Phoenix shows. A home network or VPN address won't work for hosted apps.
+
+### Approving a sign-in {#oauth-approve}
+
+Phoenix shows the app's name as the app gives it, the site that identified it, and where it returns to. Check those match the app you just connected.
+
+Choose the key the app gets, then select **{{label:oauth.approve}}**. Only keys with OAuth on and a sign-in period open are offered. Your browser goes back to the app, which is then connected.
+
+Select **{{label:oauth.deny}}** for a sign-in you didn't start. Phoenix refuses apps it can't verify, and fetches an app's description only from public internet addresses.
+
+Only a Home Assistant administrator can approve. The app gets the key's rights, never yours. The dialog counts down the key's sign-in period and closes only through its buttons, since a dismissed request can't be brought back; start again from the app if it ends.
+
 ## Connecting from outside your home {#remote}
 
 Phoenix has no remote service of its own. An app outside your home reaches it the same way your browser would: through your Nabu Casa address, your own domain, or a VPN such as Tailscale. Change the URL in the setup commands to that address, followed by /api/phoenix-mcp.
 
-Use an https address outside your home, because the key travels with every request. A reverse proxy must pass the Authorization header through and allow long responses. Hosted apps connect from their provider's servers, so a home network or VPN address won't work for them.
+Use an https address outside your home, because the key travels with every request. A reverse proxy must pass the Authorization header through, allow long responses, and pass on the original host and https. Hosted apps connect from their provider's servers, so a home network or VPN address won't work for them.
 
 ## When the tools change {#reconnect}
 
@@ -53,7 +90,7 @@ Apps that support skills can also install the Phoenix MCP skill, a longer guide 
 
 ## Through Home Assistant's MCP Server {#ha-mcp-server}
 
-Apps that sign in to Home Assistant itself, such as hosted connectors, can reach Phoenix's tools through Home Assistant's Model Context Protocol integration. Before 2026.11 it was called MCP Server. They use the key bound to [Assist Tool Provider](guide:topic.homeAssistantFeatures#assist-tool-provider).
+Apps that sign in to Home Assistant itself can also reach Phoenix's tools through Home Assistant's Model Context Protocol integration. For most apps, [OAuth sign-in](guide:#oauth) is simpler and keeps them to one key. Before 2026.11 it was called MCP Server. They use the key bound to [Assist Tool Provider](guide:topic.homeAssistantFeatures#assist-tool-provider).
 
 On 2026.11, use /api/mcp/phoenix_mcp, which needs an administrator's sign-in. Home Assistant 2026.7 doesn't have that address, and other versions before 2026.11 may not, so use /api/mcp there.
 
@@ -67,7 +104,7 @@ Tools from Home Assistant's other APIs don't pass through Phoenix on that route,
 
 ## When it doesn't connect {#problems}
 
-- **Unauthorized (401)**: the key is wrong, revoked or expired, or was sent in the URL instead of the Authorization header.
+- **Unauthorized (401)**: the key is wrong, revoked or expired, or was sent in the URL instead of the Authorization header. For an app that signed in, the sign-in ended: approve it again.
 - **Forbidden (403)**: a web page tried to connect from another site. Desktop and command-line apps aren't affected.
 - **Too many requests (429)**: the key hit its rate limit, or has too many connections open at once. The app should wait and try again.
 - **Unavailable (503)**: the kill switch is on, or Phoenix is still starting.

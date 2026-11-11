@@ -37,6 +37,10 @@
 
 相關：[直通模式會開放什麼](guide:topic.passThrough)
 
+### {{label:oauth.switchLabel}} {#key-oauth}
+
+讓只接受伺服器位址的應用程式（例如 ChatGPT 或 Claude）登入以使用此金鑰。預設為關閉。你也可以稍後在[金鑰設定](guide:window.keySettings#oauth-sign-in)中開啟它。
+
 ### 建立金鑰之後 {#key-created}
 
 Phoenix 會詢問你將如何使用新金鑰：

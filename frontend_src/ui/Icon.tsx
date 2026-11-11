@@ -8,7 +8,7 @@ import {
   Download, Ellipsis, Eraser, Eye, FileDiff, FileText, FunnelX, FilePenLine, GitBranch, GripHorizontal, GripVertical, History, Info, KeyRound, KeySquare,
   LayoutDashboard, Lightbulb, ListChecks, ListEnd, ListFilter, ListX, Maximize2, Menu, MessageSquarePlus, MessageSquareText, MessagesSquare, Minimize2, Minus, OctagonAlert, PanelBottom,
   PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PanelTopClose, PanelTopOpen, PanelsTopLeft, Paperclip, Pencil, PictureInPicture2, Plus, RotateCw, Rows2, Save, ScrollText, Search, SearchCheck,
-  Settings, Shield, SlidersHorizontal, StepBack, StepForward, SquareArrowDownLeft, SquareArrowOutUpRight, Square, Star, Trash2, TriangleAlert, Upload,
+  Settings, Shield, SlidersHorizontal, Timer, TimerOff, StepBack, StepForward, SquareArrowDownLeft, SquareArrowOutUpRight, Square, Star, Trash2, TriangleAlert, Upload,
   WandSparkles, X, Sun, MonitorCog, MoonStar,
 } from "lucide-react";
 
@@ -17,6 +17,8 @@ import {
 // place. Entity and device icons supplied by Home Assistant are not drawn here.
 const ICONS = {
   refresh: RotateCw,
+  timer: Timer,
+  timerOff: TimerOff,
   export: Upload,
   import: Download,
   edit: Pencil,

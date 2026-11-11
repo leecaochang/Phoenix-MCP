@@ -64,8 +64,12 @@ export function sanitizeLayout(raw: unknown, known: ReadonlySet<string>): Serial
 
     if (!root && !floating.length) return null;
     const keptPanels = Object.fromEntries(Object.entries(panels).filter(([id]) => placed.has(id)));
+    // Dockview saves which window was maximized and maximizes it again on load, out of Phoenix's
+    // sight: an Access Keys arrangement saved while the key list was held maximized brought the
+    // list back maximized over a chosen key. Phoenix decides what is maximized, so none is kept.
+    const { maximizedNode: _maximized, ...savedGrid } = source.grid;
     const grid = {
-      ...source.grid,
+      ...savedGrid,
       // An empty grid with only floating windows is still a valid layout.
       root: root ?? { type: "branch", data: [], size: 0 },
     };

@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.security", "title": "安全", "parent": "topic.about", "order": 40, "keywords": ["安全", "安全性", "保护", "威胁", "机密", "隐私"], "sectionKeywords": { "keys": ["phx_", "Bearer", "哈希", "指纹", "查询字符串", "Origin", "403", "DNS 重绑定"], "hidden": ["擦除", "已隐去", "敏感属性", "密码", "令牌", "摄像头流", "entity_picture"], "gaps": ["别名下的机密", "内联密码", "日志", "自由文本"], "untrusted": ["提示注入", "设备名称", "指令", "不可信数据"], "request-limits": ["413", "请求体大小", "批处理", "速率限制", "429", "Retry-After"], "admin": ["管理员", "长期访问令牌", "管理 API", "Home Assistant MCP Server"], "stored": ["备份", ".storage", "API 密钥", "加密", "对话"], "checklist": ["最佳实践", "建议", "加固"], "emergency": ["密钥泄露", "受损", "紧急停止开关", "轮换"], "removing": ["卸载", "清除", "删除全部"] } }
+{ "id": "topic.security", "title": "安全", "parent": "topic.about", "order": 40, "keywords": ["安全", "安全性", "保护", "威胁", "机密", "隐私"], "sectionKeywords": { "keys": ["phx_", "Bearer", "哈希", "指纹", "查询字符串", "Origin", "403", "DNS 重绑定", "OAuth", "登录链接"], "hidden": ["擦除", "已隐去", "敏感属性", "密码", "令牌", "摄像头流", "entity_picture"], "gaps": ["别名下的机密", "内联密码", "日志", "自由文本"], "untrusted": ["提示注入", "设备名称", "指令", "不可信数据"], "request-limits": ["413", "请求体大小", "批处理", "速率限制", "429", "Retry-After"], "admin": ["管理员", "长期访问令牌", "管理 API", "Home Assistant MCP Server"], "stored": ["备份", ".storage", "API 密钥", "加密", "对话"], "checklist": ["最佳实践", "建议", "加固"], "emergency": ["密钥泄露", "受损", "紧急停止开关", "轮换"], "removing": ["卸载", "清除", "删除全部"] } }
 ---
 Phoenix 让 AI 智能体在你家中工作，因此它的设计目标是只给每个智能体你允许的内容，并让机密无法触及。本页说明 Phoenix 保护什么、无法保护什么，以及你可以怎样保持安全。
 
@@ -12,6 +12,8 @@ Phoenix 让 AI 智能体在你家中工作，因此它的设计目标是只给�
 - 应用必须在 Authorization 头中发送密钥。放在网址中的密钥会被拒绝。
 - MCP 连接会拒绝来自 Home Assistant 之外页面的浏览器请求，因此恶意网站无法通过你的浏览器访问它。
 - 已吊销或已过期的密钥会立即失效。已在运行的请求会在下一次检查时停止。
+- 通过 OAuth 登录的应用会获得一个只对 Phoenix 有效的令牌，仅用于管理员批准的那一个密钥。Home Assistant 自己的登录令牌永远无法用于 Phoenix。
+- 只在登录是你自己刚刚发起时才批准。有人可能会把他们自己应用的登录链接发给你；批准它就会把密钥交给他们。
 
 相关：[保护密钥安全](guide:topic.connecting#credentials)、[{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)、[{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
 

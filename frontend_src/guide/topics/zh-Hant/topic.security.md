@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.security", "title": "安全", "parent": "topic.about", "order": 40, "keywords": ["安全", "安全性", "保護", "威脅", "機密", "隱私"], "sectionKeywords": { "keys": ["phx_", "bearer", "雜湊", "指紋", "查詢字串", "Origin", "403", "DNS 重繫結"], "hidden": ["清除", "已遮蔽", "敏感屬性", "密碼", "權杖", "攝影機串流", "entity_picture"], "gaps": ["別名下的機密", "內嵌密碼", "日誌", "自由文字"], "untrusted": ["提示注入", "裝置名稱", "指令", "不可信資料"], "request-limits": ["413", "請求體大小", "批次", "速率限制", "429", "Retry-After"], "admin": ["管理員", "長期存取權杖", "管理 API", "Home Assistant MCP Server"], "stored": ["備份", ".storage", "API 金鑰", "加密", "對話"], "checklist": ["最佳實務", "建議", "強化"], "emergency": ["金鑰洩漏", "受損", "緊急停止開關", "輪換"], "removing": ["解除安裝", "清除", "刪除全部"] } }
+{ "id": "topic.security", "title": "安全", "parent": "topic.about", "order": 40, "keywords": ["安全", "安全性", "保護", "威脅", "機密", "隱私"], "sectionKeywords": { "keys": ["phx_", "bearer", "雜湊", "指紋", "查詢字串", "Origin", "403", "DNS 重繫結", "OAuth", "登入連結"], "hidden": ["清除", "已遮蔽", "敏感屬性", "密碼", "權杖", "攝影機串流", "entity_picture"], "gaps": ["別名下的機密", "內嵌密碼", "日誌", "自由文字"], "untrusted": ["提示注入", "裝置名稱", "指令", "不可信資料"], "request-limits": ["413", "請求體大小", "批次", "速率限制", "429", "Retry-After"], "admin": ["管理員", "長期存取權杖", "管理 API", "Home Assistant MCP Server"], "stored": ["備份", ".storage", "API 金鑰", "加密", "對話"], "checklist": ["最佳實務", "建議", "強化"], "emergency": ["金鑰洩漏", "受損", "緊急停止開關", "輪換"], "removing": ["解除安裝", "清除", "刪除全部"] } }
 ---
 Phoenix 讓 AI 智慧體在你家中工作，因此它的設計目標是只給每個智慧體你允許的內容，並讓機密無法觸及。本頁說明 Phoenix 保護什麼、無法保護什麼，以及你可以怎樣保持安全。
 
@@ -12,6 +12,8 @@ Phoenix 讓 AI 智慧體在你家中工作，因此它的設計目標是只給�
 - 應用程式必須在 Authorization 標頭中傳送金鑰。放在網址中的金鑰會被拒絕。
 - MCP 連線會拒絕來自 Home Assistant 之外頁面的瀏覽器請求，因此惡意網站無法透過你的瀏覽器存取它。
 - 已撤銷或已過期的金鑰會立即失效。已在執行的請求會在下一次檢查時停止。
+- 透過 OAuth 登入的應用程式會取得只對 Phoenix 有效的權杖，僅用於管理員核准的那一個金鑰。Home Assistant 自己的登入權杖永遠無法用於 Phoenix。
+- 只在登入是你自己剛剛發起時才核准。有人可能會把他們自己應用程式的登入連結傳給你；核准它就會把金鑰交給他們。
 
 相關：[保護金鑰安全](guide:topic.connecting#credentials)、[{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)、[{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
 

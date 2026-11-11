@@ -12,9 +12,9 @@
 - 没有有效令牌时，Home Assistant 本身会在 Phoenix 运行前返回 `401`，没有 JSON 正文。
 - 已登录但不是管理员的用户会收到 `403`，错误为 `forbidden`。
 - Phoenix 仍在启动时，除目录外的每个端点都会返回 `503`，错误为 `service_unavailable`。
-- Phoenix 访问密钥（`phx_...`）无法打开这些端点。它们仅供智能体使用。
+- Phoenix 访问密钥（`phx_...`）以及应用通过 OAuth 登录获得的令牌都无法打开这些端点。它们仅供智能体使用。
 
-紧急停止开关开启时，管理 API 仍会工作。
+紧急停止开关开启时，管理 API 仍会工作。只有 OAuth 登录步骤会拒绝：开放登录时段，以及加载或批准应用的登录。
 
 相关：[管理员一侧](guide:topic.security#admin)
 

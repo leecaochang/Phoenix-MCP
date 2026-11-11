@@ -184,8 +184,49 @@ ACCESS_KEY_NAME_REGEX = re.compile(r"^[A-Za-z0-9_\-]{3,32}$")
 # The access key fields an update may change, capabilities aside.
 ACCESS_KEY_MUTABLE_FIELDS = frozenset({
     "name", "pass_through", "use_assist_exposure", "announce_all_tools", "confirm_inline_wait_seconds",
-    "rate_limit_requests", "rate_limit_burst", "persona", "notes",
+    "rate_limit_requests", "rate_limit_burst", "persona", "notes", "oauth_enabled",
 })
+
+# OAuth sign-in: an optional second way to present an access key, for apps that
+# cannot send a header. Tokens are opaque secrets stored only as SHA-256 hashes.
+OAUTH_SECRET_HEX_LENGTH = 64
+OAUTH_ACCESS_TOKEN_PREFIX = "phxo_"
+OAUTH_REFRESH_TOKEN_PREFIX = "phxr_"
+OAUTH_CODE_PREFIX = "phxc_"
+OAUTH_ACCESS_TOKEN_LENGTH = len(OAUTH_ACCESS_TOKEN_PREFIX) + OAUTH_SECRET_HEX_LENGTH
+OAUTH_REFRESH_TOKEN_LENGTH = len(OAUTH_REFRESH_TOKEN_PREFIX) + OAUTH_SECRET_HEX_LENGTH
+OAUTH_CODE_LENGTH = len(OAUTH_CODE_PREFIX) + OAUTH_SECRET_HEX_LENGTH
+OAUTH_GRANTS_STORAGE_KEY = "phoenix_mcp_oauth_grants"
+OAUTH_GRANTS_STORAGE_VERSION = 1
+OAUTH_RESOURCE_PATH = "/api/phoenix-mcp"
+OAUTH_ISSUER_PATH = "/api/phoenix-mcp/oauth"
+OAUTH_PANEL_PATH = "/phoenix-mcp/oauth"
+# Where a request from Phoenix's MCP view carries the sign-in it was authenticated by.
+OAUTH_GRANT_REQUEST_KEY = "phoenix_mcp_oauth_grant_id"
+OAUTH_ACCESS_TOKEN_TTL_SECONDS = 3600
+# A replaced refresh or access token keeps working this long, so a retried or
+# concurrent refresh does not end the sign-in.
+OAUTH_REFRESH_GRACE_SECONDS = 60
+OAUTH_REFRESH_SIBLINGS_MAX = 3
+OAUTH_RETIRED_TOKENS_MAX = 8
+OAUTH_CODE_TTL_SECONDS = 60
+OAUTH_REQUEST_TTL_SECONDS = 600
+OAUTH_WINDOW_SECONDS = 600
+OAUTH_PENDING_MAX = 32
+OAUTH_PENDING_PER_ADDRESS_MAX = 4
+OAUTH_ADDRESS_REQUESTS_PER_MINUTE = 30
+OAUTH_TRACKED_ADDRESSES_MAX = 256
+OAUTH_MAX_GRANTS_PER_ACCESS_KEY = 10
+OAUTH_MAX_GRANTS = 100
+OAUTH_URL_MAX_LENGTH = 2048
+OAUTH_STATE_MAX_LENGTH = 512
+OAUTH_CLIENT_NAME_MAX_LENGTH = 80
+OAUTH_FORM_MAX_BYTES = 16 * 1024
+OAUTH_CLIENT_METADATA_MAX_BYTES = 32 * 1024
+OAUTH_CLIENT_METADATA_TIMEOUT_SECONDS = 5
+# Credentials an OAuth endpoint refuses to read from a query string.
+OAUTH_QUERY_SECRETS = frozenset({"code", "code_verifier", "refresh_token", "token", "access_token"})
+OAUTH_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 DEFAULT_RATE_LIMIT_REQUESTS = 60
 DEFAULT_RATE_LIMIT_BURST = 10
 

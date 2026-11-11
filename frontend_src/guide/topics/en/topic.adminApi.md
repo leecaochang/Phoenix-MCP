@@ -12,9 +12,9 @@ Every admin endpoint lives under `/api/phoenix-mcp/admin` and needs a Home Assis
 - Without a valid token, Home Assistant itself answers `401` before Phoenix runs, with no JSON body.
 - A signed-in user who isn't an administrator gets `403` with error `forbidden`.
 - While Phoenix is still starting, every endpoint except the catalog answers `503` with error `service_unavailable`.
-- Phoenix access keys (`phx_...`) can't open these endpoints. They're for agents only.
+- Phoenix access keys (`phx_...`) and the tokens apps get by OAuth sign-in can't open these endpoints. They're for agents only.
 
-The admin API keeps working while the kill switch is on.
+The admin API keeps working while the kill switch is on. Only the OAuth sign-in steps refuse: opening a sign-in period, and loading or approving an app's sign-in.
 
 Related: [The administrator side](guide:topic.security#admin)
 
