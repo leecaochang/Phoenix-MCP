@@ -161,8 +161,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "description": (
             "Get a bounded page of Recorder history for one accessible entity. Pages run oldest first by "
             "default; set order to newest_first for the most recent changes (for example when something last "
-            "happened). Defaults to state_changes, which returns compact attribute-free state transitions and "
-            "supports arbitrary time ranges. significant_states returns scrubbed full state records "
+            "happened). Defaults to state_changes, which returns attribute-free state transitions as "
+            "history_csv, a CSV table with a when,state header and times in Home Assistant's local timezone "
+            "to the second, and supports arbitrary time ranges. significant_states returns scrubbed full state records "
             "that Home Assistant considers significant, not every sample, and is limited to 7 days. "
             "summary returns per-state durations and entry counts instead of rows (how long a light was on, "
             "how often a pump started); a zero or total is definitive only when complete is true. Zone states "
@@ -206,7 +207,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
                     "enum": ["state_changes", "significant_states", "summary"],
                     "default": "state_changes",
                     "description": (
-                        "state_changes: compact state transitions. significant_states: scrubbed significant state "
+                        "state_changes: state transitions as a CSV table. significant_states: scrubbed significant state "
                         "records. summary: per-state totals; omit limit and order."
                     ),
                 },
@@ -255,7 +256,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "description": (
             "Get a bounded page of Recorder statistics for one accessible entity. Five-minute data uses "
             "short-term retention; hour, day, week, month, and year use long-term statistics. Calendar "
-            "periods align in Home Assistant's local timezone. Follow has_more with next_cursor; there is "
+            "periods align in Home Assistant's local timezone. Rows come as statistics_csv, a CSV table with a "
+            "header: start in local time (a row ends where the next starts), then the values in units, rounded to keep "
+            "at least 4 significant digits; an empty cell has no value. Follow has_more with next_cursor; there is "
             "intentionally no estimated total. For individual state changes use get_history. A list of "
             "entity_id, or select with search_entities filters, returns one row per entity for the whole "
             "window instead: mean, min and max of a measurement, change of a total, in its unit. That is "

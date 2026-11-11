@@ -775,7 +775,7 @@ async def test_several_entities_list_each_entitys_own_page(recorder_mock, hass: 
     for row in many["entities"]:
         single = json.loads((await _call(hass, row["entity_id"], 0, 400, mode="state_changes", limit=3,
                                          order=order))[0]["content"][0]["text"])
-        assert row["history"] == single["history"] and row["count"] == single["count"]
+        assert row["history_csv"] == single["history_csv"] and row["count"] == single["count"]
         assert row["has_more"] is single["has_more"] and row.get("next_cursor") == (single["next_cursor"] or None)
     desk, porch = many["entities"]
     assert desk["has_more"] is True and porch["has_more"] is False and "next_cursor" not in porch
@@ -799,11 +799,11 @@ async def test_entity_pages_past_one_result_are_named_not_dropped(recorder_mock,
     for entity_id in ids:
         _alternate(hass, entity_id, 20)
     await async_wait_recording_done(hass)
-    with patch.object(history_tools, "TOOL_RESULT_MAX_BYTES", 6000):
+    with patch.object(history_tools, "TOOL_RESULT_MAX_BYTES", 3000):
         body = await _rows(hass, ids, 0, 4000)
     listed = [row["entity_id"] for row in body["entities"]]
     assert listed and listed + body["not_listed"] == ids
-    assert _stored(body) <= 6000 and any("not_listed" in warning for warning in body["warnings"])
+    assert _stored(body) <= 3000 and any("not_listed" in warning for warning in body["warnings"])
 
 
 async def test_a_list_without_mode_is_summarized_and_paging_is_ignored(recorder_mock, hass: HomeAssistant) -> None:

@@ -22,6 +22,7 @@ from custom_components.phoenix_mcp import tool_common
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.conversation_log import json_size
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+from tests.recorder_rows import page_rows
 
 
 @pytest.fixture
@@ -158,7 +159,7 @@ async def test_rows_past_one_result_are_named(hass: HomeAssistant, stats_env) ->
 
 async def test_a_single_entity_still_reads_a_page(hass: HomeAssistant, stats_env) -> None:
     body = json.loads((await _summary(hass, stats_env, entity_id="sensor.temp_a", period="hour"))[0]["content"][0]["text"])
-    assert len(body["statistics"]) == 3
+    assert len(page_rows(body, "statistics")) == 3
 
 
 async def test_an_entity_outside_scope_is_never_read_from_recorder(hass: HomeAssistant, stats_env) -> None:

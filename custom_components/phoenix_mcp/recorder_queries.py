@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from calendar import monthrange
+import csv
 from dataclasses import dataclass
+import io
 import logging
 import math
 from datetime import datetime, timedelta
@@ -285,6 +287,70 @@ def recorder_envelope(
         "warnings": warnings,
         result_key: rows,
     }
+
+
+# Row pages go to the model as one CSV table: keys repeated on every JSON row cost about a third of a
+# page's input tokens, and unrounded statistics means cost more.
+_ROW_TIME_KEYS = ("when", "start", "last_reset")
+_ROW_COLUMN_ORDER = ("when", "start", "state", "mean", "min", "max", "sum", "change", "last_reset")
+_RANGE_KEYS = ("requested_range", "covered_range", "unread_range", "data_range")
+
+
+def local_iso(value: Any, *, seconds: bool) -> Any:
+    """An ISO time in Home Assistant's timezone, to the second when asked; other values unchanged."""
+    if isinstance(value, str):
+        try:
+            value = parse_datetime(value) or value
+        except ValueError:
+            return value
+    if not isinstance(value, datetime):
+        return value
+    local = dt_util.as_local(value)
+    return (local.replace(microsecond=0) if seconds else local).isoformat()
+
+
+def _compact_number(value: Any) -> Any:
+    """A float to 4 significant digits, never fewer than 2 decimals; other values unchanged."""
+    if not isinstance(value, float) or not math.isfinite(value) or value == 0:
+        return value
+    return round(value, max(2, 3 - math.floor(math.log10(abs(value)))))
+
+
+def rows_csv(rows: list[dict[str, Any]]) -> str:
+    """Rows as CSV with a header: local times to the second, compact numbers, an empty cell for null.
+
+    end is dropped (the next row's start), and a column that is null in every row is left out. No rows is an empty string.
+    """
+    if not rows:
+        return ""
+    columns = [key for key in _ROW_COLUMN_ORDER if any(row.get(key) is not None for row in rows)]
+    columns += [key for row in rows for key in row
+                if key not in columns and key != "end" and row.get(key) is not None]
+    columns = list(dict.fromkeys(columns))
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(columns)
+    for row in rows:
+        cells = []
+        for key in columns:
+            value = row.get(key)
+            value = local_iso(value, seconds=True) if key in _ROW_TIME_KEYS else _compact_number(value)
+            cells.append("" if value is None else value)
+        writer.writerow(cells)
+    return out.getvalue()
+
+
+def compact_row_page(body: dict[str, Any], result_key: Literal["history", "statistics"]) -> dict[str, Any]:
+    """A recorder_envelope page with its rows as <result_key>_csv and its ranges in local time.
+
+    next_cursor keeps its exact UTC value, since it continues the page.
+    """
+    out = {key: value for key, value in body.items() if key != result_key}
+    for key in _RANGE_KEYS:
+        if isinstance(out.get(key), dict):
+            out[key] = {edge: local_iso(value, seconds=False) for edge, value in out[key].items()}
+    out[f"{result_key}_csv"] = rows_csv(body[result_key])
+    return out
 
 
 def floor_statistic_period(value: datetime, period: str) -> datetime:

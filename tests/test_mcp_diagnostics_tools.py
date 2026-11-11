@@ -17,6 +17,7 @@ from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
+from tests.recorder_rows import instant, page_rows
 
 # These tests stand in for loaded components; see _module_loaded_components in conftest.
 LOADED_COMPONENTS = ("recorder", "system_health")
@@ -76,15 +77,16 @@ class TestGetHistoryTransitions:
         assert outcome == "allowed"
         body = _json(content)
         assert body["mode"] == "state_changes"
-        assert [h["state"] for h in body["history"]] == ["on", "off"]
+        assert "history" not in body
+        assert [h["state"] for h in page_rows(body)] == ["on", "off"]
         assert body["count"] == 2
         assert body["has_more"] is True
         assert body["next_cursor"] == (now - timedelta(hours=1)).isoformat()
         assert body["effective_limit"] == 2
         assert body["retention"] == {"kind": "short_term", "configured_days": 10}
-        assert body["data_range"] == {
-            "start": (now - timedelta(hours=3)).isoformat(),
-            "end": (now - timedelta(hours=1)).isoformat(),
+        assert {edge: instant(value) for edge, value in body["data_range"].items()} == {
+            "start": now - timedelta(hours=3),
+            "end": now - timedelta(hours=1),
         }
         job = self.executor.await_args.args[0]
         assert job.func.__name__ == "state_changes_during_period"

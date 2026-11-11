@@ -23,6 +23,7 @@ from pytest_homeassistant.components.recorder.common import async_wait_recording
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+from tests.recorder_rows import instant, page_rows, to_second
 from custom_components.phoenix_mcp.recorder_queries import (
     backward_page_start, ceil_us, floor_us, forward_page_end, from_us,
 )
@@ -68,6 +69,11 @@ def _when(row: dict) -> str:
     return row.get("when") or row["last_updated"]
 
 
+def _rows(body: dict) -> list[dict]:
+    """state_changes rows come as CSV, significant_states rows as JSON."""
+    return page_rows(body) if "history_csv" in body else body["history"]
+
+
 async def _write(hass: HomeAssistant, count: int) -> None:
     hass.states.async_set("light.desk", "off", timestamp=_at(-60).timestamp())
     for index in range(count):
@@ -81,7 +87,7 @@ async def _write(hass: HomeAssistant, count: int) -> None:
 async def test_small_pages_return_each_row_once(recorder_mock, hass: HomeAssistant, mode: str, order: str) -> None:
     await _write(hass, 40)
     whole = await _page(hass, mode=mode, order=order, limit=1000)
-    expected = [_when(row) for row in whole["history"]]
+    expected = [_when(row) for row in _rows(whole)]
     assert len(expected) == 40 and whole["has_more"] is False
     for limit in (1, 3, 7):
         seen, cursor, pages = [], None, 0
@@ -89,23 +95,27 @@ async def test_small_pages_return_each_row_once(recorder_mock, hass: HomeAssista
             body = await _page(hass, mode=mode, order=order, limit=limit, **({"cursor": cursor} if cursor else {}))
             pages += 1
             assert 1 <= body["count"] <= limit
-            page = [_when(row) for row in body["history"]]
+            page = [_when(row) for row in _rows(body)]
             seen += page
             # Earliest to latest whatever the order, as compared instants.
-            stamps = sorted(page, key=dt_util.parse_datetime)
-            assert [dt_util.parse_datetime(body["data_range"][edge]) for edge in ("start", "end")] == [
-                dt_util.parse_datetime(stamps[0]), dt_util.parse_datetime(stamps[-1])]
+            # CSV rows carry whole seconds; the envelope's ranges keep the exact instant.
+            exact = to_second if "history_csv" in body else instant
+            stamps = sorted(page, key=instant)
+            assert [exact(body["data_range"][edge]) for edge in ("start", "end")] == [
+                instant(stamps[0]), instant(stamps[-1])]
             if not body["has_more"]:
                 assert "unread_range" not in body
                 break
             # What no page has read yet lies past the cursor, toward the end the order runs to.
-            unread, requested = body["unread_range"], body["requested_range"]
-            assert unread == ({"start": body["next_cursor"], "end": requested["end"]} if order == "oldest_first"
-                              else {"start": requested["start"], "end": body["next_cursor"]})
+            unread = {edge: instant(value) for edge, value in body["unread_range"].items()}
+            requested = {edge: instant(value) for edge, value in body["requested_range"].items()}
+            cursor_at = instant(body["next_cursor"])
+            assert unread == ({"start": cursor_at, "end": requested["end"]} if order == "oldest_first"
+                              else {"start": requested["start"], "end": cursor_at})
             assert body["next_cursor"] != cursor, "a cursor must move"
             assert pages <= 80
             edge = "end" if order == "oldest_first" else "start"
-            assert body["covered_range"][edge] == body["next_cursor"]
+            assert instant(body["covered_range"][edge]) == cursor_at
             cursor = body["next_cursor"]
         assert seen == expected, (limit, pages)
         assert pages >= 40 // limit

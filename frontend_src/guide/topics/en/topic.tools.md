@@ -22,7 +22,7 @@ Agents read current states, history, statistics, calendars, to-do lists and a su
 
 Most reads need no capability; the tree alone decides. Camera stills need one, and so does picking history or statistics entities with a search filter.
 
-- History and statistics come in pages of up to 1000 rows.
+- History and statistics come in pages of up to 1000 rows. State changes and statistics reach agents as a compact table in your home's time zone, with times to the second and statistics rounded to at least four significant digits.
 - A calendar read covers up to 31 days and 500 events.
 - Camera images are at most 2048 pixels on a side.
 - A summary of an attribute's values covers at most 7 days.

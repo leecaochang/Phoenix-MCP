@@ -8,10 +8,12 @@ import uuid
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.util import dt as dt_util
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
+from tests.recorder_rows import instant
 
 # These tests stand in for loaded components; see _module_loaded_components in conftest.
 LOADED_COMPONENTS = ("recorder",)
@@ -71,11 +73,11 @@ async def test_statistics_common_envelope_and_safe_day_cap(hass) -> None:
     assert body["limit"] == 1000
     assert body["effective_limit"] == 366
     assert body["has_more"] is True
-    assert body["next_cursor"] == body["covered_range"]["end"]
+    assert instant(body["next_cursor"]) == instant(body["covered_range"]["end"])
     # The rest of the requested range is named, so an empty first page is not read as "no data".
     assert body["unread_range"] == {"start": body["covered_range"]["end"], "end": body["requested_range"]["end"]}
     assert body["retention"] == {"kind": "long_term"}
-    assert body["statistics"] == []
+    assert body["statistics_csv"] == ""
     assert body["count"] == 0
     # An empty oldest page with more to read must not claim the entity has no statistics.
     assert "Later pages may hold them" in body["warnings"][0]
@@ -95,7 +97,7 @@ async def test_empty_five_minute_page_can_have_more_and_warn_about_retention(has
         )
     body = _json(content)
     assert outcome == "allowed"
-    assert body["statistics"] == []
+    assert body["statistics_csv"] == ""
     assert body["has_more"] is True
     assert body["next_cursor"] is not None
     assert body["retention"] == {"kind": "short_term", "configured_days": 10}
@@ -136,19 +138,16 @@ async def test_statistics_returns_rows_and_complete_final_page(hass) -> None:
         )
     body = _json(content)
     assert outcome == "allowed"
-    assert body["statistics"] == [
-        {"start": start.isoformat(), "mean": 10.0},
-        {"start": (start + timedelta(hours=1)).isoformat(), "mean": 12.0},
-    ]
+    # One table with a header: local times to the second, the unit's values as they are.
+    local = [dt_util.as_local(start + timedelta(hours=hour)).isoformat() for hour in (0, 1)]
+    assert body["statistics_csv"] == f"start,mean\n{local[0]},10.0\n{local[1]},12.0\n"
+    assert "statistics" not in body
     assert body["count"] == 2
     assert body["has_more"] is False
     assert body["next_cursor"] is None
     assert "unread_range" not in body
     assert body["warnings"] == []
-    assert body["data_range"] == {
-        "start": start.isoformat(),
-        "end": (start + timedelta(hours=1)).isoformat(),
-    }
+    assert body["data_range"] == {"start": local[0], "end": local[1]}
 
 
 async def test_statistics_rejects_unknown_type_before_recorder_query(hass) -> None:

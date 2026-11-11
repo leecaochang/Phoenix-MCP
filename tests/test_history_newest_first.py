@@ -19,6 +19,7 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.recorder_queries import newest_page
+from tests.recorder_rows import instant, page_rows
 
 # These tests stand in for loaded components; see _module_loaded_components in conftest.
 LOADED_COMPONENTS = ("recorder",)
@@ -82,10 +83,10 @@ async def test_tool_pages_backward_through_every_change_once(hass):
             result, outcome, _ = await _call_tool("get_history", args, key, hass, MagicMock())
             assert outcome == "allowed", result
             body = json.loads(result["content"][0]["text"])
-            page = [row["when"] for row in body["history"]]
+            page = [instant(row["when"]) for row in page_rows(body)]
             assert page == sorted(page, reverse=True)
             seen += page
             if not body["has_more"]:
                 break
             args = {**args, "cursor": body["next_cursor"]}
-    assert seen == [stamp.isoformat() for stamp in reversed(stamps)]
+    assert seen == list(reversed(stamps))

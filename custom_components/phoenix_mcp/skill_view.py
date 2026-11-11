@@ -96,6 +96,8 @@ grain of the model gives the smoothest results and avoids dead ends.
   pages: continue only when `has_more` is true, using `next_cursor` as the next
   call's `cursor`. There is no total to infer. A page's `covered_range` is only
   what it read; `unread_range` is the rest, so it never shows where data begins.
+  Rows come as one CSV table with a header, `history_csv` or `statistics_csv`,
+  with times in Home Assistant's local timezone to the second.
   `significant_states` is a scrubbed significant-state view, not every sample,
   and accepts at most 7 days.
   For how long something was in a state or how often it changed, use

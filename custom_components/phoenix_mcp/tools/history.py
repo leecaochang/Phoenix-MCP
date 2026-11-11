@@ -35,7 +35,7 @@ from ..policy_engine import (
     scrub_state_dict as _scrub_state_dict,
 )
 from ..recorder_queries import (
-    backward_page_start, ceil_us, floor_us, forward_page_end, from_us, iso_utc,
+    backward_page_start, ceil_us, compact_row_page, floor_us, forward_page_end, from_us, iso_utc, local_iso,
     MAX_SIGNIFICANT_STATES_RANGE, newest_page, parse_recorder_window, read_statistic_window,
     read_statistics_page, recorder_envelope, RecorderWindow, retention_metadata,
     retention_warnings, row_timestamp, state_timestamp, statistic_page, STATISTIC_PERIOD_LIMITS,
@@ -119,11 +119,11 @@ async def _tool_get_history(
         return await _history_rows_many(args["entity_id"], args, access_key, hass)
     if isinstance(args.get("entity_id"), list):
         return await _history_summary_many(args["entity_id"], args, access_key, hass)
-    return await _fit_recorder_page(lambda page_args: _history_page(page_args, access_key, hass), args, "history")
+    return await _fit_recorder_page(lambda page_args: _history_page(page_args, access_key, hass), args)
 
 
 async def _fit_recorder_page(
-    read: Callable[[dict], Awaitable[tuple[dict, str, str]]], args: dict, rows_key: str,
+    read: Callable[[dict], Awaitable[tuple[dict, str, str]]], args: dict,
 ) -> tuple[dict, str, str]:
     """A Recorder page read again with a smaller limit until it fits TOOL_RESULT_MAX_BYTES.
 
@@ -139,7 +139,7 @@ async def _fit_recorder_page(
         budget = TOOL_RESULT_MAX_BYTES - (256 if shortened else 0)
         if outcome != "allowed" or not text.startswith("{") or json_size(text) <= budget:
             break
-        rows = len(json.loads(text).get(rows_key) or [])
+        rows = int(json.loads(text).get("count") or 0)
         if rows <= 1:
             break
         args = {**args, "limit": max(1, min(rows - 1, int(rows * budget * 0.9 / json_size(text))))}
@@ -309,6 +309,8 @@ async def _history_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssis
     )
     body["order"] = order
     body["mode"] = mode
+    if mode == "state_changes":
+        body = compact_row_page(body, "history")
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 
 
@@ -707,7 +709,8 @@ async def _history_rows_many(
         body: dict[str, Any] = {
             "mode": "state_changes",
             "order": order,
-            "requested_range": {"start": iso_utc(window.start), "end": iso_utc(window.end)},
+            "requested_range": {"start": local_iso(window.start, seconds=False),
+                                "end": local_iso(window.end, seconds=False)},
             "limit": window.limit,
             "count": len(kept),
             "entities": kept,
@@ -752,7 +755,7 @@ async def _history_rows_many(
                            "area": _area_name_for_entity(entity_id, *registries),
                            "count": page["count"], "has_more": page["has_more"],
                            **({"next_cursor": page["next_cursor"]} if page["has_more"] else {}),
-                           "history": page["history"]}
+                           "history_csv": page["history_csv"]}
                     size = _stored_bytes(row)
                     if used + size + to_come <= TOOL_RESULT_MAX_BYTES:
                         rows[entity_id] = row
@@ -963,7 +966,7 @@ async def _tool_get_statistics(
         return await _statistics_summary_many(chosen, args, access_key, hass, selection=selection)
     if isinstance(args.get("entity_id"), list):
         return await _statistics_summary_many(args["entity_id"], args, access_key, hass)
-    return await _fit_recorder_page(lambda page_args: _statistics_page(page_args, access_key, hass), args, "statistics")
+    return await _fit_recorder_page(lambda page_args: _statistics_page(page_args, access_key, hass), args)
 
 
 async def _statistics_page(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
@@ -1071,4 +1074,4 @@ async def _statistics_page(args: dict, access_key: AccessKeyRecord, hass: HomeAs
     # Every value field is in units.display_unit_of_measurement; null means Recorder
     # holds no metadata for this entity, not that the values are unitless.
     body["units"] = units
-    return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
+    return _tool_success(json.dumps(compact_row_page(body, "statistics"), default=str)), "allowed", entity_id

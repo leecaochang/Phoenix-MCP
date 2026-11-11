@@ -26,6 +26,7 @@ from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, Perm
 from custom_components.phoenix_mcp.conversation_log import json_size
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission
+from tests.recorder_rows import page_rows
 
 
 @pytest.fixture
@@ -74,7 +75,8 @@ async def _pages(hass, tool, args, rows_key, continuation, key=None, extra=0):
                 break
             page_args = {**args, **follow}
             assert len(pages) < 50
-    return pages, [row for page in pages for row in page[rows_key]]
+    return pages, [row for page in pages
+                   for row in (page[rows_key] if rows_key in page else page_rows(page, rows_key))]
 
 
 async def test_search_entities_pages_continue_at_next_offset(hass: HomeAssistant) -> None:
@@ -161,6 +163,20 @@ async def test_a_history_page_shrinks_and_continues_at_next_cursor(recorder_mock
                                lambda body: {"cursor": body["next_cursor"]} if body["has_more"] else None)
     assert len(pages) > 1 and any("shortened" in warning for warning in pages[0]["warnings"])
     assert [row["state"] for row in rows] == [str(index) for index in range(60)]
+
+
+async def test_a_state_changes_page_shrinks_and_continues_at_next_cursor(recorder_mock, hass: HomeAssistant) -> None:
+    start = dt_util.utcnow() - timedelta(hours=4)
+    for index in range(400):
+        hass.states.async_set("sensor.power", str(index),
+                              timestamp=(start + timedelta(seconds=index * 30)).timestamp())
+    await async_wait_recording_done(hass)
+    args = {"entity_id": "sensor.power", "limit": 1000,
+            "start_time": (start - timedelta(minutes=1)).isoformat(), "end_time": dt_util.utcnow().isoformat()}
+    pages, rows = await _pages(hass, "get_history", args, "history",
+                               lambda body: {"cursor": body["next_cursor"]} if body["has_more"] else None)
+    assert len(pages) > 1 and any("shortened" in warning for warning in pages[0]["warnings"])
+    assert [row["state"] for row in rows] == [str(index) for index in range(400)]
 
 
 async def test_a_statistics_page_shrinks_and_continues_at_next_cursor(recorder_mock, hass: HomeAssistant) -> None:

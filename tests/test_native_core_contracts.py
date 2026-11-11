@@ -37,6 +37,7 @@ from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.tool_defs import _ENTITY_TOOL_DEFS
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.ws_dispatch import WsCommandNotDispatchedError, async_ws_command
+from tests.recorder_rows import instant, page_rows
 
 
 @pytest.fixture
@@ -181,6 +182,11 @@ async def _statistics(hass: HomeAssistant, entity_id: str, start: datetime, **ar
     return _body(result)
 
 
+def _first(body: dict) -> dict[str, str]:
+    """The first statistics row, read back from the page's CSV."""
+    return page_rows(body, "statistics")[0]
+
+
 def _hour_ago(hours: int) -> datetime:
     return dt_util.utcnow().replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours)
 
@@ -194,11 +200,12 @@ async def test_converted_statistics_carry_their_unit_and_an_unconverted_reset(re
     body = await _statistics(hass, "sensor.meter", start)
     assert body["units"] == {
         "display_unit_of_measurement": "kWh", "statistics_unit_of_measurement": "MWh", "unit_class": "energy"}
-    first = body["statistics"][0]
-    assert first["state"] == 1000.0 and first["sum"] == 2000.0
+    first = _first(body)
+    assert float(first["state"]) == 1000.0 and float(first["sum"]) == 2000.0
     # Core multiplied this timestamp by 1000 along with the values.
-    assert first["last_reset"] == reset.isoformat()
-    assert first["end"] == (start + timedelta(hours=1)).isoformat()
+    assert instant(first["last_reset"]) == reset
+    # A row's end is the next row's start, so the table leaves it out.
+    assert instant(first["start"]) == start and "end" not in first
     assert body["warnings"] == []
 
 
@@ -210,8 +217,8 @@ async def test_an_entity_without_a_state_reads_in_its_stored_unit(recorder_mock,
     await async_wait_recording_done(hass)
     body = await _statistics(hass, "sensor.meter_old", start)
     assert body["units"]["display_unit_of_measurement"] == "MWh"
-    assert body["statistics"][0]["state"] == 1.0
-    assert body["statistics"][0]["last_reset"] == _hour_ago(30).isoformat()
+    assert float(_first(body)["state"]) == 1.0
+    assert instant(_first(body)["last_reset"]) == _hour_ago(30)
 
 
 async def test_a_mean_statistic_is_labelled_in_its_display_unit(recorder_mock, hass: HomeAssistant) -> None:
@@ -222,7 +229,7 @@ async def test_a_mean_statistic_is_labelled_in_its_display_unit(recorder_mock, h
     await async_wait_recording_done(hass)
     body = await _statistics(hass, "sensor.room", start)
     assert body["units"]["display_unit_of_measurement"] == "°F"
-    assert body["statistics"][0]["mean"] == pytest.approx(68.0)
+    assert float(_first(body)["mean"]) == pytest.approx(68.0)
 
 
 async def test_the_unit_is_known_on_an_empty_page(recorder_mock, hass: HomeAssistant) -> None:
@@ -231,7 +238,7 @@ async def test_the_unit_is_known_on_an_empty_page(recorder_mock, hass: HomeAssis
     _import(hass, "sensor.meter", "MWh", "energy", _hour_ago(6), reset=_hour_ago(30))
     await async_wait_recording_done(hass)
     body = await _statistics(hass, "sensor.meter", _hour_ago(48))
-    assert body["statistics"] == []
+    assert body["statistics_csv"] == ""
     assert body["units"]["display_unit_of_measurement"] == "kWh"
 
 
@@ -245,7 +252,7 @@ async def test_unitless_is_known_and_no_metadata_is_unknown(recorder_mock, hass:
     counted = await _statistics(hass, "sensor.count", start)
     assert counted["units"] == {
         "display_unit_of_measurement": None, "statistics_unit_of_measurement": None, "unit_class": None}
-    assert counted["statistics"][0]["state"] == 1.0
+    assert float(_first(counted)["state"]) == 1.0
     assert (await _statistics(hass, "sensor.untracked", start))["units"] is None
 
 
@@ -259,7 +266,7 @@ async def test_a_metadata_failure_keeps_values_and_omits_resets(recorder_mock, h
           patch("homeassistant.components.recorder.statistics.get_metadata", side_effect=RuntimeError("db"))):
         body = await _statistics(hass, "sensor.meter", start)
     assert body["units"] is None
-    assert body["statistics"][0]["state"] == 1000.0 and "last_reset" not in body["statistics"][0]
+    assert float(_first(body)["state"]) == 1000.0 and "last_reset" not in _first(body)
     assert any("unlabelled" in warning and "last_reset was omitted" in warning for warning in body["warnings"])
 
 
@@ -292,7 +299,7 @@ async def test_only_a_release_that_converts_resets_pays_the_second_read(
     body, units = await _statistics_reads(hass, version)
     assert len(units) == queries
     assert units[0] is None
-    assert body["statistics"][0]["last_reset"] == _hour_ago(30).isoformat()
+    assert instant(_first(body)["last_reset"]) == _hour_ago(30)
 
 
 async def test_a_release_with_the_fix_keeps_resets_when_metadata_fails(recorder_mock, hass: HomeAssistant) -> None:
@@ -305,7 +312,7 @@ async def test_a_release_with_the_fix_keeps_resets_when_metadata_fails(recorder_
     with (patch("custom_components.phoenix_mcp.recorder_queries.HA_VERSION", "2026.11.0"),
           patch("homeassistant.components.recorder.statistics.get_metadata", side_effect=RuntimeError("db"))):
         body = await _statistics(hass, "sensor.meter", start)
-    assert body["statistics"][0]["last_reset"] == _hour_ago(30).isoformat()
+    assert instant(_first(body)["last_reset"]) == _hour_ago(30)
     assert body["warnings"] == ["The unit could not be read from Recorder metadata, so these values are unlabelled."]
 
 
