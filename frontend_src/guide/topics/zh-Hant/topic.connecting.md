@@ -1,5 +1,5 @@
 ---
-{"id": "topic.connecting", "title": "連線外部應用程式", "parent": "topic.about", "order": 20, "keywords": ["MCP 用戶端", "連線", "設定", "外部智慧體"], "sectionKeywords": {"methods": ["OAuth", "存取金鑰", "哪種方式", "標頭"], "commands": ["Claude Code", "Gemini CLI", "Antigravity", "Codex", "Cursor", "DeepSeek Harness", "程式碼片段", "命令"], "credentials": ["機密", "洩漏", "保護", "bearer"], "several-keys": ["多個設定", "多個金鑰", "伺服器名稱"], "connection": ["URL", "端點", "Streamable HTTP", "SSE", "協定", "工作階段"], "reconnect": ["工具已變更", "重新整理工具"], "primer": ["指令", "備註", "技能", "SKILL.md"], "oauth": ["OAuth", "ChatGPT", "Claude", "自訂連接器", "手機應用程式", "託管", "登入"], "oauth-approve": ["核准", "拒絕", "登入請求", "同意"], "ha-mcp-server": ["Home Assistant MCP Server", "/api/mcp"], "problems": ["401", "403", "429", "503", "未授權", "禁止", "疑難排解"], "remote": ["遠端存取", "Nabu Casa", "外出", "VPN", "Tailscale", "反向代理", "https"]}}
+{"id": "topic.connecting", "title": "連線外部應用程式", "parent": "topic.about", "order": 20, "keywords": ["MCP 用戶端", "連線", "設定", "外部智慧體"], "sectionKeywords": {"methods": ["OAuth", "存取金鑰", "哪種方式", "標頭"], "commands": ["Claude Code", "Gemini CLI", "Antigravity", "Codex", "Cursor", "DeepSeek Harness", "程式碼片段", "命令"], "credentials": ["機密", "洩漏", "保護", "bearer"], "several-keys": ["多個設定", "多個金鑰", "伺服器名稱"], "connection": ["URL", "端點", "Streamable HTTP", "SSE", "協定", "工作階段"], "reconnect": ["工具已變更", "重新整理工具"], "primer": ["指令", "備註", "技能", "SKILL.md"], "oauth": ["OAuth", "ChatGPT", "Claude", "自訂連接器", "手機應用程式", "託管", "登入"], "oauth-approve": ["核准", "拒絕", "登入請求", "同意"], "ha-mcp-server": ["Home Assistant MCP Server", "/api/mcp", "Home Assistant API", "裝置控制"], "problems": ["401", "403", "429", "503", "未授權", "禁止", "疑難排解"], "remote": ["遠端存取", "Nabu Casa", "外出", "VPN", "Tailscale", "反向代理", "https"]}}
 ---
 外部應用程式，例如程式開發助理或桌面聊天應用程式，會使用一個存取金鑰連線到 Phoenix。應用程式自己的模型負責思考，Phoenix 決定它可以做什麼。只接受伺服器位址的應用程式會改為[透過 OAuth 登入](guide:#oauth)，而不傳送金鑰。
 
@@ -101,6 +101,8 @@ Phoenix 沒有自己的遠端服務。家庭網路外的應用程式會像瀏覽
 從 2026.11 起，請檢查該整合的選項。除非你另行選擇，新條目會提供所有 API，包括 Phoenix 的 API。唯讀選項只給應用程式留下標記為唯讀的工具，但它不能取代金鑰的能力設定。
 
 在這條路徑上，Home Assistant 其他 API 的工具不經過 Phoenix，因此金鑰、核准、MESA 和稽核日誌都不涵蓋它們。當兩個 API 提供同名工具時，Home Assistant 會加上前綴，例如 `phoenix-mcp__`。
+
+「Home Assistant」API 是 2026.11 為管理員新增的，能觸及一切：任何實體或操作、範本、日誌和設定。若要讓應用程式保持在 Phoenix 的檢查之內，只選擇 Phoenix MCP（限定範圍）。
 
 ## 無法連線時 {#problems}
 

@@ -1429,7 +1429,7 @@
       "aiTaskAccessKeyAria": "AI 작업 액세스 키",
       "aiTaskAccessKeyHelp": "이 AI 작업이 접근할 수 있는 엔티티와 작업을 제어합니다.",
       "aiTaskUnsupported": "이 Home Assistant 설치 환경에서는 AI 작업을 사용할 수 없습니다. Home Assistant 로그를 확인한 후 Phoenix MCP를 다시 로드하세요.",
-      "assistBoundHelp": "LLM 통합 구성 요소가 사용하는 액세스 키입니다. 해당 통합 구성 요소에서 Home Assistant를 제어하려면 Phoenix MCP (scoped)를 선택하세요.",
+      "assistBoundHelp": "LLM 통합 구성 요소가 사용하는 액세스 키입니다. 해당 통합 구성 요소의 AI 도구 설정에서 Phoenix MCP (scoped)만 선택하세요.",
       "assistBoundAccessKey": "바인딩된 액세스 키",
       "assistBoundAccessKeyAria": "Assist 바인딩 액세스 키",
       "assistCard": "Assist 도구 제공업체",

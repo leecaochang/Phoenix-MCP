@@ -1604,7 +1604,7 @@
       "aiTaskAccessKeyAria": "AI タスクのアクセスキー",
       "aiTaskAccessKeyHelp": "この AI タスクがアクセスできるエンティティとアクションを制御します。",
       "aiTaskUnsupported": "この Home Assistant 環境では AI タスクを利用できません。Home Assistant のログを確認してから、Phoenix MCP を再読み込みしてください。",
-      "assistBoundHelp": "LLM インテグレーションが使うアクセスキーです。そのインテグレーションで Home Assistant を制御するには Phoenix MCP (scoped) を選びます。",
+      "assistBoundHelp": "LLM インテグレーションが使うアクセスキーです。そのインテグレーションの AIツール 設定では Phoenix MCP (scoped) だけを選びます。",
       "assistBoundAccessKey": "バインドされたアクセスキー",
       "assistBoundAccessKeyAria": "Assist にバインドされたアクセスキー",
       "assistCard": "Assist ツールプロバイダー",

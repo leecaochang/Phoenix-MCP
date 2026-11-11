@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.homeAssistantFeatures", "title": "語音智慧體、AI 任務或 Assist 工具提供者", "parent": "window.settingsHome", "order": 2, "keywords": ["對話智慧體", "LLM API", "控制 Home Assistant", "哪個模型"] }
+{ "id": "topic.homeAssistantFeatures", "title": "語音智慧體、AI 任務或 Assist 工具提供者", "parent": "window.settingsHome", "order": 2, "keywords": ["對話智慧體", "LLM API", "AI 工具", "控制 Home Assistant", "裝置控制", "哪個模型"] }
 ---
 Phoenix 可以透過三種方式與 Home Assistant 的 AI 功能協作。差別在於由誰的模型回答，以及存取金鑰控制什麼。
 
@@ -24,6 +24,10 @@ Phoenix 使用你的帳戶和模型，為自動化和腳本執行 Home Assistant
 由另一個整合的模型回答，Phoenix 只借用工具。綁定的存取金鑰決定該模型取得哪些工具，發起請求的 Home Assistant 使用者會進一步限制它們。Phoenix 在這裡不執行模型，也不使用你的額度。
 
 如果你已有喜歡的對話智慧體，並希望它透過 Phoenix 的控制存取你的家，請使用它。
+
+在該智慧體的 AI 工具設定（2026.11 之前叫「控制 Home Assistant」）中，只選擇 Phoenix MCP（限定範圍），不要選其他。
+
+Home Assistant 自帶的「裝置控制」和「Home Assistant」API 不經過 Phoenix。與 Phoenix 一起選擇時，模型會得到不受金鑰、核准、MESA 和稽核日誌約束的工具。「Home Assistant」API 能觸及的最多：所有實體和操作、範本、日誌和設定。
 
 從 Home Assistant 2026.11 起，一次對話會保留開始時的工具。修改後的備註和權限會隨下一次工具呼叫送達模型，已失去的工具會被立即拒絕。新增的工具需要開始新的對話。
 

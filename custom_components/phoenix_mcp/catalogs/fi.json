@@ -2294,7 +2294,7 @@
       "aiTaskUnsupported": "Tekoälytehtävä ei ole käytettävissä tässä Home Assistant -asennuksessa. Tarkista Home Assistantin lokit ja lataa sitten Phoenix MCP uudelleen.",
       "assistBoundAccessKey": "Sidottu käyttöavain",
       "assistBoundAccessKeyAria": "Assist-palveluun sidottu käyttöavain",
-      "assistBoundHelp": "Käyttöavain, jota LLM-integraatiosi käyttää. Valitse integraatiossa Phoenix MCP (scoped) ohjataksesi Home Assistantia.",
+      "assistBoundHelp": "Käyttöavain, jota LLM-integraatiosi käyttää. Valitse integraation tekoälytyökalujen asetuksessa vain Phoenix MCP (scoped).",
       "assistCard": "Assist-työkalujen tarjoaja",
       "assistIntro": "Anna toisen Home Assistantin tekoälyintegraation käyttää Phoenix MCP:n rajattuja työkaluja.",
       "assistNotBound": "Ei sidottu",

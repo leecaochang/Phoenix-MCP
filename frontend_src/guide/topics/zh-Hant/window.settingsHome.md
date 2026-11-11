@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["語音", "Assist", "助理"], "sectionKeywords": { "ai-decisions": ["評估", "ai_task.evaluate"], "voice-agent": ["對話智慧體", "管線"], "voice-assistant": ["管線"], "ai-task": ["產生資料"], "assist-tool-provider": ["LLM API", "控制 Home Assistant"] } }
+{ "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["語音", "Assist", "助理"], "sectionKeywords": { "ai-decisions": ["評估", "ai_task.evaluate"], "voice-agent": ["對話智慧體", "管線"], "voice-assistant": ["管線"], "ai-task": ["產生資料"], "assist-tool-provider": ["LLM API", "AI 工具", "控制 Home Assistant"] } }
 ---
 把 Phoenix 連接到 Home Assistant 自己的 AI 功能。每個分頁設定一個功能，每個功能中都有一個存取金鑰決定 Phoenix 可以做什麼。
 
@@ -137,7 +137,7 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 ## {{label:settings.assistCard}} {#assist-tool-provider}
 
-把 Phoenix 的工具借給在別處執行的模型，例如設為使用 Phoenix MCP（限定範圍）控制 Home Assistant 的對話智慧體。Phoenix 在這裡不執行自己的模型。
+把 Phoenix 的工具借給在別處執行的模型，例如 AI 工具設定為 Phoenix MCP（限定範圍）的對話智慧體。不要在那裡選擇其他 API，否則模型會得到不受 Phoenix 檢查的工具。Phoenix 在這裡不執行自己的模型。
 
 ### {{label:settings.assistBoundAccessKey}} {#assist-access-key}
 

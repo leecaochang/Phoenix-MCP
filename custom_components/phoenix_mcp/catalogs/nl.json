@@ -1981,7 +1981,7 @@
       "aiTaskAccessKeyAria": "Toegangssleutel voor AI-taak",
       "aiTaskAccessKeyHelp": "Bepaalt tot welke entiteiten en acties deze AI-taak toegang heeft.",
       "aiTaskUnsupported": "AI-taak is niet beschikbaar in deze Home Assistant-installatie. Controleer de Home Assistant-logboeken en herlaad daarna Phoenix MCP.",
-      "assistBoundHelp": "De toegangssleutel die je LLM-integratie gebruikt. Kies in die integratie Phoenix MCP (scoped) om Home Assistant te besturen.",
+      "assistBoundHelp": "De toegangssleutel die je LLM-integratie gebruikt. Kies bij de instelling AI-tools van die integratie alleen Phoenix MCP (scoped).",
       "assistBoundAccessKey": "Gekoppeld toegangssleutel",
       "assistBoundAccessKeyAria": "Aan Assist gekoppeld toegangssleutel",
       "assistCard": "Assist-toolprovider",

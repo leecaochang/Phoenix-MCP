@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["voice", "Assist", "assistant"], "sectionKeywords": { "ai-decisions": ["evaluate", "ai_task.evaluate"], "voice-agent": ["conversation agent", "pipeline"], "voice-assistant": ["pipeline"], "ai-task": ["generate data"], "assist-tool-provider": ["LLM API", "Control Home Assistant"] }, "covers": ["frontend_src/components/VoiceAgentSettings.tsx", "frontend_src/components/AiTaskSettings.tsx", "frontend_src/utils/access_key_list.ts", "frontend_src/components/AiTaskDecisionsSection.tsx", "custom_components/phoenix_mcp/routing/decision_evaluation.py", "frontend_src/components/AssistBridgeSettings.tsx"] }
+{ "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["voice", "Assist", "assistant"], "sectionKeywords": { "ai-decisions": ["evaluate", "ai_task.evaluate"], "voice-agent": ["conversation agent", "pipeline"], "voice-assistant": ["pipeline"], "ai-task": ["generate data"], "assist-tool-provider": ["LLM API", "AI tools", "Control Home Assistant"] }, "covers": ["frontend_src/components/VoiceAgentSettings.tsx", "frontend_src/components/AiTaskSettings.tsx", "frontend_src/utils/access_key_list.ts", "frontend_src/components/AiTaskDecisionsSection.tsx", "custom_components/phoenix_mcp/routing/decision_evaluation.py", "frontend_src/components/AssistBridgeSettings.tsx"] }
 ---
 Connect Phoenix to Home Assistant's own AI features. Each tab sets up one feature, and in each one an access key decides what Phoenix may do.
 
@@ -137,7 +137,7 @@ Entity permissions and MESA don't apply here: the action has no target entity an
 
 ## {{label:settings.assistCard}} {#assist-tool-provider}
 
-Lends Phoenix's tools to a model that runs elsewhere, such as a conversation agent set to Control Home Assistant with Phoenix MCP (scoped). Phoenix runs no model of its own here.
+Lends Phoenix's tools to a model that runs elsewhere, such as a conversation agent whose AI tools setting is Phoenix MCP (scoped). Choose no other API there, or the model gets tools outside Phoenix's checks. Phoenix runs no model of its own here.
 
 ### {{label:settings.assistBoundAccessKey}} {#assist-access-key}
 

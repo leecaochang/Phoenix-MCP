@@ -15,13 +15,13 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, MESA_INJECT_MIN_HA
+from .const import DOMAIN, FRONTEND_URL_PATH, MESA_INJECT_MIN_HA
 
 _LOGGER = logging.getLogger(__name__)
 
 _FRONTEND_DIR = Path(__file__).parent / "frontend"
 _JS_FILE = _FRONTEND_DIR / "phoenix-mcp-panel.js"
-_PANEL_URL = "/local/phoenix-mcp"
+_PANEL_URL = FRONTEND_URL_PATH
 _JS_URL = f"{_PANEL_URL}/phoenix-mcp-panel.js"
 _PANEL_KEY = "phoenix-mcp"
 _STATIC_REGISTERED_KEY = "phoenix_mcp_static_registered"

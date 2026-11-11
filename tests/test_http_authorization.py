@@ -1,13 +1,20 @@
 """Exercise bearer admission and session isolation through HA's real HTTP router."""
 
 from datetime import timedelta
+import json
+import struct
 
 import pytest
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
+from homeassistant.components.http import StaticPathConfig
+
+from custom_components.phoenix_mcp import panel
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.const import DOMAIN, ACCESS_KEY_PREFIX
+from custom_components.phoenix_mcp.const import (
+    ACCESS_KEY_PREFIX, DOMAIN, FRONTEND_URL_PATH, MCP_SERVER_ICONS,
+)
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_transport import ALL_MCP_VIEWS
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
@@ -24,6 +31,8 @@ async def http_authority(hass, hass_client_no_auth):
         view = view_cls()
         view.hass = hass
         hass.http.register_view(view)
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(url_path=FRONTEND_URL_PATH, path=str(panel._FRONTEND_DIR), cache_headers=False)])
     return await hass_client_no_auth(), data
 
 
@@ -398,3 +407,25 @@ async def test_modern_resource_error_uses_modern_code_and_retains_id(http_author
     assert response.status == 200
     assert reply["id"] == "resource-id"
     assert reply["error"]["code"] == -32602
+
+
+@pytest.mark.parametrize("host", ["ha.example.org", "phoenix.example.net:8443"])
+async def test_the_icon_url_starts_at_the_origin_the_request_arrived_by(http_authority, host):
+    # A cloud relay or reverse proxy reaches HA under a name its configured URLs need not list.
+    client, data = http_authority
+    _, raw = await data.store.async_create_access_key("icon", "admin")
+    response = await client.post("/api/phoenix-mcp", headers=_headers(raw, Host=host), json=_initialize())
+    assert response.status == 200
+    icons = json.loads(await response.text())["result"]["serverInfo"]["icons"]
+    assert [icon["src"] for icon in icons] == [f"http://{host}{FRONTEND_URL_PATH}/{name}" for name, _ in MCP_SERVER_ICONS]
+
+
+@pytest.mark.parametrize(("name", "size"), MCP_SERVER_ICONS)
+async def test_each_icon_needs_no_key_and_is_the_size_it_claims(http_authority, name, size):
+    client, _data = http_authority
+    response = await client.get(f"{FRONTEND_URL_PATH}/{name}")
+    assert response.status == 200 and response.headers["Content-Type"] == "image/png"
+    body = await response.read()
+    assert body[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = struct.unpack(">II", body[16:24])
+    assert f"{width}x{height}" == size

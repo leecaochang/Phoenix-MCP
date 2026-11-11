@@ -1700,7 +1700,7 @@
       "aiTaskAccessKeyAria": "AI Task access key",
       "aiTaskAccessKeyHelp": "Controls which entities and actions this AI Task can access.",
       "aiTaskUnsupported": "AI Task is unavailable in this Home Assistant installation. Check the Home Assistant logs, then reload Phoenix MCP.",
-      "assistBoundHelp": "The access key your LLM integration uses. In that integration, choose Phoenix MCP (scoped) to control Home Assistant.",
+      "assistBoundHelp": "The access key your LLM integration uses. In that integration's AI tools setting, choose only Phoenix MCP (scoped).",
       "assistBoundAccessKey": "Bound access key",
       "assistBoundAccessKeyAria": "Assist bound access key",
       "assistCard": "Assist Tool Provider",

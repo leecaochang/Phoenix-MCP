@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.homeAssistantFeatures", "title": "Voice Agent, AI Task or Assist Tool Provider", "parent": "window.settingsHome", "order": 2, "keywords": ["conversation agent", "LLM API", "Control Home Assistant", "which model"], "covers": ["custom_components/phoenix_mcp/voice_agent.py", "custom_components/phoenix_mcp/ai_task.py", "custom_components/phoenix_mcp/assist_api.py", "custom_components/phoenix_mcp/assist_gemini.py", "custom_components/phoenix_mcp/assist_schema.py"] }
+{ "id": "topic.homeAssistantFeatures", "title": "Voice Agent, AI Task or Assist Tool Provider", "parent": "window.settingsHome", "order": 2, "keywords": ["conversation agent", "LLM API", "AI tools", "Control Home Assistant", "Device control", "which model"], "covers": ["custom_components/phoenix_mcp/voice_agent.py", "custom_components/phoenix_mcp/ai_task.py", "custom_components/phoenix_mcp/assist_api.py", "custom_components/phoenix_mcp/assist_gemini.py", "custom_components/phoenix_mcp/assist_schema.py"] }
 ---
 Phoenix can work with Home Assistant's AI features in three ways. The difference is whose model answers, and what the access key controls.
 
@@ -24,6 +24,10 @@ It can also answer Home Assistant's Evaluate action for automations and scripts:
 Another integration's model answers, and Phoenix only lends it tools. The bound access key decides which tools that model gets, and the Home Assistant user who asked limits them further. Phoenix runs no model here, and uses none of your credit.
 
 Use it if you already have a conversation agent you like, and want it to reach your home through Phoenix's controls.
+
+In that agent's AI tools setting (Control Home Assistant before 2026.11), choose Phoenix MCP (scoped) and nothing else.
+
+Home Assistant's own Device control and Home Assistant APIs don't pass through Phoenix. Chosen beside it, they give the model tools outside the key, approvals, MESA and the audit log. The Home Assistant API reaches the most: every entity and action, templates, logs and configuration.
 
 From Home Assistant 2026.11, a conversation keeps the tools it started with. Changed notes and permissions reach the model with its next tool call, and a tool it has lost is refused straight away. A tool you add needs a new conversation.
 

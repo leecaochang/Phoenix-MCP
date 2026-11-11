@@ -99,6 +99,16 @@ class TestServerDiscover:
         assert (method, resource, outcome) == (
             "server/discover", "/api/phoenix-mcp", "allowed")
 
+    async def test_initialize_and_discover_name_the_same_server_with_its_icon(self):
+        discovered, *_ = await _dispatch("server/discover")
+        initialized, *_ = await _dispatch("initialize", {"protocolVersion": "2025-03-26"})
+        server_info = discovered["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]
+        assert server_info == initialized["result"]["serverInfo"]
+        assert server_info["icons"] == [
+            {"src": f"{_BASE_URL}/local/phoenix-mcp/icon.png", "mimeType": "image/png", "sizes": ["250x250"]},
+            {"src": f"{_BASE_URL}/local/phoenix-mcp/icon@2x.png", "mimeType": "image/png", "sizes": ["500x500"]},
+        ]
+
     async def test_cache_scope_is_private_never_public(self):
         # The instructions name THIS access key's confirm-gated capabilities. A
         # "public" scope invites a shared intermediary to hand one access key's

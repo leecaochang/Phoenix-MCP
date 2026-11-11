@@ -2294,7 +2294,7 @@
       "aiTaskUnsupported": "AI-uppgiften är otillgänglig i den här Home Assistant-installationen. Kontrollera Home Assistants loggar och ladda sedan om Phoenix MCP.",
       "assistBoundAccessKey": "Bunden åtkomstnyckel",
       "assistBoundAccessKeyAria": "Bunden åtkomstnyckel för Assist",
-      "assistBoundHelp": "Åtkomstnyckeln som din LLM-integration använder. Välj Phoenix MCP (scoped) i den integrationen för att styra Home Assistant.",
+      "assistBoundHelp": "Åtkomstnyckeln som din LLM-integration använder. Välj bara Phoenix MCP (scoped) under AI verktyg i den integrationen.",
       "assistCard": "Assist-verktygsleverantör",
       "assistIntro": "Låt en annan AI-integration i Home Assistant använda Phoenix MCP:s avgränsade verktyg.",
       "assistNotBound": "Inte bunden",

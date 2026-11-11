@@ -21,7 +21,8 @@ from .const import (
     AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, BLOCKED_DOMAINS, CAP_CONFIRM, CAP_DENY, DOMAIN,
     HOME_COMPANION_CLIENT_IP, MAX_PENDING_APPROVALS_PER_ACCESS_KEY, MAX_TOOL_NAME_LENGTH,
     MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS,
-    MCP_PROTOCOL_VERSIONS, MESA_MODE_OFF, ORIENTATION_GUIDANCE, PHOENIX_VERSION,
+    FRONTEND_URL_PATH, MCP_PROTOCOL_VERSIONS, MCP_SERVER_ICONS, MESA_MODE_OFF,
+    ORIENTATION_GUIDANCE, PHOENIX_VERSION,
     UNKNOWN_ARGUMENT_PROTECTED_FIELDS, VOICE_AGENT_CLIENT_IP, APPROVAL_TARGETS_KEY,
 )
 from .conversation_log import record_event, recorded_exchange
@@ -944,6 +945,19 @@ async def _dispatch_mcp(
             request_authority.reset(admitted_context)
 
 
+def _server_info(base_url: str) -> dict[str, Any]:
+    """Phoenix's MCP Implementation record, the same in initialize and server/discover.
+
+    The icon URL starts at the origin this request arrived by: a configured instance URL can
+    be one the client cannot reach, as through a cloud relay or a reverse proxy.
+    """
+    return {
+        "name": "Phoenix MCP", "version": PHOENIX_VERSION,
+        "icons": [{"src": f"{base_url}{FRONTEND_URL_PATH}/{name}", "mimeType": "image/png", "sizes": [size]}
+                  for name, size in MCP_SERVER_ICONS],
+    }
+
+
 async def _dispatch_mcp_authorized(
     method: str, msg_id: Any, params: dict, access_key: AccessKeyRecord,
     hass: HomeAssistant, data: PhoenixData, client_ip: str,
@@ -966,11 +980,7 @@ async def _dispatch_mcp_authorized(
             # capabilities, so a shared intermediary caching one access key's answer
             # would serve it to the next access key reaching it through that proxy.
             "cacheScope": "private",
-            "_meta": {
-                "io.modelcontextprotocol/serverInfo": {
-                    "name": "Phoenix MCP", "version": PHOENIX_VERSION,
-                },
-            },
+            "_meta": {"io.modelcontextprotocol/serverInfo": _server_info(base_url)},
         })
         # The instructions carry the current notes; in memory, persisted by the
         # periodic flush like tools_list_version.
@@ -993,7 +1003,7 @@ async def _dispatch_mcp_authorized(
         resp = _jsonrpc_result(msg_id, {
             "protocolVersion": version,
             "capabilities": _SERVER_CAPABILITIES,
-            "serverInfo": {"name": "Phoenix MCP", "version": PHOENIX_VERSION},
+            "serverInfo": _server_info(base_url),
             "instructions": _build_instructions(access_key, data, base_url, hass),
         })
         access_key.notes_delivered_version = access_key.notes_version

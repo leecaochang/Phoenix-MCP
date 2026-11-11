@@ -2033,7 +2033,7 @@
       "aiTaskAccessKeyAria": "Klucz dostępu Zadania AI",
       "aiTaskAccessKeyHelp": "Określa, do których encji i akcji ma dostęp to Zadanie AI.",
       "aiTaskUnsupported": "Zadanie AI jest niedostępne w tej instalacji Home Assistant. Sprawdź dzienniki Home Assistant, a następnie przeładuj Phoenix MCP.",
-      "assistBoundHelp": "Klucz dostępu używany przez Twoją integrację LLM. W tej integracji wybierz Phoenix MCP (scoped), aby sterować Home Assistant.",
+      "assistBoundHelp": "Klucz dostępu używany przez Twoją integrację LLM. W ustawieniu Narzędzia AI tej integracji wybierz tylko Phoenix MCP (scoped).",
       "assistBoundAccessKey": "Powiązany klucz dostępu",
       "assistBoundAccessKeyAria": "Klucz dostępu powiązany z Assist",
       "assistCard": "Dostawca narzędzi Assist",

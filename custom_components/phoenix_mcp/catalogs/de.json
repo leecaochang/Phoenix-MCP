@@ -1226,7 +1226,7 @@
       "aiTaskAccessKeyAria": "KI-Aufgaben-Zugriffsschlüssel",
       "aiTaskAccessKeyHelp": "Steuert, auf welche Entitäten und Aktionen diese KI-Aufgabe zugreifen kann.",
       "aiTaskUnsupported": "KI-Aufgabe ist in dieser Home Assistant-Installation nicht verfügbar. Prüfen Sie die Home Assistant-Protokolle und laden Sie Phoenix MCP anschließend neu.",
-      "assistBoundHelp": "Der Zugriffsschlüssel, den Ihre LLM-Integration verwendet. Wählen Sie in dieser Integration Phoenix MCP (scoped), um Home Assistant zu steuern.",
+      "assistBoundHelp": "Der Zugriffsschlüssel, den Ihre LLM-Integration verwendet. Wählen Sie in der Einstellung KI-Tools dieser Integration nur Phoenix MCP (scoped).",
       "assistBoundAccessKey": "Gebundener Zugriffsschlüssel",
       "assistBoundAccessKeyAria": "Gebundener Assist-Zugriffsschlüssel",
       "assistCard": "Assist-Tool-Anbieter",

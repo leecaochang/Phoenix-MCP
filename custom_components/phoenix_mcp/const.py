@@ -1284,6 +1284,12 @@ MCP_LEGACY_PROTOCOL_VERSION_PREFERRED = MCP_LEGACY_PROTOCOL_VERSIONS[0]
 # never about what it is allowed to DO.
 MCP_DISCOVER_TTL_MS = 300_000
 
+# The panel's static folder, served by Home Assistant without authentication. It holds the
+# panel bundles and Phoenix's icon, which MCP clients may show beside the server's name.
+FRONTEND_URL_PATH = "/local/phoenix-mcp"
+# Each icon as (file, size); the sizes match the PNGs.
+MCP_SERVER_ICONS: tuple[tuple[str, str], ...] = (("icon.png", "250x250"), ("icon@2x.png", "500x500"))
+
 # An access key's inline wait on a confirm gate, in seconds, before the pending_approval
 # reply. 0 means off and is the default; the maximum stays within typical MCP client
 # timeouts.

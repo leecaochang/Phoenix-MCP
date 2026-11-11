@@ -1554,7 +1554,7 @@
       "aiTaskAccessKeyAria": "AI 任务访问密钥",
       "aiTaskAccessKeyHelp": "决定此 AI 任务可以访问哪些实体和操作。",
       "aiTaskUnsupported": "当前 Home Assistant 环境无法使用 AI 任务。请检查 Home Assistant 日志，然后重新加载 Phoenix MCP。",
-      "assistBoundHelp": "您的 LLM 集成使用的访问密钥。在该集成中，选择 Phoenix MCP (scoped) 来控制 Home Assistant。",
+      "assistBoundHelp": "您的 LLM 集成使用的访问密钥。在该集成的 AI 工具设置中，只选择 Phoenix MCP (scoped)。",
       "assistBoundAccessKey": "已绑定的访问密钥",
       "assistBoundAccessKeyAria": "绑定到 Assist 的访问密钥",
       "assistCard": "Assist 工具提供商",

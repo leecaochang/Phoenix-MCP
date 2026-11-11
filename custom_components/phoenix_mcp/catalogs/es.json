@@ -1795,7 +1795,7 @@
       "aiTaskAccessKeyAria": "Clave de acceso de la tarea IA",
       "aiTaskAccessKeyHelp": "Controla a qué entidades y acciones puede acceder esta tarea IA.",
       "aiTaskUnsupported": "La tarea IA no está disponible en esta instalación de Home Assistant. Revise los registros de Home Assistant y vuelva a cargar Phoenix MCP.",
-      "assistBoundHelp": "La clave de acceso que usa su integración de LLM. En esa integración, elija Phoenix MCP (scoped) para controlar Home Assistant.",
+      "assistBoundHelp": "La clave de acceso que usa su integración de LLM. En la opción Herramientas de IA de esa integración, elija solo Phoenix MCP (scoped).",
       "assistBoundAccessKey": "Clave de acceso vinculada",
       "assistBoundAccessKeyAria": "Clave de acceso vinculada de Assist",
       "assistCard": "Proveedor de herramientas de Assist",

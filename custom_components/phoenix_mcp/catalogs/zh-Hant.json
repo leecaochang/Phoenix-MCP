@@ -1797,7 +1797,7 @@
       "aiTaskAccessKeyAria": "AI 任務存取金鑰",
       "aiTaskAccessKeyHelp": "決定此 AI 任務可以存取哪些實體和操作。",
       "aiTaskUnsupported": "目前 Home Assistant 環境無法使用 AI 任務。請檢查 Home Assistant 日誌，然後重新載入 Phoenix MCP。",
-      "assistBoundHelp": "您的 LLM 整合使用的存取金鑰。在該整合中，選擇 Phoenix MCP (scoped) 來控制 Home Assistant。",
+      "assistBoundHelp": "您的 LLM 整合使用的存取金鑰。在該整合的 AI 工具設定中，只選擇 Phoenix MCP (scoped)。",
       "assistBoundAccessKey": "已繫結的存取金鑰",
       "assistBoundAccessKeyAria": "繫結到 Assist 的存取金鑰",
       "assistCard": "Assist 工具提供者",

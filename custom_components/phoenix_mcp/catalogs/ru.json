@@ -1914,7 +1914,7 @@
       "aiTaskAccessKeyAria": "Ключ доступа AI-задачи",
       "aiTaskAccessKeyHelp": "Определяет, к каким объектам и действиям может обращаться эта AI-задача.",
       "aiTaskUnsupported": "AI-задача недоступна в этой установке Home Assistant. Проверьте журналы Home Assistant, затем перезагрузите интеграцию Phoenix MCP.",
-      "assistBoundHelp": "Ключ доступа, который использует ваша интеграция LLM. В этой интеграции выберите Phoenix MCP (scoped) для управления Home Assistant.",
+      "assistBoundHelp": "Ключ доступа, который использует ваша интеграция LLM. В параметре ИИ-инструменты этой интеграции выберите только Phoenix MCP (scoped).",
       "assistBoundAccessKey": "Привязанный ключ доступа",
       "assistBoundAccessKeyAria": "Привязанный ключ доступа Assist",
       "assistCard": "Провайдер инструментов Assist",

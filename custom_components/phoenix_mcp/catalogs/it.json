@@ -1548,7 +1548,7 @@
       "aiTaskAccessKeyAria": "Chiave di accesso dell'Attività di IA",
       "aiTaskAccessKeyHelp": "Controlla a quali entità e azioni può accedere questa Attività di IA.",
       "aiTaskUnsupported": "L’Attività di IA non è disponibile in questa installazione di Home Assistant. Controlla i registri di Home Assistant, quindi ricarica Phoenix MCP.",
-      "assistBoundHelp": "La chiave di accesso usata dalla tua integrazione LLM. In quell'integrazione scegli Phoenix MCP (scoped) per controllare Home Assistant.",
+      "assistBoundHelp": "La chiave di accesso usata dalla tua integrazione LLM. Nell'impostazione Strumenti IA di quell'integrazione scegli solo Phoenix MCP (scoped).",
       "assistBoundAccessKey": "Chiave di accesso associata",
       "assistBoundAccessKeyAria": "Chiave di accesso associata ad Assist",
       "assistCard": "Provider di strumenti Assist",
