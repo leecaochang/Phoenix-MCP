@@ -519,10 +519,10 @@ def _load_branch(path: str) -> Any:
 
 
 def read_all_entries(config_dir: str, domain: str) -> DomainEntries:
-    """Read every entry a domain defines, following configuration.yaml's includes.
+    """Read every entry a domain defines, following configuration.yaml's includes and packages.
     For reverse-reference walks; no source positions. Falls back to the default leaf when
-    configuration.yaml is missing or unparseable. Packages are reported unreadable, so the
-    caller knows the answer is incomplete.
+    configuration.yaml is missing or unparseable. A branch or package that cannot be read is
+    named, so the caller knows the answer is incomplete.
     """
     shape = _DOMAIN_SHAPES[domain]
     empty: Any = [] if shape == "list" else {}
@@ -538,9 +538,13 @@ def read_all_entries(config_dir: str, domain: str) -> DomainEntries:
     if layout.error:
         unreadable.append(layout.error)
     if layout.has_packages:
-        unreadable.append(
-            f"{domain} may also be defined under homeassistant.packages, which is not read here"
-        )
+        packaged, gaps = read_package_entries(config_dir, domain)
+        unreadable.extend(gaps)
+        for entry in packaged:
+            if shape == "list":
+                entries.append(entry.config)
+            else:
+                entries.update(entry.config)
     if layout.has_inline:
         # Readable, unlike the write path, which refuses inline as ambiguous.
         root = _load_branch(os.path.join(config_dir, CONFIGURATION_YAML))
@@ -585,6 +589,167 @@ def read_all_entries(config_dir: str, domain: str) -> DomainEntries:
                 entries.update(loaded)
 
     return DomainEntries(entries, tuple(unreadable))
+
+
+# ---------------------------------------------------------------------------
+# Packages (read only)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PackageEntry:
+    """One entry a package defines: its package name, file relative to the config directory, config."""
+
+    package: str
+    file: str
+    config: Any
+
+
+def _is_domain_key(key: Any, domain: str) -> bool:
+    """A configuration key for domain, labeled ("automation split") or not, as HA's domain_key reads it."""
+    if not isinstance(key, str):
+        return False
+    name, _, label = key.partition(" ")
+    return key == domain or (name == domain and bool(label.strip(" ")))
+
+
+class _PackageWalker:
+    """Follows include tags under homeassistant.packages without raising.
+
+    Every file passes the realpath jail, the depth limit and the cycle guard, and secrets.yaml
+    is never read. What cannot be read is named in ``unreadable``.
+    """
+
+    def __init__(self, config_dir: str) -> None:
+        self.config_dir = config_dir
+        self.base = os.path.realpath(config_dir)
+        self.unreadable: list[str] = []
+
+    def _name(self, path: str) -> str:
+        return os.path.relpath(path, self.base) if path.startswith(self.base + os.sep) else os.path.basename(path)
+
+    def load(self, path: str, chain: tuple[str, ...]) -> tuple[Any, str, tuple[str, ...]]:
+        """(document, file it came from, chain) after any whole-file !include chain; _UNREADABLE on failure."""
+        real = os.path.realpath(path)
+        if real != self.base and not real.startswith(self.base + os.sep):
+            self.unreadable.append("a package include points outside the configuration directory")
+            return _UNREADABLE, real, chain
+        name = self._name(real)
+        if os.path.basename(real).lower() == SECRETS_YAML:
+            self.unreadable.append(f"{name} is not read")
+            return _UNREADABLE, real, chain
+        if real in chain:
+            self.unreadable.append(f"{name} is included in a cycle")
+            return _UNREADABLE, real, chain
+        if len(chain) >= MAX_INCLUDE_DEPTH:
+            self.unreadable.append(f"{name} is more than {MAX_INCLUDE_DEPTH} levels of includes deep")
+            return _UNREADABLE, real, chain
+        doc = _load_branch(real)
+        if doc is _UNREADABLE:
+            self.unreadable.append(f"{name} could not be read")
+            return _UNREADABLE, real, chain
+        chain = chain + (real,)
+        if isinstance(doc, TaggedValue) and doc.tag == "!include":
+            target = _resolve_include_path(real, doc.value, self.config_dir)
+            if target is None:
+                self.unreadable.append("a package include points outside the configuration directory")
+                return _UNREADABLE, real, chain
+            return self.load(target, chain)
+        return doc, real, chain
+
+    def pieces(self, value: Any, file: str, chain: tuple[str, ...]) -> list[tuple[Any, str, tuple[str, ...]]]:
+        """Expand an include tag into (content, source file, chain), one per file; a plain value is itself."""
+        if not (isinstance(value, TaggedValue) and value.tag in INCLUDE_TAGS):
+            return [(value, file, chain)]
+        target = _resolve_include_path(file, value.value, self.config_dir)
+        if target is None:
+            self.unreadable.append("a package include points outside the configuration directory")
+            return []
+        if value.tag == "!include":
+            doc, source, after = self.load(target, chain)
+            return [] if doc is _UNREADABLE else [(doc, source, after)]
+        if not os.path.isdir(target):
+            self.unreadable.append(f"{self._name(target)} is not a directory")
+            return []
+        found: list[tuple[Any, str, tuple[str, ...]]] = []
+        for leaf in _iter_dir_files(target):
+            doc, source, after = self.load(leaf, chain)
+            if doc is _UNREADABLE or doc is None:
+                continue
+            # HA's merge loaders skip a file of the wrong shape.
+            if (value.tag == "!include_dir_merge_list" and not isinstance(doc, list)
+                    or value.tag == "!include_dir_merge_named" and not isinstance(doc, dict)):
+                continue
+            if value.tag == "!include_dir_list":
+                doc = [doc]
+            elif value.tag == "!include_dir_named":
+                doc = {os.path.splitext(os.path.basename(leaf))[0]: doc}
+            found.append((doc, source, after))
+        return found
+
+    def item(self, value: Any, file: str, chain: tuple[str, ...]) -> tuple[Any, str]:
+        """An entry that is itself a plain !include, loaded; anything else as it is."""
+        if isinstance(value, TaggedValue) and value.tag == "!include":
+            loaded = self.pieces(value, file, chain)
+            return (loaded[0][0], loaded[0][1]) if loaded else (_UNREADABLE, file)
+        return value, file
+
+
+def read_package_entries(config_dir: str, domain: str) -> tuple[list[PackageEntry], tuple[str, ...]]:
+    """Every entry homeassistant.packages defines for a domain, with what could not be read.
+
+    Follows the core config, the packages key and each package in every include form, and
+    each package's labeled and unlabeled domain keys. Read only: nothing here is editable.
+    """
+    shape = _DOMAIN_SHAPES[domain]
+    walker = _PackageWalker(config_dir)
+    root, root_file, chain = walker.load(os.path.join(config_dir, CONFIGURATION_YAML), ())
+    if not isinstance(root, dict):
+        return [], tuple(walker.unreadable)
+    found: list[PackageEntry] = []
+    for core, core_file, core_chain in walker.pieces(root.get("homeassistant"), root_file, chain):
+        if not isinstance(core, dict) or "packages" not in core:
+            continue
+        for packages, packages_file, packages_chain in walker.pieces(core["packages"], core_file, core_chain):
+            if not isinstance(packages, dict):
+                if packages is not None:
+                    walker.unreadable.append(f"{walker._name(packages_file)} does not hold a mapping of packages")
+                continue
+            for name, package in packages.items():
+                for body, body_file, body_chain in walker.pieces(package, packages_file, packages_chain):
+                    if body is None:
+                        continue
+                    if not isinstance(body, dict):
+                        walker.unreadable.append(f"package {name} is not a mapping")
+                        continue
+                    for key, value in body.items():
+                        if not _is_domain_key(key, domain):
+                            continue
+                        for content, source, after in walker.pieces(value, body_file, body_chain):
+                            if shape == "list":
+                                items = content if isinstance(content, list) else [content] if content else []
+                                for item in items:
+                                    config, where = walker.item(item, source, after)
+                                    if config is not _UNREADABLE:
+                                        found.append(PackageEntry(str(name), walker._name(where), config))
+                            elif isinstance(content, dict):
+                                for entry_id, entry in content.items():
+                                    config, where = walker.item(entry, source, after)
+                                    if config is not _UNREADABLE:
+                                        found.append(PackageEntry(str(name), walker._name(where), {entry_id: config}))
+    return found, tuple(walker.unreadable)
+
+
+def read_package_entry(config_dir: str, domain: str, entry_id: str) -> PackageEntry | None:
+    """The one package entry with entry_id, tag-encoded; None when absent or defined twice."""
+    entries, _ = read_package_entries(config_dir, domain)
+    if _DOMAIN_SHAPES[domain] == "named":
+        matches = [PackageEntry(e.package, e.file, encode_tags(e.config[entry_id]))
+                   for e in entries if isinstance(e.config, dict) and entry_id in e.config]
+    else:
+        matches = [PackageEntry(e.package, e.file, encode_tags(e.config))
+                   for e in entries if _entry_matches(domain, e.config, entry_id)]
+    return matches[0] if len(matches) == 1 else None
 
 
 # ---------------------------------------------------------------------------

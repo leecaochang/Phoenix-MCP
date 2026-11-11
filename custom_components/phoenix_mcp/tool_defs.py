@@ -809,7 +809,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "expected_hash to make the edit conditional on the automation not having changed "
             "since this read. Get the automation_id from list_automations or the entity's 'id' "
             "state attribute. YAML tags are shown as display strings (for example "
-            "\"!secret my_key\"); Phoenix MCP never resolves a secret's value."
+            "\"!secret my_key\"); Phoenix MCP never resolves a secret's value. A package entry comes back with editable false and its file; edit it there."
         ),
         "cap": "cap_automation_write",
         "inputSchema": {
@@ -903,7 +903,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "not resend. Returns a content_hash; pass it back as edit_script's expected_hash to "
             "make the edit conditional on the script not having changed since this read. The "
             "script_id is the storage key returned by list_scripts, even after an entity rename. YAML tags are shown as "
-            "display strings (for example \"!secret my_key\"); Phoenix MCP never resolves a secret's value."
+            "display strings (for example \"!secret my_key\"); Phoenix MCP never resolves a secret's value. A package entry comes back with editable false and its file; edit it there."
         ),
         "cap": "cap_script_write",
         "inputSchema": {
@@ -2997,7 +2997,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Returns a content_hash; pass it back as edit_scene's expected_hash to make the edit "
             "conditional on the scene not having changed since this read. Every entity the scene "
             "controls must be writable by this access key, the same rule edit_scene applies. Get the "
-            "scene_id from list_scenes."
+            "scene_id from list_scenes. A package entry comes back with editable false and its file; edit it there."
         ),
         "cap": "cap_scene_write",
         "inputSchema": {

@@ -237,6 +237,34 @@ def _config_read_response(
     }, indent=2, default=str)), "allowed", resource
 
 
+# A package entry is read, never edited: writes reach only Home Assistant's editor files.
+_PACKAGE_ENTRY_NOTE = (
+    "This {domain} is defined in package '{package}' ({file}). Phoenix MCP edits only {domain}s in "
+    "Home Assistant's editor file, so it cannot change this one; edit it in that file."
+)
+
+
+async def _package_read_response(
+    hass: HomeAssistant, domain: str, id_key: str, entry_id: str, resource: str,
+    admit: Callable[[Any], bool] = lambda _config: True,
+) -> tuple[dict, str, str] | None:
+    """The read answer for an entry defined in a package, marked not editable; None if there is none.
+
+    ``admit`` lets a caller refuse the entry as it refuses an editor-file one. No content_hash is
+    given, since no edit can use it.
+    """
+    entry = await hass.async_add_executor_job(
+        yaml_includes.read_package_entry, hass.config.config_dir, domain, entry_id,
+    )
+    if entry is None or not admit(entry.config):
+        return None
+    return _tool_success(json.dumps({
+        id_key: entry_id, "config": entry.config, "editable": False,
+        "package": entry.package, "file": entry.file,
+        "note": _PACKAGE_ENTRY_NOTE.format(domain=domain, package=entry.package, file=entry.file),
+    }, indent=2, default=str)), "allowed", resource
+
+
 async def _entry_cas_conflict(
     args: dict, hass: HomeAssistant, domain: str, entry_id: str, tool_name: str
 ) -> tuple[dict, str, str] | None:
@@ -405,7 +433,7 @@ def _automation_not_found(
 ) -> str:
     """Why no stored configuration was found, said plainly for an automation the caller can see.
 
-    A YAML automation without an id, or one defined in a package, has no entry here. Only an entity
+    A YAML automation without an id, or one defined inline in configuration.yaml, has no entry here. Only an entity
     this key can read is explained, so the text never confirms one it cannot.
     """
     if (requested.startswith("automation.") and hass.states.get(requested) is not None
@@ -414,8 +442,9 @@ def _automation_not_found(
             return (f"{requested} is a YAML automation without an id:, so it has no stored configuration this "
                     "tool can read or edit. get_relationships still shows what it references; giving it an id: in "
                     "YAML makes it readable here.")
-        return (f"{requested} has id '{automation_id}', but its configuration is not in the automation files "
-                "Phoenix edits (for example it is in a package), so this tool cannot read or edit it.")
+        return (f"{requested} has id '{automation_id}', but its configuration is not in the automation files or "
+                "packages Phoenix reads (for example it is inline in configuration.yaml), so this tool cannot read "
+                "or edit it.")
     return f"No automation found with id '{automation_id}'."
 
 
@@ -432,6 +461,10 @@ async def _tool_get_automation(
         return _tool_error("automation_id is required."), "invalid_request", "get_automation"
     config = await _read_config_entry(hass, "automation", automation_id)
     if config is None:
+        packaged = await _package_read_response(
+            hass, "automation", "automation_id", automation_id, f"automation:{automation_id}")
+        if packaged is not None:
+            return packaged
         return (_tool_error(_automation_not_found(hass, access_key, requested, automation_id)), "not_found",
                 f"automation:{automation_id}")
     return _config_read_response("automation_id", automation_id, config, f"automation:{automation_id}")
@@ -888,6 +921,9 @@ async def _tool_get_script(
         return _tool_error("script_id is required."), "invalid_request", "get_script"
     config = await _read_config_entry(hass, "script", script_id)
     if config is None:
+        packaged = await _package_read_response(hass, "script", "script_id", script_id, f"script:{script_id}")
+        if packaged is not None:
+            return packaged
         return _tool_error(f"No script found with id '{script_id}'."), "not_found", f"script:{script_id}"
     return _config_read_response("script_id", script_id, config, f"script:{script_id}")
 
@@ -1561,6 +1597,12 @@ async def _tool_get_scene(
     if not scene_id:
         return _tool_error("scene_id is required."), "invalid_request", "get_scene"
     config = await _read_config_entry(hass, "scene", scene_id)
+    if config is None:
+        packaged = await _package_read_response(
+            hass, "scene", "scene_id", scene_id, f"scene:{scene_id}",
+            admit=lambda found: not _unwritable_scene_members(found, access_key, hass))
+        if packaged is not None:
+            return packaged
     if config is None or _unwritable_scene_members(config, access_key, hass):
         return _tool_error(
             f"No scene found with id '{scene_id}', or it controls entities outside your write scope."
