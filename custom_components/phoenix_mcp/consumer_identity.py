@@ -26,6 +26,23 @@ def _config_key(config: Any) -> str | None:
         return None
 
 
+def _as_validated(value: Any) -> Any:
+    """A configuration with each step's legacy `service` key named `action`, as HA keeps it.
+
+    HA copies an automation shallowly into `raw_config`, then renames `service` in place while
+    validating, so the steps it keeps carry the new name; a file read as written still has the
+    old one. Both sides pass through here before they are compared.
+    """
+    if isinstance(value, list):
+        return [_as_validated(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    renamed = {key: _as_validated(item) for key, item in value.items()}
+    if "service" in renamed and "action" not in renamed:
+        renamed["action"] = renamed.pop("service")
+    return renamed
+
+
 def _scene_key(name: Any, icon: Any, states: dict) -> str | None:
     return _config_key({"name": name, "icon": icon, "entities": {
         eid: {"state": state.state, "attributes": dict(state.attributes)}
@@ -50,7 +67,7 @@ class ConsumerIdentityIndex:
                     continue
                 if kind == "automation":
                     raw = getattr(entity, "raw_config", None)
-                    key = _config_key(raw) if isinstance(raw, dict) and not raw.get("id") else None
+                    key = _config_key(_as_validated(raw)) if isinstance(raw, dict) and not raw.get("id") else None
                 else:
                     scene = getattr(entity, "scene_config", None)
                     key = _scene_key(scene.name, scene.icon, scene.states) if scene is not None and not scene.id else None
@@ -72,7 +89,7 @@ class ConsumerIdentityIndex:
                 return None
             key = _scene_key(config.get("name"), config.get("icon"), states)
         else:
-            key = _config_key(config)
+            key = _config_key(_as_validated(config))
         matches = self._loaded.get((kind, key), []) if key is not None else []
         # Duplicate identical configurations cannot prove which identity owns a row.
         return matches[0].partition(".")[2] if len(matches) == 1 else None

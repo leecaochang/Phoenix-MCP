@@ -126,3 +126,28 @@ async def test_many_reference_holders_do_not_rescan_the_registry(hass, monkeypat
     assert len(body["consumers"]) == 100
     assert len(body["dangling_references"]) == 10
     assert scans <= 2
+
+
+async def test_an_idless_automation_with_legacy_service_steps_is_one_consumer(hass):
+    """HA renames a step's `service` to `action` inside the raw config it keeps; the file keeps
+    the old key. Matched anyway, the graph's hit folds into the scanned row instead of a second."""
+    from custom_components.phoenix_mcp.consumer_identity import ConsumerIdentityIndex
+
+    hass.states.async_set("light.porch", "off")
+    legacy = {"alias": "Welcome home", "trigger": [{"platform": "state", "entity_id": "lock.door", "to": "unlocked"}],
+              "action": [{"service": "light.turn_on", "target": {"entity_id": ["light.porch"]}}]}
+    with open(hass.config.path("automations.yaml"), "w") as file:
+        yaml.safe_dump([legacy], file)
+    assert await async_setup_component(hass, "automation", {"automation": [dict(legacy)]})
+    await hass.async_block_till_done()
+    loaded = next(iter(hass.data["automation"].entities))
+    assert "service" not in json.dumps(loaded.raw_config)  # the premise: HA keeps the new key
+    object_id = loaded.entity_id.partition(".")[2]
+    assert ConsumerIdentityIndex(hass).config_identity("automation", legacy) == object_id
+
+    with patch.object(discovery, "_relationship_graph_hits",
+                      return_value=({("automation", loaded.entity_id, "light.porch")}, [], True)):
+        preview = await discovery._registry_relationships_preview(hass, ["light.porch"])
+    rows = [row for row in preview["consumers"] if row["kind"] == "automation"]
+    assert len(rows) == 1, rows
+    assert rows[0]["id"] == object_id and "action" in rows[0]["roles"]
