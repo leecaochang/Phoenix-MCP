@@ -56,7 +56,7 @@ from ..tool_common import (
 from ..redaction import redact_diagnostics, redact_inaccessible_entity_ids_in_text
 from ..request_authority import _approved_exec_ctx
 from ..tool_contracts import normalize_tool_args, service_name_error
-from .camera import media_read_refusal
+from .camera import media_read_refusal, remember_generated_image
 from .esphome import _ESPHOME_DOMAIN
 from .system import _execute_restart_ha
 
@@ -657,6 +657,7 @@ async def _execute_call_service(
         failure = _service_failure(err, domain, service, access_key, hass, detail=domain not in PRIMARY_ENTITY_DOMAINS)
         return failure, "invalid_request", resource
 
+    remember_generated_image(data, access_key, service_key, svc_response)
     body: dict[str, Any] = {"success": True}
     if local_plan:
 

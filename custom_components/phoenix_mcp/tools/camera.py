@@ -17,7 +17,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.util import dt as dt_util
 
-from ..const import CAP_ALLOW, MESA_MODE_OFF
+from ..const import AI_TASK_GENERATED_IMAGES_KEPT, AI_TASK_IMAGE_SERVICE, CAP_ALLOW, MESA_MODE_OFF
 from ..data import PhoenixData
 from ..tool_input import str_arg
 from ..capability import effective_cap
@@ -111,9 +111,9 @@ def media_read_refusal(
 
     Every camera or image media-source ID needs cap_camera_read and the read check of
     get_camera_image; a hidden and a missing one read alike. An AI Task attachment from any
-    other source is refused, as nothing scopes it.
+    other source is refused, as nothing scopes it, unless this key generated that image.
     """
-    if unscoped_attachments(domain, service_data):
+    if unscoped_attachments(domain, service_data, data.generated_images.get(access_key.id, ())):
         return AI_TASK_ATTACHMENT_REFUSAL, "invalid_request"
     named = media_source_entities(service_data)
     if not named:
@@ -127,6 +127,19 @@ def media_read_refusal(
                                        caller="call_service", preview=preview) is not None):
             return MEDIA_READ_REFUSAL, "denied"
     return None
+
+
+def remember_generated_image(
+    data: PhoenixData, access_key: AccessKeyRecord, service_key: str, response: object,
+) -> None:
+    """Keep the media-source ID an image generation returned, so this key may attach it later."""
+    if service_key != AI_TASK_IMAGE_SERVICE or not isinstance(response, dict):
+        return
+    media_id = response.get("media_source_id")
+    if not isinstance(media_id, str) or not media_id:
+        return
+    kept = [item for item in data.generated_images.get(access_key.id, []) if item != media_id]
+    data.generated_images[access_key.id] = [*kept, media_id][-AI_TASK_GENERATED_IMAGES_KEPT:]
 
 
 def _dimension(value: Any, name: str) -> tuple[int | None, str | None]:

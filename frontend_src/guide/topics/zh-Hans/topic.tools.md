@@ -57,7 +57,8 @@
 - 发送消息的通知操作需要通知能力。集成自带的、通过通知实体发送消息的操作也需要。手机以外的旧版通知服务始终需要您审批。
 - 通知播放需要广播能力：`assist_satellite.announce`、`start_conversation`、`ask_question`、`music_assistant.play_announcement`、带 `announce` 的 `media_player.play_media` 和 `tts.speak`。
 - `tts.speak` 还需要对其指定的每个音箱有 W。普通播放只需要 W。
-- 操作数据中以 `media-source://camera/<entity_id>` 或 `media-source://image/<entity_id>` 指定的摄像头或图像，需要 {{label:caps.cap_camera_read.label}} 和对它的 R，与获取静态图像相同。AI 任务的附件只能是摄像头或图像。
+- 操作数据中以 `media-source://camera/<entity_id>` 或 `media-source://image/<entity_id>` 指定的摄像头或图像，需要 {{label:caps.cap_camera_read.label}} 和对它的 R，与获取静态图像相同。
+- AI 任务的附件只能是摄像头、图像，或同一密钥自上次重启以来用 `ai_task.generate_image` 生成的图片。
 - ESPHome 设备操作只需要设备上的 W。MESA 不检查它们，也不检查重新加载或重启。
 - 搜索或列出 Music Assistant 音乐库需要服务响应数据，以及某个 Music Assistant 实体（例如音箱）上的 R。这些操作不会播放任何内容，所以 MESA 也不检查它们。
 - `update.install` 必须在设备的每个实体上通过 MESA。在 ESPHome 设备上还需要 ESPHome 固件刷写。

@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import voluptuous as vol
 from homeassistant.components import ai_task as core_ai_task
-from homeassistant.components.ai_task import task as core_task
+from homeassistant.components.ai_task import services as core_services, task as core_task
 from homeassistant.components.ai_task.const import DATA_COMPONENT, AITaskEntityFeature
 from homeassistant.components.ai_task.entity import AITaskEntity
 from homeassistant.components.ai_task.task import GenDataTaskResult
@@ -34,7 +34,12 @@ from custom_components.phoenix_mcp.access_key_store import (
     PermissionNode,
     PermissionTree,
 )
-from custom_components.phoenix_mcp.const import DOMAIN, MESA_MODE_ADVISORY, MESA_MODE_OFF
+from custom_components.phoenix_mcp.const import (
+    AI_TASK_GENERATED_IMAGES_KEPT,
+    DOMAIN,
+    MESA_MODE_ADVISORY,
+    MESA_MODE_OFF,
+)
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 
@@ -47,7 +52,8 @@ IMAGE = "image.doorbell"
 class _OtherVendorTask(AITaskEntity):
     """A third-party AI Task entity that records what Core hands it."""
 
-    _attr_supported_features = AITaskEntityFeature.GENERATE_DATA | AITaskEntityFeature.SUPPORT_ATTACHMENTS
+    _attr_supported_features = (AITaskEntityFeature.GENERATE_DATA | AITaskEntityFeature.GENERATE_IMAGE
+                                | AITaskEntityFeature.SUPPORT_ATTACHMENTS)
     _attr_unique_id = "other_vendor"
     _attr_name = None
     entity_id = TASK
@@ -76,12 +82,12 @@ def _environment(hass, *, mesa_mode: str = MESA_MODE_OFF, mesa=None) -> tuple[Ph
     return data, pending
 
 
-def _key(entities: dict[str, str], **fields) -> AccessKeyRecord:
+def _key(entities: dict[str, str], key_id: str = "k", **fields) -> AccessKeyRecord:
     fields.setdefault("cap_camera_read", "allow")
     # Core runs generate_data only with a response requested.
     fields.setdefault("cap_service_response", "allow")
     return AccessKeyRecord(
-        id="k", name="K", access_key_hash="x", created_at=utcnow(), created_by="a",
+        id=key_id, name=key_id.upper(), access_key_hash="x", created_at=utcnow(), created_by="a",
         permissions=PermissionTree(entities={e: PermissionNode(state=s) for e, s in entities.items()}),
         **fields,
     )
@@ -336,3 +342,82 @@ def test_core_still_names_the_attachment_field_and_its_scheme():
     assert ATTR_ATTACHMENTS == "attachments" and URI_SCHEME == "media-source://"
     assert core_ai_task.DOMAIN == "ai_task"
     assert json.dumps(sorted(AITaskEntityFeature.__members__))
+
+
+def _generated(index: int) -> str:
+    return f"media-source://ai_task/image/2026-11-11_0000{index:02d}_sketch.png"
+
+
+async def _generate_image(hass, data, key, media_id: str) -> tuple:
+    """Run ai_task.generate_image through call_service, with Core answering media_id."""
+    produced = AsyncMock(return_value={"conversation_id": "c", "media_source_id": media_id, "mime_type": "image/png"})
+    call = {"service": {"domain": "ai_task", "name": "generate_image",
+                        "data": {"task_name": "sketch", "instructions": "Draw a house"}},
+            "targets": [{"kind": "entity", "ids": [TASK]}]}
+    with patch.object(core_services, "async_generate_image", produced):
+        result = await _call_tool("call_service", call, key, hass, data)
+    assert produced.await_count == 1, result
+    return result
+
+
+def _attach(media_id: str) -> dict:
+    call = _generate()
+    call["service"]["data"]["attachments"] = [{"media_content_id": media_id, "media_content_type": "image/png"}]
+    return call
+
+
+async def test_a_key_may_attach_an_image_it_generated(hass, other_vendor):
+    entity, resolved = other_vendor
+    data, _ = _environment(hass)
+    key = _key({TASK: "GREEN"}, cap_camera_read="deny")
+    assert (await _generate_image(hass, data, key, _generated(1)))[1] == "allowed"
+    result, outcome, _ = await _call_tool("call_service", _attach(_generated(1)), key, hass, data)
+    assert outcome == "allowed", result
+    assert resolved == [[{"media_content_id": _generated(1), "media_content_type": "image/png"}]]
+    assert len(entity.tasks) == 1
+
+
+@pytest.mark.parametrize("media_id", [
+    _generated(2),
+    f" {_generated(1)}",
+    _generated(1).upper(),
+    "media-source://ai_task/image/../../secrets.yaml",
+])
+async def test_an_image_this_key_did_not_generate_is_refused(hass, other_vendor, media_id):
+    entity, resolved = other_vendor
+    data, _ = _environment(hass)
+    key = _key({TASK: "GREEN"})
+    await _generate_image(hass, data, key, _generated(1))
+    result, outcome, _ = await _call_tool("call_service", _attach(media_id), key, hass, data)
+    assert outcome == "invalid_request", result
+    assert resolved == [] and entity.tasks == []
+
+
+async def test_another_keys_generated_image_is_refused(hass, other_vendor):
+    entity, resolved = other_vendor
+    data, _ = _environment(hass)
+    await _generate_image(hass, data, _key({TASK: "GREEN"}, key_id="maker"), _generated(1))
+    result, outcome, _ = await _call_tool(
+        "call_service", _attach(_generated(1)), _key({TASK: "GREEN"}, key_id="other"), hass, data)
+    assert outcome == "invalid_request", result
+    assert resolved == [] and entity.tasks == []
+
+
+async def test_only_the_newest_generated_images_are_remembered(hass, other_vendor):
+    data, _ = _environment(hass)
+    key = _key({TASK: "GREEN"})
+    for index in range(AI_TASK_GENERATED_IMAGES_KEPT + 1):
+        await _generate_image(hass, data, key, _generated(index))
+    assert (await _call_tool("call_service", _attach(_generated(0)), key, hass, data))[1] == "invalid_request"
+    assert (await _call_tool("call_service", _attach(_generated(1)), key, hass, data))[1] == "allowed"
+    assert len(data.generated_images["k"]) == AI_TASK_GENERATED_IMAGES_KEPT
+
+
+async def test_a_refused_generation_remembers_nothing(hass, other_vendor):
+    data, _ = _environment(hass)
+    key = _key({TASK: "GREEN"}, cap_service_response="deny")
+    call = {"service": {"domain": "ai_task", "name": "generate_image",
+                        "data": {"task_name": "sketch", "instructions": "Draw a house"}},
+            "targets": [{"kind": "entity", "ids": [TASK]}]}
+    assert (await _call_tool("call_service", call, key, hass, data))[1] == "denied"
+    assert data.generated_images == {}

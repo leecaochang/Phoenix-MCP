@@ -98,6 +98,8 @@ class PhoenixData:
     oauth_grants: OAuthGrantStore = field(default_factory=OAuthGrantStore)
     # OAuth sign-in windows, pending requests and codes: memory only.
     oauth: OAuthRuntime = field(default_factory=OAuthRuntime)
+    # Media-source IDs of the images each access key generated, by key id: memory only.
+    generated_images: dict[str, list[str]] = field(default_factory=dict)
     # MESA semantic-safety runtime (store, resolver, enforcer, validator).
     # None only if MESA setup failed; views guard accordingly.
     mesa: MesaRuntime | None = None

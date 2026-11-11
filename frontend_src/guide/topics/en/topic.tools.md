@@ -52,7 +52,8 @@ Agents can also run Home Assistant actions on targets they can write, and previe
 - An action's returned data needs Service response data. Without it, most actions still run but return no data. Actions that only return data, such as `weather.get_forecasts`, are refused.
 - Notify actions, which send messages, need Notifications. So does an integration's own action that sends through a notify entity. A legacy notify service other than a phone's always needs your approval.
 - Announcements need Broadcast: `assist_satellite.announce`, `start_conversation` and `ask_question`, `music_assistant.play_announcement`, `media_player.play_media` with `announce`, and `tts.speak`. `tts.speak` also needs Write on every speaker it names. Ordinary playback needs only Write.
-- A camera or image named in an action's data as `media-source://camera/<entity_id>` or `media-source://image/<entity_id>` needs {{label:caps.cap_camera_read.label}} and Read on it, as with any still. AI Task attachments must be cameras or images.
+- A camera or image named in an action's data as `media-source://camera/<entity_id>` or `media-source://image/<entity_id>` needs {{label:caps.cap_camera_read.label}} and Read on it, as with any still.
+- AI Task attachments must be cameras, images, or a picture the same key made with `ai_task.generate_image` since the last restart.
 - ESPHome device actions need only Write on the device. MESA doesn't check them, and doesn't check reloads or restarts either.
 - Searching or listing the Music Assistant library needs Service response data and Read on a Music Assistant entity, such as a speaker. Nothing plays, so MESA doesn't check these either.
 - `update.install` must pass MESA on every entity of the device. On an ESPHome device it also needs ESPHome firmware flashing.

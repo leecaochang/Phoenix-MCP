@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass
 from functools import partial
 from inspect import unwrap
@@ -787,8 +787,11 @@ def media_source_entities(service_data: object) -> list[tuple[str, str]]:
     return list(dict.fromkeys(item for item in named if item is not None))
 
 
-def unscoped_attachments(domain: str, service_data: object) -> bool:
-    """Whether an AI Task call attaches anything but a camera or image media-source ID."""
+def unscoped_attachments(domain: str, service_data: object, generated: Collection[str] = ()) -> bool:
+    """Whether an AI Task call attaches anything but a camera or image, or an image in ``generated``.
+
+    A generated image matches exactly, as HA resolves it.
+    """
     if domain != "ai_task" or not isinstance(service_data, Mapping):
         return False
     attachments = service_data.get(AI_TASK_ATTACHMENT_FIELD)
@@ -798,13 +801,15 @@ def unscoped_attachments(domain: str, service_data: object) -> bool:
     return any(
         not isinstance(item, Mapping)
         or not isinstance(item.get("media_content_id"), str)
-        or _media_source_entity(item["media_content_id"]) is None
+        or (_media_source_entity(item["media_content_id"]) is None
+            and item["media_content_id"] not in generated)
         for item in items
     )
 
 
 AI_TASK_ATTACHMENT_REFUSAL = (
     "AI Task attachments can only be cameras or images, given as "
-    "media-source://camera/<entity_id> or media-source://image/<entity_id>. No action was "
-    "dispatched."
+    "media-source://camera/<entity_id> or media-source://image/<entity_id>, or an image this "
+    "access key generated, by the media_source_id ai_task.generate_image returned. No action "
+    "was dispatched."
 )

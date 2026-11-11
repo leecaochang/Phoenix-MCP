@@ -992,8 +992,12 @@ SCRIPT_INPUT_FIELD = "variables"
 # for a media-source ID in any field of any service, checking only a context user's access.
 MEDIA_SOURCE_ENTITY_DOMAINS = frozenset({"camera", "image"})
 # AI Task hands each attachment to the model, which describes it to the caller. Only an
-# entity source can be scoped, so an attachment from any other source is refused.
+# entity source can be scoped, so an attachment from any other source is refused, except an
+# image the same key generated: every caller's images share one folder under guessable names.
 AI_TASK_ATTACHMENT_FIELD = "attachments"
+AI_TASK_IMAGE_SERVICE = "ai_task/generate_image"
+# Generated images remembered per key, newest kept; memory only, so a restart forgets them.
+AI_TASK_GENERATED_IMAGES_KEPT = 50
 # Services that take an entity and cannot actuate it, or do nothing on physical and notify
 # domains, so such a target adds no capability. A deliberate list: an unknown service on a
 # lock stays gated, and readers that return door codes (schlage.get_codes,
