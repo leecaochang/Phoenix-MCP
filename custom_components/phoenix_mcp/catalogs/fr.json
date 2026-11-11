@@ -751,6 +751,7 @@
       "rowOutcome": "Résultat",
       "rowPayload": "Charge utile",
       "rowRequestId": "ID de requête",
+      "rowOAuthApp": "Application OAuth",
       "rowResource": "Ressource",
       "rowTime": "Heure",
       "outcomeCancelled": "Annulé",

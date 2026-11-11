@@ -1063,6 +1063,7 @@
       "rowOutcome": "Udfald",
       "rowPayload": "Nyttelast",
       "rowRequestId": "Anmodnings-ID",
+      "rowOAuthApp": "OAuth-app",
       "rowResource": "Ressource",
       "rowTime": "Tid",
       "outcomeCancelled": "Annulleret",

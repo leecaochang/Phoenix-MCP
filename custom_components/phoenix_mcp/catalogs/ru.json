@@ -928,6 +928,7 @@
       "rowOutcome": "Результат",
       "rowPayload": "Данные",
       "rowRequestId": "Идентификатор запроса",
+      "rowOAuthApp": "Приложение OAuth",
       "rowResource": "Ресурс",
       "rowTime": "Время",
       "outcomeCancelled": "Отменено",

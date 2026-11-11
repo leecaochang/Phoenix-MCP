@@ -2339,6 +2339,7 @@
       "rowOutcome": "Ergebnis",
       "rowPayload": "Nutzdaten",
       "rowRequestId": "Anfrage-ID",
+      "rowOAuthApp": "OAuth-App",
       "rowResource": "Ressource",
       "rowTime": "Zeit",
       "outcomeCancelled": "Abgebrochen",

@@ -403,6 +403,7 @@
       "rowOutcome": "Uitkomst",
       "rowPayload": "Payload",
       "rowRequestId": "Verzoek-ID",
+      "rowOAuthApp": "OAuth-app",
       "rowResource": "Resource",
       "rowTime": "Tijd",
       "outcomeCancelled": "Geannuleerd",

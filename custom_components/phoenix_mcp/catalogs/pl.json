@@ -413,6 +413,7 @@
       "rowOutcome": "Wynik",
       "rowPayload": "Zawartość",
       "rowRequestId": "ID żądania",
+      "rowOAuthApp": "Aplikacja OAuth",
       "rowResource": "Zasób",
       "rowTime": "Czas",
       "outcomeCancelled": "Anulowano",

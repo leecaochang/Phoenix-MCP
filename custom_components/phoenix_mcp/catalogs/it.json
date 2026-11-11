@@ -447,6 +447,7 @@
       "rowOutcome": "Esito",
       "rowPayload": "Carico utile",
       "rowRequestId": "ID richiesta",
+      "rowOAuthApp": "App OAuth",
       "rowResource": "Risorsa",
       "rowTime": "Ora",
       "outcomeCancelled": "Annullato",

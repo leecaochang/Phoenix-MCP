@@ -555,6 +555,7 @@
       "rowOutcome": "結果",
       "rowPayload": "ペイロード",
       "rowRequestId": "リクエスト ID",
+      "rowOAuthApp": "OAuth アプリ",
       "rowResource": "リソース",
       "rowTime": "時刻",
       "outcomeCancelled": "キャンセル済み",

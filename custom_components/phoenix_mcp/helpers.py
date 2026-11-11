@@ -88,6 +88,7 @@ def log_request(
     payload: dict | None = None,
     mesa_advisory: bool = False,
     stale_tools_advisory: bool = False,
+    oauth_app: dict[str, str] | None = None,
 ) -> None:
     """Record an audit entry and update in-memory access key counters."""
     # Attribute the request to the access key's active settings preset, when one is
@@ -113,6 +114,7 @@ def log_request(
         mesa_advisory=mesa_advisory,
         preset=preset_name,
         stale_tools_advisory=stale_tools_advisory,
+        oauth_app=oauth_app,
     )
     update_access_key_counter(data, access_key.id, outcome)
 

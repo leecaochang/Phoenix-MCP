@@ -122,6 +122,8 @@ async def async_get_authenticated_access_key(
 
     if not rl_result.allowed:
         fire_rate_limit_events(hass, data, access_key)
+        # No request authority exists yet, so the sign-in is named here.
+        grant = data.oauth_grants.get(request.get(OAUTH_GRANT_REQUEST_KEY))
         log_request(
             data,
             access_key,
@@ -130,6 +132,7 @@ async def async_get_authenticated_access_key(
             resource=resource,
             outcome="rate_limited",
             client_ip=get_client_ip(request),
+            oauth_app=grant.audit_label() if grant is not None else None,
         )
         resp = build_error_response("rate_limited", "Rate limit exceeded.", 429, request_id)
         resp.headers["Retry-After"] = str(rl_result.retry_after)

@@ -253,6 +253,8 @@ Pages through the log of agent requests, newest first.
 
 The response has `entries` and `total`. Each entry has `request_id`, `timestamp`, `access_key_id`, `access_key_name`, `method`, `resource`, `outcome`, `client_ip` and `pass_through`. It may also have `payload`, `mesa_advisory`, `preset`, `stale_tools_advisory`, `ha_user_id` and `originating_access_key_id`.
 
+A row written for a request an OAuth sign-in made also has `oauth_app`, with that sign-in's `name` and `host`.
+
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.badPagination`, `adminError.paginationNonNegative` | `limit` or `offset` isn't a whole number of 0 or more. |

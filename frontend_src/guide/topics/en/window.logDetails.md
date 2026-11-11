@@ -13,6 +13,8 @@ Every field of the entry, including its **{{label:audit.rowRequestId}}**. A tool
 
 If the access key was renamed since, its name then shows in brackets after the current one.
 
+A request an app made through OAuth sign-in shows **{{label:audit.rowOAuthApp}}**: the name the app gave itself, then the address it signed in through. Only the address is checked, so trust that part.
+
 ## A conversation {#conversation}
 
 The heading sums up the conversation: where it came from, when, and how many turns, tool calls and changes it holds. Its turns follow, oldest first, 25 at a time.

@@ -1063,6 +1063,7 @@
       "rowOutcome": "Tulos",
       "rowPayload": "Sisältö",
       "rowRequestId": "Pyynnön tunnus",
+      "rowOAuthApp": "OAuth-sovellus",
       "rowResource": "Resurssi",
       "rowTime": "Aika",
       "outcomeCancelled": "Peruutettu",

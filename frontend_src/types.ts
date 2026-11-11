@@ -470,6 +470,8 @@ export interface AuditEntry {
   mesa_advisory?: boolean;
   preset?: string | null;
   stale_tools_advisory?: boolean;
+  /** The OAuth sign-in's app when one made the request: its claimed name and checked host. */
+  oauth_app?: { name: string; host: string } | null;
 }
 
 export interface EntityInfo {

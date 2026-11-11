@@ -97,6 +97,16 @@ describe("Audit Log updates", () => {
     expect(field?.querySelector("dd")?.textContent).toBe("Pass-Through");
   });
 
+  it("names the OAuth app in Log Details only for a row a sign-in made", () => {
+    const field = (e: AuditEntry) => [...render(<AuditEntryDetail entry={e} accessKeyName="key" />).container
+      .querySelectorAll(".phx-log-field")].find((f) => f.querySelector("dt")?.textContent === "OAuth app");
+    expect(field({ ...entry(1), oauth_app: { name: "ChatGPT", host: "chatgpt.com" } })?.querySelector("dd")?.textContent)
+      .toBe("ChatGPT · chatgpt.com");
+    expect(field({ ...entry(2), oauth_app: { name: "", host: "app.example" } })?.querySelector("dd")?.textContent)
+      .toBe("Unnamed app · app.example");
+    expect(field(entry(3))).toBeUndefined();
+  });
+
   it("does not update while its window is hidden", async () => {
     vi.useFakeTimers();
     vi.mocked(api.getAudit).mockResolvedValue({ entries: [entry(1)], total: 1 });

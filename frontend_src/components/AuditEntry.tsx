@@ -107,6 +107,12 @@ export function AuditEntryDetail({ entry, accessKeyName }: { entry: AuditEntry; 
             : formatAccessKeyName(accessKeyName)}
         />
         <Field label={t("audit.rowAccess")} value={accessLabel(entry)} />
+        {entry.oauth_app && (
+          <Field
+            label={t("audit.rowOAuthApp")}
+            value={`${entry.oauth_app.name || t("oauth.unnamedApp")} · ${entry.oauth_app.host}`}
+          />
+        )}
         <Field label={t("audit.rowMethod")} value={entry.method} mono />
         <Field label={t("audit.rowResource")} value={friendlyResource(entry.resource)} mono />
         <Field label={t("audit.rowOutcome")} value={outcomeLabel(entry)} />

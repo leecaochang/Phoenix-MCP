@@ -21,7 +21,7 @@ from .const import (
 )
 from .conversation_log import sanitized
 from .helpers import log_internal_failure
-from .request_authority import household_authority
+from .request_authority import household_authority, request_authority
 from .provider_constants import AGENT_CHAT_CLIENT_IP
 from .access_key_store import GlobalSettings
 from .time_text import parse_datetime
@@ -91,6 +91,25 @@ def _argument_names(arguments: Any) -> Any:
 def _storable_text(value: Any) -> Any:
     """Escape what the JSON writer refuses, so one string cannot fail a whole save."""
     return value.encode("utf-8", "backslashreplace").decode("utf-8") if isinstance(value, str) else value
+
+
+def _oauth_app_field(value: Any) -> dict[str, str] | None:
+    """A stored or recorded app label as {"name", "host"} of bounded text, else None."""
+    if not isinstance(value, dict):
+        return None
+    name, host = value.get("name"), value.get("host")
+    if not isinstance(name, str) or not isinstance(host, str) or not host:
+        return None
+    return {"name": _bounded_field(name), "host": _bounded_field(host)}
+
+
+def _request_oauth_app(access_key_id: str) -> dict[str, str] | None:
+    """The app of the OAuth sign-in this request was admitted with, when it is this key's."""
+    authority = request_authority.get()
+    if authority is None or authority.oauth_grant_id is None or authority.access_key_id != access_key_id:
+        return None
+    grant = authority.data.oauth_grants.get(authority.oauth_grant_id)
+    return None if grant is None else grant.audit_label()
 
 
 def _bounded_field(value: object) -> str:
@@ -169,6 +188,8 @@ class AuditEntry:
     ha_user_id: str | None = None
     # Server-owned source identity, never a bearer credential.
     originating_access_key_id: str | None = None
+    # The OAuth sign-in's app, {"name", "host"}, copied when the row was written.
+    oauth_app: dict[str, str] | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -194,6 +215,8 @@ class AuditEntry:
             d["ha_user_id"] = self.ha_user_id
         if self.originating_access_key_id is not None:
             d["originating_access_key_id"] = self.originating_access_key_id
+        if self.oauth_app is not None:
+            d["oauth_app"] = dict(self.oauth_app)
         return d
 
 
@@ -228,11 +251,12 @@ class AuditLog:
         timestamp: datetime | None = None,
         ha_user_id: str | None = None,
         originating_access_key_id: str | None = None,
+        oauth_app: dict[str, str] | None = None,
     ) -> None:
         """Append an audit entry, subject to the current logging settings.
         Skipped by disable_all_logging or the per-outcome toggle, except pending_approval and
         approval/* rows. log_entity_names and log_client_ip redact names and IPs, keeping
-        Phoenix's own surfaces named.
+        Phoenix's own surfaces named. ``oauth_app`` defaults to the request's own OAuth sign-in.
         """
         if settings.disable_all_logging:
             return
@@ -288,6 +312,7 @@ class AuditLog:
             stale_tools_advisory=stale_tools_advisory,
             ha_user_id=_storable_text(ha_user_id if ha_user_id is not None else household.user_id if household else None),
             originating_access_key_id=_storable_text(originating_access_key_id),
+            oauth_app=_oauth_app_field(oauth_app if oauth_app is not None else _request_oauth_app(access_key_id)),
         ))
 
     _VALID_OUTCOMES = frozenset({
@@ -479,6 +504,7 @@ class AuditLog:
                     stale_tools_advisory=r.get("stale_tools_advisory", False),
                     ha_user_id=r.get("ha_user_id"),
                     originating_access_key_id=r.get("originating_access_key_id"),
+                    oauth_app=_oauth_app_field(r.get("oauth_app")),
                 ))
             except (KeyError, TypeError, ValueError) as exc:
                 _LOGGER.warning("Skipping corrupt audit entry: %s", exc)

@@ -95,6 +95,10 @@ class OAuthGrant:
             "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
         }
 
+    def audit_label(self) -> dict[str, str]:
+        """The app an audit row names: the name it gave itself, and the host it signed in through."""
+        return {"name": self.client_name, "host": self.redirect_host}
+
     def to_storage_dict(self) -> dict:
         return {
             **self.to_admin_dict(),

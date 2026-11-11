@@ -253,6 +253,8 @@ GET    /api/phoenix-mcp/admin/audit
 
 回應包含 `entries` 和 `total`。每個條目有 `request_id`、`timestamp`、`access_key_id`、`access_key_name`、`method`、`resource`、`outcome`、`client_ip` 和 `pass_through`。它還可能包含 `payload`、`mesa_advisory`、`preset`、`stale_tools_advisory`、`ha_user_id` 和 `originating_access_key_id`。
 
+由 OAuth 登入發出的請求所寫入的條目還有 `oauth_app`，包含該登入的 `name` 和 `host`。
+
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.badPagination`、`adminError.paginationNonNegative` | `limit` 或 `offset` 不是大於等於 0 的整數。 |

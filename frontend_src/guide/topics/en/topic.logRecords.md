@@ -9,6 +9,7 @@ Phoenix keeps two logs. The audit log is a short record of every action and its 
 - **Other MCP requests**: listing tools, starting and ending a session, and requests a key wasn't allowed to make. If an app disconnects during a change, an entry named `request/cancelled` records it.
 - **Evaluate actions**: each `ai_task/evaluate` call and refusal, under the Decisions access key. The entry holds a refusal's reason, never the questions or data.
 - **MESA blocks**: an extra entry for each entity MESA refused. These need the mesa_core.audit logger at its default level, INFO; raising it in Home Assistant's logger settings hides them, though the blocks still happen.
+- **OAuth sign-ins**: each token an app is given or refused. Any entry for a signed-in app's request also names the app, in [{{label:workspace.logDetails}}](guide:window.logDetails#audit-entry).
 - **Approvals**: each request queued for approval, and what happened to it: approved, carried out, rejected, cancelled or failed.
 - **Your changes in the panel**: access keys, permissions, settings, MESA profiles, restores, wipes and other administrator actions. These show the administrator instead of an access key. A settings change names what changed, even one that turns logging off.
 

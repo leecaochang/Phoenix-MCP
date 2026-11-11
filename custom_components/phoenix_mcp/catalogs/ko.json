@@ -360,6 +360,7 @@
       "rowOutcome": "결과",
       "rowPayload": "페이로드",
       "rowRequestId": "요청 ID",
+      "rowOAuthApp": "OAuth 앱",
       "rowResource": "리소스",
       "rowTime": "시각",
       "outcomeCancelled": "취소됨",

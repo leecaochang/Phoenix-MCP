@@ -844,6 +844,7 @@
       "rowOutcome": "结果",
       "rowPayload": "负载",
       "rowRequestId": "请求 ID",
+      "rowOAuthApp": "OAuth 应用",
       "rowResource": "资源",
       "rowTime": "时间",
       "outcomeCancelled": "已取消",

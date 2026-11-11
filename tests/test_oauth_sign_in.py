@@ -479,3 +479,118 @@ async def test_stopping_a_window_refuses_the_approval_and_works_under_the_kill_s
     await data.store.async_patch_settings(kill_switch=False)
     missing = await admin.delete("/api/phoenix-mcp/admin/access-keys/no-such-key/oauth/window")
     assert missing.status == 404
+
+
+# Audit label
+
+
+APP_LABEL = {"name": "Test App", "host": "app.example"}
+
+
+async def test_audit_rows_name_the_signed_in_app_and_key_rows_do_not(hass, oauth):
+    from custom_components.phoenix_mcp.admin.logs import PhoenixAdminAuditView
+
+    app, admin, data, _fetch = oauth
+    view = PhoenixAdminAuditView()
+    view.hass = hass
+    hass.http.register_view(view)
+    access_key, raw = await _key(data)
+    tokens = await _sign_in(app, admin, access_key.id)
+    assert (await _mcp(app, tokens["access_token"])).status == 200
+    signed_in = [e for e in data.audit.query(access_key_id=access_key.id) or [] if e.oauth_app]
+    assert signed_in and all(e.oauth_app == APP_LABEL for e in signed_in)
+
+    before = {e.request_id for e in data.audit.query(access_key_id=access_key.id) or []}
+    assert (await _mcp(app, raw)).status == 200
+    by_key = [e for e in data.audit.query(access_key_id=access_key.id) or [] if e.request_id not in before]
+    assert by_key and all(e.oauth_app is None for e in by_key)
+
+    listed = await (await admin.get("/api/phoenix-mcp/admin/audit")).json()
+    rows = listed.get("data", listed)["entries"]
+    assert any(row.get("oauth_app") == APP_LABEL for row in rows)
+    assert any("oauth_app" not in row for row in rows if row["access_key_id"] == access_key.id)
+
+
+async def test_a_rate_limited_sign_in_is_labeled_too(oauth):
+    from types import SimpleNamespace
+
+    app, admin, data, _fetch = oauth
+    access_key, _raw = await _key(data)
+    tokens = await _sign_in(app, admin, access_key.id)
+    with patch.object(data.rate_limiter, "check", return_value=SimpleNamespace(allowed=False, retry_after=1)):
+        assert (await _mcp(app, tokens["access_token"])).status == 429
+    limited = [e for e in data.audit.query(access_key_id=access_key.id, outcome="rate_limited") or []]
+    assert limited and limited[0].oauth_app == APP_LABEL
+
+
+async def test_the_label_outlives_the_sign_in_and_survives_storage(oauth):
+    app, admin, data, _fetch = oauth
+    access_key, _raw = await _key(data)
+    tokens = await _sign_in(app, admin, access_key.id)
+    assert (await _mcp(app, tokens["access_token"])).status == 200
+    for grant in data.oauth_grants.list_for_key(access_key.id):
+        await data.oauth_grants.async_remove(grant.id)
+    labeled = [e for e in data.audit.query(access_key_id=access_key.id) or [] if e.oauth_app]
+    assert labeled
+    reloaded, _ = AuditLog()._parse_rows([e.to_dict() for e in labeled])
+    assert [e.oauth_app for e in reloaded] == [APP_LABEL] * len(labeled)
+
+
+@pytest.mark.parametrize("stored", [
+    "Test App", {"name": "Test App"}, {"name": 3, "host": "app.example"}, {"name": "x", "host": ""},
+])
+def test_a_malformed_stored_label_is_dropped(stored):
+    row = {"request_id": "r", "timestamp": "2026-11-11T00:00:00+00:00", "access_key_id": "k",
+           "access_key_name": "K", "method": "m", "resource": "x", "outcome": "allowed", "client_ip": "1.2.3.4",
+           "oauth_app": stored}
+    entries, _ = AuditLog()._parse_rows([row])
+    assert len(entries) == 1 and entries[0].oauth_app is None
+
+
+def test_only_the_signed_in_keys_rows_are_labeled_in_its_request(hass):
+    from types import SimpleNamespace
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+    from custom_components.phoenix_mcp.request_authority import request_authority
+
+    grant = SimpleNamespace(audit_label=lambda: dict(APP_LABEL))
+    data = SimpleNamespace(oauth_grants=SimpleNamespace(get=lambda grant_id: grant if grant_id == "g" else None))
+    audit = AuditLog()
+    token = request_authority.set(RequestAuthority(hass, data, "k", "h", "g"))  # type: ignore[arg-type]
+    try:
+        for key_id in ("k", "other"):
+            audit.record(request_id="r", access_key_id=key_id, access_key_name=key_id, method="m",
+                         resource="x", outcome="allowed", client_ip="1.2.3.4", settings=GlobalSettings())
+    finally:
+        request_authority.reset(token)
+    assert [(e.access_key_id, e.oauth_app) for e in audit.query() or []] == [("other", None), ("k", APP_LABEL)]
+
+
+def _token_rows(data, access_key_id):
+    return [e for e in data.audit.query(access_key_id=access_key_id) or [] if e.resource == "oauth:token"]
+
+
+async def test_every_token_endpoint_row_names_the_app(oauth, freezer: FrozenDateTimeFactory):
+    app, admin, data, _fetch = oauth
+    # A wrong verifier, before any sign-in exists.
+    access_key, _raw = await _key(data)
+    _verifier, challenge = _pkce()
+    code = await _approve(app, admin, challenge, access_key.id)
+    await _token(app, grant_type="authorization_code", code=code, code_verifier=_pkce()[0],
+                 client_id=CLIENT_ID, redirect_uri=REDIRECT)
+    # The exchange, then the same code again, which ends the sign-in.
+    data.oauth.open_window(access_key.id)
+    verifier, challenge = _pkce()
+    code = await _approve(app, admin, challenge, access_key.id)
+    form = dict(grant_type="authorization_code", code=code, code_verifier=verifier,
+                client_id=CLIENT_ID, redirect_uri=REDIRECT)
+    await _token(app, **form)
+    await _token(app, **form)
+    # A refresh token used again after its grace.
+    data.oauth.open_window(access_key.id)
+    tokens = await _sign_in(app, admin, access_key.id)
+    await _token(app, grant_type="refresh_token", refresh_token=tokens["refresh_token"])
+    freezer.tick(timedelta(seconds=OAUTH_REFRESH_GRACE_SECONDS + 1))
+    await _token(app, grant_type="refresh_token", refresh_token=tokens["refresh_token"])
+    rows = _token_rows(data, access_key.id)
+    assert sorted(e.outcome for e in rows) == ["allowed", "allowed", "denied", "denied", "denied"]
+    assert all(e.oauth_app == APP_LABEL for e in rows)

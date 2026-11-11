@@ -98,8 +98,11 @@ async def _read_form(request: web.Request) -> dict[str, str] | None:
     return _single_values(parse_qs(text, keep_blank_values=True, strict_parsing=False))
 
 
-def _audit(data: PhoenixData, request: web.Request, rid: str, access_key: Any, outcome: str) -> None:
-    """Record a token-endpoint event against the key it concerns; never any token."""
+def _audit(
+    data: PhoenixData, request: web.Request, rid: str, access_key: Any, outcome: str,
+    oauth_app: dict[str, str],
+) -> None:
+    """Record a token-endpoint event against the key and app it concerns; never any token."""
     data.audit.record(
         request_id=rid,
         access_key_id=access_key.id,
@@ -109,7 +112,13 @@ def _audit(data: PhoenixData, request: web.Request, rid: str, access_key: Any, o
         outcome=outcome,  # type: ignore[arg-type]
         client_ip=get_client_ip(request),
         settings=data.store.get_settings(),
+        oauth_app=oauth_app,
     )
+
+
+def _code_app(code: Any) -> dict[str, str]:
+    """The app an authorization code was approved for, as an audit row names it."""
+    return {"name": code.client_name, "host": redirect_host(code.redirect_uri)}
 
 
 def _tokens_body(tokens: IssuedTokens) -> dict:
@@ -275,8 +284,8 @@ class PhoenixOAuthTokenView(PhoenixView):
                 # A code used twice was intercepted: end the sign-in it produced.
                 removed = await data.oauth_grants.async_remove(reused_grant_id)
                 access_key = data.store.get_access_key_by_id(removed.access_key_id) if removed else None
-                if access_key is not None:
-                    _audit(data, request, rid, access_key, "denied")
+                if access_key is not None and removed is not None:
+                    _audit(data, request, rid, access_key, "denied", removed.audit_label())
             return _oauth_error("invalid_grant", rid=rid)
         access_key = data.store.get_access_key_by_id(code.access_key_id)
         presented_resource = form.get("resource")
@@ -287,7 +296,7 @@ class PhoenixOAuthTokenView(PhoenixView):
             return _oauth_error("invalid_grant", rid=rid)
         if not pkce_matches(form.get("code_verifier"), code.code_challenge):
             if access_key is not None:
-                _audit(data, request, rid, access_key, "denied")
+                _audit(data, request, rid, access_key, "denied", _code_app(code))
             return _oauth_error("invalid_grant", rid=rid)
         if (access_key is None or not access_key.is_valid() or not access_key.oauth_enabled
                 or access_key.oauth_generation != code.generation):
@@ -300,7 +309,7 @@ class PhoenixOAuthTokenView(PhoenixView):
         except GrantLimitError:
             return _oauth_error("access_denied", rid=rid)
         data.oauth.mark_redeemed(raw, tokens.grant_id)
-        _audit(data, request, rid, access_key, "allowed")
+        _audit(data, request, rid, access_key, "allowed", _code_app(code))
         return _json(_tokens_body(tokens), rid=rid)
 
     async def _refresh(self, request: web.Request, data: PhoenixData, form: dict[str, str], rid: str) -> web.Response:
@@ -317,7 +326,7 @@ class PhoenixOAuthTokenView(PhoenixView):
         if outcome == "reused" and grant is not None:
             access_key = data.store.get_access_key_by_id(grant.access_key_id)
             if access_key is not None:
-                _audit(data, request, rid, access_key, "denied")
+                _audit(data, request, rid, access_key, "denied", grant.audit_label())
         return _oauth_error("invalid_grant", rid=rid)
 
 

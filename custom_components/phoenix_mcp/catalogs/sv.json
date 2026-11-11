@@ -1063,6 +1063,7 @@
       "rowOutcome": "Utfall",
       "rowPayload": "Nyttolast",
       "rowRequestId": "ID för begäran",
+      "rowOAuthApp": "OAuth-app",
       "rowResource": "Resurs",
       "rowTime": "Tid",
       "outcomeCancelled": "Avbruten",

@@ -843,6 +843,7 @@
       "rowOutcome": "結果",
       "rowPayload": "負載",
       "rowRequestId": "請求 ID",
+      "rowOAuthApp": "OAuth 應用程式",
       "rowResource": "資源",
       "rowTime": "時間",
       "outcomeCancelled": "已取消",
