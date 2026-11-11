@@ -106,7 +106,8 @@ def test_preexisting_duplicates_refuse_edit_and_create(tmp_path, fallback):
         assert target.read_bytes() == before
 
 
-@pytest.mark.parametrize("extra", ["automation manual: [{id: inline}]\n", "homeassistant:\n  packages: {}\n"])
+@pytest.mark.parametrize("extra", ["automation manual: [{id: inline}]\n",
+                                   "homeassistant:\n  packages: !include_dir_named missing_packages\n"])
 def test_custom_id_requires_proven_absence(tmp_path, extra):
     (tmp_path / "configuration.yaml").write_text("automation: !include automations.yaml\n" + extra)
     result = yi.automation_write(str(tmp_path), "new", config(), True)

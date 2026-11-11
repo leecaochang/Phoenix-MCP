@@ -1352,9 +1352,10 @@ def test_read_all_reports_a_shape_mismatch(tmp_path):
 
 
 def test_explicit_automation_id_under_packages_explains_the_create_refusal(tmp_path):
+    """A package that cannot be read leaves the id unprovable; one that can is test_yaml_packages'."""
     write(tmp_path, "configuration.yaml", """\
         homeassistant:
-          packages: {}
+          packages: !include_dir_named missing_packages
         automation: !include automations.yaml
     """)
     write(tmp_path, "automations.yaml", "[]\n")

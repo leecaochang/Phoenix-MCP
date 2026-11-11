@@ -111,6 +111,7 @@ An automation runs as Home Assistant, not as the agent. Its actions aren't limit
 
 - Only the editor's own files change. Automations and scripts written by hand elsewhere in YAML are refused.
 - Automations, scripts and scenes in a package are read and searched, but never changed. Reading one names its package and file, so you can edit it there.
+- A new automation or script can't take an id a package already uses.
 - Listing them needs Registry read, and shows only those whose entity the key can read.
 - Blueprints need Manage blueprints plus the capability for the blueprint's kind, automation or script.
 

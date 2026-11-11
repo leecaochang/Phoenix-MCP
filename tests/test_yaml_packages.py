@@ -393,3 +393,142 @@ async def test_list_automations_searches_package_automations(hass, packaged):
     body = json.loads(result["content"][0]["text"])
     assert [item["entity_id"] for item in body["automations"]] == ["automation.water"]
     assert "not_searched" not in body
+
+
+# ---- creating an id a package already defines
+
+
+def _create_layout(tmp_path, package_body: str = "") -> None:
+    write(tmp_path, "configuration.yaml", """\
+        automation: !include automations.yaml
+        script: !include scripts.yaml
+        homeassistant:
+          packages: !include_dir_named packages
+    """)
+    write(tmp_path, "automations.yaml", "[]\n")
+    write(tmp_path, "scripts.yaml", "{}\n")
+    (tmp_path / "packages").mkdir(exist_ok=True)
+    if package_body:
+        write(tmp_path, "packages/garden.yaml", package_body)
+
+
+AUTOMATION = {"triggers": [], "actions": []}
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_an_automation_id_a_package_defines_is_refused(tmp_path, dry_run):
+    _create_layout(tmp_path, "automation:\n  - id: water\n")
+    result = yi.automation_write(str(tmp_path), "water", {"id": "water", **AUTOMATION}, True, None, dry_run)
+    assert result.error_kind == "already_exists"
+    assert "package 'garden'" in result.message and os.path.join("packages", "garden.yaml") in result.message
+    assert (tmp_path / "automations.yaml").read_text() == "[]\n"
+
+
+def test_an_automation_id_no_package_defines_is_created(tmp_path):
+    _create_layout(tmp_path, "automation:\n  - id: water\n")
+    result = yi.automation_write(str(tmp_path), "porch", {"id": "porch", **AUTOMATION}, True)
+    assert result.ok, result.message
+    assert "porch" in (tmp_path / "automations.yaml").read_text()
+
+
+def test_an_unread_package_still_leaves_a_chosen_automation_id_unproven(tmp_path):
+    _create_layout(tmp_path, "automation:\n  - id: water\n")
+    write(tmp_path, "packages/broken.yaml", "automation: [unclosed\n")
+    result = yi.automation_write(str(tmp_path), "porch", {"id": "porch", **AUTOMATION}, True)
+    assert result.error_kind == "ambiguous" and "cannot confirm" in result.message
+    generated = yi.automation_write(str(tmp_path), "phoenix_mcp_x", {"id": "phoenix_mcp_x", **AUTOMATION},
+                                    True, None, False, True)
+    assert generated.ok, generated.message
+
+
+def test_a_script_id_a_package_defines_is_refused_before_and_at_the_write(tmp_path):
+    _create_layout(tmp_path, "script:\n  water:\n    sequence: []\n")
+    precheck = yi.write_target_refusal(str(tmp_path), "script", "water", create=True)
+    assert precheck is not None and precheck.error_kind == "already_exists"
+    result = yi.perform_create(str(tmp_path), "script", "water", {"sequence": []})
+    assert result.error_kind == "already_exists" and "package 'garden'" in result.message
+    assert (tmp_path / "scripts.yaml").read_text() == "{}\n"
+    assert yi.write_target_refusal(str(tmp_path), "script", "porch", create=True) is None
+    assert yi.perform_create(str(tmp_path), "script", "porch", {"sequence": []}).ok
+
+
+def test_an_unread_package_does_not_block_a_new_script(tmp_path):
+    """As before packages were read: only an id proven taken refuses a script."""
+    _create_layout(tmp_path)
+    write(tmp_path, "packages/broken.yaml", "script: [unclosed\n")
+    assert yi.perform_create(str(tmp_path), "script", "porch", {"sequence": []}).ok
+
+
+async def test_create_script_refuses_a_package_id_before_any_approval(hass, packaged):
+    from custom_components.phoenix_mcp.tools import authoring
+    from unittest.mock import AsyncMock, patch
+
+    with patch.object(authoring, "_gate", new_callable=AsyncMock) as gate:
+        result, outcome, _ = await _call_tool("create_script", {
+            "script_id": "water_script", "config": {"sequence": []}}, _key(cap_script_write="allow"), hass, _data())
+    assert outcome == "denied", result
+    assert "package 'garden'" in result["content"][0]["text"]
+    gate.assert_not_awaited()
+    assert (packaged / "scripts.yaml").read_text() == "{}\n"
+
+
+# ---- secrets.yaml on the editor-file paths
+
+
+SECRET = "hunter2-very-secret"
+
+
+@pytest.mark.parametrize("route", ["!include secrets.yaml", "!include linked.yaml", "!include SECRETS.yaml"])
+def test_a_domain_routed_to_secrets_yaml_is_never_read_or_written(tmp_path, route):
+    name = "SECRETS.yaml" if "SECRETS" in route else "secrets.yaml"
+    write(tmp_path, name, f"db_password:\n  sequence: {SECRET}\n")
+    if "linked" in route:
+        os.symlink(tmp_path / name, tmp_path / "linked.yaml")
+    write(tmp_path, "configuration.yaml", f"script: {route}\n")
+    before = (tmp_path / name).read_text()
+    assert yi.read_entry(str(tmp_path), "script", "db_password") is None
+    found = yi.read_all_entries(str(tmp_path), "script")
+    assert found.entries == {} and found.unreadable == (yi.MSG_SECRETS.format(domain="script"),)
+    for result in (
+        yi.perform_create(str(tmp_path), "script", "new_one", {"sequence": []}),
+        yi.perform_edit(str(tmp_path), "script", "db_password", {"sequence": []}),
+        yi.perform_delete(str(tmp_path), "script", "db_password"),
+        yi.write_target_refusal(str(tmp_path), "script", "new_one", create=True),
+    ):
+        assert result is not None and not result.ok and SECRET not in (result.message or "")
+    assert (tmp_path / name).read_text() == before
+
+
+@pytest.mark.parametrize("flavor", ["!include_dir_merge_named", "!include_dir_named"])
+def test_a_symlinked_leaf_in_an_editor_folder_is_not_read(tmp_path, flavor):
+    config = tmp_path / "config"
+    write(config, "secrets.yaml", f"db_password:\n  sequence: {SECRET}\n")
+    write(tmp_path, "outside/stolen.yaml", f"stolen:\n  sequence: {SECRET}\n")
+    write(config, "configuration.yaml", f"script: {flavor} scripts\n")
+    write(config, "scripts/kept.yaml", "kept:\n  sequence: []\n" if "merge" in flavor else "sequence: []\n")
+    os.symlink(config / "secrets.yaml", config / "scripts" / "linked_secrets.yaml")
+    os.symlink(tmp_path / "outside" / "stolen.yaml", config / "scripts" / "linked_out.yaml")
+    found = yi.read_all_entries(str(config), "script")
+    assert SECRET not in json.dumps(found.entries) and set(found.entries) == {"kept"}
+    for entry_id in ("db_password", "linked_secrets", "stolen", "linked_out"):
+        assert SECRET not in json.dumps(yi.read_entry(str(config), "script", entry_id))
+
+
+def test_a_nested_include_of_secrets_yaml_is_refused(tmp_path):
+    write(tmp_path, "secrets.yaml", f"db_password:\n  sequence: {SECRET}\n")
+    write(tmp_path, "configuration.yaml", "script: !include scripts.yaml\n")
+    write(tmp_path, "scripts.yaml", "db_password: !include secrets.yaml\n")
+    assert yi.read_entry(str(tmp_path), "script", "db_password") is None
+    result = yi.perform_edit(str(tmp_path), "script", "db_password", {"sequence": []})
+    assert not result.ok and result.message == yi.MSG_SECRETS.format(domain="script")
+
+
+def test_the_fallback_editor_readers_refuse_secrets_yaml(tmp_path):
+    from custom_components.phoenix_mcp.tools import authoring
+
+    write(tmp_path, "secrets.yaml", f"db_password:\n  sequence: {SECRET}\n")
+    os.symlink(tmp_path / "secrets.yaml", tmp_path / "scripts.yaml")
+    for reader in (authoring._read_scripts_yaml, authoring._read_automations_yaml, authoring._read_scenes_yaml):
+        with pytest.raises(yi.SecretsFileError):
+            reader(str(tmp_path / "scripts.yaml"))
+    assert yi.read_entry(str(tmp_path), "script", "db_password") is None

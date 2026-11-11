@@ -106,6 +106,13 @@ MSG_OUTSIDE_CONFIG = (
     "configuration.yaml routes {domain} outside the Home Assistant "
     "configuration directory."
 )
+MSG_PACKAGE_DUPLICATE = (
+    "{domain} id '{entry_id}' is already defined in package '{package}' ({file}). Choose "
+    "another id{hint}."
+)
+MSG_SECRETS = (
+    "configuration.yaml routes {domain} to secrets.yaml, which Phoenix MCP never reads."
+)
 MSG_NOT_FOUND = {
     "automation": "No automation found with id '{entry_id}'.",
     "script": "No script found with id '{entry_id}'.",
@@ -259,8 +266,22 @@ class PhoenixInputLoader(PhoenixLenientLoader):
     allow_aliases = False
 
 
+def is_secrets_file(path: str) -> bool:
+    """Whether a path is, or links to, a file named secrets.yaml in any case."""
+    return os.path.basename(os.path.realpath(path)).lower() == SECRETS_YAML
+
+
+class SecretsFileError(yaml.YAMLError):
+    """Raised instead of reading secrets.yaml, whose values no read may return."""
+
+
 def load_tagged(path: str) -> Any:
-    """Parse a YAML file with the opaque-tag loader. Returns None for empty files."""
+    """Parse a YAML file with the opaque-tag loader. Returns None for empty files.
+
+    Refuses secrets.yaml, however it is reached, with SecretsFileError.
+    """
+    if is_secrets_file(path):
+        raise SecretsFileError("secrets.yaml is never read.")
     with open(path, "r", encoding="utf-8") as f:
         text = f.read()
     try:
@@ -460,6 +481,9 @@ def resolve_domain_layout(config_dir: str, domain: str) -> DomainLayout | None:
             if resolved is None:
                 error = error or MSG_OUTSIDE_CONFIG.format(domain=domain)
                 continue
+            if is_secrets_file(resolved):
+                error = error or MSG_SECRETS.format(domain=domain)
+                continue
             targets.append(DomainTarget(value.tag, resolved, key))
         elif isinstance(value, (list, dict)) and value:
             has_inline = True
@@ -510,8 +534,16 @@ class DomainEntries:
 _UNREADABLE = object()
 
 
-def _load_branch(path: str) -> Any:
-    """Parse one leaf file; _UNREADABLE when missing or unparseable, None when empty."""
+def _load_branch(path: str, config_dir: str | None = None) -> Any:
+    """Parse one leaf file; _UNREADABLE when missing, unparseable or secrets.yaml, None when empty.
+
+    With config_dir, a file whose realpath leaves it is _UNREADABLE too: a symlinked leaf in
+    an included directory can point anywhere.
+    """
+    if config_dir is not None:
+        real, base = os.path.realpath(path), os.path.realpath(config_dir)
+        if real != base and not real.startswith(base + os.sep):
+            return _UNREADABLE
     try:
         return load_tagged(path)
     except (OSError, yaml.YAMLError):
@@ -570,7 +602,7 @@ def read_all_entries(config_dir: str, domain: str) -> DomainEntries:
             unreadable.append(f"{target.config_key} points at a directory that does not exist")
             continue
         for leaf in _iter_dir_files(target.path):
-            loaded = _load_branch(leaf)
+            loaded = _load_branch(leaf, config_dir)
             if loaded is _UNREADABLE:
                 unreadable.append(f"{os.path.basename(leaf)} could not be read")
                 continue
@@ -635,7 +667,7 @@ class _PackageWalker:
             self.unreadable.append("a package include points outside the configuration directory")
             return _UNREADABLE, real, chain
         name = self._name(real)
-        if os.path.basename(real).lower() == SECRETS_YAML:
+        if is_secrets_file(real):
             self.unreadable.append(f"{name} is not read")
             return _UNREADABLE, real, chain
         if real in chain:
@@ -740,15 +772,53 @@ def read_package_entries(config_dir: str, domain: str) -> tuple[list[PackageEntr
     return found, tuple(walker.unreadable)
 
 
+def _package_matches(entries: list[PackageEntry], domain: str, entry_id: str) -> list[PackageEntry]:
+    if _DOMAIN_SHAPES[domain] == "named":
+        return [e for e in entries if isinstance(e.config, dict) and entry_id in e.config]
+    return [e for e in entries if _entry_matches(domain, e.config, entry_id)]
+
+
+def _package_holding(layout: DomainLayout, entry_id: str) -> tuple[PackageEntry | None, bool]:
+    """(a package entry already using entry_id, whether every package could be read)."""
+    if not layout.has_packages:
+        return None, True
+    entries, unreadable = read_package_entries(layout.config_dir, layout.domain)
+    matches = _package_matches(entries, layout.domain, entry_id)
+    return (matches[0] if matches else None), not unreadable
+
+
+def _package_duplicate(entry: PackageEntry, domain: str, entry_id: str) -> OpResult:
+    hint = " or omit automation_id to have an unused one generated" if domain == "automation" else ""
+    return OpResult(ok=False, error_kind="already_exists", message=MSG_PACKAGE_DUPLICATE.format(
+        domain=domain.capitalize(), entry_id=entry_id, package=entry.package, file=entry.file, hint=hint,
+    ))
+
+
+def _create_id_refusal(layout: DomainLayout, entry_id: str, exc: LocateError, *, generated_id: bool) -> OpResult | None:
+    """Whether an id absent from the editor graph is free to create; the refusal when it is not.
+
+    Packages are read: one holding the id refuses. An automation id given by the caller is
+    provable only when no inline config exists and every package was read.
+    """
+    domain = layout.domain
+    if exc.reason not in ("not_found", "ambiguous"):
+        return _locate_error_result(exc)
+    held, complete = _package_holding(layout, entry_id)
+    if held is not None:
+        return _package_duplicate(held, domain, entry_id)
+    if (domain == "automation" and exc.reason == "ambiguous" and not generated_id
+            and (layout.has_inline or not complete)):
+        return OpResult(ok=False, error_kind="ambiguous",
+                        message=MSG_CREATE_UNPROVABLE.format(domain="automation", entry_id=entry_id))
+    return None
+
+
 def read_package_entry(config_dir: str, domain: str, entry_id: str) -> PackageEntry | None:
     """The one package entry with entry_id, tag-encoded; None when absent or defined twice."""
     entries, _ = read_package_entries(config_dir, domain)
-    if _DOMAIN_SHAPES[domain] == "named":
-        matches = [PackageEntry(e.package, e.file, encode_tags(e.config[entry_id]))
-                   for e in entries if isinstance(e.config, dict) and entry_id in e.config]
-    else:
-        matches = [PackageEntry(e.package, e.file, encode_tags(e.config))
-                   for e in entries if _entry_matches(domain, e.config, entry_id)]
+    named = _DOMAIN_SHAPES[domain] == "named"
+    matches = [PackageEntry(e.package, e.file, encode_tags(e.config[entry_id] if named else e.config))
+               for e in _package_matches(entries, domain, entry_id)]
     return matches[0] if len(matches) == 1 else None
 
 
@@ -1033,6 +1103,8 @@ def _guard_walk(path: str, walk_path: tuple[str, ...], layout: DomainLayout) -> 
         raise LocateError(
             "unresolvable", MSG_OUTSIDE_CONFIG.format(domain=domain)
         )
+    if is_secrets_file(real):
+        raise LocateError("unresolvable", MSG_SECRETS.format(domain=domain))
     if not os.path.isfile(path):
         raise LocateError(
             "parse_error",
@@ -1276,7 +1348,13 @@ def write_target_refusal(config_dir: str, domain: str, entry_id: str, *, create:
             return None if layout.fallback else layout
         if create:
             route = _create_route(layout, domain)
-            return route if isinstance(route, OpResult) else None
+            if isinstance(route, OpResult):
+                return route
+            if domain == "script" and layout.has_packages:
+                held, _ = _package_holding(layout, entry_id)
+                if held is not None:
+                    return _package_duplicate(held, domain, entry_id)
+            return None
         try:
             located = locate_entry(layout, entry_id)
         except LocateError:
@@ -1405,11 +1483,10 @@ def _automation_write_checked(
     try:
         located = locate_entry(layout, entry_id)
     except LocateError as exc:
-        if create and exc.reason == "ambiguous" and not generated_id:
-            return OpResult(ok=False, error_kind=_LOCATE_KIND_MAP[exc.reason],
-                            message=MSG_CREATE_UNPROVABLE.format(domain="automation", entry_id=entry_id))
-        if not create or exc.reason not in (("not_found", "ambiguous") if generated_id else ("not_found",)):
+        if not create:
             return _locate_error_result(exc)
+        if (refusal := _create_id_refusal(layout, entry_id, exc, generated_id=generated_id)) is not None:
+            return refusal
         conflict = automation_identity_conflict(entry_id, config, None, create=True, expected_hash=expected_hash)
         if conflict is not None:
             return conflict
@@ -1503,19 +1580,17 @@ def perform_create(config_dir: str, domain: str, entry_id: str, config: dict, *,
         try:
             existing = locate_entry(layout, entry_id)
         except LocateError as exc:
-            if exc.reason not in (("not_found", "ambiguous") if generated_id else ("not_found",)):
-                return _locate_error_result(exc)
+            if (refusal := _create_id_refusal(layout, entry_id, exc, generated_id=generated_id)) is not None:
+                return refusal
         else:
             conflict = automation_identity_conflict(entry_id, config, encode_tags(existing.config), create=True)
             assert conflict is not None
             return conflict
 
     # Graph-wide duplicate check for named entries (scripts); automation identities
-    # are checked above. Refuse ONLY if the id already exists in the editable
-    # include files. "not_found" and "ambiguous" (id absent from the include files,
-    # though packages or inline config that Phoenix MCP does not read exist) are not
-    # a duplicate it can act on, so creation proceeds; a config the walker cannot
-    # parse (unresolvable/parse_error) still blocks.
+    # are checked above. An id in the include files or a package refuses; one absent
+    # from both proceeds even when inline config or an unread package exists, and a
+    # config the walker cannot parse (unresolvable/parse_error) still blocks.
     if _DOMAIN_SHAPES[domain] == "named":
         exists_msg = f"A script with id '{entry_id}' already exists. Use edit_script to update it."
         try:
@@ -1523,9 +1598,8 @@ def perform_create(config_dir: str, domain: str, entry_id: str, config: dict, *,
         except LocateError as exc:
             if exc.reason == "duplicate":
                 return OpResult(ok=False, error_kind="already_exists", message=exists_msg)
-            if exc.reason in ("unresolvable", "parse_error"):
-                return _locate_error_result(exc)
-            # not_found / ambiguous: not a duplicate in the editable files; proceed.
+            if (refusal := _create_id_refusal(layout, entry_id, exc, generated_id=generated_id)) is not None:
+                return refusal
         else:
             return OpResult(ok=False, error_kind="already_exists", message=exists_msg)
 

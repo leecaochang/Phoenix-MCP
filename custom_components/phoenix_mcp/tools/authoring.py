@@ -142,6 +142,8 @@ def _get_automation_lock(hass: HomeAssistant) -> asyncio.Lock:
 def _read_automations_yaml(path: str) -> list:
     if not os.path.isfile(path):
         return []
+    if yaml_includes.is_secrets_file(path):
+        raise yaml_includes.SecretsFileError("secrets.yaml is never read.")
     data = _load_yaml(path)
     return data if isinstance(data, list) else []
 
@@ -160,6 +162,8 @@ def _get_script_lock(hass: HomeAssistant) -> asyncio.Lock:
 def _read_scripts_yaml(path: str) -> dict:
     if not os.path.isfile(path):
         return {}
+    if yaml_includes.is_secrets_file(path):
+        raise yaml_includes.SecretsFileError("secrets.yaml is never read.")
     data = _load_yaml(path)
     return data if isinstance(data, dict) else {}
 
@@ -185,6 +189,8 @@ _SCENE_LOCK_KEY = f"{DOMAIN}_scene_yaml_lock"
 def _read_scenes_yaml(path: str) -> list:
     if not os.path.isfile(path):
         return []
+    if yaml_includes.is_secrets_file(path):
+        raise yaml_includes.SecretsFileError("secrets.yaml is never read.")
     data = _load_yaml(path)
     return data if isinstance(data, list) else []
 
