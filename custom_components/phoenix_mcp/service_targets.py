@@ -18,9 +18,11 @@ from homeassistant.helpers.template import is_template_string
 
 from .access_key_store import AccessKeyRecord
 from .const import (
+    AI_TASK_ATTACHMENT_FIELD,
     CROSS_DOMAIN_SERVICES,
     DEVICE_ACTUATOR_DOMAINS,
     DOMAIN,
+    MEDIA_SOURCE_ENTITY_DOMAINS,
     MUSIC_ASSISTANT_LIBRARY_SERVICES,
     NO_TARGET_SERVICES,
     PHYSICAL_COMMAND_SERVICES,
@@ -747,3 +749,62 @@ def template_fields_error(fields: tuple[str, ...]) -> str:
         "access key's scope. Read the values you need first and send them as plain "
         "text. No action was dispatched."
     )
+
+
+_MEDIA_SOURCE_SCHEME = "media-source://"
+
+
+def _strings(value: object) -> Iterator[str]:
+    """Yield every string of a nested value, mapping keys included."""
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            yield item
+        elif isinstance(item, Mapping):
+            pending.extend(item.keys())
+            pending.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            pending.extend(item)
+
+
+def _media_source_entity(value: str) -> tuple[str, str] | None:
+    """Return (source, identifier) of a camera or image media-source ID, lowercased, else None."""
+    text = value.strip().lower()
+    if not text.startswith(_MEDIA_SOURCE_SCHEME):
+        return None
+    source, _, identifier = text.removeprefix(_MEDIA_SOURCE_SCHEME).partition("/")
+    return (source, identifier.strip()) if source in MEDIA_SOURCE_ENTITY_DOMAINS else None
+
+
+def media_source_entities(service_data: object) -> list[tuple[str, str]]:
+    """Return (source, identifier) for each camera or image media-source ID in a call's data.
+
+    HA resolves such an ID in any field, so the value decides, not the field. Read without
+    case, as a check on more than HA reads costs nothing.
+    """
+    named = (_media_source_entity(value) for value in _strings(service_data))
+    return list(dict.fromkeys(item for item in named if item is not None))
+
+
+def unscoped_attachments(domain: str, service_data: object) -> bool:
+    """Whether an AI Task call attaches anything but a camera or image media-source ID."""
+    if domain != "ai_task" or not isinstance(service_data, Mapping):
+        return False
+    attachments = service_data.get(AI_TASK_ATTACHMENT_FIELD)
+    if attachments is None:
+        return False
+    items = attachments if isinstance(attachments, list) else [attachments]
+    return any(
+        not isinstance(item, Mapping)
+        or not isinstance(item.get("media_content_id"), str)
+        or _media_source_entity(item["media_content_id"]) is None
+        for item in items
+    )
+
+
+AI_TASK_ATTACHMENT_REFUSAL = (
+    "AI Task attachments can only be cameras or images, given as "
+    "media-source://camera/<entity_id> or media-source://image/<entity_id>. No action was "
+    "dispatched."
+)

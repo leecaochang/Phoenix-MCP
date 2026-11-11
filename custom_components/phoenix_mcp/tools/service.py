@@ -56,6 +56,7 @@ from ..tool_common import (
 from ..redaction import redact_diagnostics, redact_inaccessible_entity_ids_in_text
 from ..request_authority import _approved_exec_ctx
 from ..tool_contracts import normalize_tool_args, service_name_error
+from .camera import media_read_refusal
 from .esphome import _ESPHOME_DOMAIN
 from .system import _execute_restart_ha
 
@@ -132,6 +133,8 @@ async def _tool_call_service(
         return _tool_refused_before_write(refusal), "invalid_request", "call_service"
     if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), args.get("entity_id")):
         return _tool_refused_before_write(script_input_selector_error(selecting)), "invalid_request", "call_service"
+    if media := media_read_refusal(domain, args.get("service_data"), access_key, hass, data, request_id, client_ip):
+        return _tool_refused_before_write(media[0]), media[1], "call_service"
 
 
     targetless = (service_key in DUAL_GATE_SERVICES | NO_TARGET_SERVICES | MUSIC_ASSISTANT_LIBRARY_SERVICES
@@ -399,6 +402,9 @@ async def _execute_call_service(
         return _tool_refused_before_write(refusal), "invalid_request", resource
     if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), args.get("entity_id")):
         return _tool_refused_before_write(script_input_selector_error(selecting)), "invalid_request", resource
+    # Rechecked for a saved approval: scope, capability and privacy may change while it waits.
+    if media := media_read_refusal(domain, args.get("service_data"), access_key, hass, data, request_id, client_ip):
+        return _tool_refused_before_write(media[0]), media[1], resource
 
     check_request_authority()
     entity_id = args.get("entity_id")

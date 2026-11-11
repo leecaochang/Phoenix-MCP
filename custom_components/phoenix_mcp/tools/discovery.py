@@ -67,6 +67,7 @@ from ..capability import effective_cap
 from ..redaction import (
     entity_hint_for_agent, redact_diagnostics as _redact_diagnostics, redact_inaccessible_entity_ids_in_text,
 )
+from .camera import media_read_refusal
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _project_state, _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
@@ -3258,6 +3259,8 @@ async def _tool_dry_run_service(
         return _tool_error(refusal), "invalid_request", "dry_run_service"
     if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), args.get("entity_id")):
         return _tool_error(script_input_selector_error(selecting)), "invalid_request", "dry_run_service"
+    if media := media_read_refusal(domain, args.get("service_data"), access_key, hass, data, preview=True):
+        return _tool_error(media[0]), media[1], "dry_run_service"
     # Sanitised exactly as the real call sanitises it, so the preview predicts
     # the call that would actually run rather than the one the caller wrote.
     service_data = _sanitize_service_data(args.get("service_data"))

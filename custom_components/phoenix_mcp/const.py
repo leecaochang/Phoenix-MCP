@@ -988,6 +988,12 @@ REACH_WIDENING_FLAGS = MappingProxyType({"zwave_js/multicast_set_value": ("broad
 # variable whether or not a field declares it. A script run by name takes its data this way.
 SCRIPT_INPUT_SERVICES = frozenset({"automation/trigger", "script/turn_on"})
 SCRIPT_INPUT_FIELD = "variables"
+# Media sources whose identifier is an entity ID: Home Assistant reads that camera or image
+# for a media-source ID in any field of any service, checking only a context user's access.
+MEDIA_SOURCE_ENTITY_DOMAINS = frozenset({"camera", "image"})
+# AI Task hands each attachment to the model, which describes it to the caller. Only an
+# entity source can be scoped, so an attachment from any other source is refused.
+AI_TASK_ATTACHMENT_FIELD = "attachments"
 # Services that take an entity and cannot actuate it, or do nothing on physical and notify
 # domains, so such a target adds no capability. A deliberate list: an unknown service on a
 # lock stays gated, and readers that return door codes (schlage.get_codes,

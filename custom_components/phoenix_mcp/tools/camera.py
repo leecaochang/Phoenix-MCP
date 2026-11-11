@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from contextlib import nullcontext
 import json
 import logging
 from typing import Any
@@ -24,6 +25,7 @@ from ..mesa import build_caller_context
 from ..mesa_audit import request_context
 from ..policy_engine import Permission, canonical_entity_id, resolve_read
 from ..access_key_store import AccessKeyRecord
+from ..service_targets import AI_TASK_ATTACHMENT_REFUSAL, media_source_entities, unscoped_attachments
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _tool_error
 from ..component_guard import require_component
 
@@ -63,6 +65,70 @@ def _camera_denied(resource: str, outcome: str = "denied") -> tuple[dict, str, s
     return _tool_error("Entity not found."), outcome, resource
 
 
+def picture_read_denied(
+    entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
+    request_id: str = "", client_ip: str | None = None, *, caller: str, preview: bool = False,
+) -> str | None:
+    """Return the refusal outcome for reading one camera or image picture, or None if allowed.
+
+    Scope, then MESA privacy; the capability is the caller's check. "not_found" and "denied"
+    must reach the agent alike. A preview's privacy denial stays out of the audit log.
+    """
+    permission = resolve_read(entity_id, access_key, hass)
+    if permission == Permission.NOT_FOUND:
+        return "not_found"
+    if permission not in (Permission.READ, Permission.WRITE):
+        return "denied"
+    if data.store.get_settings().mesa_mode == MESA_MODE_OFF:
+        return None
+    runtime = data.mesa
+    if runtime is None:
+        _LOGGER.warning("MESA runtime unavailable while reading picture %s", entity_id)
+        return "denied"
+    profile = runtime.resolver.resolve(entity_id)
+    with nullcontext() if preview else request_context(access_key, request_id, client_ip):
+        decision = runtime.enforcer.privacy.evaluate(
+            profile.privacy_classification,
+            build_caller_context(access_key, request_id or caller),
+            entity_id=entity_id,
+            is_person=profile.domain == "person",
+            is_minor=profile.person_traits.is_minor is True,
+        )
+    return None if decision.allowed else "denied"
+
+
+MEDIA_READ_REFUSAL = (
+    "This call names a camera or image as a media-source ID, which Home Assistant reads. That "
+    "needs camera image access to it, as get_camera_image does. No action was dispatched."
+)
+
+
+def media_read_refusal(
+    domain: str, service_data: object, access_key: AccessKeyRecord, hass: HomeAssistant,
+    data: PhoenixData, request_id: str = "", client_ip: str | None = None, *, preview: bool = False,
+) -> tuple[str, str] | None:
+    """Return (message, outcome) when a call's data names a picture the key may not read.
+
+    Every camera or image media-source ID needs cap_camera_read and the read check of
+    get_camera_image; a hidden and a missing one read alike. An AI Task attachment from any
+    other source is refused, as nothing scopes it.
+    """
+    if unscoped_attachments(domain, service_data):
+        return AI_TASK_ATTACHMENT_REFUSAL, "invalid_request"
+    named = media_source_entities(service_data)
+    if not named:
+        return None
+    if effective_cap(access_key, "cap_camera_read") != CAP_ALLOW:
+        return MEDIA_READ_REFUSAL, "denied"
+    for source, identifier in named:
+        entity_id = canonical_entity_id(identifier, hass)
+        if (not valid_entity_id(entity_id) or entity_id.split(".", 1)[0] != source
+                or picture_read_denied(entity_id, access_key, hass, data, request_id, client_ip,
+                                       caller="call_service", preview=preview) is not None):
+            return MEDIA_READ_REFUSAL, "denied"
+    return None
+
+
 def _dimension(value: Any, name: str) -> tuple[int | None, str | None]:
     if value is None:
         return None, None
@@ -93,30 +159,9 @@ async def _tool_get_camera_image(
     if not valid_entity_id(entity_id) or not entity_id.startswith("camera."):
         return _camera_denied(entity_id, "not_found")
 
-    permission = resolve_read(entity_id, access_key, hass)
-    if permission == Permission.NOT_FOUND:
-        return _camera_denied(entity_id, "not_found")
-    if permission not in (Permission.READ, Permission.WRITE):
-        return _camera_denied(entity_id)
-
-    settings = data.store.get_settings()
-    if settings.mesa_mode != MESA_MODE_OFF:
-        runtime = data.mesa
-        if runtime is None:
-            _LOGGER.warning("MESA runtime unavailable while reading camera %s", entity_id)
-            return _camera_denied(entity_id)
-        else:
-            profile = runtime.resolver.resolve(entity_id)
-            with request_context(access_key, request_id, client_ip):
-                decision = runtime.enforcer.privacy.evaluate(
-                    profile.privacy_classification,
-                    build_caller_context(access_key, request_id or "get_camera_image"),
-                    entity_id=entity_id,
-                    is_person=profile.domain == "person",
-                    is_minor=profile.person_traits.is_minor is True,
-                )
-            if not decision.allowed:
-                return _camera_denied(entity_id)
+    if (outcome := picture_read_denied(entity_id, access_key, hass, data, request_id, client_ip,
+                                       caller="get_camera_image")) is not None:
+        return _camera_denied(entity_id, outcome)
 
     width, error = _dimension(args.get("width"), "width")
     if error:
