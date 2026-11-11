@@ -2714,6 +2714,25 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .mesa-preview-block { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--phx-border); }
 .mesa-preview-warnings { margin: 6px 0 0 0; padding-left: 18px; font-size: 12px; color: var(--phx-text-2); }
 
+/* A system action's review: labelled sections, consumers grouped by kind, the full data folded. */
+.action-preview { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.action-preview-section { min-width: 0; }
+.action-preview-heading { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--phx-text-2); }
+.action-preview-subheading { margin: 8px 0 2px; font-size: 12px; font-weight: 600; color: var(--phx-text); }
+.action-preview-text { margin: 0; font-size: 13px; line-height: 1.5; }
+.action-preview-warning { margin: 0 0 8px; }
+.action-preview-warning ul { margin: 0; padding-left: 18px; }
+.action-preview-section .approval-detail-meta { margin: 0; }
+.action-preview-value { overflow-wrap: anywhere; }
+.action-preview-list { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.action-preview-list > li { padding: 2px 0; overflow-wrap: anywhere; }
+.action-preview-consumer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px 12px; }
+.action-preview-detail, .action-preview-more { color: var(--phx-text-2); }
+.action-preview-details > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--phx-text-2); padding: 4px 0; }
+@media (max-width: 600px) {
+  .action-preview-consumer { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+
 /* MESA profile editor: tidy two-column form, fuzzy key search, inline help */
 .mesa-editor-body .field { margin-bottom: 14px; }
 .mesa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0 16px; }

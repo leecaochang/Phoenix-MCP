@@ -1,5 +1,5 @@
 ---
-{ "id": "window.review", "title": "{{label:workspace.review}}", "parent": "workspace.approvals", "order": 2, "keywords": ["差異", "比較", "決定"], "sectionKeywords": { "reject": ["原因", "拒絕請求"], "change": ["更改前", "更改後", "預覽", "程式碼編輯器", "並排"] } }
+{ "id": "window.review", "title": "{{label:workspace.review}}", "parent": "workspace.approvals", "order": 2, "keywords": ["差異", "比較", "決定"], "sectionKeywords": { "reject": ["原因", "拒絕請求"], "change": ["更改前", "更改後", "預覽", "程式碼編輯器", "並排", "使用方", "關聯", "刪除"] } }
 ---
 準確顯示所選請求會變更什麼，並讓你做出決定。已決定的請求會保留在這裡，並顯示其結果。
 
@@ -28,7 +28,7 @@
 - 設定和 YAML：**{{label:common.before}}** 和 **{{label:common.after}}** 並排顯示。在 **{{label:changes.lineViewShort}}** 和 **{{label:changes.codeEditorShort}}** 之間切換，或把兩側上下堆疊。
 - 儀表板、卡片和能源儀表板：**{{label:common.diff}}** 或 **{{label:common.preview}}**，後者會繪製結果。
 - 對裝置的操作：操作、其目標，以及 MESA 允許、暫緩或阻止的內容。
-- 實體和裝置登錄檔的變更：先說明此變更為何需要你的核准，再顯示變更內容以及使用該目標的項目。
+- 刪除、重新命名、輔助項目、整合等系統操作：請求為何需要核准、將發生什麼、誰在使用它、哪些 Phoenix 設定提及它。展開底部的 **{{label:approvals.previewAllDetails}}** 查看全部。
 - 刪除待辦事項：每個事項及其狀態，並提示刪除後無法復原。
 
 這些檢視選擇會儲存在此瀏覽器中，變更也會使用它們。

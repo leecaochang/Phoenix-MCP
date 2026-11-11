@@ -1,5 +1,5 @@
 ---
-{ "id": "window.review", "title": "{{label:workspace.review}}", "parent": "workspace.approvals", "order": 2, "keywords": ["diff", "compare", "decide"], "sectionKeywords": { "reject": ["reason", "deny request"], "change": ["before", "after", "preview", "code editor", "side by side"] }, "covers": ["frontend_src/views/ApprovalsView.tsx", "frontend_src/components/ApprovalChange.tsx", "frontend_src/components/DiffView.tsx", "custom_components/phoenix_mcp/admin/approvals.py", "frontend_src/components/DashboardPreview.tsx", "frontend_src/utils/approval_reason.ts", "frontend_src/utils/approval_reason_draft.ts", "frontend_src/utils/approval_summary.ts", "frontend_src/utils/approval_text.ts", "frontend_src/utils.ts"] }
+{ "id": "window.review", "title": "{{label:workspace.review}}", "parent": "workspace.approvals", "order": 2, "keywords": ["diff", "compare", "decide"], "sectionKeywords": { "reject": ["reason", "deny request"], "change": ["before", "after", "preview", "code editor", "side by side", "used by", "relationships", "delete"] }, "covers": ["frontend_src/views/ApprovalsView.tsx", "frontend_src/components/ApprovalChange.tsx", "frontend_src/components/ActionPreview.tsx", "frontend_src/components/DiffView.tsx", "custom_components/phoenix_mcp/admin/approvals.py", "frontend_src/components/DashboardPreview.tsx", "frontend_src/utils/approval_reason.ts", "frontend_src/utils/approval_reason_draft.ts", "frontend_src/utils/approval_summary.ts", "frontend_src/utils/approval_text.ts", "frontend_src/utils.ts"] }
 ---
 Shows exactly what the chosen request would change, and lets you decide. A decided request stays here, with its outcome.
 
@@ -28,7 +28,7 @@ How the change is shown depends on what the request does:
 - Configuration and YAML: **{{label:common.before}}** and **{{label:common.after}}** side by side. Switch between **{{label:changes.lineViewShort}}** and **{{label:changes.codeEditorShort}}**, or stack the two sides.
 - Dashboards, cards and the Energy dashboard: **{{label:common.diff}}** or **{{label:common.preview}}**, which draws the result.
 - Actions on devices: the action, its targets, and what MESA allows, holds or blocks.
-- Entity and device registry changes: first why the change needs your approval, then what changes and what uses the target.
+- Deletes, renames, helpers, integrations and other system actions: why the request needs your approval, what happens, what uses the item and which Phoenix settings name it. Unfold **{{label:approvals.previewAllDetails}}** at the bottom to see everything.
 - Removing to-do items: each item with its status, and a warning that removal is permanent.
 
 These view choices are kept in this browser, and Changes uses them too.

@@ -2,14 +2,14 @@
  * What an approval request would change, shown in Review: a before and after
  * comparison for code and configuration, an inert dashboard or Energy preview
  * where the saved data allows one, the service call with its MESA outcome, or
- * the system action with what it removes.
+ * the system action laid out by ActionPreview, with what it removes.
  */
 
 import React, { useEffect, useState } from "react";
 import type { ApprovalRecord } from "../types";
 import { BeforeAfter, RemovedPane } from "./DiffView";
 import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, singleCardPreviewConfig, storedPreviewMode, useHuiCardReady, wrapCardPreviewConfig } from "./DashboardPreview";
-import { YamlView, toYaml } from "./YamlView";
+import { ActionPreview, MesaPreviewBlock } from "./ActionPreview";
 import { diffSummary } from "../utils/approval_text";
 import { ENERGY_SOURCE_LABEL_KEYS } from "../utils/approval_summary";
 import { t } from "../i18n";
@@ -230,34 +230,6 @@ function ServicePreview({ preview }: { preview: Record<string, unknown> }) {
   );
 }
 
-function MesaPreviewBlock({ mesa }: { mesa: Record<string, unknown> }) {
-  const confirm = (mesa.confirm_entities as string[]) ?? [];
-  const allowed = (mesa.allowed_entities as string[]) ?? [];
-  const blocked = (mesa.blocked as Array<{ entity_id: string; rule: string }>) ?? [];
-  const warnings = (mesa.warnings as string[]) ?? [];
-  return (
-    <div className="mesa-preview-block">
-      <div className="approval-detail-meta">
-        <span className="stat-label">{t("approvals.mesaConfirm")}</span>
-        <span><code>{confirm.length ? confirm.join(t("common.listSeparator")) : t("common.none")}</code></span>
-        <span className="stat-label">{t("approvals.mesaAllowed")}</span>
-        <span><code>{allowed.length ? allowed.join(t("common.listSeparator")) : t("common.none")}</code></span>
-        {blocked.length > 0 && (
-          <>
-            <span className="stat-label">{t("approvals.mesaBlocked")}</span>
-            <span><code>{blocked.map((b) => `${b.entity_id} (${b.rule})`).join(t("common.listSeparator"))}</code></span>
-          </>
-        )}
-      </div>
-      {warnings.length > 0 && (
-        <ul className="mesa-preview-warnings">
-          {warnings.map((w, i) => <li key={i}>{w}</li>)}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 // Show proposed Energy preferences directly, including the changed fields.
 type EnergySourceRow = { type?: string; name?: string; meters?: Array<[string, string]> };
 type EnergyDeviceRow = { name?: string; statistic?: string };
@@ -344,9 +316,7 @@ function SystemActionPreview({ summary, preview, before }: { summary?: string; p
           <RemovedPane value={before} />
         </div>
       )}
-      {Object.keys(preview).length > 0 && (
-        <YamlView value={toYaml(preview)} />
-      )}
+      <ActionPreview preview={preview} />
     </div>
   );
 }

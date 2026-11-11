@@ -197,6 +197,8 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "da": frozenset({
+        "panel.approvals.previewKindScript",  # "Scripts ({count})", Home Assistant's Danish term
+        "panel.approvals.previewFieldNote",  # "Note", Home Assistant's Danish term
         "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
         "entity.sensor.status.name",  # "Status", the same word in this language
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.
@@ -253,6 +255,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "de": frozenset({
+        "panel.approvals.previewKindDashboard",  # "Dashboards ({count})", Home Assistant's German term
         "panel.wizard.oauthClaudeCodeTitle",  # "In Claude Code", the same preposition in German plus a product name
         "panel.common.codeBlock",  # "Code", the same word in German
         "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
@@ -326,6 +329,10 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        "panel.approvals.previewKindScript",  # "Scripts ({count})", Home Assistant's French term
+        "panel.approvals.previewFieldNote",  # "Note", Home Assistant's French term
+        "panel.approvals.previewPathSection",  # "section {number}", Home Assistant's French term
+        "panel.approvals.previewPathBadge",  # "badge {number}", Home Assistant's French term
         "panel.common.codeBlock",  # "Code", the same word in French
         "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
         "panel.approvals.detailTabArgs",       # "Arguments", the French word
@@ -360,6 +367,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.expiryMinutes",               # "Minutes"
     }),
     "es": frozenset({
+        "panel.approvals.previewKindScript",  # "Scripts ({count})", Home Assistant's Spanish term
         "panel.agentchat.errorLabel",  # "Error", the same word in Spanish
         "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionIn",  # Region name or label spelled the same as English in this language.
@@ -497,6 +505,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.conversations.source.agentcli",  # "Agent Chat", a Phoenix product name
     }),
     "nl": frozenset({
+        "panel.approvals.previewKindScript",  # "Scripts ({count})", Home Assistant's Dutch term
+        "panel.approvals.previewKindDashboard",  # "Dashboards ({count})", Home Assistant's Dutch term
+        "panel.approvals.previewPathBadge",  # "badge {number}", Home Assistant's Dutch term
         "panel.wizard.oauthClaudeCodeTitle",  # "In Claude Code", the same preposition in Dutch plus a product name
         "panel.common.codeBlock",  # "Code", the same word in Dutch
         "panel.settings.colorTheme.aubergine",  # "Aubergine", the color's own name in this language
