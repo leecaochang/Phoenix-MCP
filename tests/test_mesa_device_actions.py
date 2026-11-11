@@ -36,6 +36,7 @@ from custom_components.phoenix_mcp.access_key_store import (
 )
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
+from custom_components.phoenix_mcp.esphome_builder import ESPHOME_BUILDER_ALLOWED_COMMANDS
 from custom_components.phoenix_mcp.tool_catalog import _EXECUTOR_REGISTRY, _TOOL_HANDLERS
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
@@ -821,10 +822,9 @@ _PACKAGE_NAME = "custom_components.phoenix_mcp"
 # registry gate every entity identity action uses.
 _GATES = frozenset({f"{_PACKAGE_NAME}.mesa:async_apply_mesa_to_call", f"{_PACKAGE_NAME}.mesa:evaluate_registry_action"})
 
-# A read-only tool that does call a service, with the reason it changes nothing.
-_READS_THROUGH_A_SERVICE = {
-    "get_todo_items": "todo.get_items only returns the list",
-}
+# A read-only tool that calls a service outside _READ_SERVICES, with the reason it
+# changes nothing. get_todo_items reads through todo.get_items, which is one of them.
+_READS_THROUGH_A_SERVICE: dict[str, str] = {}
 
 
 def _package_sources() -> dict[str, tuple[str, bool]]:
@@ -945,21 +945,52 @@ def _mutating_tools() -> dict[str, tuple[str, str | None]]:
 
 
 # The calls that change Home Assistant from a tracked handler: a service call, a registry
-# write, and an integration's own device-removal hook.
+# write, an integration's own device-removal hook, a dashboard layout save, a Zigbee group
+# change through the radio backend, and a Device Builder command that is not a read.
 _EFFECT_ATTRIBUTES = frozenset({
     "async_call", "async_update_entity", "async_remove", "async_update_device", "async_remove_device", "hook",
 })
-_EFFECT_FUNCTIONS = frozenset({"update_device_registry_entry"})
+_EFFECT_FUNCTIONS = frozenset({
+    "update_device_registry_entry", "async_save_lovelace_config",
+    "async_create_zigbee_group", "async_set_zigbee_group_members", "async_remove_zigbee_group",
+})
+# Services that only answer: a todo list's items, a player's or Music Assistant's search.
+_READ_SERVICES = frozenset({"get_items", "search_media", "search"})
+# Every Device Builder command Phoenix may send, split by whether it starts, changes or
+# cancels something. troubleshoot refreshes the Builder's own reachability verdict.
+_BUILDER_WRITES = frozenset({
+    "firmware/compile", "firmware/install", "firmware/clean", "firmware/cancel", "firmware/analyze_memory",
+    "devices/troubleshoot",
+})
+_BUILDER_READS = frozenset({
+    "devices/list", "devices/validate", "boards/get_board", "boards/get_boards", "components/get_component_bodies",
+    "components/get_components", "components/get_categories", "automations/get_available", "automations/parse",
+    "automations/get_bodies", "editor/migrate_config", "version_history/list_versions",
+    "version_history/get_version", "version_history/list_deleted", "devices/logs", "devices/stop_stream",
+    "devices/decode_backtrace", "firmware/get_job", "firmware/get_jobs", "firmware/follow_job",
+})
+
+
+def _string_argument(call: ast.Call, index: int) -> str | None:
+    """A call's positional argument when it is a string literal, else None."""
+    if len(call.args) > index and isinstance(call.args[index], ast.Constant) and isinstance(call.args[index].value, str):
+        return call.args[index].value
+    return None
 
 
 def _is_effect(child: ast.AST) -> bool:
     if not isinstance(child, ast.Call):
         return False
     func = child.func
+    if isinstance(func, ast.Attribute) and func.attr == "async_call":
+        return _string_argument(child, 1) not in _READ_SERVICES
+    if getattr(func, "id", getattr(func, "attr", None)) == "async_builder_command":
+        # Every write is sent by its literal name; the board and component reads pick theirs in a variable.
+        return _string_argument(child, 2) in _BUILDER_WRITES
     if isinstance(func, ast.Attribute) and func.attr in _EFFECT_ATTRIBUTES:
         # Phoenix deleting its own Store file changes nothing in Home Assistant.
         return not (func.attr == "async_remove" and "store" in ast.unparse(func.value).lower())
-    return isinstance(func, ast.Name) and func.id in _EFFECT_FUNCTIONS
+    return getattr(func, "id", getattr(func, "attr", None)) in _EFFECT_FUNCTIONS
 
 
 def _dispatch_sites(nodes: dict[str, ast.AST]) -> set[str]:
@@ -1012,11 +1043,14 @@ def test_a_tracked_handler_marks_before_every_dispatch():
     """A tracked handler that never marked proves nothing ran, so one unmarked branch lies."""
     nodes, edges = _function_bodies()
     tracked = _tracked_handlers()
-    assert len(tracked) >= 40, f"the scan found only {tracked}; it is not working"
+    assert len(tracked) >= 75, f"the scan found only {tracked}; it is not working"
     boundaries = _write_boundaries(nodes)
     reached = set().union(*(_reachable_before_mark(handler, edges, boundaries) for handler in tracked))
     sites = _dispatch_sites(nodes) & reached
-    assert len(sites) >= 4, f"the scan found only {sites}; it is not working"
+    assert len(sites) >= 15, f"the scan found only {sites}; it is not working"
+    # Each kind of effect is still recognized where it happens.
+    modules = {site.split(":")[0].rsplit(".", 1)[-1] for site in sites}
+    assert modules >= {"service", "registry", "native", "lovelace", "radio", "esphome"}, modules
     unmarked = {site: lines for site in sites if (lines := _unmarked_dispatches(nodes[site]))}
     assert unmarked == {}
 
@@ -1041,6 +1075,12 @@ def test_the_direct_writers_are_exactly_the_handlers_that_skip_their_executor():
         and executor not in _reachable(handler, edges)
     }
     assert skipping == set(tool_catalog._HANDLER_WRITES_DIRECTLY)
+
+
+def test_every_device_builder_command_is_a_read_or_a_write_to_the_scan():
+    """A newly allowed command must be classified, or the scan cannot tell whether it needs a mark."""
+    assert not _BUILDER_WRITES & _BUILDER_READS
+    assert _BUILDER_WRITES | _BUILDER_READS == ESPHOME_BUILDER_ALLOWED_COMMANDS
 
 
 def test_the_marking_scan_catches_an_unmarked_dispatch():

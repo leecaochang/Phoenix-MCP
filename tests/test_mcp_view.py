@@ -4217,3 +4217,31 @@ async def test_untargeted_service_refusal_explains_unsupported_targetless_calls(
         response, outcome, _ = await handler(args, access_key, hass, data)
         assert outcome == "invalid_request"
         assert "Targetless services outside the supported allowlist are unavailable" in response["content"][0]["text"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "started"), [("approved", True), ("rejected", False)])
+async def test_an_approved_inline_result_counts_as_dispatched(hass, status, started):
+    """The approved run may have written, so its result must not read as refused before write."""
+    import asyncio
+    from types import SimpleNamespace
+    from custom_components.phoenix_mcp.request_authority import DispatchProgress, dispatch_progress
+    from custom_components.phoenix_mcp.tool_common import _await_inline_confirm
+
+    record = _approval_record(status, result={"tool_result": {"content": [{"type": "text", "text": "failed after writing"}],
+                                                             "isError": True}, "outcome": "invalid_request"}) \
+        if status == "approved" else _approval_record(status, closure_reason="admin_cancelled")
+    data = _inline_wait_data([record])
+    access_key = _make_physical_access_key("confirm")
+    access_key.confirm_inline_wait_seconds = 60
+    approval = SimpleNamespace(id="appr-1", tool_name="create_scene", expires_at=None)
+    progress = DispatchProgress(tracked=True)
+    token = dispatch_progress.set(progress)
+    try:
+        task = asyncio.create_task(_await_inline_confirm(hass, data, access_key, approval))
+        await asyncio.sleep(0.01)
+        hass.bus.async_fire("phoenix_mcp_approval_resolved", {"approval_id": "appr-1"})
+        await task
+    finally:
+        dispatch_progress.reset(token)
+    assert progress.started is started

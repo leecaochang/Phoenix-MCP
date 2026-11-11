@@ -43,7 +43,7 @@ from .dashboard_search import Criteria, parse_criteria, search_layout
 from ..policy_engine import Permission, filter_service_response, is_sensitive_key, resolve_registry_access
 from ..access_key_store import AccessKeyRecord
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
-from ..request_authority import AuthorityChangedError, write_boundary
+from ..request_authority import AuthorityChangedError, mark_dispatch_started, write_boundary
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _cas_conflict,
@@ -226,6 +226,7 @@ async def _recoverable_dashboard_save(
                     return _tool_error("The dashboard layout changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", "dashboard"
                 await _check_authority_before_dispatch(recovery, rid)
                 sent = rid
+                mark_dispatch_started()
                 try:
                     await async_save_lovelace_config(hass, url_path, after)
                 except WsCommandNotDispatchedError as exc:

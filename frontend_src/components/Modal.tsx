@@ -1,5 +1,6 @@
 /**Accessible modal with focus trap, ARIA dialog role, and Escape to close.*/
 import React, { useContext, useEffect, useRef, useCallback, useState } from "react";
+import { announceDialog } from "../utils/dialog_presence";
 import { createPortal } from "react-dom";
 import { ActionButton } from "../ui/ActionButton";
 import { MenuRootContext } from "../ui/Menu";
@@ -158,6 +159,14 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
   onNavigatePreviousRef.current = onNavigatePrevious;
   onNavigateNextRef.current = onNavigateNext;
   recordNavigationRef.current = recordNavigation;
+
+  // Announced so the floating Agent Chat window steps aside instead of covering it.
+  useEffect(() => {
+    const node = modalRef.current;
+    if (!node) return;
+    announceDialog(node, true);
+    return () => announceDialog(node, false);
+  }, []);
 
   useEffect(() => {
     // Falls back to the dialog itself (tabIndex={-1}) so focus never stays

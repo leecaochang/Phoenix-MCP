@@ -1697,6 +1697,7 @@ async def _tool_hass_cancel_all_timers(
         try:
             async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
                 check_request_authority()
+                mark_dispatch_started()
                 await hass.services.async_call(
                     "timer", "cancel", {"entity_id": entities},
                     blocking=True, return_response=False,
@@ -1908,6 +1909,7 @@ async def _tool_hass_broadcast(
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
             check_request_authority()
+            mark_dispatch_started()
             await hass.services.async_call(
                 "assist_satellite",
                 "announce",

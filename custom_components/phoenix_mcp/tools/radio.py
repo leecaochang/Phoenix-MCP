@@ -43,7 +43,7 @@ from .discovery import _accessible_entity_ids
 from ..tool_common import (
     MESA_DENIED_MESSAGE, _CAP_FORBIDDEN_MESSAGE, _gate, _mesa_confirm_annotation, _pending_or_inline, _record_version, _set_progress_status, _tool_error, _tool_refused_before_write, _tool_reported_failure, _tool_success, _tool_uncertain, _truncate, _with_mesa_advisory,
 )
-from ..request_authority import _approved_exec_ctx, write_boundary
+from ..request_authority import _approved_exec_ctx, mark_dispatch_started, write_boundary
 from ..policy_engine import (
     Permission,
     device_cascade_entity_ids,
@@ -3108,6 +3108,7 @@ async def _execute_zigbee_group_change(
     if isinstance(advisory, tuple):
         return advisory
 
+    mark_dispatch_started()
     try:
         if change.operation == "create":
             after_configuration = await radio_backend.async_create_zigbee_group(

@@ -59,19 +59,41 @@ from .tool_input import (
     with_argument_notes,
 )
 from .tools.calendar import _tool_calendar_write
-from .tools.native import _build_live_context, _UNTRUSTED_DATA_BOUNDARY
+from .tools.esphome import (
+    _tool_analyze_esphome_memory, _tool_cancel_esphome_job, _tool_check_esphome_connectivity,
+    _tool_clean_esphome_build, _tool_compile_esphome_firmware,
+)
+from .tools.lovelace import _tool_dashboard_card
+from .tools.native import (
+    _build_live_context, _tool_hass_broadcast, _tool_hass_cancel_all_timers, _tool_hass_climate_set_temperature,
+    _tool_hass_fan_set_speed, _tool_hass_light_set, _tool_hass_media_next, _tool_hass_media_pause,
+    _tool_hass_media_player_mute, _tool_hass_media_player_unmute, _tool_hass_media_previous,
+    _tool_hass_media_search_and_play, _tool_hass_media_unpause, _tool_hass_set_volume, _tool_hass_turn_off,
+    _tool_hass_turn_on, _tool_hass_vacuum_clean_area, _tool_hass_vacuum_return_to_base, _tool_hass_vacuum_start,
+    _UNTRUSTED_DATA_BOUNDARY,
+)
+from .tools.radio import _tool_zigbee_group_change
 from .tools.registry import _tool_delete_entity, _tool_remove_device, _tool_set_device, _tool_set_entity
 from .tools.service import _tool_call_service
+from .tools.todo import _tool_set_todo_item
 
 _LOGGER = logging.getLogger(__name__)
 
 # Handlers that call mark_dispatch_started() before every effect, so returning
 # without it proves nothing was written: an agent turn gets such a refusal back
-# instead of holding the key for review. Their executors mark inline, after their
-# own rechecks, and carry no @write_boundary.
+# instead of holding the key for review. Reads stay unmarked. An executor of theirs
+# marks too: inline after its own rechecks, or on entry through @write_boundary.
 _BOUNDARY_TRACKED_HANDLERS = frozenset({
     _tool_call_service, _tool_calendar_write,
     _tool_set_entity, _tool_delete_entity, _tool_set_device, _tool_remove_device,
+    _tool_hass_turn_on, _tool_hass_turn_off, _tool_hass_light_set, _tool_hass_fan_set_speed,
+    _tool_hass_climate_set_temperature, _tool_hass_set_volume, _tool_hass_media_pause, _tool_hass_media_unpause,
+    _tool_hass_media_next, _tool_hass_media_previous, _tool_hass_media_search_and_play,
+    _tool_hass_media_player_mute, _tool_hass_media_player_unmute, _tool_hass_cancel_all_timers,
+    _tool_hass_vacuum_start, _tool_hass_vacuum_return_to_base, _tool_hass_vacuum_clean_area, _tool_hass_broadcast,
+    _tool_dashboard_card, _tool_zigbee_group_change, _tool_set_todo_item,
+    _tool_compile_esphome_firmware, _tool_clean_esphome_build, _tool_cancel_esphome_job,
+    _tool_check_esphome_connectivity, _tool_analyze_esphome_memory,
 })
 
 

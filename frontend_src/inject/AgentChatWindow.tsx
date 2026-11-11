@@ -19,6 +19,7 @@ import {
   AGENTCHAT_REVIEW_DECIDED_EVENT,
   AGENTCHAT_REVIEW_OPENED_EVENT,
 } from "../utils/agentchat_review";
+import { DIALOG_CLOSED_EVENT, DIALOG_OPENED_EVENT, announcedDialog, openDialogs } from "../utils/dialog_presence";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
 import THEMES_CSS from "../themes.css?inline";
 import { ensurePhoenixFont } from "../ui/fonts";
@@ -128,8 +129,12 @@ let focusRequest = 0;
 let opener: HTMLElement | null = null;
 let reviewResumeFrame: number | null = null;
 let dockState: AgentChatDock | null = null;
+/** Why the window is off the screen: an approval review, or each dialog it would cover. */
+const away = new Set<unknown>();
+const REVIEW = "review";
 
-function suspendForApprovalReview(): void {
+function stepAside(reason: unknown): void {
+  away.add(reason);
   if (reviewResumeFrame !== null) {
     window.cancelAnimationFrame(reviewResumeFrame);
     reviewResumeFrame = null;
@@ -142,26 +147,52 @@ function suspendForApprovalReview(): void {
   host?.remove();
 }
 
-function resumeAfterApprovalReview(): void {
+function stepBack(reason: unknown): void {
+  if (!away.delete(reason) || away.size > 0) return;
   if (reviewResumeFrame !== null) window.cancelAnimationFrame(reviewResumeFrame);
   // Let the panel close its modal and AgentCliWindow commit its pill/restored
   // mode before recreating the global compositing layer on the next frame.
   reviewResumeFrame = window.requestAnimationFrame(() => {
     reviewResumeFrame = null;
-    if (host && !host.isConnected) document.body.appendChild(host);
+    if (host && !host.isConnected && away.size === 0) document.body.appendChild(host);
   });
+}
+
+const suspendForApprovalReview = () => stepAside(REVIEW);
+const resumeAfterApprovalReview = () => stepBack(REVIEW);
+
+/** A dialog the window would cover: not one of its own, and not while it sits docked in My Workspace. */
+function covers(dialog: HTMLElement): boolean {
+  return !dockState?.slot && !dialog.closest(".agentcli-window");
+}
+
+function dialogOpened(event: Event): void {
+  const dialog = announcedDialog(event);
+  if (dialog && covers(dialog)) stepAside(dialog);
+}
+
+function dialogClosed(event: Event): void {
+  const dialog = announcedDialog(event);
+  if (dialog) stepBack(dialog);
 }
 
 function watchApprovalReview(): void {
   window.addEventListener(AGENTCHAT_REVIEW_OPENED_EVENT, suspendForApprovalReview);
   window.addEventListener(AGENTCHAT_REVIEW_CLOSED_EVENT, resumeAfterApprovalReview);
   window.addEventListener(AGENTCHAT_REVIEW_DECIDED_EVENT, resumeAfterApprovalReview);
+  window.addEventListener(DIALOG_OPENED_EVENT, dialogOpened);
+  window.addEventListener(DIALOG_CLOSED_EVENT, dialogClosed);
+  // A dialog already open when the window appears is stepped aside from too.
+  for (const dialog of openDialogs()) if (dialog.isConnected && covers(dialog)) away.add(dialog);
 }
 
 function unwatchApprovalReview(): void {
   window.removeEventListener(AGENTCHAT_REVIEW_OPENED_EVENT, suspendForApprovalReview);
   window.removeEventListener(AGENTCHAT_REVIEW_CLOSED_EVENT, resumeAfterApprovalReview);
   window.removeEventListener(AGENTCHAT_REVIEW_DECIDED_EVENT, resumeAfterApprovalReview);
+  window.removeEventListener(DIALOG_OPENED_EVENT, dialogOpened);
+  window.removeEventListener(DIALOG_CLOSED_EVENT, dialogClosed);
+  away.clear();
   if (reviewResumeFrame !== null) {
     window.cancelAnimationFrame(reviewResumeFrame);
     reviewResumeFrame = null;
@@ -318,7 +349,7 @@ export function showAgentChat(accessKeyId?: string): void {
   mount.style.pointerEvents = "none";
   shadow.appendChild(mount);
   registerLanguageRoot(mount);
-  document.body.appendChild(host);
+  if (away.size === 0) document.body.appendChild(host);
   root = createRoot(mount);
   paintAgentChat();
 }

@@ -67,7 +67,7 @@ from ..capability import effective_cap
 from ..redaction import (
     redact_entity_ids_outside, redact_inaccessible_entity_ids_in_text, redact_diagnostics, visible_entity_ids,
 )
-from ..request_authority import check_request_authority, write_boundary
+from ..request_authority import check_request_authority, mark_dispatch_started, write_boundary
 from ..policy_engine import (
     Permission, esphome_entry_for_entity, esphome_entry_writable, required_service_cap,
     resolve, resolve_registry_access,
@@ -2094,6 +2094,7 @@ async def _tool_compile_esphome_firmware(
     payload = {"configuration": rel}
     if "force_local" in args:
         payload["force_local"] = args["force_local"]
+    mark_dispatch_started()
     try:
         res = await async_builder_command(
             hass, url, "firmware/compile", payload,
@@ -2139,6 +2140,7 @@ async def _tool_clean_esphome_build(
     if inflight is not None:
         return inflight
 
+    mark_dispatch_started()
     try:
         res = await async_builder_command(
             hass, url, "firmware/clean", {"configuration": rel},
@@ -2746,6 +2748,7 @@ async def _tool_cancel_esphome_job(
 
     rel = job["configuration"]
     body: dict[str, Any] = {"job_id": job.get("job_id"), "file": rel, "cancelled": True}
+    mark_dispatch_started()
     try:
         await async_builder_command(
             hass, url, "firmware/cancel", {"job_id": job.get("job_id")},
@@ -3178,6 +3181,7 @@ async def _tool_check_esphome_connectivity(
     timeout = (ESPHOME_BUILDER_TROUBLESHOOT_HEADLESS_SECONDS if client_ip in _ESPHOME_HEADLESS_CLIENT_IPS
                else ESPHOME_BUILDER_TROUBLESHOOT_TIMEOUT_SECONDS)
     check_request_authority()
+    mark_dispatch_started()
     try:
         res = await async_builder_command(
             hass, url, "devices/troubleshoot", {"configuration": rel}, timeout_seconds=timeout,
@@ -3194,6 +3198,7 @@ async def _tool_check_esphome_connectivity(
 
 async def _esphome_cancel_quietly(hass: HomeAssistant, url: str, job_id: str) -> None:
     """Best-effort cancel of a job whose result can no longer be collected."""
+    mark_dispatch_started()
     try:
         await async_builder_command(hass, url, "firmware/cancel", {"job_id": job_id},
                                     timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS)
@@ -3235,6 +3240,7 @@ async def _tool_analyze_esphome_memory(
         return (_tool_error(f"A firmware job for this file is {active.get('status')} (job_id "
                             f"{active.get('job_id')}). Memory analysis would cancel it; wait for it with "
                             "wait_for_esphome_job first."), "invalid_request", f"esphome:{rel}")
+    mark_dispatch_started()
     try:
         start = await async_builder_command(
             hass, url, "firmware/analyze_memory", {"configuration": rel},

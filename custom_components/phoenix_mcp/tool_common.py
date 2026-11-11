@@ -50,7 +50,7 @@ from .helpers import content_hash
 from .catalog_text import version_summary_fields as _version_summary
 from .approvals import DiffSource, _resolve_diff, async_evaluate_capability
 from .access_key_store import AccessKeyRecord
-from .request_authority import AuthorityChangedError, check_request_authority
+from .request_authority import AuthorityChangedError, check_request_authority, mark_dispatch_started
 
 if TYPE_CHECKING:
     from .data import PhoenixData
@@ -590,6 +590,9 @@ async def _await_inline_confirm(
         # Event fired but the record is not terminal (a rare race): behave as if
         # it timed out, so the agent still gets a usable pending reply.
         return _tool_pending(approval, notified=_approval_notifies(data)), "pending_approval", resource
+    if latest.status == STATUS_APPROVED:
+        # The approved run may have written, so nothing this request returns proves it did not.
+        mark_dispatch_started()
     if latest.status == STATUS_APPROVED and latest.result:
         tool_result = latest.result.get("tool_result")
         if tool_result is not None:

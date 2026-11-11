@@ -283,7 +283,11 @@ async def test_native_service_rechecks_authority_after_mesa_wait(hass):
     with patch.object(native, '_mesa_gate_native', AsyncMock(side_effect=gate)) as mesa:
         response = await _view(hass).post(_make_request(body, 'application/json', raw))
     mesa.assert_awaited_once()
-    assert 'error' in json.loads(response.text)
+    # HassTurnOn marks dispatch just before the call, so the refusal is known to have run nothing.
+    body = json.loads(response.text)
+    assert body['result']['isError'] is True
+    assert 'No action was executed' in json.dumps(body)
+    assert not data.agent_recovery.blocks(access_key.id)
     sink.assert_not_called()
 
 

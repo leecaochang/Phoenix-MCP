@@ -153,12 +153,11 @@ def _register_executor(tool_name: str, fn: Any) -> None:
     _EXECUTOR_REGISTRY[tool_name] = fn
 
 
-# Tools whose handler changes Home Assistant without calling its registered executor,
-# so a marked executor proves nothing about them. A test keeps this equal to the code.
-_HANDLER_WRITES_DIRECTLY = frozenset({
-    "HassTurnOff", "HassTurnOn", "add_dashboard_card", "create_zigbee_group", "delete_dashboard_card",
-    "edit_dashboard_card", "remove_zigbee_group", "set_todo_item", "set_zigbee_group_members",
-})
+# Tools whose handler changes Home Assistant without calling its registered executor and
+# without marking dispatch itself, so a marked executor proves nothing about them. Empty
+# while every such handler marks inline (tool_dispatch._BOUNDARY_TRACKED_HANDLERS); a
+# test keeps this equal to the code.
+_HANDLER_WRITES_DIRECTLY: frozenset[str] = frozenset()
 # (tool name, registered handler) pairs whose executor marks dispatch on entry, frozen
 # once registration is complete so a stand-in handler is never trusted.
 _EXECUTOR_TRACKED: set[tuple[str, Any]] = set()
@@ -175,7 +174,10 @@ def _freeze_executor_tracking() -> None:
 
 
 def executor_tracked(tool_name: str, handler: Any) -> bool:
-    """Whether this registered handler only writes through its marked executor."""
+    """Whether a @write_boundary executor covers this registered handler's writes.
+
+    A handler that writes without that executor marks inline or is in _HANDLER_WRITES_DIRECTLY.
+    """
     return (tool_name, handler) in _EXECUTOR_TRACKED
 
 
