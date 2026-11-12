@@ -133,7 +133,7 @@ describe("buildAgentTabs", () => {
 
   it("offers OAuth steps only for clients that sign in with a client metadata document", () => {
     const tabs = buildOAuthTabs("https://ha.example/api/phoenix-mcp");
-    expect(tabs.map((t) => t.key)).toEqual(["claude", "chatgpt", "vscode", "antigravity"]);
+    expect(tabs.map((t) => t.key)).toEqual(["claude", "chatgpt", "vscode"]);
     for (const t of tabs) {
       expect(t.href).toMatch(/^https:\/\//);
       expect(t.blocks.some((b) => b.steps && b.steps.length > 0)).toBe(true);
@@ -149,6 +149,8 @@ describe("buildAgentTabs", () => {
     expect(tabs.find((t) => t.key === "chatgpt")!.href).toBe("https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt");
     // Clients that can't sign in this way are left to the key.
     expect(tabs.map((t) => t.key)).not.toContain("cursor");
+    // Antigravity's sign-in is unconfirmed, so it takes the key.
+    expect(tabs.map((t) => t.key)).not.toContain("antigravity");
   });
 
   it("threads the access-key-derived server name into every tab", () => {

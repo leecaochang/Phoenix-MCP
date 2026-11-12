@@ -1276,7 +1276,7 @@
       "connectMethodLabel": "How the app connects",
       "methodKey": "Paste the Access Key",
       "methodOAuth": "Sign In with OAuth",
-      "oauthIntro": "For apps that take only a server address. The app signs in through Home Assistant and you approve it in Phoenix; nothing secret is copied. Turn on OAuth sign-in below, then follow the steps for your app. Cursor, Gemini CLI and DeepSeek Harness can't sign in this way; paste the key for them.",
+      "oauthIntro": "For apps that take only a server address. The app signs in through Home Assistant and you approve it in Phoenix; nothing secret is copied. Turn on OAuth sign-in below, then follow the steps for your app. Antigravity, Cursor, Gemini CLI and DeepSeek Harness can't sign in this way; paste the key for them.",
       "oauthNoKey": "Turn on Allow OAuth sign-in in this key's Key Settings, then follow the steps for your app.",
       "oauthStepApprove": "Home Assistant opens in your browser. Sign in as an administrator, then approve the request in Phoenix.",
       "oauthClaudeStep1": "In Claude, open Customize, then Connectors, and select \"Add custom connector\".",
@@ -1299,11 +1299,7 @@
       "oauthCodexCliNote": "In the Codex CLI 0.148 or later, run this command. Codex opens the sign-in in your browser; if it doesn't, or the sign-in timed out, run codex mcp login phoenix. When the browser says Authentication complete, return to the terminal.",
       "oauthVscodeStep1": "Run Chat: Open Customizations, select MCP Servers, then Add Server (+). Choose HTTP, paste the address shown above, name it phoenix and choose Copilot Global.",
       "oauthVscodeStep2": "Start the server from its ... menu and select Authenticate when asked.",
-      "oauthVscodeToolsNote": "VS Code allows at most 128 tools in one request. A key with many capabilities can offer more, so turn some Phoenix tools off in the chat tools picker, or turn on github.copilot.chat.virtualTools.threshold.",
-      "oauthAntigravityStep1": "Open Customizations, then Installed, then MCP Servers, and select Add MCP Server. In the CLI, run /mcp.",
-      "oauthAntigravityStep2": "Paste the address shown above, then select Authenticate.",
-      "oauthAntigravityStep4": "Antigravity shows a code. Paste it into Enter authorization code and select Submit.",
-      "oauthAntigravityNote": "The Antigravity IDE needs version 2.6.0 or later."
+      "oauthVscodeToolsNote": "VS Code allows at most 128 tools in one request. A key with many capabilities can offer more, so turn some Phoenix tools off in the chat tools picker, or turn on github.copilot.chat.virtualTools.threshold."
     },
     "inject": {
       "profileSet": "MESA profile set for {key} - click to edit",
