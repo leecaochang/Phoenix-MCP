@@ -38,6 +38,7 @@ from .llm.probes import _effort_probe_body, async_probe_capabilities, async_prob
 from .provider_constants import (
     AGENT_CHAT_CLIENT_IP, AGENT_CHAT_PROBE_SENTINEL, AGENT_CHAT_REQUEST_BODY_BYTES,
     PROVIDER_API_KEY_MAX_LENGTH,
+    AGENT_CHAT_TOOL_LOADING_MODES,
 )
 from .routing.decision_history import without_thinking
 from .routing.decision_provider import decision_error_reason, DecisionProvider
@@ -570,10 +571,15 @@ class PhoenixAgentCliProviderView(PhoenixView):
         body = await _read_body(request, rid)
         if isinstance(body, web.Response):
             return body
-        if unknown := set(body) - {"model", "auto"}:
+        if unknown := set(body) - {"model", "auto", "tool_loading"}:
             fields = ", ".join(sorted(unknown))
             return _err("invalid_request", f"The request contains fields Phoenix does not recognize: {fields}.", 400, rid,
                         key="unknownFields", params={"fields": fields})
+        if "tool_loading" in body:
+            response = await self._set_tool_loading(request, rid, instance_id, body.get("tool_loading"))
+            if response is not None or not set(body) - {"tool_loading"}:
+                return response or _ok({"instance": {"id": instance_id, "tool_loading": body["tool_loading"]}},
+                                       request_id=rid)
         auto = body.get("auto")
         if auto is not None and not isinstance(auto, bool):
             return _err("invalid_request", "auto must be a boolean (true or false).", 400, rid,
@@ -626,6 +632,23 @@ class PhoenixAgentCliProviderView(PhoenixView):
             "id": instance_id, "model": (current or {}).get("model", model),
             "model_mode": "auto" if auto is True else "fixed",
         }}, request_id=rid)
+
+    async def _set_tool_loading(self, request: web.Request, rid: str, instance_id: str, mode: object) -> web.Response | None:
+        """Store a conversation account's tool-loading setting; the refusal, or None once saved."""
+        if mode not in AGENT_CHAT_TOOL_LOADING_MODES:
+            choices = ", ".join(AGENT_CHAT_TOOL_LOADING_MODES)
+            return _err("invalid_request", f"tool_loading must be one of: {choices}.", 400, rid,
+                        key="toolLoadingInvalid", params={"choices": choices})
+        store = await _get_secret_store(self.hass)
+        record = store.get(instance_id)
+        if record is not None and provider_purpose(record.get("kind", "")) == "decision":
+            return _err("invalid_request", "Decision accounts declare no tools.", 400, rid,
+                        key="toolLoadingDecision")
+        if record is None or not await store.set_tool_loading(instance_id, str(mode)):
+            return _err("not_found", "Provider account not found.", 404, rid, key="providerAccountNotFound")
+        if self.hass.data.get(DOMAIN) is not None:
+            _audit_admin(self.hass, request, rid, f"provider:{instance_id}")
+        return None
 
     @require_admin
     async def delete(self, request: web.Request, instance_id: str) -> web.Response:

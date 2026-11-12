@@ -322,7 +322,12 @@ export interface AgentCliInstance {
   capabilities?: Record<string, DeclaredModelCaps>;
   /** When the capability refresh last ran, ISO. Null if it never has. */
   capabilities_checked_at?: string | null;
+  /** Whether turns receive every tool at once or load them as needed; conversation accounts only. */
+  tool_loading?: ToolLoadingMode;
 }
+
+/** An account's tool loading: automatic by catalog size, always, or never (unless the provider's cap forces it). */
+export type ToolLoadingMode = "auto" | "always" | "never";
 
 export type MesaMode = "off" | "advisory" | "enforced";
 

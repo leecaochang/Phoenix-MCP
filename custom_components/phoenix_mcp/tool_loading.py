@@ -1,9 +1,11 @@
-"""Tool-level loading for providers whose tools-array cap the catalog exceeds.
+"""Tool-level loading: Phoenix's own loops declare a catalog in parts.
 
-Phoenix's own loops declare such a catalog in parts: a starting set, the client-local
-load_tools function and the loaded deferred tools, with a directory in the system prompt.
-Nothing is hidden or granted: every call still goes through the shared dispatcher. External
-clients and uncapped providers keep the complete catalog.
+A turn declares a small core, the client-local load_tools function and the deferred tools
+loaded so far, with a directory of the rest in the system prompt. It applies when the
+provider account asks for it (automatic above a catalog size) and always past a provider's
+tools-array cap. Nothing is hidden or granted: the directory lists only the access key's own
+tools, and every call still goes through the shared dispatcher. External clients keep the
+complete catalog.
 """
 
 from __future__ import annotations
@@ -13,19 +15,58 @@ import json
 import re
 from typing import Any
 
-from .provider_constants import AGENT_CHAT_DEFERRED_TOOL_GROUPS, AGENT_CHAT_LOAD_TOOLS_NAME
-from .tool_catalog import _TOOL_DEFS_BY_NAME, _tool_caps
+from .provider_constants import (
+    AGENT_CHAT_CORE_TOOLS, AGENT_CHAT_LOAD_TOOLS_NAME, AGENT_CHAT_TOOL_GROUPS, AGENT_CHAT_TOOL_LOADING_MIN_BYTES,
+    AGENT_CHAT_VOICE_PRELOADED_GROUPS,
+)
 
 
 def tool_group(name: str) -> str | None:
-    """The deferred group a published tool belongs to, or None for the starting set."""
+    """The deferred group a tool belongs to, or None for the starting set.
 
-    definition = _TOOL_DEFS_BY_NAME.get(name)
-    caps = _tool_caps(definition) if definition is not None else ()
-    for group, (group_caps, fragments, _summary) in AGENT_CHAT_DEFERRED_TOOL_GROUPS.items():
-        if (caps and caps[0] in group_caps) or any(fragment in name for fragment in fragments):
+    Exact names win over fragments; core tools and tools matching nothing are never deferred.
+    """
+    if name in AGENT_CHAT_CORE_TOOLS:
+        return None
+    for group, (members, _summary) in AGENT_CHAT_TOOL_GROUPS.items():
+        if name in members:
+            return group
+    for group, (members, _summary) in AGENT_CHAT_TOOL_GROUPS.items():
+        if any(fragment in name for fragment in members):
             return group
     return None
+
+
+def catalog_bytes(catalog: list[dict]) -> int:
+    """The catalog's compact JSON size, the measure the automatic threshold uses."""
+    return len(json.dumps(catalog, separators=(",", ":"), ensure_ascii=False).encode())
+
+
+def history_tool_calls(messages: list[dict]) -> list[tuple[str, Any]]:
+    """Every tool call in a provider history as (name, arguments), in order.
+
+    Reads Anthropic tool_use blocks and OpenAI-shaped tool_calls; anything else is skipped.
+    """
+    calls: list[tuple[str, Any]] = []
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        content = message.get("content")
+        if isinstance(content, list):
+            calls += [(str(block.get("name") or ""), block.get("input")) for block in content
+                      if isinstance(block, dict) and block.get("type") == "tool_use"]
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") if isinstance(call, dict) else None
+            if not isinstance(function, dict):
+                continue
+            arguments = function.get("arguments")
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except ValueError:
+                    arguments = None
+            calls.append((str(function.get("name") or ""), arguments))
+    return calls
 
 
 def _first_sentence(description: Any) -> str:
@@ -36,38 +77,66 @@ def _first_sentence(description: Any) -> str:
 
 
 class ToolLoader:
-    """One turn's declared catalog under a provider's tools-array cap.
+    """One turn's declared catalog: a starting set, load_tools and the loaded deferred tools.
 
-    Loaded tools are evicted least recently used first, but never in the round
-    that loaded them: two loads in one round cannot push out each other's tools
-    before the model has seen either, so the overflow is refused instead.
+    Under a provider's tools-array cap, loaded tools are evicted least recently used first, but
+    never in the round that loaded them: two loads in one round cannot push out each other's tools
+    before the model has seen either, so the overflow is refused instead. Without a cap nothing is
+    evicted.
     """
 
-    def __init__(self, catalog: list[dict], limit: int) -> None:
+    def __init__(self, catalog: list[dict], limit: int | None, preload: tuple[str, ...] = ()) -> None:
         self.limit = limit
         self._by_name = {tool["name"]: tool for tool in catalog}
-        members: dict[str, list[str]] = {group: [] for group in AGENT_CHAT_DEFERRED_TOOL_GROUPS}
+        members: dict[str, list[str]] = {group: [] for group in AGENT_CHAT_TOOL_GROUPS}
         self.starting: list[dict] = []
         for tool in catalog:
             group = tool_group(tool["name"])
-            if group is None:
+            if group is None or group in preload:
                 self.starting.append(tool)
             else:
                 members[group].append(tool["name"])
         self.groups = {group: names for group, names in members.items() if names}
         self.deferred = frozenset(name for names in self.groups.values() for name in names)
-        self.capacity = limit - len(self.starting) - 1
+        self.capacity: int | None = None if limit is None else limit - len(self.starting) - 1
         self._loaded: OrderedDict[str, None] = OrderedDict()
         self._pinned: set[str] = set()
         self._declared: frozenset[str] = frozenset()
 
     @classmethod
-    def plan(cls, catalog: list[dict], limit: int | None) -> ToolLoader | None:
-        """A loader when the catalog exceeds the limit and loading leaves room, else None."""
-        if limit is None or len(catalog) <= limit:
+    def plan(cls, catalog: list[dict], limit: int | None, *, mode: str = "auto", surface: str = "chat",
+             exempt: bool = False) -> ToolLoader | None:
+        """A loader for this turn, or None to declare the complete catalog.
+
+        Past the provider's cap it always loads, since the complete catalog would be refused. Otherwise
+        "never" and exempt turns never load, "always" loads, and "auto" loads from the size threshold.
+        """
+        over_cap = limit is not None and len(catalog) > limit
+        if not over_cap and (exempt or mode == "never"
+                             or (mode != "always" and catalog_bytes(catalog) < AGENT_CHAT_TOOL_LOADING_MIN_BYTES)):
             return None
-        loader = cls(catalog, limit)
-        return loader if loader.capacity >= 1 and loader.deferred else None
+        preload = AGENT_CHAT_VOICE_PRELOADED_GROUPS if surface == "voice" and not over_cap else ()
+        loader = cls(catalog, limit, preload)
+        return loader if loader.deferred and (loader.capacity is None or loader.capacity >= 1) else None
+
+    def restore(self, messages: list[dict]) -> None:
+        """Load again what earlier turns of this conversation loaded or called, oldest first.
+
+        A loaded tool stays available for the conversation, so a follow-up needs no second load.
+        """
+        names: list[str] = []
+        for name, arguments in history_tool_calls(messages):
+            if name == AGENT_CHAT_LOAD_TOOLS_NAME and isinstance(arguments, dict):
+                requested = arguments.get("names")
+                names += [n for n in requested if isinstance(n, str)] if isinstance(requested, list) else []
+                for group in self._requested_groups(arguments) or ():
+                    names += self.groups.get(group, [])
+            elif name in self.deferred:
+                names.append(name)
+        for name in dict.fromkeys(n for n in names if n in self.deferred):
+            if self.capacity is not None and len(self._loaded) >= self.capacity:
+                self._loaded.popitem(last=False)
+            self._loaded[name] = None
 
     def round_tools(self) -> list[dict]:
         """Start a model round and return the definitions it declares.
@@ -82,26 +151,30 @@ class ToolLoader:
     def loader_tool(self) -> dict:
         return {
             "name": AGENT_CHAT_LOAD_TOOLS_NAME,
-            "description": ("Load deferred tools from the deferred tool directory so they can be called from the "
-                            "next step. Give exact tool names, or one group to load all of its tools. Loading "
+            "description": ("Load tools from the list of tools not loaded yet so they can be called from the "
+                            "next step. Give exact tool names, or groups to load all of their tools. Loading "
                             "grants no permission; every call is still checked."),
             "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
                 "names": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-                "group": {"type": "string", "enum": list(self.groups)},
+                "groups": {"type": "array", "items": {"type": "string", "enum": list(self.groups)}, "minItems": 1},
             }},
         }
 
     def directory(self) -> str:
-        """The system-prompt section listing every deferred tool."""
+        """The system-prompt section listing every deferred tool by group."""
+        capped = ""
+        if self.capacity is not None and self.limit is not None:
+            capped = (f" This provider accepts at most {self.limit} tools in one request, so at most "
+                      f"{self.capacity} of these stay loaded; loading more unloads the least recently used ones.")
         lines = [
-            "\n\nDeferred tools: this provider accepts at most "
-            f"{self.limit} tools in one request, so these tools of this access key are not loaded yet. Call "
-            f"{AGENT_CHAT_LOAD_TOOLS_NAME} with exact names, or one group, before calling any of them. At most "
-            f"{self.capacity} deferred tools stay loaded; loading more unloads the least recently used ones. "
-            "The rule that a tool absent from the list is unavailable does not apply to the tools listed here.",
+            "\n\nTools not loaded yet: to keep each request small, these tools of this access key are listed "
+            f"here but not loaded. Call {AGENT_CHAT_LOAD_TOOLS_NAME} with exact names, or groups, before calling "
+            "any of them, and load what a request needs before saying it cannot be done. Loaded tools stay "
+            f"available for the rest of the conversation.{capped} The rule that a tool absent from the list "
+            "is unavailable does not apply to the tools listed here.",
         ]
         for group, names in self.groups.items():
-            lines.append(f"\n[{group}] {AGENT_CHAT_DEFERRED_TOOL_GROUPS[group][2]}")
+            lines.append(f"\n[{group}] {AGENT_CHAT_TOOL_GROUPS[group][1]}")
             lines += [f"- {name}: {_first_sentence(self._by_name[name].get('description'))}" for name in names]
         return "\n".join(lines)
 
@@ -115,31 +188,46 @@ class ToolLoader:
         if name in self._loaded:
             self._loaded.move_to_end(name)
 
+    def _requested_groups(self, arguments: dict) -> list[str] | None:
+        """The groups a load names, from groups (a list) or the older group (one name); None if malformed."""
+        groups = arguments.get("groups")
+        single = arguments.get("group")
+        if groups is None and single is None:
+            return []
+        if groups is not None and (not isinstance(groups, list) or not all(isinstance(g, str) for g in groups)):
+            return None
+        if single is not None and not isinstance(single, str):
+            return None
+        return list(dict.fromkeys([*(groups or []), *([single] if single is not None else [])]))
+
     def load(self, arguments: Any) -> tuple[str, bool]:
         """Load what fits of the requested tools; return the result text and whether it is an error."""
         names = arguments.get("names") if isinstance(arguments, dict) else None
-        group = arguments.get("group") if isinstance(arguments, dict) else None
-        if (not isinstance(arguments, dict) or set(arguments) - {"names", "group"} or (names is None and group is None)
+        groups = self._requested_groups(arguments) if isinstance(arguments, dict) else None
+        if (not isinstance(arguments, dict) or set(arguments) - {"names", "groups", "group"} or groups is None
+                or (names is None and not groups)
                 or (names is not None and (not isinstance(names, list) or not all(isinstance(n, str) for n in names)))
-                or (group is not None and group not in self.groups)):
-            return (f"Give names (a list of tool names from the deferred directory) and/or group (one of: "
+                or any(group not in self.groups for group in groups)):
+            return (f"Give names (a list of tool names from the list of tools not loaded yet) and/or groups (from: "
                     f"{', '.join(self.groups)}). Nothing was loaded."), True
         body: dict[str, Any] = {}
         requested = list(dict.fromkeys(names or []))
-        if group is not None:
-            members = [name for name in self.groups[group] if name not in self._loaded]
-            if len(members) > self._room():
-                body["group_not_loaded"] = group
-                body["note"] = (f"The {group} group has {len(members)} tools that are not loaded, more than fit now. "
-                                "Load only the names you need.")
+        refused_groups = []
+        for group in groups:
+            members = [name for name in self.groups[group] if name not in self._loaded and name not in requested]
+            if self.capacity is not None and len(members) > self._room():
+                refused_groups.append(group)
             else:
-                requested += [name for name in members if name not in requested]
+                requested += members
+        if refused_groups:
+            body["groups_not_loaded"] = refused_groups
+            body["note"] = ("These groups have more tools than fit now. Load only the names you need.")
         body["already_available"] = [n for n in requested
                                      if (n in self._by_name and n not in self.deferred) or n in self._loaded]
         body["unknown"] = [n for n in requested if n not in self._by_name]
         loaded, evicted, refused = [], [], []
         for name in (n for n in requested if n in self.deferred and n not in self._loaded):
-            if len(self._loaded) >= self.capacity:
+            if self.capacity is not None and len(self._loaded) >= self.capacity:
                 victim = next((n for n in self._loaded if n not in self._pinned), None)
                 if victim is None:
                     refused.append(name)
@@ -167,5 +255,7 @@ class ToolLoader:
         return json.dumps(result, ensure_ascii=False), not loaded and not body["already_available"]
 
     def _room(self) -> int:
-        """Slots a load in this round can still fill, counting evictable tools."""
+        """Slots a load in this round can still fill, counting evictable tools; unbounded without a cap."""
+        if self.capacity is None:
+            return len(self.deferred)
         return self.capacity - len(self._loaded) + sum(1 for name in self._loaded if name not in self._pinned)

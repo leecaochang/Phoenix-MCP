@@ -88,6 +88,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `models_checked_at` | Phoenix 上次讀取模型清單的時間。 |
 | `base_url` | 按設定時的值。 |
 | `endpoint_id` | 按設定時的值。 |
+| `tool_loading` | `auto`（預設）、`always` 或 `never`。 |
 | `capabilities` | 依模型：提供者宣告的、探測發現的，以及提供者在過去 30 天拒絕的選項。 |
 | `capabilities_checked_at` | Phoenix 上次檢查能力的時間。 |
 
@@ -120,14 +121,17 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 |---|---|---|
 | `model` | string | 要使用的模型。對話帳戶接受任何模型 ID。決策帳戶需要提供者目前列出的模型。 |
 | `auto` | boolean | `true` 會自動跟隨提供者的模型。決策帳戶拒絕此項。 |
+| `tool_loading` | string | `auto`、`always` 或 `never`：帳戶的對話輪次如何取得存取金鑰的工具。決策帳戶拒絕此項。 |
 
-傳送 `model` 或 `auto: true`，不要同時傳送，也不要傳送其他欄位。使用 `auto: true` 時，Phoenix 會立即讀取模型清單，因此回應會顯示它選擇的模型。
+傳送 `model` 或 `auto: true`，不要同時傳送。`tool_loading` 可以單獨傳送，也可以與其中任一項一起傳送。使用 `auto: true` 時，Phoenix 會立即讀取模型清單，因此回應會顯示它選擇的模型。
 
-回應為 `200`，僅包含 `{"instance": {"id": ..., "model": ..., "model_mode": ...}}`，而不是完整帳戶。
+回應為 `200`，僅包含 `{"instance": {"id": ..., "model": ..., "model_mode": ...}}`，而不是完整帳戶。只傳送 `tool_loading` 時，回應為 `{"instance": {"id": ..., "tool_loading": ...}}`。
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
-| 400 | `invalid_request` | `adminError.unknownFields` | 本文包含 `model` 和 `auto` 以外的欄位。 |
+| 400 | `invalid_request` | `adminError.unknownFields` | 本文包含 `model`、`auto` 和 `tool_loading` 以外的欄位。 |
+| 400 | `invalid_request` | `adminError.toolLoadingInvalid` | `tool_loading` 不是 `auto`、`always` 或 `never`。 |
+| 400 | `invalid_request` | `adminError.toolLoadingDecision` | `tool_loading` 傳送給了決策帳戶，而決策帳戶不使用工具。 |
 | 400 | `invalid_request` | `adminError.booleanRequired` | `auto` 不是布林值。 |
 | 400 | `invalid_request` | `adminError.providerModelOrAuto` | `model` 和 `auto: true` 同時傳送。 |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | 兩者都沒有傳送。 |

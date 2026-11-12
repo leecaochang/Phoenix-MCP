@@ -1,9 +1,10 @@
-"""Tool-level loading under a provider's tools-array cap, in the loader and in both agent loops.
+"""Tool-level loading in the loader and in both agent loops: when it applies, and how it declares.
 
 The loader only declares definitions the access key's catalog already holds,
 so the properties that matter are that nothing is dropped silently, that an
-undeclared call never reaches the dispatcher, and that eviction never takes a
-tool from the round that loaded it.
+undeclared call never reaches the dispatcher, that eviction never takes a
+tool from the round that loaded it, and that the account setting, the size
+threshold and the provider's cap decide together whether a turn loads at all.
 """
 
 from __future__ import annotations
@@ -17,9 +18,11 @@ import pytest
 from custom_components.phoenix_mcp import agent_chat, agent_turn
 from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
-from custom_components.phoenix_mcp.provider_constants import AGENT_CHAT_LOAD_TOOLS_NAME
+from custom_components.phoenix_mcp.provider_constants import (
+    AGENT_CHAT_LOAD_TOOLS_NAME, AGENT_CHAT_TOOL_LOADING_MIN_BYTES,
+)
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
-from custom_components.phoenix_mcp.tool_loading import ToolLoader
+from custom_components.phoenix_mcp.tool_loading import ToolLoader, catalog_bytes, history_tool_calls
 from tests.runtime_fixtures import patch_readers
 
 
@@ -75,8 +78,15 @@ def test_names_load_what_exists_and_report_the_rest():
 def test_a_group_that_does_not_fit_is_refused_whole():
     loader = ToolLoader.plan(_catalog(), 14)
     loader.round_tools()
-    body, is_error = _load(loader, group="esphome")
-    assert is_error and body["group_not_loaded"] == "esphome" and "loaded" not in body
+    body, is_error = _load(loader, groups=["esphome"])
+    assert is_error and body["groups_not_loaded"] == ["esphome"] and "loaded" not in body
+    body, is_error = _load(loader, groups=["dashboards"])
+    assert not is_error and body["loaded"] == [f"dashboard_tool_{i}" for i in range(3)]
+
+
+def test_the_older_single_group_argument_still_loads():
+    loader = ToolLoader.plan(_catalog(), 14)
+    loader.round_tools()
     body, is_error = _load(loader, group="dashboards")
     assert not is_error and body["loaded"] == [f"dashboard_tool_{i}" for i in range(3)]
 
@@ -95,6 +105,7 @@ def test_a_round_never_evicts_what_it_loaded_but_the_next_round_can():
 
 
 @pytest.mark.parametrize("arguments", [{}, {"names": "esphome_tool_0"}, {"names": [1]}, {"group": "zigbee"},
+                                       {"groups": ["zigbee"]}, {"groups": "esphome"}, {"groups": []},
                                        {"names": ["esphome_tool_0"], "extra": True}, "esphome_tool_0"])
 def test_malformed_load_requests_load_nothing(arguments):
     loader = ToolLoader.plan(_catalog(), 14)
@@ -102,6 +113,85 @@ def test_malformed_load_requests_load_nothing(arguments):
     text, is_error = loader.load(arguments)
     assert is_error and "Nothing was loaded" in text
     assert [tool["name"] for tool in loader.round_tools()][-1] == "plain_9"
+
+
+
+def _big(tool: dict) -> dict:
+    """A tool with a description long enough that a catalog of ~150 passes the automatic threshold."""
+    return {**tool, "description": tool["description"] + " " + "x" * 700}
+
+
+def _large_catalog() -> list[dict]:
+    return [_big(tool) for tool in _catalog(120, 20, 3)]
+
+
+def test_automatic_loads_from_the_size_threshold_and_never_below_it():
+    small, large = _catalog(120, 20, 3), _large_catalog()
+    assert catalog_bytes(small) < AGENT_CHAT_TOOL_LOADING_MIN_BYTES <= catalog_bytes(large)
+    assert ToolLoader.plan(small, None) is None
+    loader = ToolLoader.plan(large, None)
+    # Without a cap nothing is evicted and every group loads whole.
+    assert loader is not None and loader.capacity is None
+    loader.round_tools()
+    body, is_error = _load(loader, groups=["esphome", "dashboards"])
+    assert not is_error and len(body["loaded"]) == 23 and "unloaded" not in body
+
+
+def test_the_account_setting_decides_below_the_cap_and_the_cap_decides_above_it():
+    small, large = _catalog(), _large_catalog()
+    assert ToolLoader.plan(small, None, mode="always") is not None
+    assert ToolLoader.plan(large, None, mode="never") is None
+    assert ToolLoader.plan(large, None, exempt=True) is None
+    # Past the cap the complete catalog would be refused, so it loads whatever the setting.
+    assert ToolLoader.plan(large, 128, mode="never") is not None
+    assert ToolLoader.plan(large, 128, exempt=True) is not None
+
+
+def test_voice_declares_device_control_from_the_start():
+    catalog = _large_catalog() + [_big(_tool("intent__HassTurnOn")), _big(_tool("light__HassLightSet"))]
+    voice = ToolLoader.plan(catalog, None, surface="voice")
+    chat = ToolLoader.plan(catalog, None, surface="chat")
+    assert "device_control" not in voice.groups and "intent__HassTurnOn" in [t["name"] for t in voice.round_tools()]
+    assert chat.groups["device_control"] == ["intent__HassTurnOn", "light__HassLightSet"]
+
+
+def test_core_tools_are_never_deferred():
+    catalog = _large_catalog() + [_big(_tool("call_service")), _big(_tool("get_state"))]
+    loader = ToolLoader.plan(catalog, None)
+    assert {"call_service", "get_state"} <= {t["name"] for t in loader.starting} and not loader.deferred & {"call_service"}
+
+
+def test_history_calls_are_read_from_both_provider_formats():
+    messages = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "1", "name": "load_tools",
+                                           "input": {"names": ["esphome_tool_0"]}}]},
+        {"role": "assistant", "content": None, "tool_calls": [
+            {"id": "2", "type": "function", "function": {"name": "dashboard_tool_1", "arguments": "{}"}},
+            {"id": "3", "type": "function", "function": {"name": "esphome_tool_2", "arguments": "not json"}}]},
+    ]
+    assert history_tool_calls(messages) == [("load_tools", {"names": ["esphome_tool_0"]}),
+                                            ("dashboard_tool_1", {}), ("esphome_tool_2", None)]
+
+
+def test_a_follow_up_keeps_what_the_conversation_loaded_or_used():
+    loader = ToolLoader.plan(_large_catalog(), None)
+    loader.restore([
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "1", "name": "load_tools",
+                                           "input": {"groups": ["dashboards"]}}]},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "2", "name": "esphome_tool_3", "input": {}},
+                                          {"type": "tool_use", "id": "3", "name": "plain_1", "input": {}}]},
+    ])
+    declared = [t["name"] for t in loader.round_tools()]
+    assert declared[-4:] == ["dashboard_tool_0", "dashboard_tool_1", "dashboard_tool_2", "esphome_tool_3"]
+    assert loader.blocked("esphome_tool_3") is None and loader.blocked("esphome_tool_0") is not None
+
+
+def test_restoring_under_a_cap_keeps_the_newest_that_fit():
+    loader = ToolLoader.plan(_catalog(), 14)
+    loader.restore([{"role": "assistant", "content": [
+        {"type": "tool_use", "id": str(i), "name": f"esphome_tool_{i}", "input": {}} for i in range(4)]}])
+    assert [t["name"] for t in loader.round_tools()][-3:] == ["esphome_tool_1", "esphome_tool_2", "esphome_tool_3"]
 
 
 class _Scripted:
@@ -223,7 +313,7 @@ async def test_the_headless_loop_loads_the_same_way(hass):
 
 
 @pytest.mark.asyncio
-async def test_a_provider_without_a_cap_keeps_the_complete_catalog(hass):
+async def test_a_small_catalog_without_a_cap_keeps_the_complete_catalog(hass):
     provider = _Scripted([[{"type": llm_base.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
     provider.kind = "deepseek"
     data = _data()
@@ -232,3 +322,57 @@ async def test_a_provider_without_a_cap_keeps_the_complete_catalog(hass):
                                           "http://h", system="s", seed="hi", client_ip="voice", max_iterations=2)
     assert len(provider.declared[0]) == 143 and AGENT_CHAT_LOAD_TOOLS_NAME not in provider.declared[0]
     assert "Deferred tools" not in provider.system_prompts[0]
+
+
+@pytest.mark.asyncio
+async def test_an_uncapped_provider_loads_a_large_catalog_unless_the_account_says_never(hass):
+    data = _data()
+    declared: dict[str, list[str]] = {}
+    for mode in ("auto", "never"):
+        provider = _Scripted([[{"type": llm_base.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
+        provider.kind, provider.cfg = "deepseek", MagicMock(tool_loading=mode)
+        with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=_large_catalog()):
+            await agent_turn._run_headless_turn(hass, data, data.store.get_access_key_by_id.return_value, provider, None,
+                                              "http://h", system="s", seed="hi", client_ip="voice", max_iterations=2)
+        declared[mode] = provider.declared[0]
+        assert ("Tools not loaded yet" in provider.system_prompts[0]) is (mode == "auto")
+    assert declared["auto"] == [AGENT_CHAT_LOAD_TOOLS_NAME, *(f"plain_{i}" for i in range(120))]
+    assert len(declared["never"]) == 143
+
+
+@pytest.mark.asyncio
+async def test_home_companion_keeps_its_complete_catalog(hass):
+    data = _data()
+    access_key = data.store.get_access_key_by_id.return_value
+    access_key.persona = "home_companion"
+    provider = _Scripted([[{"type": llm_base.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
+    provider.kind, provider.cfg = "deepseek", MagicMock(tool_loading="always")
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=_large_catalog()):
+        await agent_turn._run_headless_turn(hass, data, access_key, provider, None, "http://h", system="s", seed="hi",
+                                          client_ip="voice", max_iterations=2)
+    assert AGENT_CHAT_LOAD_TOOLS_NAME not in provider.declared[0]
+
+
+@pytest.mark.asyncio
+async def test_agent_chat_carries_loaded_tools_into_the_next_message(hass):
+    provider = _Scripted([[_call("c", "esphome_tool_0", {"file": "x.yaml"}), _done("tool_use")],
+                          [{"type": llm_base.EV_TEXT, "text": "Done."}, _done("end_turn")]])
+    provider.kind, provider.cfg = "deepseek", MagicMock(tool_loading="always")
+    dispatch = AsyncMock(return_value=({"result": {"content": [{"type": "text", "text": "ok"}]}}, "m", "r", "allowed"))
+    history = [{"role": "user", "content": "first"},
+               {"role": "assistant", "content": [{"type": "tool_use", "id": "a", "name": AGENT_CHAT_LOAD_TOOLS_NAME,
+                                                  "input": {"names": ["esphome_tool_0"]}}]},
+               {"role": "user", "content": "compile it"}]
+
+    async def emit(name, payload):
+        return None
+
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=_catalog(10, 4, 3)), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", dispatch):
+        await agent_chat.async_run_agent_turn(
+            hass=hass, data=_data(), access_key=MagicMock(), provider=provider, session=MagicMock(), messages=history,
+            options={}, client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event())
+
+    assert provider.declared[0][-1] == "esphome_tool_0"
+    assert [call.args[2]["name"] for call in dispatch.await_args_list] == ["esphome_tool_0"]

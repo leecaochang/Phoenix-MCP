@@ -26,7 +26,7 @@ from ..provider_constants import (
     AGENT_CHAT_LOAD_TOOLS_NAME, AGENT_CHAT_MAX_CATALOG_MODELS, AGENT_CHAT_MAX_JSON_BYTES,
     AGENT_CHAT_MAX_MODEL_ID_LENGTH, AGENT_CHAT_MAX_SSE_BUFFER_BYTES, AGENT_CHAT_MAX_STREAM_BYTES,
     AGENT_CHAT_PROVIDER_DETAIL_CHARS, AGENT_CHAT_PROVIDER_ERROR_BYTES,
-    AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS,
+    AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS, AGENT_CHAT_TOOL_LOADING_DEFAULT, AGENT_CHAT_TOOL_LOADING_MODES,
 )
 from ..tool_loading import ToolLoader
 from ..time_text import parse_date, parse_datetime
@@ -915,10 +915,21 @@ def _tool_limit_problem(provider: Any, tools: list) -> dict | None:
     }
 
 
-def _tool_loader(provider: Any, catalog: list[dict]) -> ToolLoader | None:
-    """Tool-level loading when this provider's tools-array cap is below the catalog."""
+def _tool_loader(provider: Any, catalog: list[dict], *, surface: str = "chat", history: list[dict] | None = None,
+                 exempt: bool = False) -> ToolLoader | None:
+    """This turn's loader under the account's tool-loading setting and the provider's cap, or None.
+
+    ``history`` is the conversation so far, whose loaded tools stay loaded; ``exempt`` is a turn
+    that keeps its complete catalog unless the provider's cap forces loading (Home Companion).
+    """
     definition = PROVIDER_DEFINITIONS.get(str(getattr(provider, "kind", "")))
-    return ToolLoader.plan(catalog, definition.max_tools if definition is not None else None)
+    mode = getattr(getattr(provider, "cfg", None), "tool_loading", AGENT_CHAT_TOOL_LOADING_DEFAULT)
+    loader = ToolLoader.plan(catalog, definition.max_tools if definition is not None else None,
+                             mode=mode if mode in AGENT_CHAT_TOOL_LOADING_MODES else AGENT_CHAT_TOOL_LOADING_DEFAULT,
+                             surface=surface, exempt=exempt)
+    if loader is not None and history:
+        loader.restore(history)
+    return loader
 
 
 def _local_tool_results(

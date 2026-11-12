@@ -7,6 +7,7 @@ import type {
   RoutingSurface,
   AgentCliProviderKind,
   AgentCliInstance,
+  ToolLoadingMode,
   AgentCliProvidersResponse,
   AiEvaluatePreferredStatus, AiTaskPreferredStatus,
   ApprovalListParams,
@@ -490,6 +491,10 @@ export const api = {
   setAgentCliProviderAuto: (id: string) =>
     req<{ instance: { id: string; model: string; model_mode: "auto" | "fixed" } }>(
       "PATCH", `/agentcli/providers/${encodeURIComponent(id)}`, { auto: true }),
+  /** Whether this account's turns receive every tool at once or load them as needed. */
+  setAgentCliProviderToolLoading: (id: string, toolLoading: ToolLoadingMode) =>
+    req<{ instance: { id: string; tool_loading: ToolLoadingMode } }>(
+      "PATCH", `/agentcli/providers/${encodeURIComponent(id)}`, { tool_loading: toolLoading }),
   deleteAgentCliProvider: (id: string) =>
     req<{ deleted: string }>("DELETE", `/agentcli/providers/${encodeURIComponent(id)}`),
   getAgentCliModels: (id: string) =>

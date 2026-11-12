@@ -442,8 +442,11 @@ def test_the_largest_catalog_loads_within_every_capped_provider(surface):
 
     assert len(catalog) > limit, "the worst case no longer needs loading; this bound is then vacuous"
     assert {tool["name"] for tool in catalog}.isdisjoint({provider_constants.AGENT_CHAT_LOAD_TOOLS_NAME})
-    assert set(loader.groups) == set(provider_constants.AGENT_CHAT_DEFERRED_TOOL_GROUPS)
+    assert set(loader.groups) == set(provider_constants.AGENT_CHAT_TOOL_GROUPS)
     assert max(len(names) for names in loader.groups.values()) <= loader.capacity
+    # Every tool is core or grouped: a new tool that matches no group would sit in every
+    # request's starting set, so it must be given a group (or join the core) deliberately.
+    assert {tool["name"] for tool in loader.starting} <= set(provider_constants.AGENT_CHAT_CORE_TOOLS)
 
 
 # ---------------------------------------------------------------------------

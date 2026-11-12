@@ -3394,6 +3394,11 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 
 /* A provider account's actions: labelled buttons below its model line. */
 .agentcli-account-actions { margin: 8px 0 0; }
+/* An account's Tool loading choice: its label beside the select, wrapping on a narrow window. */
+.agentcli-settings-tool-loading {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0;
+  font-size: 13px; color: var(--phx-text-2);
+}
 .agentcli-settings-probe-opt {
   display: flex; align-items: center; gap: 8px; min-width: 0;
   color: var(--phx-text-2); line-height: 1.4;

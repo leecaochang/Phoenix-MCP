@@ -1946,7 +1946,7 @@ async def _run_headless_turn(
 
     review_state = None if is_companion(access_key) else create_review_state(data, access_key, routing_surface)
     agent_tools = build_agent_tool_list(access_key, data, routing_surface)
-    loader = _tool_loader(provider, agent_tools)
+    loader = _tool_loader(provider, agent_tools, surface=routing_surface, exempt=is_companion(access_key))
     if loader is not None:
         system += loader.directory()
     declared = loader.round_tools() if loader is not None else agent_tools

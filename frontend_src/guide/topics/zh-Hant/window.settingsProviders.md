@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 金鑰", "模型", "LLM", "帳戶", "額度", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["新帳戶", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通義千問", "千問", "阿里雲百煉", "百煉", "智譜", "月之暗面", "騰訊雲", "小米", "離線", "本機模型", "價格", "計費"], "decision-provider": ["TypeSafe", "JEV", "快速路徑"] } }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 金鑰", "模型", "LLM", "帳戶", "額度", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["新帳戶", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通義千問", "千問", "阿里雲百煉", "百煉", "智譜", "月之暗面", "騰訊雲", "小米", "離線", "本機模型", "價格", "計費"], "decision-provider": ["TypeSafe", "JEV", "快速路徑"], "tool-loading": ["load_tools", "延遲載入", "工具搜尋", "token", "工具太多", "上下文"] } }
 ---
 新增 Phoenix 使用的 AI 帳戶。每個帳戶需要 API 金鑰，或者對於本機模型，需要伺服器位址。
 
@@ -30,6 +30,18 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 透過傳送幾個非常簡短的請求，查明模型支援哪些努力層級以及是否能讀取影像。
 
 這會消耗少量額度，因此 Phoenix 會先詢問。將指標懸停在按鈕上可查看上次執行的時間。
+
+### {{label:settings.toolLoadingLabel}} {#tool-loading}
+
+決定 Agent Chat、語音智慧體和 AI 任務如何把存取金鑰的工具交給此帳戶的模型。
+
+**{{label:settings.toolLoadingAuto}}**（預設）只傳送一小組常用工具，其餘工具依群組列出。請求需要時，模型會載入更多工具。存取金鑰的工具很多（約 75 個或以上）時，Phoenix 才這樣做；工具較少時，會全部傳送。
+
+分批載入讓每個請求傳送的 token 少得多，結果相同。請求需要尚未載入的工具時，會多一步。語音智慧體一開始就帶有裝置控制工具，因此語音命令不用等這一步。
+
+**{{label:settings.toolLoadingAlways}}** 無論工具多少都分批載入。**{{label:settings.toolLoadingNever}}** 一律傳送全部工具，但只接受 128 個工具的提供者除外。
+
+載入不會給模型更多權限。清單只顯示該存取金鑰自己的工具，Phoenix 照常檢查每次呼叫。Home Companion 金鑰一律取得完整的工具集。
 
 ### 移除帳戶 {#remove-account}
 
@@ -64,7 +76,7 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 
 選擇這些方案時 Phoenix 會發出警告。語音、AI Task 和 Agent Chat 請使用提供商的按量付費 API。
 
-Groq、Mistral AI 和 Z.ai 每個請求最多接受 128 個工具，Phoenix 對 Gemini、Kimi、OpenRouter 和 Infron 也採用同樣的上限。Phoenix 會先給它們較小的工具集，並在模型要求時載入更多。
+Groq、Mistral AI 和 Z.ai 每個請求最多接受 128 個工具，Phoenix 對 Gemini、Kimi、OpenRouter 和 Infron 也採用同樣的上限。存取金鑰的工具更多時，無論[工具載入](guide:#tool-loading)如何設定，Phoenix 都會為它們分批載入工具。
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 

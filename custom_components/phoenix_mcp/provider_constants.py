@@ -233,23 +233,65 @@ AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS = 2
 AGENT_CHAT_MAX_TOOLS_PER_REQUEST = 128
 # Phoenix's own client-local function that declares deferred tools; never an MCP tool.
 AGENT_CHAT_LOAD_TOOLS_NAME = "load_tools"
-# Groups of tools deferred under a provider's tools-array cap: id -> (capabilities,
-# name fragments, directory summary). A tool joins the first group whose
-# capabilities hold its first capability or one of whose fragments is in its
-# name; every other tool is in the starting set.
-AGENT_CHAT_DEFERRED_TOOL_GROUPS: Mapping[str, tuple[tuple[str, ...], tuple[str, ...], str]] = MappingProxyType({
-    "esphome": (("cap_esphome_yaml", "cap_esphome_flash"), ("esphome",),
-                "ESPHome Device Builder: device YAML, validation, builds, flashing, jobs, device logs and diagnostics."),
-    "dashboards": (("cap_lovelace_write", "cap_dashboard_resources"), ("dashboard",),
-                   "Lovelace dashboards, their views and cards, and dashboard resources."),
-    "zigbee": (("cap_radio_write",), ("zigbee", "radio"),
-               "Zigbee and radio networks: network and device diagnostics, pairing, options, bindings, reporting and groups."),
-    "integrations": (("cap_integration_write", "cap_integration_reconfigure"), (),
-                     "Adding, removing, reloading and reconfiguring integrations."),
-    "registry_writes": (("cap_registry_write",), (), "Renaming, moving, enabling, disabling and removing registry entries."),
-    "files_and_backups": (("cap_backup", "cap_filesystem", "cap_yaml_edit"), (), "Reading configuration files and YAML, and backups."),
-    "helpers": (("cap_helper_write",), (), "Creating, editing and deleting helpers."),
-    "mesa": ((), ("mesa_",), "MESA device-safety profiles, their explanations and control leases."),
+# Tool-level loading: Phoenix's own loops declare a small core plus load_tools and list the
+# rest by group in the system prompt. Measured across personas, providers and Voice, it gave
+# the same task outcomes as the complete catalog with 55 to 70% fewer input tokens on large
+# catalogs.
+AGENT_CHAT_TOOL_LOADING_MODES = ("auto", "always", "never")
+AGENT_CHAT_TOOL_LOADING_DEFAULT = "auto"
+# Automatic loads in parts from this catalog size (compact JSON bytes, about 24,000 tokens).
+# Below it loading saved under 10% per conversation and added a load round.
+AGENT_CHAT_TOOL_LOADING_MIN_BYTES = 96_000
+# Always declared: orientation, discovery, state, the generic service call and approvals.
+AGENT_CHAT_CORE_TOOLS = (
+    "get_capability_summary", "get_overview", "search_entities", "describe_entity", "get_state",
+    "call_service", "find_available_actions", "get_approval_status", "wait_for_approval", "llm__GetDateTime",
+)
+# Groups declared from the start on Voice, where an extra load round is an audible pause.
+AGENT_CHAT_VOICE_PRELOADED_GROUPS = ("device_control",)
+# Deferred groups: id -> (members, directory summary). A member is an exact tool name or a
+# name fragment; exact names are matched before fragments, and fragments in this order (device
+# families first, so get_esphome_automations joins esphome), and a tool matching nothing
+# stays in the starting set, so no tool is ever hidden.
+AGENT_CHAT_TOOL_GROUPS: Mapping[str, tuple[tuple[str, ...], str]] = MappingProxyType({
+    "esphome": (("esphome",), "ESPHome Device Builder: device YAML, validation, builds, flashing, jobs, device logs "
+                              "and diagnostics."),
+    "zigbee": (("zigbee", "radio"), "Zigbee and radio networks: network and device diagnostics, pairing, options, "
+                                    "bindings, reporting and groups."),
+    "dashboards": (("dashboard",), "Lovelace dashboards, their views and cards, and dashboard resources."),
+    "mesa": (("mesa_",), "MESA device-safety profiles, their explanations and control leases."),
+    "device_control": (("intent__", "light__", "fan__", "climate__", "media_player__", "vacuum__",
+                        "assist_satellite__", "homeassistant__GetLiveContext", "recognize_intent", "dry_run_service",
+                        "get_camera_image"),
+                       "Direct device commands: on/off, lights, fans, climate, covers, media players, vacuums, "
+                       "timers, broadcasts, live context, camera snapshots, intent recognition and service dry runs."),
+    "history": (("get_history", "get_statistics", "get_logbook", "recent_activity", "compare_states",
+                 "compare_entities", "watch_entity"),
+                "Past states, long-term statistics, the logbook, recent activity, comparisons and watching an entity."),
+    "calendar_todo": (("_calendar_", "get_calendar", "todo"), "Calendar events and to-do lists: read, create, change and delete."),
+    "automations": (("automation", "script", "scene", "blueprint", "test_trigger", "test_condition", "whatif",
+                     "render_template"),
+                    "Automations, scripts, scenes and blueprints: list, read, create, edit, delete, validate, traces, "
+                    "testing triggers and conditions, what-if checks and template rendering."),
+    "home_structure": (("describe_area", "list_areas", "list_floors", "list_zones", "list_devices", "get_device",
+                        "list_labels", "get_relationships", "list_helpers"),
+                       "Areas, floors, zones, devices, labels, the helper list and relationships between them."),
+    "system": (("get_logs", "get_log_detail", "get_phoenix_diagnostics", "list_integration_log_levels",
+                "set_integration_log_level", "get_system_health", "get_repairs", "check_ha_config", "get_config",
+                "get_notifications", "send_notification", "get_audit_summary", "restart_ha"),
+               "Home Assistant logs, diagnostics, system health, repairs, config check, configuration, "
+               "notifications, the Phoenix audit summary and restart."),
+    "energy": (("energy", "solar"), "Energy dashboard configuration and solar forecast."),
+    "integrations": (("integration", "fix_repair", "remove_device"),
+                     "Integrations: list, add, remove, reload, enable, reconfigure, subentries, repair fixes, and "
+                     "removing devices."),
+    "registry_writes": (("set_entity", "set_area_or_floor", "set_device", "delete_entity", "set_label_or_category"),
+                        "Renaming, moving, enabling, disabling and removing entities, devices, areas, floors, "
+                        "labels and categories."),
+    "files_and_backups": (("list_files", "read_file", "get_yaml_config", "backup"),
+                          "Reading configuration files and YAML, and backups."),
+    "helpers": (("create_helper", "edit_helper", "delete_helper", "helper_settings", "restore_configuration"),
+                "Creating, editing and deleting helpers, helper settings, and restoring configuration versions."),
 })
 # Longest provider error-envelope message shown to an administrator.
 AGENT_CHAT_PROVIDER_DETAIL_CHARS = 300

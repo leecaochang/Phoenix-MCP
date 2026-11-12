@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API key", "model", "LLM", "account", "credit", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["new account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "offline", "local model", "price", "pricing", "billing"], "decision-provider": ["TypeSafe", "JEV", "fast path"] }, "covers": ["frontend_src/components/LlmProviderSettings.tsx", "frontend_src/components/ProviderAddForm.tsx", "frontend_src/components/DecisionProviderSettings.tsx", "custom_components/phoenix_mcp/tool_loading.py", "custom_components/phoenix_mcp/model_selection.py", "custom_components/phoenix_mcp/routing/decision_budget.py"] }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API key", "model", "LLM", "account", "credit", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["new account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "offline", "local model", "price", "pricing", "billing"], "decision-provider": ["TypeSafe", "JEV", "fast path"], "tool-loading": ["load_tools", "deferred tools", "tool search", "tokens", "too many tools", "context"] }, "covers": ["frontend_src/components/LlmProviderSettings.tsx", "frontend_src/components/ProviderAddForm.tsx", "frontend_src/components/DecisionProviderSettings.tsx", "custom_components/phoenix_mcp/tool_loading.py", "custom_components/phoenix_mcp/model_selection.py", "custom_components/phoenix_mcp/routing/decision_budget.py"] }
 ---
 Add the AI accounts Phoenix uses. Each account needs an API key or, for a local model, a server address.
 
@@ -30,6 +30,18 @@ Reloads the provider's list of models. This uses no tokens. On a local Ollama se
 Finds out which effort levels the model supports and whether it can read images, by sending it a few very short requests.
 
 This uses a little credit, so Phoenix asks first. Hover over the button to see when it last ran.
+
+### {{label:settings.toolLoadingLabel}} {#tool-loading}
+
+Decides how Agent Chat, the Voice Agent and AI Task give this account's model the access key's tools.
+
+**{{label:settings.toolLoadingAuto}}** (default) sends a small set of everyday tools and lists the rest by group. The model loads more when a request needs them. Phoenix does this when the access key has a large set of tools, about 75 or more. With fewer, it sends them all.
+
+Loading in parts sends far fewer tokens with each request, with the same results. A request that needs a tool not loaded yet takes one extra step. The Voice Agent starts with the device control tools, so spoken commands don't wait for that step.
+
+**{{label:settings.toolLoadingAlways}}** loads in parts whatever the size. **{{label:settings.toolLoadingNever}}** always sends every tool, except to providers that accept only 128 tools.
+
+Loading never gives the model more access. The list shows only the access key's own tools, and Phoenix checks every call as usual. Home Companion keys always get their full set of tools.
 
 ### Removing an account {#remove-account}
 
@@ -62,7 +74,7 @@ Most providers need only an API key. Some also need to know where your account i
 
 Some plans are for coding tools only: Z.ai's Coding Plan, Xiaomi MiMo's Token Plan, and Alibaba Cloud's Coding Plan and Token Plan. Their terms forbid use from an app such as Home Assistant, and the provider may throttle or block the key. Phoenix warns when you choose one. For Voice, AI Task and Agent Chat, use the provider's pay-as-you-go API.
 
-Groq, Mistral AI and Z.ai accept at most 128 tools per request, and Phoenix applies the same limit to Gemini, Kimi, OpenRouter and Infron. Phoenix gives them a smaller set to start with, and loads more when the model asks.
+Groq, Mistral AI and Z.ai accept at most 128 tools per request, and Phoenix applies the same limit to Gemini, Kimi, OpenRouter and Infron. When the access key has more, Phoenix always loads tools in parts for them, whatever the [Tool loading](guide:#tool-loading) setting.
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 

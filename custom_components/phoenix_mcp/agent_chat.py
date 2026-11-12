@@ -135,7 +135,7 @@ async def async_run_agent_turn(
 
 
     agent_tools = build_agent_tool_list(access_key, data, "chat")
-    loader = _tool_loader(provider, agent_tools)
+    loader = _tool_loader(provider, agent_tools, surface="chat", history=messages)
     system = (
         _build_instructions(access_key, data, base_url, hass)
         + _conversation_behavior_prompt(

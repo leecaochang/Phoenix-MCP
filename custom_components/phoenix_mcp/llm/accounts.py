@@ -34,7 +34,8 @@ from ..provider_constants import (
     AGENT_CHAT_OPENCODE_CONSOLE_MODELS_URL, AGENT_CHAT_OPENROUTER_BASE_URL,
     AGENT_CHAT_SECRETS_STORAGE_KEY, AGENT_CHAT_SECRETS_STORAGE_VERSION,
     AGENT_CHAT_TENCENT_GUANGZHOU_BASE_URL, AGENT_CHAT_TENCENT_SINGAPORE_BASE_URL,
-    AGENT_CHAT_TENCENT_US_BASE_URL, AGENT_CHAT_TOGETHER_BASE_URL, AGENT_CHAT_ZAI_BASE_URL,
+    AGENT_CHAT_TENCENT_US_BASE_URL, AGENT_CHAT_TOGETHER_BASE_URL, AGENT_CHAT_TOOL_LOADING_DEFAULT,
+    AGENT_CHAT_TOOL_LOADING_MODES, AGENT_CHAT_ZAI_BASE_URL,
     AGENT_CHAT_ZAI_CHINA_BASE_URL, AGENT_CHAT_ZAI_CODING_BASE_URL,
 )
 from ..routing.routing_tables import DECISION_TYPESAFE_BASE_URL, DECISION_TYPESAFE_MODEL
@@ -89,6 +90,8 @@ class ProviderConfig:
     thinking_off: str | None = None
     # False when the provider declared that the model takes no effort level.
     effort: bool | None = None
+    # The account's tool-loading setting: auto, always or never (provider_constants).
+    tool_loading: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -620,6 +623,16 @@ class AgentCliStore:
             await self._save()
             return True
 
+    async def set_tool_loading(self, instance_id: str, mode: str) -> bool:
+        """Change one account's tool-loading setting. False if the account is unknown."""
+        async with self._lock:
+            cfg = self._data.get(instance_id)
+            if not isinstance(cfg, dict):
+                return False
+            cfg["tool_loading"] = mode
+            await self._save()
+            return True
+
     async def set_capabilities(
         self, instance_id: str, capabilities: dict, checked_at: str,
     ) -> bool:
@@ -744,6 +757,7 @@ class AgentCliStore:
                 "models_checked_at": catalog.get("checked_at") or None,
                 "base_url": inst.get("base_url", ""),
                 "endpoint_id": inst.get("endpoint_id") or None,
+                "tool_loading": _tool_loading(inst),
                 "capabilities": _with_learned(inst),
                 "capabilities_checked_at": inst.get("capabilities_checked_at") or None,
             })
@@ -792,8 +806,15 @@ class AgentCliStore:
         return ProviderConfig(
             kind=kind, model=model, base_url=base_url, api_key=cfg.get("api_key"),
             endpoint_id=endpoint_id, vision=vision, thinking_off=thinking_off, effort=effort,
+            tool_loading=_tool_loading(cfg),
             decision_routing_revision=str(cfg.get("decision_routing_revision") or "") if purpose == "decision" else "",
         )
+
+
+def _tool_loading(cfg: dict) -> str:
+    """An account's tool-loading setting; anything unrecognized reads as the default."""
+    value = cfg.get("tool_loading")
+    return value if value in AGENT_CHAT_TOOL_LOADING_MODES else AGENT_CHAT_TOOL_LOADING_DEFAULT
 
 
 async def _get_secret_store(hass: HomeAssistant) -> AgentCliStore:

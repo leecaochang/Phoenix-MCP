@@ -1,5 +1,5 @@
 ---
-{"id": "topic.adminApiChat", "title": "Agent Chat Endpoints", "parent": "topic.adminApi", "order": 40, "keywords": ["provider", "AI provider", "account", "model", "chat", "agent turn", "SSE", "stream"], "sectionKeywords": {"providers": ["provider account", "instance", "instance_id"], "provider-kinds": ["Anthropic", "OpenAI", "Claude", "ChatGPT", "Gemini", "Ollama", "OpenRouter", "Infron", "Qwen", "TypeSafe", "JEV", "decision provider", "endpoint_id", "region"], "setup-fields": ["api_key", "base_url", "endpoint_id", "API key"], "list-providers": ["provider_types", "purpose", "capabilities"], "change-provider": ["automatic model", "auto", "model_mode"], "refresh-models": ["refresh", "capabilities"], "probe-model": ["probe", "options", "effort", "vision"], "check-setup": ["probe", "test connection"], "chat": ["agentcli/chat", "turn", "access_key_id"], "chat-options": ["thinking", "effort", "temperature", "max_tokens", "show_thinking"], "chat-images": ["attachments", "image", "JPEG", "PNG", "GIF", "base64"], "events": ["keepalive", "text/event-stream", "Server-Sent Events", "ready", "status", "thinking_delta", "assistant_delta", "focus_declined", "tool_call", "tool_progress", "approval_required", "approval_resolved", "tool_image", "tool_result", "usage", "notice", "continue_required", "error", "messages", "done", "event stream", "SSE"]}, "covers": ["custom_components/phoenix_mcp/agent_chat_views.py", "custom_components/phoenix_mcp/agent_chat.py", "custom_components/phoenix_mcp/agent_turn.py"]}
+{"id": "topic.adminApiChat", "title": "Agent Chat Endpoints", "parent": "topic.adminApi", "order": 40, "keywords": ["provider", "AI provider", "account", "model", "chat", "agent turn", "SSE", "stream"], "sectionKeywords": {"providers": ["provider account", "instance", "instance_id"], "provider-kinds": ["Anthropic", "OpenAI", "Claude", "ChatGPT", "Gemini", "Ollama", "OpenRouter", "Infron", "Qwen", "TypeSafe", "JEV", "decision provider", "endpoint_id", "region"], "setup-fields": ["api_key", "base_url", "endpoint_id", "API key"], "list-providers": ["provider_types", "purpose", "capabilities"], "change-provider": ["automatic model", "auto", "model_mode", "tool_loading"], "refresh-models": ["refresh", "capabilities"], "probe-model": ["probe", "options", "effort", "vision"], "check-setup": ["probe", "test connection"], "chat": ["agentcli/chat", "turn", "access_key_id"], "chat-options": ["thinking", "effort", "temperature", "max_tokens", "show_thinking"], "chat-images": ["attachments", "image", "JPEG", "PNG", "GIF", "base64"], "events": ["keepalive", "text/event-stream", "Server-Sent Events", "ready", "status", "thinking_delta", "assistant_delta", "focus_declined", "tool_call", "tool_progress", "approval_required", "approval_resolved", "tool_image", "tool_result", "usage", "notice", "continue_required", "error", "messages", "done", "event stream", "SSE"]}, "covers": ["custom_components/phoenix_mcp/agent_chat_views.py", "custom_components/phoenix_mcp/agent_chat.py", "custom_components/phoenix_mcp/agent_turn.py"]}
 ---
 Use these endpoints to manage the AI provider accounts Phoenix uses and to run Agent Chat turns from your own code. Every endpoint follows the rules in the [Admin API](guide:topic.adminApi) overview.
 
@@ -88,6 +88,7 @@ Each account in `instances` has these fields. The API key is never among them.
 | `models_checked_at` | When Phoenix last read the model list. |
 | `base_url` | As set up. |
 | `endpoint_id` | As set up. |
+| `tool_loading` | `auto` (default), `always` or `never`. |
 | `capabilities` | Per model: what the provider declares, what a probe found, and options the provider refused in the last 30 days. |
 | `capabilities_checked_at` | When Phoenix last checked capabilities. |
 
@@ -120,14 +121,17 @@ The response is `201` with `{"instance": {...}}`, holding the account fields abo
 |---|---|---|
 | `model` | string | The model to use. Conversation accounts accept any model ID. Decision accounts need one the provider lists now. |
 | `auto` | boolean | `true` follows the provider's model automatically. Decision accounts refuse it. |
+| `tool_loading` | string | `auto`, `always` or `never`: how the account's turns get the access key's tools. Decision accounts refuse it. |
 
-Send `model` or `auto: true`, not both, and no other fields. With `auto: true`, Phoenix reads the model list straight away, so the response shows the model it picked.
+Send `model` or `auto: true`, not both. `tool_loading` can come alone or with either. With `auto: true`, Phoenix reads the model list straight away, so the response shows the model it picked.
 
-The response is `200` with only `{"instance": {"id": ..., "model": ..., "model_mode": ...}}`, not the full account.
+The response is `200` with only `{"instance": {"id": ..., "model": ..., "model_mode": ...}}`, not the full account. When `tool_loading` comes alone, it's `{"instance": {"id": ..., "tool_loading": ...}}`.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
-| 400 | `invalid_request` | `adminError.unknownFields` | The body has fields other than `model` and `auto`. |
+| 400 | `invalid_request` | `adminError.unknownFields` | The body has fields other than `model`, `auto` and `tool_loading`. |
+| 400 | `invalid_request` | `adminError.toolLoadingInvalid` | `tool_loading` isn't `auto`, `always` or `never`. |
+| 400 | `invalid_request` | `adminError.toolLoadingDecision` | `tool_loading` went to a decision account, which uses no tools. |
 | 400 | `invalid_request` | `adminError.booleanRequired` | `auto` isn't a boolean. |
 | 400 | `invalid_request` | `adminError.providerModelOrAuto` | Both `model` and `auto: true` were sent. |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | Neither was sent. |

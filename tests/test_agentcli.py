@@ -7021,3 +7021,75 @@ async def test_a_continued_turn_repeats_the_paused_turns_time_note(hass):
 def test_only_a_real_past_start_is_kept_for_a_continue(body, kept):
     from custom_components.phoenix_mcp.agent_chat_views import _continued_turn_start
     assert (_continued_turn_start(body) is not None) is kept
+
+
+class TestToolLoadingSetting:
+    """Each conversation account chooses whether Phoenix loads its tools in parts.
+
+    The setting travels to every turn through ProviderConfig, so the store, the
+    resolver and the admin PATCH must agree on its three values and its default.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_store_saves_it_and_the_resolver_carries_it(self, hass):
+        from homeassistant.helpers.storage import Store
+        store = llm_accounts.AgentCliStore(Store(hass, 1, "phx_test_agentcli_tool_loading"))
+        iid = await store.add("deepseek", {"api_key": "k", "model": "m", "base_url": "https://d"})
+        assert store.resolve(iid).tool_loading == "auto"
+        assert await store.set_tool_loading(iid, "never") is True
+        assert store.resolve(iid).tool_loading == "never"
+        assert next(i for i in store.list_instances() if i["id"] == iid)["tool_loading"] == "never"
+        assert store.get(iid)["api_key"] == "k" and store.get(iid)["model"] == "m"
+        assert await store.set_tool_loading("nope", "always") is False
+
+    @pytest.mark.asyncio
+    async def test_an_unrecognized_stored_value_reads_as_automatic(self, hass):
+        from homeassistant.helpers.storage import Store
+        store = llm_accounts.AgentCliStore(Store(hass, 1, "phx_test_agentcli_tool_loading_bad"))
+        iid = await store.add("deepseek", {"api_key": "k", "model": "m", "base_url": "https://d", "tool_loading": "sometimes"})
+        assert store.resolve(iid).tool_loading == "auto"
+
+    @pytest.mark.asyncio
+    async def test_patch_sets_it_alone_without_touching_the_model(self, hass):
+        from unittest.mock import AsyncMock
+        secret_store = MagicMock()
+        secret_store.get = MagicMock(return_value={"kind": "deepseek"})
+        secret_store.set_tool_loading = AsyncMock(return_value=True)
+        secret_store.set_model = AsyncMock(return_value=True)
+        view = agent_chat_views.PhoenixAgentCliProviderView()
+        view.hass = hass
+        with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store",
+                           AsyncMock(return_value=secret_store)):
+            resp = await view.patch(_admin_request({"tool_loading": "always"}), instance_id="pid")
+        assert resp.status == 200
+        secret_store.set_tool_loading.assert_awaited_once_with("pid", "always")
+        secret_store.set_model.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("value", ["sometimes", None, True, ""])
+    async def test_patch_refuses_an_unknown_value(self, hass, value):
+        from unittest.mock import AsyncMock
+        secret_store = MagicMock()
+        secret_store.get = MagicMock(return_value={"kind": "deepseek"})
+        secret_store.set_tool_loading = AsyncMock(return_value=True)
+        view = agent_chat_views.PhoenixAgentCliProviderView()
+        view.hass = hass
+        with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store",
+                           AsyncMock(return_value=secret_store)):
+            resp = await view.patch(_admin_request({"tool_loading": value}), instance_id="pid")
+        assert resp.status == 400
+        secret_store.set_tool_loading.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_patch_refuses_a_decision_account_and_saves_nothing(self, hass):
+        from unittest.mock import AsyncMock
+        secret_store = MagicMock()
+        secret_store.get = MagicMock(return_value={"kind": "typesafe"})
+        secret_store.set_tool_loading = AsyncMock(return_value=True)
+        view = agent_chat_views.PhoenixAgentCliProviderView()
+        view.hass = hass
+        with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store",
+                           AsyncMock(return_value=secret_store)):
+            resp = await view.patch(_admin_request({"tool_loading": "never"}), instance_id="pid")
+        assert resp.status == 400
+        secret_store.set_tool_loading.assert_not_awaited()
