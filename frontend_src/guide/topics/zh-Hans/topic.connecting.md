@@ -16,6 +16,8 @@
 
 Phoenix 会显示 Claude Code、Gemini CLI、Antigravity CLI、Codex、Cursor 和 DeepSeek Harness 的确切命令或配置，并为其他 MCP 应用提供一个通用版本。Claude Code 位于 Claude 选项卡，Codex 位于 ChatGPT 选项卡。
 
+Codex 的设置还会把工具超时提高到 330 秒，这样较长的 ESPHome 构建或审批等待不会被中断。
+
 在 **{{label:wizard.methodOAuth}}** 下，Phoenix 会显示 Claude、ChatGPT、VS Code 和 Antigravity 的登录步骤。Claude 选项卡也涵盖 Claude Code，ChatGPT 选项卡涵盖 ChatGPT 桌面应用。
 
 这些说明出现在三个位置：

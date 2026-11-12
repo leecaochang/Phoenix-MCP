@@ -279,6 +279,47 @@ async def test_the_reserved_last_round_is_told_so_and_offered_no_tools(hass: Hom
     assert [bool(tools) for tools in provider.declared] == [True, False]
 
 
+class _PrefixProvider(_Provider):
+    """A provider whose replayed reasoning is bound to the system prompt, tools and history."""
+
+    keeps_prefix_on_final_round = True
+
+    def __init__(self, *calls):
+        super().__init__(*calls)
+        self.options: list = []
+        self.last_messages: list = []
+
+    async def stream_turn(self, session, *, system_prompt, messages, tools, options):
+        self.options.append(options)
+        self.last_messages.append(messages[-1] if messages else None)
+        async for event in super().stream_turn(session, system_prompt=system_prompt, messages=messages,
+                                               tools=tools, options=options):
+            yield event
+
+
+async def test_a_prefix_bound_provider_closes_without_changing_the_prefix(hass: HomeAssistant):
+    """The last round keeps system and tools, switches tool calls off and says so after the history."""
+    catalog = [{"name": "get_state", "description": "d", "inputSchema": {"type": "object", "properties": {}}}]
+    provider = _PrefixProvider([_tool("get_state"), _done("tool_use")], [_text("Done."), _done()])
+    dispatch = AsyncMock(return_value=(
+        {"result": {"content": [{"type": "text", "text": "on"}]}}, "tools/call", "get_state", "allowed"))
+    with patch.object(agent_turn, "dispatch_agent_tool", dispatch), \
+            patch.object(agent_turn, "build_agent_tool_list", return_value=catalog):
+        result = await _run(hass, _data(), provider, max_iterations=2, reserve_final_round=True)
+    assert result.text == "Done."
+    assert provider.systems == ["s", "s"]
+    assert provider.declared[0] and provider.declared[1] == provider.declared[0]
+    assert provider.options == [{}, {"tool_choice": "none"}]
+    assert agent_turn._FINAL_ROUND_SYSTEM.strip() in json.dumps(provider.last_messages[1])
+
+
+async def test_a_first_round_that_is_final_still_offers_no_tools(hass: HomeAssistant):
+    """With no earlier round, nothing replayed is at stake, so the catalog is not re-sent."""
+    provider = _PrefixProvider([_text("Hi."), _done()])
+    await _run(hass, _data(), provider, response_only=True)
+    assert provider.declared == [[]] and provider.options == [{}]
+
+
 async def test_a_final_round_does_not_advance_the_tool_loader(hass: HomeAssistant):
     loader = MagicMock()
     loader.directory.return_value = ""

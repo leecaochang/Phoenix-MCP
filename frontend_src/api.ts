@@ -523,6 +523,9 @@ export interface AgentCliChatBody {
   // existing conversation with no new user message.
   user?: string;
   continue?: boolean;
+  // With continue: the paused turn's own start, as the checkpoint gave it, so the request
+  // keeps the time note the model's earlier reasoning followed.
+  turn_started_at?: string;
   // Images attached to the new user message, as base64 JPEG bytes.
   attachments?: { mime_type: string; data: string }[];
   // One-turn Home-focused override. Valid only alongside a new user message.

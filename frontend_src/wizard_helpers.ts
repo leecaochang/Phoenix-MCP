@@ -120,7 +120,9 @@ export function buildCodexCommand(url: string, serverName: string, envVar: strin
   return `codex mcp add ${serverName} --url ${shellArg(url)} --bearer-token-env-var ${envVar}`;
 }
 export function buildCodexConfig(url: string, serverName: string, envVar: string): string {
-  return `[mcp_servers.${serverName}]\nurl = ${JSON.stringify(url)}\nbearer_token_env_var = ${JSON.stringify(envVar)}`;
+  // Codex ends a tool call at its tool timeout whatever progress arrives; 330 s outlasts
+  // the longest hold Phoenix makes (an ESPHome build wait of up to 300 s).
+  return `[mcp_servers.${serverName}]\nurl = ${JSON.stringify(url)}\nbearer_token_env_var = ${JSON.stringify(envVar)}\ntool_timeout_sec = 330`;
 }
 
 export function buildHarnessConfig(url: string, accessKey: string, accessKeyName: string): string {

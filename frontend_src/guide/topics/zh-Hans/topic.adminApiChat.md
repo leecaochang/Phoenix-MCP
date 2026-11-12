@@ -233,6 +233,7 @@ POST   /api/phoenix-mcp/agentcli/chat
 | `messages` | list | 之前的轮次。Phoenix 不保留转录：从 `messages` 事件中保存列表，并在下一轮次中发回。 |
 | `options` | object | 模型选项。参见[选项](guide:#chat-options)。 |
 | `continue` | boolean | `true` 会恢复在轮次限制处暂停的轮次，不添加新消息。 |
+| `turn_started_at` | string | 与 `continue: true` 一起发送 `continue_required` 中的 `turn_started_at`，让模型看到与暂停前相同的日期和时间。如果它不是带时区的过去 ISO 8601 时间，则会被忽略。 |
 | `language` | string | 命令路由使用的语言。面板始终发送它。 |
 | `log_conversation_id` | string | 在对话日志中把轮次归入一个线程。 |
 
@@ -312,7 +313,7 @@ Phoenix 每 15 秒发送一条 `: keepalive` 注释。流开始后，问题会�
 | `tool_result` | `id`、`name`、`is_error`、`summary` | `summary` 会缩短以供显示。 |
 | `usage` | `input_tokens`、`output_tokens`、`context_tokens`、`cache_read_tokens`、`cache_write_tokens` | 提供商到此轮次为止的总量，仅在报告用量时。 |
 | `notice` | `code`、`message` | `code` 为 `bad_tool_call_retry`、`max_tokens_stop` 或 `empty_turn`。 |
-| `continue_required` | `iterations` | 轮次在限制处暂停。使用 `continue: true` 发送下一个请求。 |
+| `continue_required` | `iterations`、`turn_started_at` | 轮次在限制处暂停。使用 `continue: true` 和这个 `turn_started_at` 发送下一个请求。 |
 | `error` | `code`、`message`；可选 `retryable`、`outcome`、`diagnostic`、`message_params`、`provider_detail`、`provider_code`、`rate_limit`、`refused` | `code` 包括 `cancelled`、`internal`、`kill_switch`、`unauthorized`、`review_changed`、`outcome_unknown`、`output_limit`、`invalid_request` 以及提供商自己的代码。 |
 | `messages` | `messages` | 完整更新后的转录。保留它用于下一轮次。 |
 | `done` | `stop_reason` | 始终是最后一个事件。失败的轮次后，`stop_reason` 为 `error`。 |

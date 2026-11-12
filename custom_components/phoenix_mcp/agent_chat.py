@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime
 from typing import Awaitable, Callable
 
 from aiohttp import ClientSession
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .access_key_store import AccessKeyRecord
 from .agent_recovery import recovery_turn
@@ -65,9 +67,11 @@ async def async_run_agent_turn(
     home_focused: bool = False,
     routing_language: object = None,
     account: tuple[str, str | None] | None = None,
+    turn_started_at: datetime | None = None,
 ) -> list[dict]:
     """Run one user turn to completion, streaming SSE events. Returns updated messages.
-    ``account`` is the chat's provider account and model for a Home Companion request. Phases
+    ``account`` is the chat's provider account and model for a Home Companion request.
+    ``turn_started_at`` is a paused turn's own start, which a continue keeps. Phases
     live in _consume_model_stream and _run_tool_batch; the iteration cap, output budget and
     turn ending stay here.
     """
@@ -145,7 +149,10 @@ async def async_run_agent_turn(
     # The clock goes on the operator's message in each request copy, after the
     # history the next turn re-sends, so that history stays a cached prefix.
     operator = _operator_message_index(messages)
-    time_note = _agentcli_time_context(hass)
+    # A continued turn reuses its start time: the note sits before the reasoning it replays,
+    # and the provider refuses reasoning whose earlier messages changed.
+    started = turn_started_at or dt_util.now()
+    time_note = _agentcli_time_context(hass, started)
     if operator is None:
         system += time_note
     declared = loader.round_tools() if loader is not None else agent_tools
@@ -370,7 +377,7 @@ async def async_run_agent_turn(
     # continue instead of stopping silently. Emitted before the messages frame
     # so the client has the resumable conversation to send back on "Continue".
     if paused_for_continue and not cancel.is_set():
-        await emit("continue_required", {"iterations": iterations})
+        await emit("continue_required", {"iterations": iterations, "turn_started_at": started.isoformat()})
     _LOGGER.debug(
         "agentCLI turn ended: stop_reason=%s saw_text=%s errored=%s paused=%s",
         stop_reason, saw_text, turn_errored, paused_for_continue,

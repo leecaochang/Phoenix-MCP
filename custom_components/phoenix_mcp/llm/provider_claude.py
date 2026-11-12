@@ -39,6 +39,9 @@ class ClaudeProvider:
     def __init__(self, cfg: ProviderConfig) -> None:
         self.cfg = cfg
         self.kind = cfg.kind
+        # Anthropic binds replayed thinking to the system prompt, the tools and every earlier
+        # message, so a closing round keeps all three and is told not to call a tool instead.
+        self.keeps_prefix_on_final_round = cfg.kind == "claude"
         # Filled by list_models: creation time per listed id, for model selection.
         self.model_created: dict[str, float] = {}
         self._model_rows: dict[str, dict] = {}
@@ -242,6 +245,8 @@ class ClaudeProvider:
             "stream": True,
         }
         _apply_claude_options(body, options, self.kind)
+        if options.get("tool_choice") == "none" and tools:
+            body["tool_choice"] = {"type": "none"}
         if (self.cfg.base_url, self.cfg.model) in _CLAUDE_NO_ADAPTIVE:
             _use_enabled_thinking(body)
         try:

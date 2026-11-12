@@ -202,6 +202,8 @@ _MISTRAL_FAMILY_RE = re.compile(r"^(?:mistral|magistral|ministral|devstral|codes
 # OpenCode's free models answer only OpenCode's own app; any other client gets
 # HTTP 403 FreeTierError, so they are never offered or chosen automatically.
 _OPENCODE_FREE_RE = re.compile(r"^big-pickle$|-free$")
+# Z.ai models that think by default and keep earlier rounds' reasoning when asked to.
+_ZAI_THINKING_MODEL_RE = re.compile(r"^glm-(?:4\.[5-9]|[5-9])", re.I)
 
 
 def _filter_opencode_models(models: list[str], *, verified_only: bool = False) -> list[str]:
@@ -626,10 +628,14 @@ class OpenAICompatProvider:
         thinking_on = False
         reasoning_model = False
         if self.definition.reasoning == "deepseek":
+            if thinking is None and effort:
+                # The panel sends a level alone once Check options has listed DeepSeek's
+                # documented "none": that level is Off, and any other turns thinking on.
+                thinking = effort != "none"
             if thinking is not None:
                 body["thinking"] = {"type": "enabled" if thinking else "disabled"}
                 thinking_on = bool(thinking)
-            if thinking_on and effort:
+            if thinking_on and effort and effort != "none":
                 # TOP-LEVEL: a deliberately INVALID value here answers 400, so
                 # the field is parsed and validated rather than ignored. It is a
                 # standard OpenAI parameter, which is why it sits beside
@@ -711,6 +717,10 @@ class OpenAICompatProvider:
                 thinking = False
             elif effort:
                 body["reasoning_effort"] = effort
+            if thinking is None and (effort or (tools and _ZAI_THINKING_MODEL_RE.match(self.cfg.model or ""))):
+                # A level alone (the panel's shape for GLM 5.2 and later) or a tool turn with
+                # no choice at all (Voice, AI Task) means the model's default, which is on.
+                thinking = True
             if thinking is not None:
                 body["thinking"] = {"type": "enabled" if thinking else "disabled"}
                 if thinking and tools:

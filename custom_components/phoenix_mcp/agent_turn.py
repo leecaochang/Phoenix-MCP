@@ -753,9 +753,13 @@ _AGENT_CHAT_ADDENDUM = (
 _TIME_CONTEXT_LEAD = "\n\n[Phoenix note: Home Assistant's local time zone is "
 
 
-def _agentcli_time_context(hass: HomeAssistant) -> str:
-    """State Home Assistant's zone and the current local time for one chat turn."""
-    now = dt_util.now()
+def _agentcli_time_context(hass: HomeAssistant, started: datetime | None = None) -> str:
+    """State Home Assistant's zone and the local time a chat turn started, now unless given.
+
+    A continued turn passes its original start, so the note before replayed reasoning is
+    byte-for-byte the one that reasoning was produced after.
+    """
+    now = started if started is not None else dt_util.now()
     offset = now.strftime("%z")
     offset_label = f"UTC{offset[:3]}:{offset[3:]}" if len(offset) == 5 else "UTC"
     return (
@@ -1634,16 +1638,38 @@ def _headless_stream_failure(run: _HeadlessRun, ev: dict) -> _HeadlessTurnResult
     )
 
 
+def _with_final_note(messages: list[dict]) -> list[dict]:
+    """A request copy whose last user message carries the final-round instruction."""
+    note = _FINAL_ROUND_SYSTEM.strip()
+    if not messages or messages[-1].get("role") != "user":
+        return [*messages, {"role": "user", "content": note}]
+    last = messages[-1]
+    content = last.get("content")
+    if isinstance(content, str):
+        stamped = {**last, "content": f"{content}\n\n{note}"}
+    elif isinstance(content, list):
+        stamped = {**last, "content": [*content, {"type": "text", "text": note}]}
+    else:
+        return [*messages, {"role": "user", "content": note}]
+    return [*messages[:-1], stamped]
+
+
 async def _stream_headless_round(
     run: _HeadlessRun, *, round_system: str, tools: list[dict], final_round: bool, iteration: int,
-    usage: HeadlessUsage | None,
+    usage: HeadlessUsage | None, final_note: bool = False,
 ) -> _HeadlessRound:
-    """Read one model call into a round, leaving its stop reason on ``run``."""
+    """Read one model call into a round, leaving its stop reason on ``run``.
+
+    ``final_note`` closes the turn without changing the prompt's prefix: the instruction rides
+    on a copy of the last user message and tool calls are switched off.
+    """
     model = _HeadlessRound()
     run.stop_reason = "end_turn"
     async for ev in _stream_turn_resilient(
-        run.provider, run.session, system_prompt=round_system, messages=run.messages,
-        tools=tools, options={}, cancel=run.cancel, dispatch_started=run.dispatch_started,
+        run.provider, run.session, system_prompt=round_system,
+        messages=_with_final_note(run.messages) if final_note else run.messages,
+        tools=tools, options={"tool_choice": "none"} if final_note else {}, cancel=run.cancel,
+        dispatch_started=run.dispatch_started,
         write_started=run.write_started, first_reply_seconds=run.first_reply_seconds,
     ):
         etype = ev["type"]
@@ -1938,8 +1964,13 @@ async def _run_headless_turn(
 
     for iteration in range(max_iterations):
         final_round = response_only or run.report_only or (reserve_final_round and iteration == max_iterations - 1)
+        # A provider that binds replayed reasoning to the prefix gets the closing instruction
+        # after the history instead, with the same tools and tool calls switched off. Only
+        # this turn's earlier rounds carry reasoning; finished history is stored without it.
+        keep_prefix = (final_round and iteration > 0
+                       and getattr(provider, "keeps_prefix_on_final_round", False) is True)
         round_system = system
-        if final_round:
+        if final_round and not keep_prefix:
             round_system += _FINAL_ROUND_SYSTEM
         if not check_turn_context(access_key, round_system, run.messages):
             return _HeadlessTurnResult("", run.review_urls, outcome=TURN_OUTPUT_LIMIT)
@@ -1950,8 +1981,8 @@ async def _run_headless_turn(
             if (key := tuple(tool["name"] for tool in definitions)) != tools_key:
                 tools, tools_key = provider.format_tools(definitions), key
         model = await _stream_headless_round(
-            run, round_system=round_system, tools=[] if final_round else tools, final_round=final_round,
-            iteration=iteration, usage=usage,
+            run, round_system=round_system, tools=tools if keep_prefix or not final_round else [],
+            final_round=final_round, iteration=iteration, usage=usage, final_note=keep_prefix,
         )
         if model.ending is not None:
             return model.ending

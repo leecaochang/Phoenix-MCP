@@ -793,6 +793,8 @@ export function AgentCliWindow({
   // Non-null when the last turn paused at the round-cap checkpoint (its value is
   // the round count reached); drives the Continue/Stop control.
   const [pendingContinue, setPendingContinue] = useState<number | null>(null);
+  // The paused turn's start, sent back with Continue so the server repeats its time note.
+  const continueStartedAtRef = useRef<string | null>(null);
   const [mode, setMode] = useState<WinMode>(() => {
     if (saved.minimized) return "min";
     // No stored maximize preference: mobile defaults to full screen.
@@ -1446,7 +1448,9 @@ export function AgentCliWindow({
           model: model || undefined,
           messages: sentMessages,
           log_conversation_id: getLogConversationId(sentMessages.length > 0, persistenceOwner),
-          ...(mode === "continue" ? { continue: true } : { user: text }),
+          ...(mode === "continue"
+            ? { continue: true, ...(continueStartedAtRef.current ? { turn_started_at: continueStartedAtRef.current } : {}) }
+            : { user: text }),
           ...(images.length ? { attachments: images.map((image) => ({ mime_type: image.mimeType, data: image.data })) } : {}),
           options: buildOptions(kind, options, caps),
         },
@@ -1547,6 +1551,7 @@ export function AgentCliWindow({
               // The turn paused at the round-cap checkpoint. Show the
               // Continue/Stop control; the conversation is left resumable.
               setPendingContinue(Number(p.iterations ?? 0) || 0);
+              continueStartedAtRef.current = typeof p.turn_started_at === "string" ? p.turn_started_at : null;
               break;
             case "error":
               setLiveStatus(null);

@@ -16,6 +16,8 @@ The instructions open on OAuth when the key already allows it. Each method lists
 
 Phoenix shows the exact command or configuration for Claude Code, Gemini CLI, Antigravity CLI, Codex, Cursor and DeepSeek Harness, plus a general one for any other MCP app. Claude Code is on the Claude tab, and Codex on the ChatGPT tab.
 
+The Codex setup also raises its tool timeout to 330 seconds, so a long ESPHome build or a wait for approval isn't cut off.
+
 Under **{{label:wizard.methodOAuth}}**, Phoenix shows sign-in steps for Claude, ChatGPT, VS Code and Antigravity. The Claude tab covers Claude Code too, and the ChatGPT tab covers the ChatGPT desktop app.
 
 The instructions appear in three places:

@@ -233,6 +233,7 @@ POST   /api/phoenix-mcp/agentcli/chat
 | `messages` | list | 之前的輪次。Phoenix 不保留逐字稿：從 `messages` 事件中保留清單，並在下一輪次中傳回。 |
 | `options` | object | 模型選項。參見[選項](guide:#chat-options)。 |
 | `continue` | boolean | `true` 會恢復在輪次上限處暫停的輪次，不新增訊息。 |
+| `turn_started_at` | string | 與 `continue: true` 一起傳送 `continue_required` 中的 `turn_started_at`，讓模型看到與暫停前相同的日期和時間。如果它不是帶時區的過去 ISO 8601 時間，則會被忽略。 |
 | `language` | string | 命令路由使用的語言。面板一律傳送它。 |
 | `log_conversation_id` | string | 在對話記錄中把輪次歸入一個執行緒。 |
 
@@ -312,7 +313,7 @@ Phoenix 每 15 秒傳送一條 `: keepalive` 註解。串流開始後，問題�
 | `tool_result` | `id`、`name`、`is_error`、`summary` | `summary` 會縮短以供顯示。 |
 | `usage` | `input_tokens`、`output_tokens`、`context_tokens`、`cache_read_tokens`、`cache_write_tokens` | 提供者到此輪次為止的總量，僅在回報用量時。 |
 | `notice` | `code`、`message` | `code` 為 `bad_tool_call_retry`、`max_tokens_stop` 或 `empty_turn`。 |
-| `continue_required` | `iterations` | 輪次在限制處暫停。使用 `continue: true` 傳送下一個請求。 |
+| `continue_required` | `iterations`、`turn_started_at` | 輪次在限制處暫停。使用 `continue: true` 和這個 `turn_started_at` 傳送下一個請求。 |
 | `error` | `code`、`message`；選填 `retryable`、`outcome`、`diagnostic`、`message_params`、`provider_detail`、`provider_code`、`rate_limit`、`refused` | `code` 包括 `cancelled`、`internal`、`kill_switch`、`unauthorized`、`review_changed`、`outcome_unknown`、`output_limit`、`invalid_request` 以及提供者自己的代碼。 |
 | `messages` | `messages` | 完整更新後的逐字稿。保留它用於下一輪次。 |
 | `done` | `stop_reason` | 一律是最後一個事件。失敗的輪次後，`stop_reason` 為 `error`。 |

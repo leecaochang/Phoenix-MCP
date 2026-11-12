@@ -70,6 +70,11 @@ describe("buildCodexConfig", () => {
     expect(cfg).toContain('url = "http://ha/api/phoenix-mcp"');
     expect(cfg).toContain('bearer_token_env_var = "PHOENIX_ACCESS_KEY_VOICE"');
   });
+
+  it("outlasts Phoenix's longest hold, since Codex ends a call at its tool timeout", () => {
+    const cfg = buildCodexConfig("http://ha/api/phoenix-mcp", "phx-voice", "PHOENIX_ACCESS_KEY_VOICE");
+    expect(cfg).toContain("tool_timeout_sec = 330");
+  });
 });
 
 describe("HTTP client configuration", () => {

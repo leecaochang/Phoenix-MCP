@@ -56,11 +56,25 @@ def payload(response):
     return json.loads(response[0]['result']['content'][0]['text'])
 
 
+class _Catalogs(list):
+    """The tools each model call was offered, with the options it was sent."""
+
+    def __init__(self):
+        super().__init__()
+        self.options = []
+
+
+def closed(catalogs):
+    """Whether the last call closed the turn: Claude keeps its tools and switches tool calls off."""
+    return catalogs.options[-1] == {'tool_choice': 'none'} and catalogs[-1] == catalogs[-2]
+
+
 def scripted(monkeypatch, rounds, *, before=None, transcripts=None, prompts=None):
     provider = llm_provider_claude.ClaudeProvider(llm_accounts.ProviderConfig('claude','test','http://test','key'))
-    catalogs = []
+    catalogs = _Catalogs()
     async def stream(session, *, system_prompt, messages, tools, options):
         catalogs.append(tools)
+        catalogs.options.append(options)
         if prompts is not None:
             prompts.append(system_prompt)
         if transcripts is not None:
@@ -404,7 +418,7 @@ async def test_a_read_answered_in_prose_is_corrected_once_instead_of_discarded(h
         report=payload(await rpc(hass,companion))
     # A plain state read is still reported from the state itself.
     assert report['status']=='completed' and 'temperature: 23' in report['message']
-    assert len(catalogs)==3 and catalogs[-1]==[] and 'did not pass validation' in json.dumps(transcripts[-1])
+    assert len(catalogs)==3 and closed(catalogs) and 'did not pass validation' in json.dumps(transcripts[-1])
     service.assert_not_awaited()
 
 
@@ -466,7 +480,7 @@ async def test_last_round_reports_completed_write_without_another_tool_batch(has
     result = payload(await rpc(hass,companion))
     assert result['status'] == 'completed'
     assert len(calls) == 1 and len(catalogs) == 4
-    assert catalogs[-1] == [] and all(catalogs[:-1])
+    assert closed(catalogs) and all(catalogs)
     assert not companion[0].agent_recovery.blocks(companion[1].id)
 
 
@@ -483,7 +497,7 @@ async def test_final_round_ignoring_no_tools_cannot_act_and_reports_prior_effect
     ])
     result = payload(await rpc(hass,companion))
     assert result['status'] == ('completed' if write_first else 'exhausted')
-    assert len(catalogs) == 4 and catalogs[-1] == []
+    assert len(catalogs) == 4 and closed(catalogs)
     assert len(result['tool_outcomes']) == (4 if write_first else 3)
     assert len(calls) == int(write_first)
     assert not companion[0].agent_recovery.blocks(companion[1].id)
@@ -573,6 +587,7 @@ async def test_owned_ingresses_delegate_original_request_once_without_report_rei
             structure_json={'type':'object','properties':{'temperature':{'type':'number'}}} if surface=='ai_structured' else None)
     if surface=='ai_structured':
         assert json.loads(answer)=={'temperature':23}
+        # The structured pass is a turn of its own whose only round is final: no tools, as before.
         assert catalogs[-1]==[] and len(catalogs)==3
     else:
         assert '23' in answer and 'Invented success' not in answer
@@ -1003,7 +1018,7 @@ async def test_invalid_count_report_gets_one_tools_free_correction(hass, compani
         report = payload(await rpc(hass, companion, args={'request': 'How many lights in my house?'}))
     assert report['status'] == 'completed' and 'Matching light entities in your permitted scope: 1.' in report['message']
     assert '999' not in report['message'] and report['execution'] == 'not_attempted'
-    assert len(catalogs) == 3 and catalogs[-1] == []
+    assert len(catalogs) == 3 and closed(catalogs)
     assert 'did not pass validation' in json.dumps(transcripts[-1])
     service.assert_not_awaited()
     assert not companion[0].agent_recovery.records(companion[1].id)
@@ -1016,7 +1031,7 @@ async def test_count_report_correction_cannot_dispatch_or_repeat(hass, companion
         report = payload(await rpc(hass, companion, args={'request': 'How many lights in my house?'}))
     assert report['status'] in {'invalid_output', 'exhausted'}
     assert report['execution'] == 'not_attempted'
-    assert len(catalogs) == 3 and catalogs[-1] == []
+    assert len(catalogs) == 3 and closed(catalogs)
     service.assert_not_awaited()
     assert not companion[0].agent_recovery.records(companion[1].id)
 

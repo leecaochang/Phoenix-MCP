@@ -238,6 +238,7 @@ class PhoenixAgentCliChatView(PhoenixView):
                 home_focused=settings.agentcli_home_focused,
                 routing_language=body.get("language") if body.get("continue") is not True else None,
                 account=(instance_id, body.get("model") or None),
+                turn_started_at=_continued_turn_start(body),
             )
         except Exception:  # never leak internals to the client
             _LOGGER.exception("agentCLI turn failed")
@@ -249,6 +250,24 @@ class PhoenixAgentCliChatView(PhoenixView):
             except (ConnectionResetError, ClientError, RuntimeError):
                 pass
         return cast(web.Response, resp)
+
+
+def _continued_turn_start(body: dict) -> datetime | None:
+    """The paused turn's own start a continue sends back, or None to start the clock now.
+
+    Only a timezone-aware time that is not in the future is kept; anything else falls back to
+    now, which costs the replayed reasoning on providers that bind it to the earlier messages.
+    """
+    raw = body.get("turn_started_at")
+    if body.get("continue") is not True or not isinstance(raw, str) or len(raw) > 64:
+        return None
+    try:
+        started = parse_datetime(raw)
+    except ValueError:
+        return None
+    if started is None or started.tzinfo is None or started > utcnow():
+        return None
+    return started
 
 
 async def _validate_base_url(

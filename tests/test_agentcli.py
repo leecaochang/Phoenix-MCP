@@ -6713,20 +6713,51 @@ async def test_ollama_show_supplies_thinking_levels():
     assert caps["qwen3.8:27b"]["effort_levels"] == ["low", "medium", "xhigh"]
 
 
+_PRESERVED = {"type": "enabled", "clear_thinking": False}
+
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("options", "thinking", "effort"), [
-    ({"thinking": True, "effort": "low"}, {"type": "enabled", "clear_thinking": False}, "low"),
-    ({"thinking": True, "effort": "none"}, {"type": "disabled"}, None),
-    ({"thinking": False}, {"type": "disabled"}, None),
+@pytest.mark.parametrize(("model", "options", "thinking", "effort"), [
+    # The panel's shapes: a level alone for GLM 5.2 and later, with "none" as Off.
+    ("glm-5.3", {"effort": "low"}, _PRESERVED, "low"),
+    ("glm-5.2", {"effort": "none"}, {"type": "disabled"}, None),
+    # Voice and AI Task send no options: the model's default, on, keeping earlier reasoning.
+    ("glm-5.3", {}, _PRESERVED, None),
+    ("glm-4.7", {}, _PRESERVED, None),
+    # An older model without default thinking gets nothing it did not ask for.
+    ("glm-4-32b-0414-128k", {}, None, None),
+    # The boolean shape older models' panels send.
+    ("glm-5.1", {"thinking": True}, _PRESERVED, None),
+    ("glm-5.1", {"thinking": False}, {"type": "disabled"}, None),
 ])
-async def test_zai_sends_effort_beside_the_thinking_switch(options, thinking, effort):
+async def test_zai_keeps_preserved_thinking_on_every_shape_the_callers_send(model, options, thinking, effort):
     body = _sse('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}', "data: [DONE]")
     session = _FakeSession(_FakeResp(200, body))
-    provider = OpenAICompatProvider(ProviderConfig(kind="zai", model="glm-5.2", base_url="https://z", api_key="k"))
+    provider = OpenAICompatProvider(ProviderConfig(kind="zai", model=model, base_url="https://z", api_key="k"))
     await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[{"type": "function"}],
                                         options=options))
     sent = session.calls[-1][1]["json"]
-    assert sent["thinking"] == thinking and sent.get("reasoning_effort") == effort
+    assert sent.get("thinking") == thinking and sent.get("reasoning_effort") == effort
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("options", "thinking", "effort", "capped"), [
+    # After Check options lists DeepSeek's "none", the panel sends a level alone.
+    ({"effort": "none"}, {"type": "disabled"}, None, True),
+    ({"effort": "max"}, {"type": "enabled"}, "max", False),
+    ({"thinking": True, "effort": "low"}, {"type": "enabled"}, "low", False),
+    ({"thinking": False}, {"type": "disabled"}, None, True),
+    ({}, None, None, False),
+])
+async def test_deepseek_honours_a_level_sent_without_the_switch(options, thinking, effort, capped):
+    body = _sse('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}', "data: [DONE]")
+    session = _FakeSession(_FakeResp(200, body))
+    provider = OpenAICompatProvider(ProviderConfig(kind="deepseek", model="deepseek-flash", base_url="https://d", api_key="k"))
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[{"type": "function"}],
+                                        options=options))
+    sent = session.calls[-1][1]["json"]
+    assert sent.get("thinking") == thinking and sent.get("reasoning_effort") == effort
+    assert ("max_tokens" in sent) is capped
 
 
 @pytest.mark.asyncio
@@ -6804,3 +6835,71 @@ def test_a_rejection_tells_the_agent_what_the_operator_was_looking_at():
     assert "Manage entity registry" in body["review_showed"]["why_approval"]
     assert "Hidden Automation" not in json.dumps(body)
     assert "saw when deciding" in body["review_showed"]["note"]
+
+
+@pytest.mark.asyncio
+async def test_claude_closes_a_turn_with_its_tools_and_tool_calls_switched_off():
+    """The closing round keeps the tool list, part of the prefix replayed thinking is bound to."""
+    done = _claude_sse({"type": "message_start", "message": {"usage": {"input_tokens": 1}}},
+                       {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}},
+                       {"type": "message_stop"})
+    session = _SeqSession(_FakeResp(200, done))
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-sonnet-5-5", base_url="https://a", api_key="k"))
+    assert provider.keeps_prefix_on_final_round is True
+    tools = [{"name": "get_state", "description": "d", "input_schema": {"type": "object"}}]
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[{"role": "user", "content": "hi"}],
+                                        tools=tools, options={"tool_choice": "none"}))
+    assert session.bodies[0]["tool_choice"] == {"type": "none"}
+    assert session.bodies[0]["tools"] == tools
+    minimax = ClaudeProvider(ProviderConfig(kind="minimax", model="MiniMax-M3", base_url="https://m/anthropic", api_key="k"))
+    assert minimax.keeps_prefix_on_final_round is False
+
+
+@pytest.mark.asyncio
+async def test_a_continued_turn_repeats_the_paused_turns_time_note(hass):
+    """Replayed reasoning followed the original note, and a provider refuses it after a changed one."""
+    provider = _ScriptedProvider([
+        [{"type": llm_base.EV_TOOL, "id": "t1", "name": "get_state", "input": {}}, _done("tool_use")],
+        [{"type": llm_base.EV_TEXT, "text": "Done."}, _done("end_turn")],
+    ])
+    fake_dispatch = AsyncMock(return_value=(
+        {"result": {"content": [{"type": "text", "text": "ok"}]}}, "m", "r", "allowed"))
+    started = datetime(2026, 11, 1, 9, 0, 0, tzinfo=timezone.utc)
+    later = datetime(2026, 11, 1, 9, 7, 30, tzinfo=timezone.utc)
+    first: list = []
+    second: list = []
+
+    async def run(messages, events, now, **extra):
+        async def emit(name, payload):
+            events.append((name, payload))
+        with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+             patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+             patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+             patch("custom_components.phoenix_mcp.llm.base.dt_util.now", return_value=now):
+            return await async_run_agent_turn(
+                hass=hass, data=_loop_data(), access_key=MagicMock(), provider=provider,
+                session=MagicMock(), messages=messages, options={}, client_ip="agentcli",
+                base_url="http://h", emit=emit, cancel=asyncio.Event(), max_iterations=1, **extra)
+
+    held = await run([{"role": "user", "content": "Check it."}], first, started)
+    [checkpoint] = [payload for name, payload in first if name == "continue_required"]
+    assert checkpoint["turn_started_at"] == started.isoformat()
+    from custom_components.phoenix_mcp.agent_chat_views import _continued_turn_start
+    resumed = _continued_turn_start({"continue": True, "turn_started_at": checkpoint["turn_started_at"]})
+    await run(held, second, later, turn_started_at=resumed)
+    operator_then = provider.sent_messages[0][0]["content"]
+    operator_now = provider.sent_messages[1][0]["content"]
+    assert operator_now == operator_then and "09:07:30" not in operator_now
+
+
+@pytest.mark.parametrize(("body", "kept"), [
+    ({"continue": True, "turn_started_at": "2026-11-01T09:00:00+00:00"}, True),
+    ({"continue": True, "turn_started_at": "2026-11-12T09:00:00"}, False),
+    ({"continue": True, "turn_started_at": "2999-01-01T00:00:00+00:00"}, False),
+    ({"continue": True, "turn_started_at": "\ud800"}, False),
+    ({"continue": True, "turn_started_at": 12}, False),
+    ({"turn_started_at": "2026-11-12T09:00:00+00:00"}, False),
+])
+def test_only_a_real_past_start_is_kept_for_a_continue(body, kept):
+    from custom_components.phoenix_mcp.agent_chat_views import _continued_turn_start
+    assert (_continued_turn_start(body) is not None) is kept

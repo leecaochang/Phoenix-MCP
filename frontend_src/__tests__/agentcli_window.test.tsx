@@ -1322,7 +1322,7 @@ describe("AgentCliWindow streaming", () => {
       .mockImplementationOnce(async (_body, onEvent: (n: string, p: unknown) => void) => {
         onEvent("tool_call", { id: "tc1", name: "get_history", arguments: {} });
         onEvent("tool_result", { id: "tc1", name: "get_history", is_error: false, summary: "…" });
-        onEvent("continue_required", { iterations: 20 });
+        onEvent("continue_required", { iterations: 20, turn_started_at: "2026-11-01T09:00:00+00:00" });
         onEvent("messages", { messages: [{ role: "user", content: "why" }, { role: "assistant", content: "looking" }] });
         onEvent("done", { stop_reason: "tool_use" });
       })
@@ -1353,6 +1353,8 @@ describe("AgentCliWindow streaming", () => {
     const secondBody = agentCliChat.mock.calls[1][0] as Record<string, unknown>;
     expect(secondBody.continue).toBe(true);
     expect(secondBody.user).toBeUndefined();
+    // The paused turn's start goes back, so the server repeats the time note its reasoning followed.
+    expect(secondBody.turn_started_at).toBe("2026-11-01T09:00:00+00:00");
     // The held conversation from the paused turn is re-sent.
     expect((secondBody.messages as unknown[]).length).toBe(2);
     // The resumed answer streams in, and the checkpoint control is gone.
