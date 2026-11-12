@@ -687,6 +687,42 @@ async def test_an_unknown_finish_reason_is_malformed(finish):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "finish"), [("grok", "end_turn"), ("together", "eos")])
+async def test_a_documented_natural_end_counts_as_stop(kind, finish):
+    events = await _events(_provider(kind), _frame({"content": "hello!!!"}, finish=finish))
+    assert events[-1]["type"] == EV_DONE and events[-1]["stop_reason"] == "end_turn"
+    # Elsewhere the same value stays unknown.
+    events = await _events(_provider("chatgpt"), _frame({"content": "hello!!!"}, finish=finish))
+    assert _failure(events) == _MALFORMED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["together", "fireworks"])
+async def test_a_legacy_function_call_finish_counts_as_tool_calls_only_with_calls(kind):
+    call = _frame({"tool_calls": [_tool(arguments="{}")]}, finish="function_call")
+    events = await _events(_provider(kind), call)
+    assert [e["name"] for e in events if e["type"] == EV_TOOL] == ["t"]
+    assert events[-1]["stop_reason"] == "tool_use"
+    events = await _events(_provider(kind), _frame({"content": "hello!!!"}, finish="function_call"))
+    assert _failure(events) == _MALFORMED
+    events = await _events(_provider("chatgpt"), call)
+    assert EV_DONE not in _types(events)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("error", "expected"), [
+    ({"type": "upstream_error", "message": "x"}, ("provider_transient", True)),
+    ({"type": "gateway_error", "upstream_status": 503, "message": "x"}, ("provider_transient", True)),
+    ({"type": "invalid_request_error", "message": "x"}, ("provider_blocked", False)),
+])
+async def test_an_error_inside_the_delta_is_classified_like_a_top_level_one(error, expected):
+    events = await _events(_provider("tencent"), _frame({"content": "hi", "error": error}))
+    assert _failure(events) == expected
+    events = await _events(_provider("tencent"), "data: " + json.dumps({"error": error}))
+    assert _failure(events) == expected
+
+
+@pytest.mark.asyncio
 async def test_repetition_truncation_counts_as_the_length_limit():
     events = await _events(_provider("mimo"), _frame({"content": "hello!!!"}, finish="repetition_truncation"))
     assert events[-1]["type"] == EV_DONE and events[-1]["stop_reason"] == "max_tokens"

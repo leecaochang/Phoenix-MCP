@@ -316,7 +316,7 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         _definition("gemini", "Gemini", AGENT_CHAT_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini",
                     tool_stream="gemini", max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
         _definition(
-            "grok", "Grok", AGENT_CHAT_GROK_BASE_URL,
+            "grok", "Grok", AGENT_CHAT_GROK_BASE_URL, include_usage=True,
             fields=(_region_field(_GROK_ENDPOINTS), _API_KEY_FIELD), endpoints=_GROK_ENDPOINTS,
         ),
         _definition("groq", "Groq", AGENT_CHAT_GROQ_BASE_URL, include_usage=True,
@@ -326,7 +326,7 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
             fields=(_region_field(_KIMI_ENDPOINTS), _API_KEY_FIELD), endpoints=_KIMI_ENDPOINTS,
             max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST,
         ),
-        _definition("meta", "Meta", AGENT_CHAT_META_BASE_URL, reasoning="meta", model_filter="meta"),
+        _definition("meta", "Meta", AGENT_CHAT_META_BASE_URL, include_usage=True, reasoning="meta", model_filter="meta"),
         _definition("minimax", "MiniMax", AGENT_CHAT_MINIMAX_BASE_URL, adapter="anthropic",
                     fields=(_region_field(_MINIMAX_ENDPOINTS), _API_KEY_FIELD), endpoints=_MINIMAX_ENDPOINTS),
         _definition(
@@ -341,7 +341,7 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         ),
         _definition(
             "tencent", "Tencent Cloud TokenHub", AGENT_CHAT_TENCENT_SINGAPORE_BASE_URL,
-            fields=(_TENCENT_ENDPOINT_FIELD, _API_KEY_FIELD), endpoints=_TENCENT_ENDPOINTS,
+            fields=(_TENCENT_ENDPOINT_FIELD, _API_KEY_FIELD), endpoints=_TENCENT_ENDPOINTS, include_usage=True,
             reasoning="probed_effort", model_filter="tencent",
         ),
         _definition(

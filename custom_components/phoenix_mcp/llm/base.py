@@ -10,7 +10,7 @@ import functools
 import json
 import logging
 import re
-from typing import Any, AsyncIterator, Awaitable, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable, NoReturn
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
 from homeassistant.util import dt as dt_util
@@ -344,12 +344,14 @@ _PROVIDER_BILLING: dict[str, tuple[frozenset[str], tuple[str, ...]]] = {
              ("used all available credits", "monthly spending limit", "doesn't have any credits")),
     "groq": (frozenset({"blocked_api_access"}), ()),
     "fireworks": (frozenset(), ("is suspended",)),
-    "opencode": (frozenset({"creditserror", "monthlylimiterror", "userlimiterror"}), ()),
+    # A Console policy budget answers 429 until it resets monthly or an owner raises it.
+    "opencode": (frozenset({"creditserror", "monthlylimiterror", "userlimiterror"}), ("policy budget exceeded",)),
     "openrouter": (frozenset({"openrouter_credits", "openrouter_key_limit"}), ("key limit exceeded",)),
     "ollama_cloud": (frozenset(), ("requires a subscription",)),
     # Infron's free-tier balance refusal is an HTTP 429 with only a generic type, so the sentence names it.
     "infron": (frozenset({"insufficient_user_quota"}), ("current credits have been used up", "free model requires")),
-    "zai": (frozenset({"1113", "1309"}), ()),
+    # 1314: the enterprise package expired (sent as HTTP 429).
+    "zai": (frozenset({"1113", "1309", "1314"}), ()),
     "tencent": (frozenset({"403004", "401007", "401008", "failedoperation.servicestoparrears",
                            "failedoperation.resourcepackexhausted", "failedoperation.freeresourcepackexhausted"}), ()),
 }
@@ -368,11 +370,16 @@ _PROVIDER_NON_RETRYABLE: dict[str, frozenset[str]] = {
 # The same, for a provider whose errors carry only a sentence.
 _PROVIDER_NON_RETRYABLE_PHRASES: dict[str, tuple[str, ...]] = {
     "infron": ("daily limit exceeded",),
+    # Kimi's organization tokens-per-day limit, which resets the next day.
+    "kimi": ("tpd limit reached",),
+    # DashScope's plan windows ("hour/week/month allocated quota exceeded").
+    "qwen": ("hour allocated quota exceeded", "week allocated quota exceeded", "month allocated quota exceeded"),
 }
 # Refusals of this request that the status alone misnames: Z.ai's model outside
 # the plan, and OpenCode's free models, which answer only OpenCode's own app.
 _PROVIDER_REJECTED: dict[str, frozenset[str]] = {
-    "zai": frozenset({"1311"}),
+    # 1311: a model outside the plan; 1315: a key limited to the enterprise coding package.
+    "zai": frozenset({"1311", "1315"}),
     "opencode": frozenset({"freetiererror"}),
 }
 _RETRY_DELAY = re.compile(r"(\d{1,6})(?:\.\d+)?s")
@@ -642,6 +649,12 @@ def _total_provider_response(parse: Callable) -> Callable:
 _TRANSIENT_STREAM_STATUSES = frozenset({"408", "429", "500", "502", "503", "504", "529"})
 _TRANSIENT_STREAM_CODES = frozenset({
     "overloaded_error", "rate_limit_error", "server_error", "internal_server_error", "rate_limit_exceeded",
+    # Anthropic's internal error and timeout, which its errors page says to retry.
+    "api_error", "timeout_error",
+    # Meta's 503 codes, "always retryable", and its mid-stream shutdown.
+    "server_shutting_down", "service_overloaded", "backend_unavailable",
+    # TokenHub's failure of the model behind it (its documented frame carries only a type).
+    "upstream_error",
     # OpenRouter's typed categories (error.metadata.error_type).
     "provider_unavailable", "provider_overloaded", "timeout", "server", "rate_limit",
 })
@@ -654,7 +667,9 @@ def _transient_stream_error(error: dict) -> bool:
     metadata: dict = given if isinstance(given, dict) else {}
     return (code in _TRANSIENT_STREAM_CODES
             or (re.fullmatch(r"\d{3}(?:\d{3})?", code) is not None and code[:3] in _TRANSIENT_STREAM_STATUSES)
-            or str(metadata.get("error_type") or "").strip().lower() in _TRANSIENT_STREAM_CODES)
+            or str(metadata.get("error_type") or "").strip().lower() in _TRANSIENT_STREAM_CODES
+            # TokenHub names the status of the model behind it.
+            or str(error.get("upstream_status") or "").strip() in _TRANSIENT_STREAM_STATUSES)
 
 
 def _provider_object(payload: str) -> dict:
@@ -662,11 +677,19 @@ def _provider_object(payload: str) -> dict:
     if not isinstance(obj, dict):
         raise _ProviderResponseError()
     feedback = obj.get("promptFeedback")
+    if isinstance(feedback, dict) and feedback.get("blockReason"):
+        raise _ProviderResponseError("provider_blocked", retryable=False)
     error = obj.get("error")
-    if (isinstance(feedback, dict) and feedback.get("blockReason")) or (
-        isinstance(error, dict) and str(error.get("code") or error.get("type")) in
-        {*_NON_RETRYABLE_ERROR_CODES, *_DEFAULT_BILLING_CODES, "content_filter", "content_policy_violation"}
-    ):
+    if error:
+        _raise_stream_error(error)
+    return obj
+
+
+def _raise_stream_error(error: Any) -> NoReturn:
+    """Raise the failure an error object inside a 200 stream names; never returns."""
+    if isinstance(error, dict) and str(error.get("code") or error.get("type")) in {
+        *_NON_RETRYABLE_ERROR_CODES, *_DEFAULT_BILLING_CODES, "content_filter", "content_policy_violation",
+    }:
         raise _ProviderResponseError("provider_blocked", retryable=False)
     if isinstance(error, dict) and _transient_stream_error(error):
         raise _ProviderResponseError("provider_transient")
@@ -675,11 +698,9 @@ def _provider_object(payload: str) -> dict:
         # (an undeclared tool, unparseable arguments). The model erred, not a
         # policy: nothing ran, and a fresh sample usually succeeds.
         raise _ProviderResponseError("bad_tool_call")
-    if error:
-        # Unknown HTTP-200 errors are deliberate upstream refusals, not a reason
-        # to replay a request. The content itself must never become diagnostics.
-        raise _ProviderResponseError("provider_blocked", retryable=False)
-    return obj
+    # Unknown HTTP-200 errors are deliberate upstream refusals, not a reason
+    # to replay a request. The content itself must never become diagnostics.
+    raise _ProviderResponseError("provider_blocked", retryable=False)
 
 
 def _valid_tool_call(call_id: Any, name: Any, arguments: Any) -> bool:

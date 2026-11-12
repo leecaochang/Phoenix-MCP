@@ -18,7 +18,7 @@ from .base import (
     _invalid_tool_calls, _invalid_tools_error, _is_expired, _json_error_hint,
     _merged_whole_arguments, _MISTRAL_RATE_LIMIT_HEADER_FIELDS, _model_result_text, _norm,
     _infron_capabilities, _norm_stop, _ollama_capabilities, _openrouter_capabilities, _parse_provider_error,
-    _PROBE_TIMEOUT, _provider_object, _provider_tool, _ProviderResponseError,
+    _PROBE_TIMEOUT, _provider_object, _provider_tool, _ProviderResponseError, _raise_stream_error,
     _rate_limit_headers, _read_json, _REFUSAL_STATUSES, _refused_option,
     _REPLAY_REASONING_KINDS, _RETRY_AFTER_HEADER_FIELDS, _retry_transient, _RETRYABLE_STATUSES,
     _silent_stream_error, _sse_lines, _ThinkSplitter, _tool_call_problem,
@@ -840,7 +840,7 @@ class OpenAICompatProvider:
 
     @_total_provider_response
     async def _parse(self, resp: Any, show_thinking: bool) -> AsyncIterator[dict]:
-        stream = _ChatStream(self.definition.tool_stream == "gemini")
+        stream = _ChatStream(self.definition.tool_stream == "gemini", self.kind)
         async for line in _sse_lines(resp):
             payload = _sse_payload(line)
             if not payload:
@@ -949,7 +949,8 @@ _CheckedCall = tuple[Any, Any, Any, str | None]
 class _ChatStream:
     """What one Chat Completions stream has accumulated so far."""
 
-    def __init__(self, gemini: bool) -> None:
+    def __init__(self, gemini: bool, kind: str = "") -> None:
+        self.kind = kind
         self.text_parts: list[str] = []
         # The providers in _REPLAY_REASONING_KINDS retain reasoning_content verbatim
         # with the assistant tool call on the next round. Other compatible
@@ -1032,6 +1033,9 @@ def _chunk_choice(chunk: dict) -> tuple[dict, dict] | None:
         raise _ProviderResponseError()
     if delta.get("refusal") or choice.get("finish_reason") == "content_filter":
         raise _ProviderResponseError("provider_blocked", retryable=False)
+    if delta.get("error"):
+        # TokenHub documents its in-stream error inside the delta as well as at the top level.
+        _raise_stream_error(delta["error"])
     return choice, delta
 
 
@@ -1128,6 +1132,16 @@ def _merge_tool_fragment(tc: Any, stream: _ChatStream) -> None:
                         else slot["args"] + fn["arguments"])
 
 
+# Finish reasons a provider documents under another name: xAI's end_turn and
+# Together's eos end a reply naturally; Together and Fireworks list the legacy
+# function_call beside tool_calls (with no call, _refuse_unusable_end refuses it).
+_FINISH_ALIASES: dict[str, dict[str, str]] = {
+    "grok": {"end_turn": "stop"},
+    "together": {"eos": "stop", "function_call": "tool_calls"},
+    "fireworks": {"function_call": "tool_calls"},
+}
+
+
 def _settle_finish(stream: _ChatStream) -> None:
     """Refuse a finish reason that means failure and normalize the rest."""
     if stream.finish in _FINISH_FAILURES:
@@ -1136,6 +1150,7 @@ def _settle_finish(stream: _ChatStream) -> None:
     if stream.finish == "repetition_truncation":
         # MiMo cut a degenerate repetition short: the output stopped early.
         stream.finish = "length"
+    stream.finish = _FINISH_ALIASES.get(stream.kind, {}).get(stream.finish, stream.finish)
     if stream.gemini and stream.finish == "stop" and stream.calls:
         # Gemini ends a tool-call response with "stop" rather than "tool_calls".
         stream.finish = "tool_calls"

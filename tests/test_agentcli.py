@@ -381,13 +381,13 @@ async def test_openai_usage_chunk_with_empty_choices_reports_usage():
 @pytest.mark.parametrize(("kind", "expects_flag"), [
     ("chatgpt", True), ("deepseek", True), ("openrouter", True), ("kimi", True),
     ("groq", True), ("ollama", True), ("ollama_cloud", True),
-    ("gemini", False), ("grok", False), ("mistral", False), ("nvidia", False), ("meta", False),
-    ("zai", False),
+    ("gemini", False), ("grok", True), ("mistral", False), ("nvidia", False), ("meta", True),
+    ("zai", False), ("tencent", True),
     ("together", False), ("cerebras", False), ("fireworks", False), ("qwen", True),
 ])
 async def test_stream_options_include_usage_only_for_curated_kinds(kind, expects_flag):
     # OpenAI and Ollama omit streaming usage unless asked; DeepSeek, OpenRouter, Kimi,
-    # Groq, and Qwen document accepting the flag. Everyone else must NOT get it (an unrecognized
+    # Groq, Qwen, xAI, Meta and TokenHub document accepting the flag. Everyone else must NOT get it (an unrecognized
     # stream_options could reject the whole request there).
     body = _sse("data: [DONE]")
     cfg = ProviderConfig(kind=kind, model="m", base_url="https://h", api_key="k")
@@ -5067,6 +5067,27 @@ async def test_explicit_transient_sse_error_is_distinct_from_policy_block():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("error_type", "code", "retryable"), [
+    # Anthropic's errors page: retry an internal error or a timeout.
+    ("api_error", "provider_transient", True),
+    ("timeout_error", "provider_transient", True),
+    ("invalid_request_error", "provider_blocked", False),
+])
+async def test_claude_mid_stream_errors_are_classified_by_type(error_type, code, retryable):
+    provider = ClaudeProvider(ProviderConfig("claude", "m", "http://h", "k"))
+    body = _sse(f'data: {{"type":"error","error":{{"type":"{error_type}","message":"x"}}}}')
+    events = await _collect(provider.stream_turn(_FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
+    assert (events[-1]["code"], events[-1]["retryable"]) == (code, retryable)
+
+
+@pytest.mark.parametrize("code", ["server_shutting_down", "service_overloaded", "backend_unavailable"])
+def test_meta_mid_stream_unavailability_is_transient(code):
+    with pytest.raises(llm_base._ProviderResponseError) as raised:
+        llm_base._provider_object(json.dumps({"error": {"code": code, "message": "x"}}))
+    assert raised.value.code == "provider_transient" and raised.value.retryable is True
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("arguments", [None, False, [], {}, 0, "[]", "false", "null"])
 async def test_non_object_tool_input_never_becomes_an_empty_action(arguments):
     provider = OpenAICompatProvider(ProviderConfig("deepseek", "m", "http://h", "k"))
@@ -6251,6 +6272,15 @@ async def test_timeouts_and_overload_are_retryable_on_every_adapter(status):
     ("zai", 429, {"code": "1308", "message": "Usage limit reached for 5 hour. Resets at 18:00"}, "rate_limit", False),
     ("zai", 429, {"code": "1302", "message": "Rate limit reached"}, "rate_limit", True),
     ("zai", 429, {"code": "1311", "message": "Your plan does not include this model"}, "provider_rejected", False),
+    ("zai", 429, {"code": "1314", "message": "Your enterprise package has expired"}, "quota", False),
+    ("zai", 429, {"code": "1315", "message": "This key is limited to the coding package"}, "provider_rejected", False),
+    ("opencode", 429, {"message": "Upstream request failed: Policy budget exceeded"}, "quota", False),
+    ("kimi", 429, {"type": "rate_limit_reached_error",
+                   "message": "Organization-level TPD limit reached, please try again tomorrow"}, "rate_limit", False),
+    ("kimi", 429, {"type": "rate_limit_reached_error", "message": "Your RPM rate limit reached"}, "rate_limit", True),
+    ("qwen", 429, {"code": "Throttling.AllocationQuota", "message": "Hour allocated quota exceeded."}, "rate_limit", False),
+    ("qwen", 429, {"code": "Throttling.AllocationQuota", "message": "Month allocated quota exceeded."}, "rate_limit", False),
+    ("qwen", 429, {"code": "Throttling.RateQuota", "message": "Requests rate limit exceeded"}, "rate_limit", True),
     ("tencent", 429, {"code": "429004", "message": "daily token limit"}, "rate_limit", False),
     ("tencent", 429, {"code": "429001", "message": "rate limit"}, "rate_limit", True),
 ])
