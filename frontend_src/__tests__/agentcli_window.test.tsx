@@ -508,7 +508,8 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
   });
   it("gemini: Google's per-model thinking levels, never temperature", () => {
     const table: Record<string, string[]> = {
-      "gemini-2.5-flash": ["none", "low", "medium", "high"],
+      // Routed by Google to 3.5 Flash-Lite, which cannot turn reasoning off.
+      "gemini-2.5-flash": ["low", "medium", "high"],
       "gemini-2.5-pro": ["low", "medium", "high"],
       "gemini-2.5-flash-lite": ["none", "low", "medium", "high"],
       "gemini-3-flash-preview": ["minimal", "low", "medium", "high"],
@@ -561,6 +562,17 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
     expect(buildOptions("grok", { ...base, effort: "none" }, g43).effort).toBe("none");
     expect(modelCaps("grok", "grok-4.7", false).defaultLevel).toBe("high");
     expect(modelCaps("grok", "grok-4.20-multi-agent", false).thinking).toEqual([]);
+  });
+  it("meta: Ember joins Wonder at max; each model starts at Meta's own default", () => {
+    for (const model of ["muse-wonder-1.0", "muse-ember-1.0"]) {
+      const caps = modelCaps("meta", model, true);
+      expect(vals(caps), model).toContain("max");
+      expect(caps.defaultLevel, model).toBe("max");
+    }
+    const spark = modelCaps("meta", "muse-spark-1.1", true);
+    expect(vals(spark)).not.toContain("max");
+    expect(spark.defaultLevel).toBe("high");
+    expect(vals(spark)).not.toContain("off");
   });
   it("kimi: k3 effort levels, k2 boolean toggle, moonshot-v1 temperature only", () => {
     // K3 always reasons, so there is no off; low/high/max are the levels it takes.

@@ -292,8 +292,8 @@ export function buildOAuthTabs(url: string): AgentTab[] {
         { hint: t("wizard.oauthVscodeToolsNote") },
       ],
     },
-    // Antigravity left 2026-11-12: Google documents a sign-in, but the IDE's own guide has none and a
-    // live try found nothing to sign in from, so it connects with the key until a sign-in is confirmed.
+    // No Antigravity tab: Google documents a sign-in, but the IDE's own guide has none and a live try
+    // found nothing to sign in from, so it connects with the key until a sign-in is confirmed.
   ];
 }
 

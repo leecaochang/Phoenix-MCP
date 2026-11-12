@@ -105,10 +105,17 @@ def _epoch(value: Any) -> float | None:
 
 
 def _is_expired(row: Any) -> bool:
-    """Whether a catalogue row carries a shutdown date that has already passed."""
+    """Whether a catalogue row is switched off or carries a shutdown date that has already passed.
+
+    Mistral's `deprecation` is not read here: it may be the announcement rather than the
+    retirement, and a deprecated model stays usable until Mistral stops listing it.
+    """
     if not isinstance(row, dict):
         return False
-    for key in ("shutdown_date", "expiration_date", "deprecation"):
+    if row.get("active") is False:
+        # Groq marks a model it no longer serves.
+        return True
+    for key in ("shutdown_date", "expiration_date"):
         value = row.get(key)
         try:
             stamp = parse_datetime(value) if isinstance(value, str) and "T" in value else (

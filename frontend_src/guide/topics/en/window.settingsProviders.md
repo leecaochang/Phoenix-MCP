@@ -17,7 +17,7 @@ If something is wrong with an account, such as a model the provider no longer of
 
 Choose from the models the provider offers. Models that can't use tools are greyed out, because Phoenix needs tools to act.
 
-**{{label:settings.agentcliModelAuto}}** always uses the provider's newest suitable model. If you pick a model yourself, Phoenix keeps it until the provider retires it, then switches to its successor. A model whose name ends in `:free` switches only to another free model.
+**{{label:settings.agentcliModelAuto}}** uses a current model suited to agent work, skipping previews and models announced for retirement. If you pick a model yourself, Phoenix keeps it until the provider retires it, then switches to the successor the provider names, or else the newest of its family. A model whose name ends in `:free` switches only to another free model.
 
 When **{{label:settings.agentcliVerifyOptions}}** is on, saving also checks which options the model supports. This uses a little API credit.
 

@@ -51,8 +51,7 @@ AGENT_CHAT_MINIMAX_BASE_URL = "https://api.minimax.io/anthropic"
 # case. Automatic mode ranks it like any catalogue, so a new MiniMax model reaches
 # an account through the live listing without touching this tuple.
 AGENT_CHAT_MINIMAX_MODELS = (
-    "MiniMax-M3.1-Flash", "MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5",
-    "MiniMax-M2.5-highspeed", "MiniMax-M2.1", "MiniMax-M2.1-highspeed", "MiniMax-M2",
+    "MiniMax-M3.1-Flash", "MiniMax-M3",
 )
 # Mistral's hosted API is OpenAI-compatible for chat and publishes live model
 # capabilities. Base includes /v1 so chat/models append cleanly. There is no
@@ -149,14 +148,17 @@ AGENT_CHAT_DEFAULT_MAX_TOKENS = 32000
 # OpenAI-compatible kinds are deliberately not sent max_tokens (OpenAI reasoning
 # models reject the field outright), except NVIDIA below.
 AGENT_CHAT_DEEPSEEK_MAX_TOKENS = 32768
-# NVIDIA's hosted models default as low as 1024 output tokens (Llama 3.3 70B);
-# 4096 is within each documented model range checked. A model that refuses it is
-# retried once without the field.
-AGENT_CHAT_NVIDIA_MAX_TOKENS = 4096
+# NVIDIA's hosted models default as low as 1024 output tokens (Llama 3.3 70B),
+# while its reasoning models default to 16384 and share it with their reasoning.
+# A larger cap keeps those whole; a model whose range is smaller (gpt-oss-20b
+# allows 4096) refuses it and is retried once without the field.
+AGENT_CHAT_NVIDIA_MAX_TOKENS = 32768
 # Characters per token for estimating a request's size before a local Ollama
-# server sees it. Set above what a whole Phoenix request runs at, so the estimate
-# errs low and an estimate over the loaded context is a real overflow.
-AGENT_CHAT_PROMPT_CHARS_PER_TOKEN = 5.0
+# server sees it, as measured on a whole Phoenix request.
+AGENT_CHAT_PROMPT_CHARS_PER_TOKEN = 4.6
+# Share of a local Ollama model's loaded context kept for the reply (thinking and
+# a tool call); a prompt above the rest is refused rather than silently cut.
+AGENT_CHAT_OLLAMA_REPLY_SHARE = 0.1
 # How many Ollama /api/show lookups run at once during a capability refresh.
 # Ollama is the only backend whose capabilities cost one request PER MODEL, and a
 # large local library would otherwise arrive as one burst against a machine that

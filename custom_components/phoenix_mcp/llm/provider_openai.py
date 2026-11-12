@@ -28,7 +28,7 @@ from .base import (
 from ..provider_constants import (
     AGENT_CHAT_DEEPSEEK_MAX_TOKENS, AGENT_CHAT_NVIDIA_MAX_TOKENS, AGENT_CHAT_OPENCODE_CHAT_MODELS,
     AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL, AGENT_CHAT_OPENCODE_LEGACY_CHAT_EXCEPTIONS,
-    AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS, AGENT_CHAT_PROMPT_CHARS_PER_TOKEN,
+    AGENT_CHAT_OLLAMA_REPLY_SHARE, AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS, AGENT_CHAT_PROMPT_CHARS_PER_TOKEN,
     AGENT_CHAT_REASONING_PROBE_MAX_TOKENS,
 )
 
@@ -148,12 +148,12 @@ def _filter_mistral_models(data: list[dict]) -> list[str]:
     A model must declare completion_chat and function_calling. If that schema disappears entirely,
     fall back to active ids rather than an empty account.
     """
-    # A model with a published deprecation date is on its way out, and the
-    # superseded native reasoning line and Labs models are not offered for tool
-    # work, so none of them is a candidate for the dropdown or automatic mode.
+    # A deprecated model stays selectable until Mistral stops listing it (its
+    # capabilities mark it, which keeps it out of automatic mode). The superseded
+    # native reasoning line and Labs models are not offered for tool work.
     active = [
         m for m in data
-        if m.get("id") and m.get("archived") is not True and not m.get("deprecation")
+        if m.get("id") and m.get("archived") is not True
         and not re.search(r"^labs-|magistral", str(m["id"]), re.I)
     ]
     if not any(isinstance(m.get("capabilities"), dict) for m in active):
@@ -174,7 +174,7 @@ def _mistral_capabilities(data: list[dict], models: list[str]) -> dict[str, dict
         declared = row.get("capabilities")
         if model_id not in wanted or not isinstance(declared, dict):
             continue
-        caps: dict[str, bool] = {}
+        caps: dict[str, Any] = {}
         chat = declared.get("completion_chat")
         tools = declared.get("function_calling")
         vision = declared.get("vision")
@@ -182,6 +182,13 @@ def _mistral_capabilities(data: list[dict], models: list[str]) -> dict[str, dict
             caps["tools"] = chat and tools
         if isinstance(vision, bool):
             caps["vision"] = vision
+        if row.get("deprecation"):
+            # Announced for retirement: automatic mode moves off it now, and the model Mistral
+            # names replaces it once the catalogue drops it.
+            caps["deprecated"] = True
+            replacement = row.get("deprecation_replacement_model")
+            if isinstance(replacement, str) and replacement and replacement != model_id:
+                caps["replacement"] = replacement
         if caps:
             out[model_id] = caps
     return out
@@ -219,11 +226,11 @@ def _filter_opencode_models(models: list[str], *, verified_only: bool = False) -
 
 
 def _filter_meta_models(models: list[str]) -> list[str]:
-    """Keep Meta's chat models: the Muse Wonder and Spark text lines, without the data-sharing tier.
+    """Keep Meta's chat models: the Muse Wonder, Spark and Ember text lines, without the data-sharing tier.
     """
     # Meta serves image, voice and segmentation models under the same key, and a `-contributor`
     # model trains on the prompts it receives, which must be an explicit operator choice.
-    chat = sorted(m for m in models if m.lower().startswith(("muse-spark", "muse-wonder"))
+    chat = sorted(m for m in models if m.lower().startswith(("muse-spark", "muse-wonder", "muse-ember"))
                   and "contributor" not in m.lower())
     return chat or sorted(models)
 
@@ -234,12 +241,13 @@ def _filter_nvidia_models(models: list[str]) -> list[str]:
     Falls back to every id if the naming convention changes enough to filter everything out.
     """
     # NVIDIA's catalog advertises no per-model parameters, so tool support cannot be detected and is
-    # left to the operator; only ids that provably cannot chat are removed.
+    # left to the operator; only ids that provably cannot chat are removed, and the medical, finance,
+    # creative-writing and code-completion fine-tunes, which no agent turn suits.
     chat = sorted(
         m for m in models
         if not _NON_CHAT_MODEL_RE.search(m) and not re.search(
             r"rerank|reward|safety|parse|clip|vila|neva|kosmos|deplot|detector|"
-            r"retriever|calibration|riva", m, re.I)
+            r"retriever|calibration|riva|palmyra-(?:med|fin|creative)|codellama", m, re.I)
     )
     return chat or sorted(models)
 
@@ -1272,9 +1280,7 @@ def _refuse_unusable_end(stream: _ChatStream, parsed_tools: list[dict]) -> None:
 
 
 def _estimated_prompt_tokens(body: dict) -> int:
-    """A conservative, low-erring token estimate for the messages and tools of one request."""
-    # Calibrated on a local Ollama (see AGENT_CHAT_PROMPT_CHARS_PER_TOKEN): erring low means an
-    # estimate above the context really does not fit.
+    """A token estimate for the messages and tools of one request, calibrated on a local Ollama."""
     size = len(json.dumps(body.get("messages") or [], ensure_ascii=False))
     size += len(json.dumps(body.get("tools") or [], ensure_ascii=False))
     return int(size / AGENT_CHAT_PROMPT_CHARS_PER_TOKEN)
@@ -1282,7 +1288,8 @@ def _estimated_prompt_tokens(body: dict) -> int:
 
 def _ollama_context_problem(prompt_tokens: int, context: int | None) -> dict | None:
     """The refusal for a prompt longer than the loaded Ollama context, or None."""
-    if context is None or prompt_tokens <= context:
+    # The reply shares the context: a prompt filling it would push its own start out as the reply grows.
+    if context is None or prompt_tokens <= context * (1 - AGENT_CHAT_OLLAMA_REPLY_SHARE):
         return None
     suggested = 1 << max(prompt_tokens * 5 // 4, 1).bit_length()
     params = {"needed": prompt_tokens, "context": context, "suggested": suggested}

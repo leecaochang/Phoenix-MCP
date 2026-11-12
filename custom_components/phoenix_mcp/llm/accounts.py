@@ -45,8 +45,9 @@ from ..time_text import parse_datetime
 _MODEL_SEEN_LIMIT = 1000
 
 
-# What a probe finds and a provider's catalogue may not state.
-_PROBED_CAPABILITIES = ("effort_levels", "temperature")
+# What a probe finds and a provider's catalogue may not state, and the successor a provider named,
+# which must outlive the model's own row once the catalogue drops it.
+_PROBED_CAPABILITIES = ("effort_levels", "temperature", "replacement")
 
 
 def _with_probed(capabilities: dict, previous: Any) -> dict:
@@ -668,14 +669,18 @@ class AgentCliStore:
         catalog = _catalog_of(cfg)
         models = [m for m in catalog.get("models") or [] if isinstance(m, str)]
         eligible = [m for m in catalog.get("eligible") or [] if isinstance(m, str)] or list(models)
-        # A model a real turn showed cannot call tools is no use to automatic mode.
+        # A model a real turn showed cannot call tools, or one announced for retirement, is no use
+        # to automatic mode.
         caps = _with_learned(cfg)
-        eligible = [m for m in eligible if (caps.get(m) or {}).get("tools") is not False]
+        eligible = [m for m in eligible if (caps.get(m) or {}).get("tools") is not False
+                    and (caps.get(m) or {}).get("deprecated") is not True]
+        replacements = {m: row["replacement"] for m, row in caps.items()
+                        if isinstance(row.get("replacement"), str)}
         return effective_model(
             cfg.get("kind", ""), str(cfg.get("model") or ""), models,
             [m for m in cfg.get("seen") or [] if isinstance(m, str)],
             catalog.get("created") if isinstance(catalog.get("created"), dict) else None,
-            eligible or None,
+            eligible or None, replacements,
         )
 
     async def record_refusal(self, instance_id: str, model: str, option: str, at: str) -> bool:

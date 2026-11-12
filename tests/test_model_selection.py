@@ -69,3 +69,25 @@ def test_eligible_pool_narrows_automatic_choice_only():
     assert effective_model("x", "", catalogue, [], None, eligible=["a-2"]) == ("a-2", "")
     # An explicit id that is still listed stays even when not eligible.
     assert effective_model("x", "a-3", catalogue, ["a-3"], None, eligible=["a-2"]) == ("a-3", "")
+
+
+def test_automatic_mode_avoids_previews_speed_tiers_and_domain_models_where_ids_say_nothing():
+    """Catalogues whose rows share one creation time, or hide preview status, rank by tier words.
+
+    Groq, NVIDIA and OpenCode give no usable creation time or preview flag, so the
+    version numbers in the ids decided before: a preview, a writing fine-tune or a
+    speed tier won. Meta's newest model is a preview at the highest price.
+    """
+    groq = ["qwen/qwen3.8-27b", "meta-models/muse-spark-open", "minimaxai/minimax-m2.7",
+            "openai/gpt-oss-20b", "openai/gpt-oss-120b", "llama-3.3-70b-versatile"]
+    assert best_model("groq", groq, {m: 1.0 for m in groq} | {"qwen/qwen3.8-27b": 9.0}) == "openai/gpt-oss-120b"
+    nvidia = ["writer/palmyra-creative-122b", "meta/codellama-70b", "nvidia/nemotron-3-super-120b-a12b",
+              "moonshotai/kimi-k2.6", "z-ai/glm-5.3"]
+    assert best_model("nvidia", nvidia, {m: 735790403.0 for m in nvidia}) == "nvidia/nemotron-3-super-120b-a12b"
+    opencode = ["glm-5.3-flash", "glm-5.3", "kimi-k3", "deepseek-v4-pro"]
+    assert best_model("opencode", opencode, {m: 1794454934.0 for m in opencode}) == "glm-5.3"
+    meta = ["muse-wonder-1.0", "muse-spark-1.3", "muse-ember-1.0"]
+    assert rank_models("meta", meta, {"muse-wonder-1.0": 3.0, "muse-ember-1.0": 2.0, "muse-spark-1.3": 1.0}) == [
+        "muse-spark-1.3", "muse-ember-1.0", "muse-wonder-1.0"]
+    # Large 4 is what Mistral names to replace Medium.
+    assert best_model("mistral", ["mistral-medium-latest", "mistral-large-latest", "mistral-small-latest"]) == "mistral-large-latest"

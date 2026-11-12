@@ -370,7 +370,8 @@ function geminiThinking(m: string): { levels: string[]; defaultLevel: string } {
   if (/gemini-(?:[4-9]|3\.)/.test(m))
     return { levels: ["low", "medium", "high"], defaultLevel: /flash|gemini-[4-9]/.test(m) ? "medium" : "high" };
   if (/gemini-2\.5-flash-lite/.test(m)) return { levels: ["none", "low", "medium", "high"], defaultLevel: "none" };
-  if (/gemini-2\.5-flash/.test(m)) return { levels: ["none", "low", "medium", "high"], defaultLevel: "medium" };
+  // Google routes 2.5 Flash to 3.5 Flash-Lite, where reasoning cannot be turned off.
+  if (/gemini-2\.5-flash/.test(m)) return { levels: ["low", "medium", "high"], defaultLevel: "medium" };
   if (/gemini-2\.5/.test(m)) return { levels: ["low", "medium", "high"], defaultLevel: "medium" };
   return { levels: [], defaultLevel: "high" };
 }
@@ -477,14 +478,17 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
                  defaultLevel: "on", temperature: false };
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
     }
-    case "meta":
+    case "meta": {
       // Meta's Model API reasoning_effort. Muse models always reason (they reject
-      // "none" with a 400), so no off is offered; Muse Wonder and Spark 1.3 also
-      // take "max". Meta tunes the models for their default temperature, so
-      // temperature is not offered either.
+      // "none" with a 400), so no off is offered; Muse Wonder, Ember and Spark 1.3
+      // also take "max". Left unset, Wonder and Ember run at max and Spark at high,
+      // so those are the defaults. Meta tunes the models for their default
+      // temperature, so temperature is not offered either.
+      const topMax = /^muse-(?:wonder|ember)/.test(m);
       return { thinking: thinkOpts(["minimal", "low", "medium", "high", "xhigh",
-                                    ...(/^muse-wonder|^muse-spark-1\.3(?!.*contributor)/.test(m) ? ["max"] : [])]),
-               style: "effort", defaultLevel: "medium", temperature: false };
+                                    ...(topMax || /^muse-spark-1\.3(?!.*contributor)/.test(m) ? ["max"] : [])]),
+               style: "effort", defaultLevel: topMax ? "max" : "high", temperature: false };
+    }
     case "minimax":
       // MiniMax via its Anthropic-compatible API (no custom temperature). M3.1
       // Flash takes an effort (default max, no "none"); M3 has an on/off adaptive

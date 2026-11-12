@@ -6714,7 +6714,7 @@ _OLLAMA_TOOL_REPLY = _sse(
     'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
     "data: [DONE]",
 )
-_BIG_PROMPT = [{"role": "user", "content": "x" * 100_000}]   # about 20,000 estimated tokens
+_BIG_PROMPT = [{"role": "user", "content": "x" * 100_000}]   # about 21,700 estimated tokens
 
 
 def _local_ollama(kind: str = "ollama") -> OpenAICompatProvider:
@@ -6723,12 +6723,16 @@ def _local_ollama(kind: str = "ollama") -> OpenAICompatProvider:
 
 
 def test_prompt_estimate_and_context_problem():
-    assert llm_provider_openai._estimated_prompt_tokens({"messages": _BIG_PROMPT, "tools": []}) == pytest.approx(20_000, rel=0.01)
+    # 4.6 characters per token, as measured on a whole Phoenix request.
+    assert llm_provider_openai._estimated_prompt_tokens({"messages": _BIG_PROMPT, "tools": []}) == pytest.approx(21_740, rel=0.01)
     assert llm_provider_openai._ollama_context_problem(20_000, None) is None
     assert llm_provider_openai._ollama_context_problem(20_000, 32_768) is None
     problem = llm_provider_openai._ollama_context_problem(20_000, 8_192)
     assert problem["code"] == "ollama_context_too_small" and problem["retryable"] is False
     assert problem["message_params"] == {"needed": 20_000, "context": 8_192, "suggested": 32_768}
+    # A tenth of the context is kept for the reply: a prompt that fits but leaves no room is refused.
+    assert llm_provider_openai._ollama_context_problem(29_000, 32_768) is None
+    assert llm_provider_openai._ollama_context_problem(30_000, 32_768)["code"] == "ollama_context_too_small"
 
 
 @pytest.mark.asyncio

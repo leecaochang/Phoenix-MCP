@@ -22,7 +22,8 @@ TIER_PREFERENCES: dict[str, tuple[str, ...]] = {
     "claude": ("opus", "sonnet", "fable", "haiku"),
     "deepseek": (r"flash", r"pro"),
     "gemini": (r"flash(?![-_]?lite)", r"pro", r"lite"),
-    "mistral": ("medium", "large", "small"),
+    # Large 4 is what Mistral names to replace Medium.
+    "mistral": ("large", "medium", "small"),
     "qwen": ("max", "plus", "flash"),
     "tencent": (r"^hy", r"^deepseek"),
     "openrouter": (r"anthropic/claude-opus", r"anthropic/claude-sonnet", r"openai/gpt", r"google/gemini"),
@@ -31,7 +32,14 @@ TIER_PREFERENCES: dict[str, tuple[str, ...]] = {
                r"openai/gpt(?!.*:free$)", r"google/gemini(?!.*:free$)"),
     # The plain GLM model leads its line; flash variants are the fast tier.
     "zai": (r"^glm-[\d.]+$", r"-air(?:$|-)", r"-flash$", r"-flashx"),
-    "meta": ("wonder", "spark"),
+    # Wonder is a preview at the highest price; Ember is Spark's lower-priced sibling.
+    "meta": ("spark", "ember", "wonder"),
+    # Groq's production line; everything else it lists is preview or enterprise-priced.
+    "groq": (r"gpt-oss-120b", r"gpt-oss-20b"),
+    # NVIDIA gives every row one creation time, so families with NIM tool calling lead.
+    "nvidia": (r"nemotron", r"kimi", r"deepseek", r"glm", r"gpt-oss"),
+    # OpenCode gives every row one creation time too; the plain GLM model, not its flash tier.
+    "opencode": (r"^glm-[\d.]+$",),
 }
 
 # How aggregators mark a free variant of a model.
@@ -141,16 +149,18 @@ def effective_model(
     kind: str, stored: str, catalogue: Sequence[str], seen: Sequence[str],
     created: Mapping[str, float] | None = None,
     eligible: Sequence[str] | None = None,
+    replacements: Mapping[str, str] | None = None,
 ) -> tuple[str, str]:
     """Return the model a request should use, and the id it replaced ("" if none).
     Empty ``stored`` means the best eligible model. A stored id stays unless the provider
     listed it and then dropped it; an empty catalogue changes nothing. ``eligible`` narrows
-    the pool only.
+    the pool only. ``replacements`` holds the successor a provider named for a model.
     """
     pool = eligible if eligible else catalogue
     if not stored:
         return best_model(kind, pool, created), ""
     if catalogue and stored not in catalogue and stored in seen:
-        replacement = successor(kind, stored, pool, created)
+        named = (replacements or {}).get(stored)
+        replacement = named if named in catalogue else successor(kind, stored, pool, created)
         return (replacement, stored) if replacement else (stored, "")
     return stored, ""

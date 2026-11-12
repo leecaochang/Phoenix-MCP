@@ -14,6 +14,7 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp import agent_chat_views, provider_constants
 from custom_components.phoenix_mcp.llm import accounts as llm_accounts
 from custom_components.phoenix_mcp.llm import base as llm_base
+from custom_components.phoenix_mcp.llm import provider_openai as provider_openai_module
 from custom_components.phoenix_mcp.llm.provider_claude import ClaudeProvider
 from custom_components.phoenix_mcp.llm.provider_openai import (
     OpenAICompatProvider,
@@ -566,13 +567,72 @@ def test_meta_filter_excludes_non_chat_and_data_sharing_models():
     assert _filter_meta_models(ids) == ["muse-spark-1.3"]
 
 
-def test_mistral_filter_drops_deprecated_labs_and_magistral_models():
+def test_mistral_filter_keeps_deprecated_models_and_drops_labs_and_magistral():
     caps = {"completion_chat": True, "function_calling": True}
     rows = [{"id": "mistral-medium-latest", "capabilities": caps},
-            {"id": "mistral-old", "capabilities": caps, "deprecation": "2026-12-01T00:00:00Z"},
+            # Deprecated is not retired: it stays selectable until Mistral stops listing it.
+            {"id": "mistral-old", "capabilities": caps, "deprecation": "2026-01-01T00:00:00Z"},
             {"id": "labs-thing", "capabilities": caps}, {"id": "magistral-medium-latest", "capabilities": caps},
+            {"id": "mistral-archived", "capabilities": caps, "archived": True},
             {"id": "mistral-embed", "capabilities": {"completion_chat": False, "function_calling": False}}]
-    assert _filter_mistral_models(rows) == ["mistral-medium-latest"]
+    assert _filter_mistral_models(rows) == ["mistral-medium-latest", "mistral-old"]
+    # A past deprecation date does not expire the row either.
+    assert not llm_base._is_expired(rows[1])
+
+
+def test_mistral_capabilities_mark_deprecation_and_its_named_replacement():
+    caps = {"completion_chat": True, "function_calling": True}
+    rows = [{"id": "mistral-medium-3-5", "capabilities": caps, "deprecation": "2026-10-31T00:00:00Z",
+             "deprecation_replacement_model": "mistral-large-4"},
+            {"id": "mistral-large-4", "capabilities": caps}]
+    out = provider_openai_module._mistral_capabilities(rows, ["mistral-medium-3-5", "mistral-large-4"])
+    assert out["mistral-medium-3-5"] == {"tools": True, "deprecated": True, "replacement": "mistral-large-4"}
+    assert out["mistral-large-4"] == {"tools": True}
+
+
+@pytest.mark.asyncio
+async def test_a_deprecated_model_leaves_automatic_mode_and_hands_over_to_its_named_replacement():
+    store = llm_accounts.AgentCliStore(AsyncMock())
+    auto = await store.add("mistral", {"api_key": "a"})
+    pinned = await store.add("mistral", {"api_key": "b", "model": "mistral-medium-3-5"})
+    for iid in (auto, pinned):
+        await store.set_catalog(iid, ["mistral-medium-3-5", "mistral-large-2512", "mistral-small-4"], {}, "t1")
+        await store.set_capabilities(iid, {
+            "mistral-medium-3-5": {"tools": True, "deprecated": True, "replacement": "mistral-small-4"},
+            # The top tier, but announced for retirement.
+            "mistral-large-2512": {"tools": True, "deprecated": True},
+            "mistral-small-4": {"tools": True},
+        }, "t1")
+    # Automatic mode skips both deprecated models; an explicit choice keeps its model while it is listed.
+    assert store.resolve(auto).model == "mistral-small-4"
+    store._data[pinned]["model"] = "mistral-medium-3-5"
+    assert store.resolve(pinned).model == "mistral-medium-3-5"
+    # Once Mistral stops listing it, the replacement it named takes over, not the family heuristic.
+    for iid in (auto, pinned):
+        await store.set_catalog(iid, ["mistral-medium-latest", "mistral-small-4"], {}, "t2")
+        await store.set_capabilities(iid, {"mistral-medium-latest": {"tools": True}, "mistral-small-4": {"tools": True}}, "t2")
+    assert store.resolve(pinned).model == "mistral-small-4"
+
+
+def test_catalogue_filters_keep_ember_and_drop_domain_fine_tunes():
+    assert provider_openai_module._filter_meta_models(
+        ["muse-ember-1.0", "muse-spark-1.3", "muse-wonder-1.0", "muse-spark-1.3-contributor", "muse-voice-1"]
+    ) == ["muse-ember-1.0", "muse-spark-1.3", "muse-wonder-1.0"]
+    assert _filter_nvidia_models(["writer/palmyra-creative-122b", "writer/palmyra-med-70b-32k",
+                                  "writer/palmyra-fin-70b-32k", "meta/codellama-70b",
+                                  "nvidia/nemotron-3-super-120b-a12b"]) == ["nvidia/nemotron-3-super-120b-a12b"]
+    # MiniMax's Anthropic-compatible API lists only these two; the fallback no longer keeps retired M2 ids alive.
+    assert provider_constants.AGENT_CHAT_MINIMAX_MODELS == ("MiniMax-M3.1-Flash", "MiniMax-M3")
+
+
+def test_nvidia_cap_leaves_its_reasoning_models_their_default_output():
+    # Kimi K2.6 and Nemotron 3 Super default to 16384 output tokens and share them with reasoning.
+    assert provider_constants.AGENT_CHAT_NVIDIA_MAX_TOKENS >= 16384
+
+
+def test_groq_drops_rows_it_no_longer_serves():
+    assert llm_base._is_expired({"id": "old", "active": False})
+    assert not llm_base._is_expired({"id": "new", "active": True})
 
 
 def test_nvidia_and_openrouter_filters_drop_non_chat_entries():
