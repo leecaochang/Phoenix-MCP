@@ -18,7 +18,7 @@ Phoenix shows the exact command or configuration for Claude Code, Gemini CLI, An
 
 The Codex setup also raises its tool timeout to 330 seconds, so a long ESPHome build or a wait for approval isn't cut off.
 
-Under **{{label:wizard.methodOAuth}}**, Phoenix shows sign-in steps for Claude, ChatGPT, VS Code and Antigravity. The Claude tab covers Claude Code too, and the ChatGPT tab covers the ChatGPT desktop app.
+Under **{{label:wizard.methodOAuth}}**, Phoenix shows sign-in steps for Claude, ChatGPT, VS Code and Antigravity. The Claude tab covers Claude Code too, and the ChatGPT tab covers the ChatGPT desktop app and the Codex CLI.
 
 The instructions appear in three places:
 
@@ -56,7 +56,9 @@ ChatGPT, Claude and their phone apps can't send an access key. They take only a 
 2. Choose your app's tab and follow its steps. Each uses the address Phoenix shows. Leave any client ID and secret empty.
 3. The app opens Home Assistant in your browser. Sign in as an administrator, then approve the request in Phoenix.
 
-Claude, ChatGPT, VS Code and Antigravity can sign in this way, including Claude Code. The Codex CLI, Cursor, Gemini CLI and DeepSeek Harness can't; give them the key instead. The Codex CLI asks to register itself, which Phoenix doesn't allow.
+Claude, ChatGPT, VS Code and Antigravity can sign in this way, including Claude Code and the Codex CLI 0.148 or later. Cursor, Gemini CLI and DeepSeek Harness can't; give them the key instead.
+
+VS Code takes at most 128 tools in one request. A key with many capabilities can offer more, so turn some Phoenix tools off in VS Code's tools picker.
 
 The app then uses the key you approved it for, with the key's permissions, capabilities, approvals and rate limit. Its requests show in the audit log under that key.
 

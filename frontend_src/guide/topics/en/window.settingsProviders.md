@@ -60,7 +60,9 @@ Most providers need only an API key. Some also need to know where your account i
 - Qwen: your workspace's base URL, a public HTTPS address, as well as the API key.
 - Ollama (local): your Ollama server's address. Home Assistant connects to it, so use an address the Home Assistant host can reach.
 
-OpenAI, Gemini, Groq, Kimi, Mistral AI, OpenRouter and Z.ai accept at most 128 tools per request, and Phoenix applies the same limit to Infron. Phoenix gives them a smaller set to start with, and loads more when the model asks.
+Some plans are for coding tools only: Z.ai's Coding Plan, Xiaomi MiMo's Token Plan, and Alibaba Cloud's Coding Plan and Token Plan. Their terms forbid use from an app such as Home Assistant, and the provider may throttle or block the key. Phoenix warns when you choose one. For Voice, AI Task and Agent Chat, use the provider's pay-as-you-go API.
+
+Groq, Mistral AI and Z.ai accept at most 128 tools per request, and Phoenix applies the same limit to OpenAI, Gemini, Kimi, OpenRouter and Infron. Phoenix gives them a smaller set to start with, and loads more when the model asks.
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 

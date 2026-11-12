@@ -142,8 +142,10 @@ describe("buildAgentTabs", () => {
     // Claude Code sits in the Claude tab, and the ChatGPT desktop app in the ChatGPT tab; the commands carry the HTTPS address and no header.
     const codes = (key: string) => tabs.find((t) => t.key === key)!.blocks.map((b) => b.code).filter(Boolean);
     expect(codes("claude")).toEqual(["claude mcp add --transport http phoenix https://ha.example/api/phoenix-mcp"]);
-    // The Codex CLI registers dynamically, which Phoenix doesn't offer: no command that would fail.
-    expect(codes("chatgpt")).toEqual([]);
+    // The Codex CLI (0.148 and later) signs in with OpenAI's client document; its command carries no key.
+    expect(codes("chatgpt")).toEqual(["codex mcp add phoenix --url https://ha.example/api/phoenix-mcp"]);
+    // VS Code says how many tools it takes in one request.
+    expect(tabs.find((t) => t.key === "vscode")!.blocks.some((b) => b.hint === "wizard.oauthVscodeToolsNote" || /128/.test(b.hint ?? ""))).toBe(true);
     expect(tabs.find((t) => t.key === "chatgpt")!.href).toBe("https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt");
     // Clients that can't sign in this way are left to the key.
     expect(tabs.map((t) => t.key)).not.toContain("cursor");
@@ -306,7 +308,9 @@ describe("buildSkillInstall", () => {
     expect(command).toBe(`mkdir -p ~/.cursor/skills/phoenix && curl -fsSL ${url} -o ~/.cursor/skills/phoenix/SKILL.md`);
   });
   it("installs the guide where Antigravity CLI reads global skills", () => {
-    expect(buildSkillInstall(url, "antigravity")[0].code).toContain("~/.gemini/antigravity-cli/skills/phoenix/SKILL.md");
+    // The shared folder the Antigravity CLI, app and IDE all read.
+    expect(buildSkillInstall(url, "antigravity")[0].code).toContain("~/.gemini/config/skills/phoenix/SKILL.md");
+    expect(buildSkillInstall(url, "antigravity")[0].code).not.toContain("antigravity-cli");
   });
   it("gives non-Claude agents the skill URL as a copyable field plus a download", () => {
     for (const key of ["gemini", "antigravity", "codex", "deepseek-harness", "other"]) {

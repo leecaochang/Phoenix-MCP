@@ -46,8 +46,10 @@ ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS = 4_096
 # wait_for_esphome_job holds the request open so a build has something in flight
 # to report progress on. This is the longest hold in the whole surface (the next
 # is the 180s inline confirm), chosen to fit a real build in one call; the SSE
-# keepalive is what keeps an intermediary from dropping it.
-ESPHOME_BUILDER_JOB_WAIT_SECONDS = 300
+# keepalive is what keeps an intermediary from dropping it. It stays under 300 s,
+# where Codex (a wall clock that progress does not extend), Claude Code (an idle
+# window) and Cursor end a tool call, so the "still running" answer arrives first.
+ESPHOME_BUILDER_JOB_WAIT_SECONDS = 270
 # The same hold on a headless conversational surface (Assist's tool bridge, the
 # voice agent, AI Task) is a hang: none of them can render a held request, their
 # own pipeline timeouts are far shorter than the value above, and the build runs

@@ -270,8 +270,8 @@ export function buildOAuthTabs(url: string): AgentTab[] {
       ],
     },
     {
-      // One tab for ChatGPT: the Codex app is part of the ChatGPT desktop app. The Codex CLI signs in only by
-      // dynamic registration, which Phoenix doesn't offer, so it appears only with the key.
+      // One tab for ChatGPT: the Codex app is part of the ChatGPT desktop app. The Codex CLI signs in with
+      // OpenAI's published client document from 0.148 on; older versions need the key.
       key: "chatgpt",
       label: "ChatGPT",
       href: "https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt",
@@ -280,14 +280,17 @@ export function buildOAuthTabs(url: string): AgentTab[] {
           t("wizard.oauthChatgptStep4"), approve] },
         { hint: t("wizard.oauthChatgptNote") },
         { title: t("wizard.oauthCodexAppTitle"), steps: [t("wizard.oauthCodexAppStep1"), t("wizard.oauthCodexAppStep2"), approve] },
-        { hint: t("wizard.oauthCodexCliNote") },
+        { hint: t("wizard.oauthCodexCliNote"), code: `codex mcp add phoenix --url ${shellArg(url)}` },
       ],
     },
     {
       key: "vscode",
       label: "VS Code",
       href: "https://code.visualstudio.com/docs/copilot/chat/mcp-servers",
-      blocks: [{ steps: [t("wizard.oauthVscodeStep1"), t("wizard.oauthVscodeStep2"), approve] }],
+      blocks: [
+        { steps: [t("wizard.oauthVscodeStep1"), t("wizard.oauthVscodeStep2"), approve] },
+        { hint: t("wizard.oauthVscodeToolsNote") },
+      ],
     },
     {
       key: "antigravity",
@@ -339,7 +342,8 @@ export function buildSkillInstall(skillUrl: string, agentKey: string): AgentBloc
         title,
         hint: t("wizard.skillAntigravityHint"),
         fields: [{ label: t("wizard.skillGuideUrlLabel"), value: skillUrl }],
-        code: `mkdir -p ~/.gemini/antigravity-cli/skills/phoenix && curl -fsSL ${shellArg(skillUrl)} -o ~/.gemini/antigravity-cli/skills/phoenix/SKILL.md`,
+        // The folder the Antigravity CLI, app and IDE all read.
+        code: `mkdir -p ~/.gemini/config/skills/phoenix && curl -fsSL ${shellArg(skillUrl)} -o ~/.gemini/config/skills/phoenix/SKILL.md`,
       }];
     case "deepseek-harness":
       return [{

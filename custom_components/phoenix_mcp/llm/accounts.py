@@ -99,11 +99,15 @@ class ProviderChoice:
     label_key: str | None = None
     base_url: str | None = None
     models_url: str | None = None
+    # A caveat the form shows while this choice is selected, such as plan terms.
+    note_key: str | None = None
 
     def public(self) -> dict[str, Any]:
         out: dict[str, Any] = {"value": self.value, "label": self.label}
         if self.label_key:
             out["label_key"] = self.label_key
+        if self.note_key:
+            out["note_key"] = self.note_key
         return out
 
 
@@ -183,9 +187,10 @@ _ZAI_ENDPOINTS = (
         "standard", "Standard API", "settings.agentcliZaiStandard",
         AGENT_CHAT_ZAI_BASE_URL,
     ),
+    # Z.ai allows the Coding Plan only in its supported tools.
     ProviderChoice(
         "coding", "Coding Plan", "settings.agentcliZaiCoding",
-        AGENT_CHAT_ZAI_CODING_BASE_URL,
+        AGENT_CHAT_ZAI_CODING_BASE_URL, note_key="settings.agentcliZaiCodingTerms",
     ),
     ProviderChoice(
         "china", "China (BigModel)", "settings.agentcliZaiChina",
@@ -243,12 +248,14 @@ _GROK_ENDPOINTS = (
 )
 _MIMO_ENDPOINTS = (
     ProviderChoice("payg", "Pay as you go", "settings.agentcliMimoPayg", AGENT_CHAT_MIMO_BASE_URL),
-    ProviderChoice("token_plan", "Token Plan (China)", "settings.agentcliMimoTokenPlan", AGENT_CHAT_MIMO_TOKEN_PLAN_BASE_URL),
-    # A Token Plan key works only on the host its subscription page names.
+    # A Token Plan key works only on the host its subscription page names, and its
+    # terms forbid use from application backends.
+    ProviderChoice("token_plan", "Token Plan (China)", "settings.agentcliMimoTokenPlan", AGENT_CHAT_MIMO_TOKEN_PLAN_BASE_URL,
+                   note_key="settings.agentcliMimoTokenPlanTerms"),
     ProviderChoice("token_plan_sgp", "Token Plan (Singapore)", "settings.agentcliMimoTokenPlanSingapore",
-                   AGENT_CHAT_MIMO_TOKEN_PLAN_SGP_BASE_URL),
+                   AGENT_CHAT_MIMO_TOKEN_PLAN_SGP_BASE_URL, note_key="settings.agentcliMimoTokenPlanTerms"),
     ProviderChoice("token_plan_ams", "Token Plan (Europe)", "settings.agentcliMimoTokenPlanEurope",
-                   AGENT_CHAT_MIMO_TOKEN_PLAN_AMS_BASE_URL),
+                   AGENT_CHAT_MIMO_TOKEN_PLAN_AMS_BASE_URL, note_key="settings.agentcliMimoTokenPlanTerms"),
 )
 _OPENCODE_ENDPOINTS = (
     ProviderChoice("zen", "Zen (legacy)", "settings.agentcliOpenCodeZen", AGENT_CHAT_OPENCODE_BASE_URL),

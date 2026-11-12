@@ -60,7 +60,9 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 - Qwen：除了 API 密钥，还需要你的工作区基础 URL，即一个公开的 HTTPS 地址。
 - Ollama（本地）：你的 Ollama 服务器地址。Home Assistant 会连接它，因此请使用 Home Assistant 主机可以访问的地址。
 
-OpenAI、Gemini、Groq、Kimi、Mistral AI、OpenRouter 和 Z.ai 每个请求最多接受 128 个工具，Phoenix 对 Infron 也采用同样的上限。Phoenix 会先给它们较小的工具集，并在模型请求时加载更多。
+有些方案只供编程工具使用：Z.ai 的 Coding Plan、Xiaomi MiMo 的 Token Plan，以及阿里云的 Coding Plan 和 Token Plan。它们的条款禁止在 Home Assistant 这类应用中使用，提供商可能会限流或封禁密钥。选择这些方案时 Phoenix 会给出警告。语音、AI Task 和 Agent Chat 请使用提供商的按量付费 API。
+
+Groq、Mistral AI 和 Z.ai 每个请求最多接受 128 个工具，Phoenix 对 OpenAI、Gemini、Kimi、OpenRouter 和 Infron 也采用同样的上限。Phoenix 会先给它们较小的工具集，并在模型请求时加载更多。
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 

@@ -182,6 +182,21 @@ async def test_claude_turn_sends_the_declared_off_and_learns_nothing_from_thinki
     assert events[-1].get("refused") == "thinking"
 
 
+def test_plan_routes_carry_their_terms_note():
+    """Routes whose terms forbid use from application backends say so in the form."""
+    notes = {
+        (kind, choice.value): choice.public().get("note_key")
+        for kind, definition in llm_accounts.PROVIDER_DEFINITIONS.items()
+        for field in definition.fields for choice in field.choices or ()
+    }
+    assert notes[("zai", "coding")] == "settings.agentcliZaiCodingTerms"
+    for route in ("token_plan", "token_plan_sgp", "token_plan_ams"):
+        assert notes[("mimo", route)] == "settings.agentcliMimoTokenPlanTerms"
+    assert notes[("zai", "standard")] is None and notes[("mimo", "payg")] is None
+    assert {key for (_kind, _value), key in notes.items() if key} == {
+        "settings.agentcliZaiCodingTerms", "settings.agentcliMimoTokenPlanTerms"}
+
+
 @pytest.mark.asyncio
 async def test_decision_accounts_never_follow_the_catalogue():
     store = llm_accounts.AgentCliStore(AsyncMock())

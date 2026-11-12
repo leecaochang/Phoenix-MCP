@@ -943,6 +943,13 @@ class TestHeadlessWaitClamp:
     followed by a timeout while the build carries on invisibly regardless.
     """
 
+    def test_the_full_wait_ends_before_the_clients_300_second_limit(self):
+        # Codex, Claude Code and Cursor end a tool call at 300 s; the hold must
+        # return its "still running" answer before that, with room for the reply.
+        assert esphome.ESPHOME_BUILDER_JOB_WAIT_SECONDS <= 280
+        assert esphome._clamp_job_wait(None) == esphome.ESPHOME_BUILDER_JOB_WAIT_SECONDS
+        assert esphome._clamp_job_wait(10_000) == esphome.ESPHOME_BUILDER_JOB_WAIT_SECONDS
+
     @pytest.mark.parametrize("client_ip", ["assist", "voice", "ai_task"])
     def test_headless_surfaces_get_the_short_wait(self, client_ip):
         assert esphome._clamp_job_wait(300, client_ip) == (
@@ -1199,9 +1206,9 @@ class TestWaiting:
         assert body["status"] == "running"
 
     async def test_timeout_is_clamped_to_the_ceiling(self, hass, esphome_dir):
-        assert esphome._clamp_job_wait(99999) == 300
-        assert esphome._clamp_job_wait(0) == 300
-        assert esphome._clamp_job_wait("nonsense") == 300
+        assert esphome._clamp_job_wait(99999) == 270
+        assert esphome._clamp_job_wait(0) == 270
+        assert esphome._clamp_job_wait("nonsense") == 270
         assert esphome._clamp_job_wait(30) == 30
 
     async def test_the_percentage_never_rides_in_the_protocol_progress_field(self):

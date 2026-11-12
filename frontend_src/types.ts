@@ -251,6 +251,8 @@ export interface AgentCliProviderChoice {
   value: string;
   label: string;
   label_key?: string;
+  /** A caveat to show while this choice is selected, such as plan terms. */
+  note_key?: string;
 }
 
 export interface AgentCliProviderField {

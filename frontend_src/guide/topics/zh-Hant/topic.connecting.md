@@ -18,7 +18,7 @@ Phoenix 會顯示 Claude Code、Gemini CLI、Antigravity CLI、Codex、Cursor �
 
 Codex 的設定還會把工具逾時提高到 330 秒，這樣較長的 ESPHome 建置或審批等待不會被中斷。
 
-在 **{{label:wizard.methodOAuth}}** 下，Phoenix 會顯示 Claude、ChatGPT、VS Code 和 Antigravity 的登入步驟。Claude 分頁也涵蓋 Claude Code，ChatGPT 分頁涵蓋 ChatGPT 桌面應用程式。
+在 **{{label:wizard.methodOAuth}}** 下，Phoenix 會顯示 Claude、ChatGPT、VS Code 和 Antigravity 的登入步驟。Claude 分頁也涵蓋 Claude Code，ChatGPT 分頁涵蓋 ChatGPT 桌面應用程式和 Codex CLI。
 
 這些說明會出現在三個位置：
 
@@ -56,7 +56,9 @@ ChatGPT、Claude 及其手機應用程式無法傳送存取金鑰。它們只接
 2. 選擇你的應用程式的分頁，並依照其中的步驟操作。每個應用程式都使用 Phoenix 顯示的位址。如有用戶端 ID 和機密，請留空。
 3. 應用程式會在你的瀏覽器中開啟 Home Assistant。以管理員身分登入，然後在 Phoenix 中核准該請求。
 
-Claude、ChatGPT、VS Code 和 Antigravity 可以透過這種方式登入，包括 Claude Code。Codex CLI、Cursor、Gemini CLI 和 DeepSeek Harness 不能；請改為給它們金鑰。Codex CLI 會要求自行註冊，而 Phoenix 不允許這樣做。
+Claude、ChatGPT、VS Code 和 Antigravity 可以透過這種方式登入，包括 Claude Code 和 Codex CLI 0.148 或更新版本。Cursor、Gemini CLI 和 DeepSeek Harness 不能；請改為給它們金鑰。
+
+VS Code 每個請求最多接受 128 個工具。權限較多的金鑰可能提供更多工具，因此請在 VS Code 的工具選擇器中關閉部分 Phoenix 工具。
 
 之後，應用程式會使用你為它核准的金鑰，並遵循該金鑰的權限、能力、核准和速率限制。它的請求會以該金鑰的名義顯示在稽核日誌中。
 

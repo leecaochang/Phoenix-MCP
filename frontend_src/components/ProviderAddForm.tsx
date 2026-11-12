@@ -69,6 +69,20 @@ function fieldLabel(field: AgentCliProviderField): string {
   return t(field.label_key);
 }
 
+/** Alibaba Cloud's Coding Plan and Token Plan hosts, whose terms allow only interactive coding tools. */
+const QWEN_PLAN_HOST = /^https?:\/\/(?:coding(?:-intl)?\.dashscope\.aliyuncs\.com|token-plan\.[a-z0-9-]+\.maas\.aliyuncs\.com)(?:[/:]|$)/i;
+
+/** The plan-terms caveat for what the form currently names, or null. */
+export function planTermsNote(provider: AgentCliProviderType, values: Record<string, string>): string | null {
+  for (const field of provider.fields) {
+    const choice = field.choices?.find((item) => item.value === values[field.id]);
+    if (choice?.note_key) return choice.note_key;
+  }
+  if (provider.kind === "qwen" && Object.values(values).some((value) => QWEN_PLAN_HOST.test(value.trim())))
+    return "settings.agentcliQwenPlanTerms";
+  return null;
+}
+
 function initialValues(provider: AgentCliProviderType): Record<string, string> {
   return Object.fromEntries(provider.fields.map((field) => [
     field.id,
@@ -233,6 +247,8 @@ export function ProviderAddForm({
   );
   // A provider's note on getting its key right; in Settings it reads in Help.
   const note = adding?.kind === "tencent" ? t("settings.agentcliTencentHint") : adding?.kind === "mimo" ? t("settings.agentcliMiMoHint") : null;
+  // Shown in every layout: a plan whose terms forbid this use can cost the key.
+  const termsKey = adding ? planTermsNote(adding, form.values) : null;
   /** In Settings, a row's buttons sit beside it rather than under it. */
   const inline = (row: ReactNode, actions: ReactNode) => <div className="agentcli-add-inline">{row}{actions}</div>;
   const probeLabel = compact ? t("settings.agentcliVerifyOptions") : t("settings.agentcliProbeOnAdd");
@@ -300,6 +316,7 @@ export function ProviderAddForm({
             </div>
           )}
           {note && (compact ? <span className="sr-only">{note}</span> : <div className="agentcli-settings-hint">{note}</div>)}
+          {termsKey && <div className="agentcli-settings-hint text-warning" role="note">{t(termsKey)}</div>}
           {adding.fields.map((field, index) => {
             const id = `${idPrefix}-${adding.kind}-${field.id}`;
             const row = (

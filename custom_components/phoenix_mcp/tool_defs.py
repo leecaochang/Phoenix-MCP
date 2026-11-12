@@ -2672,7 +2672,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "job_id": {"type": "string", "description": "job_id returned when the build was started."},
                 "timeout": {
                     "type": "integer",
-                    "description": "Seconds to wait before returning (default and max 300).",
+                    "description": "Seconds to wait before returning (default and max 270).",
                 },
             },
             "required": ["job_id"],
@@ -2788,7 +2788,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Build one ESPHome device and report how much flash and RAM each component uses, "
             "to find what is filling a device up. Touches no device. Unlike "
-            "compile_esphome_firmware this waits for the result, up to 5 minutes, because the "
+            "compile_esphome_firmware this waits for the result, up to 4.5 minutes, because the "
             "Device Builder keeps no report afterwards; compile first so the analysis can reuse "
             "the build. Refused while another build for the same file runs, since starting it "
             "would cancel that build. Refused on voice, Assist and AI Task."

@@ -68,7 +68,8 @@ function instances() {
         { id: "endpoint_id", type: "choice", required: true,
           label_key: "settings.agentcliZaiPlan", choices: [
             { value: "standard", label: "Standard API", label_key: "settings.agentcliZaiStandard" },
-            { value: "coding", label: "Coding Plan", label_key: "settings.agentcliZaiCoding" },
+            { value: "coding", label: "Coding Plan", label_key: "settings.agentcliZaiCoding",
+              note_key: "settings.agentcliZaiCodingTerms" },
           ] },
         { id: "api_key", type: "secret", required: true,
           label_key: "settings.agentcliApiKey" },
@@ -288,6 +289,28 @@ describe("AgentCliSettings", () => {
     await waitFor(() => expect(probeAgentCliProvider).toHaveBeenCalledWith("zai", {
       endpoint_id: "coding", api_key: "z-key",
     }));
+  });
+
+  it("warns about plan terms only while a plan route is chosen", async () => {
+    renderCard();
+    await beginAdd("zai");
+    const terms = () => screen.queryByText(t("settings.agentcliZaiCodingTerms"));
+    expect(terms()).toBeNull();
+    fireEvent.change(screen.getByLabelText("Z.ai plan"), { target: { value: "coding" } });
+    expect(terms()).toBeInTheDocument();
+    expect(terms()).toHaveAttribute("role", "note");
+    fireEvent.change(screen.getByLabelText("Z.ai plan"), { target: { value: "standard" } });
+    expect(terms()).toBeNull();
+  });
+
+  it("warns when a Qwen address is a Coding Plan or Token Plan host", async () => {
+    renderCard();
+    await beginAdd("qwen");
+    const terms = () => screen.queryByText(t("settings.agentcliQwenPlanTerms"));
+    fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1" } });
+    expect(terms()).toBeNull();
+    fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "https://coding-intl.dashscope.aliyuncs.com/v1" } });
+    expect(terms()).toBeInTheDocument();
   });
 
   it("serializes the Qwen workspace URL", async () => {
