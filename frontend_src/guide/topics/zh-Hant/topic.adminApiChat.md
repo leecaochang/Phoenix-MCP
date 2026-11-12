@@ -234,7 +234,7 @@ POST   /api/phoenix-mcp/agentcli/chat
 | `model` | string | 選填。覆蓋此輪次中帳戶的模型。 |
 | `user` | string | 新訊息。除非傳送 `attachments` 或 `continue: true`，否則必填。 |
 | `attachments` | list | 此訊息的影像。參見[影像](guide:#chat-images)。 |
-| `messages` | list | 之前的輪次。Phoenix 不保留逐字稿：從 `messages` 事件中保留清單，並在下一輪次中傳回。 |
+| `messages` | list | 之前的輪次。Phoenix 不保留逐字稿：從 `messages` 事件中保留清單，並在下一輪次中傳回。每個提供者以自己的格式保存工具呼叫，因此變更 `instance_id` 時請像 Agent Chat 一樣從空清單開始。 |
 | `options` | object | 模型選項。參見[選項](guide:#chat-options)。 |
 | `continue` | boolean | `true` 會恢復在輪次上限處暫停的輪次，不新增訊息。 |
 | `turn_started_at` | string | 與 `continue: true` 一起傳送 `continue_required` 中的 `turn_started_at`，讓模型看到與暫停前相同的日期和時間。如果它不是帶時區的過去 ISO 8601 時間，則會被忽略。 |
