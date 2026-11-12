@@ -509,7 +509,9 @@ async def test_no_access_key_reaches_the_entity_through_call_service(hass, pass_
 # --------------------------------------------------------------------------- #
 
 @pytest.mark.parametrize(("status", "text"), [
-    (401, "API key rejected"), (429, "limiting requests"), (500, "refused the request"), (403, "API key rejected"),
+    # A server failure is not a refusal; a 4xx other than auth or rate limiting is.
+    (401, "API key rejected"), (429, "limiting requests"), (500, "Could not reach"), (529, "Could not reach"),
+    (422, "refused the request"), (403, "API key rejected"),
 ])
 async def test_a_failed_request_keeps_its_text_out_of_the_error(home, status, text):
     home.wire.status = status
@@ -664,7 +666,20 @@ async def test_a_provider_failure_is_recorded_as_not_a_policy_answer(home):
     with pytest.raises(HomeAssistantError):
         await home.ask()
     row = home.one_row()
-    assert row.outcome == "invalid_request" and json.loads(row.payload) == {"reason": "http_error"}
+    assert row.outcome == "invalid_request" and json.loads(row.payload) == {"reason": "unavailable"}
+
+
+async def test_one_deadline_covers_the_whole_evaluation(home, monkeypatch):
+    """The account load and request-limit reservation are bounded too, not only the request."""
+    from custom_components.phoenix_mcp.routing import decision_evaluation
+
+    async def slow(*args, **kwargs):
+        await asyncio.sleep(5)
+    monkeypatch.setattr(decision_evaluation, "_evaluate_within_deadline", slow)
+    await home.data.store.async_patch_settings(decision_timeout_ms=250)
+    with pytest.raises(HomeAssistantError) as raised:
+        await home.ask()
+    assert "did not answer in time" in str(raised.value)
 
 
 @pytest.mark.parametrize("change", [

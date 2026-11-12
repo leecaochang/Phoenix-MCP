@@ -494,7 +494,7 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       // Flash takes an effort (default max, no "none"); M3 has an on/off adaptive
       // toggle; M2 models always reason, so they get no control.
       if (/^minimax-m3\.1/.test(m))
-        return { thinking: thinkOpts(["low", "medium", "high", "max"]), style: "effort",
+        return { thinking: thinkOpts(["low", "medium", "high", "xhigh", "max"]), style: "effort",
                  defaultLevel: "max", temperature: false };
       if (/^minimax-m2/.test(m)) return { thinking: [], style: "effort", defaultLevel: "high", temperature: false };
       return { thinking: thinkOpts(["off", "on"]), style: "boolean", defaultLevel: "on", temperature: false };

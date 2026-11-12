@@ -102,14 +102,14 @@ AGENT_CHAT_TENCENT_SINGAPORE_BASE_URL = "https://tokenhub-intl.tencentcloudmaas.
 AGENT_CHAT_TENCENT_GUANGZHOU_BASE_URL = "https://tokenhub.tencentcloudmaas.com/v1"
 AGENT_CHAT_TENCENT_US_BASE_URL = "https://tokenhub-us.tencentcloudmaas.com/v1"
 AGENT_CHAT_OPENCODE_BASE_URL = "https://opencode.ai/zen/v1"
-# Keep Zen as the default for accounts saved before Console routing existed.
+# Zen stays the route of accounts saved before Console routing existed; new accounts start on Console.
 AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL = "https://opencode.ai/inference/openai/v1"
 AGENT_CHAT_OPENCODE_CONSOLE_MODELS_URL = "https://opencode.ai/inference/v1/models"
 # Console eligibility needs a documented Chat Completions endpoint or a qualified
 # live tool round. The catalog now also lists each model's API family; this set
 # remains the documented source until that metadata is qualified. Free models are
 # left out: OpenCode serves them only to its own app.
-# Source: https://opencode.ai/v2/docs/console/models/
+# Source: https://opencode.ai/docs/console/models/
 AGENT_CHAT_OPENCODE_CHAT_MODELS = frozenset({
     "qwen3.8-max", "deepseek-v4.1-flash", "deepseek-v4-pro",
     "minimax-m3", "minimax-m2.7", "minimax-m2.5", "glm-5.3-flash",
@@ -133,7 +133,8 @@ AGENT_CHAT_MISTRAL_US_BASE_URL = "https://api.us.mistral.ai/v1"
 AGENT_CHAT_OPENAI_US_BASE_URL = "https://us.api.openai.com/v1"
 AGENT_CHAT_OPENAI_EU_BASE_URL = "https://eu.api.openai.com/v1"
 # OpenAI's other data-residency prefixes. A residency project must use its own
-# prefixed host; US, EU and UAE also process in-region, the others store only.
+# prefixed host. US, EU and UAE process in-region; Australia, Japan and India do so for some
+# models only, and Canada, Singapore, Korea and the UK store in-region.
 AGENT_CHAT_OPENAI_REGION_PREFIXES = ("ae", "au", "ca", "jp", "in", "sg", "kr", "gb")
 AGENT_CHAT_MINIMAX_CHINA_BASE_URL = "https://api.minimaxi.com/anthropic"
 AGENT_CHAT_GROK_US_BASE_URL = "https://us.api.x.ai/v1"
@@ -225,7 +226,8 @@ AGENT_CHAT_MAX_ITERATIONS_MAX = 100
 # tool error so it can resend the call. Each correction also spends one round of
 # the iteration cap above; past this cap the turn ends with bad_tool_call.
 AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS = 2
-# The tools-array cap OpenAI, Groq, Mistral and Z.ai document or enforce. A
+# The tools-array cap Groq, Mistral and Z.ai document or enforce, and Phoenix applies to Gemini, Kimi,
+# OpenRouter and Infron, which document none. A
 # provider definition opts in through max_tools; a larger catalog is declared in
 # parts (tool_loading.py), and one whose starting set still exceeds it is refused.
 AGENT_CHAT_MAX_TOOLS_PER_REQUEST = 128

@@ -102,11 +102,11 @@ The /api/mcp address follows that integration's Require an administrator account
 
 On that route the key's rate limit doesn't apply, the audit log shows the calls as Assist, and the app gets Phoenix's instructions only if it asks for them.
 
-From 2026.11, check that integration's options. A new entry serves every API, Phoenix's included, unless you choose. The read-only option leaves an app only the tools marked read-only, but it doesn't replace the key's capabilities.
+From 2026.11, check that integration's options. A new entry has Expose all AI tools on, which serves every set of tools, Phoenix's included. Turn it off and choose Phoenix MCP (scoped) under AI tools. The Read-only option leaves an app only the tools marked read-only, but it doesn't replace the key's capabilities.
 
 Tools from Home Assistant's other APIs don't pass through Phoenix on that route, so the key, approvals, MESA and the audit log don't cover them. When two APIs offer the same tool name, Home Assistant adds a prefix such as `phoenix-mcp__`.
 
-The Home Assistant API, new in 2026.11 for administrators, reaches everything: any entity or action, templates, logs and configuration. To keep an app within Phoenix's checks, choose Phoenix MCP (scoped) alone.
+The Home Assistant set of AI tools, new in 2026.11 for administrators, reaches everything: any entity or action, templates, logs and configuration. To keep an app within Phoenix's checks, choose Phoenix MCP (scoped) alone.
 
 ## When it doesn't connect {#problems}
 

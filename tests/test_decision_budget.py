@@ -129,7 +129,7 @@ async def test_transport_shares_preview_voice_chat_and_counts_failures(status, s
             provider = DecisionProvider(cfg, 'systemone', request_budget=budget, request_limit=2,
                                         metrics=metrics, metric_scope=scope)
             if index == 2 or status != 200:
-                expected = 'request_budget_exhausted' if index == 2 else 'rate_limited' if status == 429 else 'http_error'
+                expected = 'request_budget_exhausted' if index == 2 else 'rate_limited' if status == 429 else 'unavailable'
                 with pytest.raises(DecisionError, match=expected):
                     await provider._request(session, 'POST', 'systemone', 1000, {'questions': {'route': {}}})
             else:

@@ -459,6 +459,16 @@ def _http_failure(
         code, retryable = "rate_limit", True
     elif _PROVIDER_REJECTED.get(kind, frozenset()) & set(codes):
         code, retryable = "provider_rejected", False
+    elif status == 400 and _CONTEXT_LIMIT_CODES & set(codes):
+        # The operator is told to shorten the conversation rather than that it was refused.
+        code, retryable = "provider_context_limit", False
+    elif kind == "gemini" and status == 403:
+        # Google lists a model for any valid key, but refuses inference for a project without the
+        # API enabled, billing or verification; that is not a rejected key.
+        code, retryable = "gemini_project_refused", False
+    elif kind == "meta" and status == 504:
+        # Meta: the first event did not arrive in time, and the same request usually times out again.
+        retryable = False
     elif (codes and codes[0] in _NON_RETRYABLE_ERROR_CODES) or daily or (
             _PROVIDER_NON_RETRYABLE.get(kind, frozenset()) & set(codes)) or any(
             phrase in _envelope_message(envelope).lower() for phrase in _PROVIDER_NON_RETRYABLE_PHRASES.get(kind, ())):
@@ -630,6 +640,8 @@ def _provider_failure(code: str, *, retryable: bool = True) -> dict:
         "provider_transient": "The provider is temporarily unavailable.",
         "provider_context_limit": "The conversation is too long for this model's context window. No tool from this response was run.",
         "bad_tool_call": "The model produced an invalid tool call. No tool from this response was run.",
+        "quota": "The provider account has run out of credit or reached its spending limit. It will not be retried.",
+        "provider_rejected": "The provider refused this request. It will not be retried.",
     }
     return _norm(EV_ERROR, status=200, code=code, message=messages[code],
                  retryable=retryable, diagnostic={"category": code})
@@ -662,6 +674,8 @@ _TRANSIENT_STREAM_CODES = frozenset({
     "server_shutting_down", "service_overloaded", "backend_unavailable",
     # TokenHub's failure of the model behind it (its documented frame carries only a type).
     "upstream_error",
+    # OpenRouter's typed category for an upstream error it could not classify (a 500).
+    "unmapped",
     # OpenRouter's typed categories (error.metadata.error_type).
     "provider_unavailable", "provider_overloaded", "timeout", "server", "rate_limit",
 })
@@ -679,6 +693,21 @@ def _transient_stream_error(error: dict) -> bool:
             or str(error.get("upstream_status") or "").strip() in _TRANSIENT_STREAM_STATUSES)
 
 
+# A request the model cannot take whole: OpenRouter's typed categories, OpenAI's code,
+# Z.ai's 1261 "Prompt too long" and TokenHub's 400003 (input over the model's context).
+_CONTEXT_LIMIT_CODES = frozenset({"context_length_exceeded", "max_tokens_exceeded", "token_limit_exceeded",
+                                  "1261", "400003"})
+# A credit problem reported inside a stream (OpenRouter's 402 and its typed category).
+_PAYMENT_CODES = frozenset({"402", "payment_required"})
+# OpenAI refusals of the request as sent, not of its content: a residency mismatch and image errors.
+_REQUEST_REJECTED_CODES = frozenset({
+    "data_residency_mismatch", "invalid_image", "image_too_large", "image_too_small", "failed_to_download_image",
+    "invalid_image_format", "invalid_base64_image", "invalid_image_url", "image_parse_error",
+    "unsupported_image_media_type", "empty_image_file", "image_file_too_large", "image_file_not_found",
+    "invalid_image_mode",
+})
+
+
 def _provider_object(payload: str) -> dict:
     obj = json.loads(payload)
     if not isinstance(obj, dict):
@@ -692,8 +721,23 @@ def _provider_object(payload: str) -> dict:
     return obj
 
 
+def _stream_error_codes(error: dict) -> set[str]:
+    """The code, type and OpenRouter error_type of an in-stream error object, lowercased."""
+    given = error.get("metadata")
+    metadata: dict = given if isinstance(given, dict) else {}
+    return {str(value).strip().lower() for value in (error.get("code"), error.get("type"), metadata.get("error_type"))
+            if isinstance(value, (str, int)) and not isinstance(value, bool)}
+
+
 def _raise_stream_error(error: Any) -> NoReturn:
     """Raise the failure an error object inside a 200 stream names; never returns."""
+    codes = _stream_error_codes(error) if isinstance(error, dict) else set()
+    if codes & _PAYMENT_CODES:
+        raise _ProviderResponseError("quota", retryable=False)
+    if codes & _CONTEXT_LIMIT_CODES:
+        raise _ProviderResponseError("provider_context_limit", retryable=False)
+    if codes & _REQUEST_REJECTED_CODES:
+        raise _ProviderResponseError("provider_rejected", retryable=False)
     if isinstance(error, dict) and str(error.get("code") or error.get("type")) in {
         *_NON_RETRYABLE_ERROR_CODES, *_DEFAULT_BILLING_CODES, "content_filter", "content_policy_violation",
     }:

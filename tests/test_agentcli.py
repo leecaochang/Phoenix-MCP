@@ -4610,19 +4610,12 @@ class TestCapabilityProbe:
         assert "temperature" not in caps
 
     @pytest.mark.asyncio
-    async def test_ollama_is_probed_for_validated_effort_levels(self, hass):
-        accepted = {"low", "medium", "high", "max"}
-
-        def answer(extra):
-            level = _effort_of(extra)
-            if level is None:
-                return 200
-            return 200 if level in accepted else 400
-
-        caps, calls, prov, _a = await self._probe(hass, "ollama", answer)
-        assert caps["effort_levels"] == ["low", "medium", "high", "max"]
-        assert calls == 10  # control + sentinel + seven candidates + temperature
-        assert _effort_of(prov.sent[1]) == provider_constants.AGENT_CHAT_PROBE_SENTINEL
+    async def test_ollama_levels_come_from_api_show_not_a_walk(self, hass):
+        # A model without thinking metadata accepts every alias, so a walk would record levels it lacks.
+        caps, calls, prov, _a = await self._probe(hass, "ollama", lambda extra: 400 if _effort_of(extra) == "phoenix-probe-invalid" else 200)
+        assert "effort_levels" not in caps
+        assert not any(_effort_of(sent) for sent in prov.sent)
+        assert calls == 2  # control + temperature
 
     @pytest.mark.asyncio
     async def test_claude_uses_its_own_nested_effort_field(self, hass):
@@ -4792,9 +4785,13 @@ class TestAggregatorEffort:
     def test_the_probe_asks_them_about_effort(self, kind):
         assert llm_probes._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
 
-    def test_openrouter_is_asked_through_its_nested_reasoning_object(self):
+    def test_infron_is_asked_through_its_nested_reasoning_object(self):
         # The top-level field has no "max"; the nested object carries every level.
-        assert llm_probes._effort_probe_body("openrouter", "max") == {"reasoning": {"effort": "max"}}
+        assert llm_probes._effort_probe_body("infron", "max") == {"reasoning": {"effort": "max"}}
+
+    def test_openrouter_levels_come_from_its_catalogue_not_a_walk(self):
+        # OpenRouter maps an unsupported level to the nearest one, so a walk would overwrite the catalogue.
+        assert llm_probes._effort_probe_body("openrouter", "max") is None
 
     def test_minimax_and_zai_carry_the_switch_their_effort_needs(self):
         assert llm_probes._effort_probe_body("minimax", "low") == {
@@ -4807,8 +4804,8 @@ class TestAggregatorEffort:
         assert llm_probes._effort_probe_body(kind, "high") is None
 
     @pytest.mark.parametrize("kind", ["ollama", "ollama_cloud"])
-    def test_ollama_probe_uses_its_openai_compatible_effort_field(self, kind):
-        assert llm_probes._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
+    def test_ollama_is_not_walked_for_effort(self, kind):
+        assert llm_probes._effort_probe_body(kind, "high") is None
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("kind", ["openrouter", "infron", "nvidia", "opencode", "tencent"])
@@ -5823,7 +5820,8 @@ async def test_headless_hands_malformed_tool_json_back_within_its_rounds(hass):
 # Tools-array cap
 # --------------------------------------------------------------------------- #
 
-@pytest.mark.parametrize(("kind", "capped"), [("chatgpt", True), ("groq", True), ("mistral", True), ("zai", True),
+# OpenAI's Responses API took 175 tools in a live turn and documents no cap.
+@pytest.mark.parametrize(("kind", "capped"), [("chatgpt", False), ("groq", True), ("mistral", True), ("zai", True),
                                               ("gemini", True), ("kimi", True), ("openrouter", True),
                                               ("deepseek", False), ("claude", False)])
 def test_documented_tools_array_caps(kind, capped):
@@ -5840,7 +5838,7 @@ async def test_a_catalog_over_the_providers_cap_is_refused_before_any_request(ha
     catalog = [{"name": f"tool_{i}", "description": "d", "inputSchema": {"type": "object", "properties": {}}}
                for i in range(count)]
     provider = _ScriptedProvider([[{"type": llm_base.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
-    provider.kind = "chatgpt"
+    provider.kind = "groq"
     data = _loop_data()
     access_key = data.store.get_access_key_by_id.return_value
     events = []
@@ -5852,7 +5850,7 @@ async def test_a_catalog_over_the_providers_cap_is_refused_before_any_request(ha
             session=None, messages=[], options={}, client_ip="agentcli", base_url="http://h",
             emit=emit, cancel=asyncio.Event())
         headless_provider = _ScriptedProvider([[{"type": llm_base.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
-        headless_provider.kind = "chatgpt"
+        headless_provider.kind = "groq"
         result = await agent_turn._run_headless_turn(hass, data, access_key, headless_provider, None, "http://h",
             system="s", seed="hi", client_ip="voice", max_iterations=2)
     errors = [body for name, body in events if name == "error"]
@@ -5862,8 +5860,8 @@ async def test_a_catalog_over_the_providers_cap_is_refused_before_any_request(ha
     assert provider.i == 0 and headless_provider.i == 0
     assert errors == [{
         "code": "too_many_tools", "retryable": False,
-        "message_params": {"count": 129, "limit": 128, "provider": "OpenAI"},
-        "message": "This access key announces 129 tools, but OpenAI accepts at most 128 in one request. "
+        "message_params": {"count": 129, "limit": 128, "provider": "Groq"},
+        "message": "This access key announces 129 tools, but Groq accepts at most 128 in one request. "
                    "Narrow the access key's capabilities or choose another provider.",
     }]
     assert result.outcome == agent_turn.TURN_PROVIDER_ERROR and "129 tools" in result.detail
@@ -6646,6 +6644,14 @@ async def test_responses_replay_uses_the_corrected_arguments_of_an_unparseable_c
                                               "error": {"code": "invalid_prompt", "message": "x"}}},
      "provider_blocked", False, None),
     ({"type": "error", "code": "rate_limit_exceeded", "message": "slow down"}, "provider_transient", True, None),
+    # A residency mismatch or a bad image is the request's fault, not a content block.
+    ({"type": "response.failed", "response": {"status": "failed",
+                                              "error": {"code": "data_residency_mismatch", "message": "x"}}},
+     "provider_rejected", False, None),
+    ({"type": "response.failed", "response": {"status": "failed",
+                                              "error": {"code": "image_too_large", "message": "x"}}},
+     "provider_rejected", False, None),
+    ({"type": "error", "code": "context_length_exceeded", "message": "x"}, "provider_context_limit", False, None),
 ])
 async def test_responses_terminal_events(event, code, retryable, stop):
     stream = _responses_sse({"type": "response.output_text.delta", "output_index": 0, "delta": "part"}, event)

@@ -26,7 +26,8 @@ TIER_PREFERENCES: dict[str, tuple[str, ...]] = {
     "mistral": ("large", "medium", "small"),
     "qwen": ("max", "plus", "flash"),
     "tencent": (r"^hy", r"^deepseek"),
-    "openrouter": (r"anthropic/claude-opus", r"anthropic/claude-sonnet", r"openai/gpt", r"google/gemini"),
+    "openrouter": (r"anthropic/claude-opus(?!.*:free$)", r"anthropic/claude-sonnet(?!.*:free$)",
+                   r"openai/gpt(?!.*:free$)", r"google/gemini(?!.*:free$)"),
     # A free variant is rate-limited and needs a funded account, so automatic mode never prefers one.
     "infron": (r"anthropic/claude-opus(?!.*:free$)", r"anthropic/claude-sonnet(?!.*:free$)",
                r"openai/gpt(?!.*:free$)", r"google/gemini(?!.*:free$)"),
@@ -57,6 +58,9 @@ _SNAPSHOT_RE = re.compile(r"(?:-\d{4}-\d{2}-\d{2}|-\d{8}|-\d{4})$")
 # A provider-maintained alias that follows its newest model. Preferring it lets
 # the PROVIDER move the target without Phoenix noticing anything.
 _LATEST_RE = re.compile(r"(?:^|[-_:/.])latest$")
+# Kinds whose -latest aliases hide which model answers, so automatic mode prefers a named one:
+# Gemini's gemini-flash-latest gets no thinking control and moves without notice.
+_DEMOTED_ALIAS_KINDS = frozenset({"gemini"})
 _VERSION_RUN_RE = re.compile(r"\d+")
 _SPLIT_RE = re.compile(r"[-_:/\s]+")
 # A parameter count or size ("70b", "8b", "27b") belongs to the family; a version
@@ -104,7 +108,7 @@ def _rank_key(
         0 if _PRERELEASE_RE.search(lowered) else 1,
         0 if _VARIANT_RE.search(lowered) else 1,
         0 if _SNAPSHOT_RE.search(lowered) else 1,
-        1 if _LATEST_RE.search(lowered) else 0,
+        (-1 if kind in _DEMOTED_ALIAS_KINDS else 1) if _LATEST_RE.search(lowered) else 0,
         float((created or {}).get(model_id) or 0),
         tuple(int(run) for run in _VERSION_RUN_RE.findall(lowered)),
         model_id,

@@ -408,7 +408,10 @@ async def test_opencode_setup_routes_are_explicit_and_credentials_keep_their_ide
         AGENT_CHAT_OPENCODE_BASE_URL, AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL,
     )
 
-    legacy = await agent_chat_views._probe_config("opencode", {"api_key": "secret"})
+    # A new account without a route starts on Console; a stored one without a route stays on Zen.
+    legacy = await agent_chat_views._probe_config("opencode", {"api_key": "secret", "endpoint_id": "zen"})
+    fresh = await agent_chat_views._probe_config("opencode", {"api_key": "secret"})
+    assert isinstance(fresh, ProviderConfig) and fresh.base_url == AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL
     console = await agent_chat_views._probe_config("opencode", {
         "api_key": "secret", "endpoint_id": "console", "base_url": "https://untrusted.example",
     })
@@ -431,7 +434,7 @@ async def test_opencode_setup_routes_are_explicit_and_credentials_keep_their_ide
     public = next(p for p in llm_accounts._provider_catalog() if p["kind"] == "opencode")
     assert "Bearer secret" not in json.dumps(public)
     assert "https://" not in json.dumps(public)
-    assert [c["value"] for c in public["fields"][0]["choices"]] == ["zen", "console"]
+    assert [c["value"] for c in public["fields"][0]["choices"]] == ["console", "zen"]
 
 
 @pytest.mark.asyncio

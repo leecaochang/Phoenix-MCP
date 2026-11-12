@@ -258,13 +258,17 @@ _MIMO_ENDPOINTS = (
     ProviderChoice("token_plan_ams", "Token Plan (Europe)", "settings.agentcliMimoTokenPlanEurope",
                    AGENT_CHAT_MIMO_TOKEN_PLAN_AMS_BASE_URL, note_key="settings.agentcliMimoTokenPlanTerms"),
 )
+# Console first for new accounts: OpenCode no longer documents Zen.
 _OPENCODE_ENDPOINTS = (
-    ProviderChoice("zen", "Zen (legacy)", "settings.agentcliOpenCodeZen", AGENT_CHAT_OPENCODE_BASE_URL),
     ProviderChoice(
         "console", "Console", "settings.agentcliOpenCodeConsole",
         AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL, AGENT_CHAT_OPENCODE_CONSOLE_MODELS_URL,
     ),
+    ProviderChoice("zen", "Zen (legacy)", "settings.agentcliOpenCodeZen", AGENT_CHAT_OPENCODE_BASE_URL),
 )
+# The route a stored account without an endpoint_id was saved on, where that is not the first
+# choice: OpenCode accounts from before Console routing are Zen accounts.
+_STORED_DEFAULT_ENDPOINT = {"opencode": "zen"}
 
 _PROVIDER_LABEL_KEYS = {
     "claude": "settings.providerAnthropic",
@@ -318,8 +322,8 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         _definition(
             "chatgpt", "OpenAI", AGENT_CHAT_OPENAI_BASE_URL, adapter="openai_responses", include_usage=True,
             model_filter="openai",
+            # No tool cap: the Responses API took 175 tools in a live turn, and OpenAI documents none.
             fields=(_region_field(_OPENAI_ENDPOINTS), _API_KEY_FIELD), endpoints=_OPENAI_ENDPOINTS,
-            max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST,
         ),
         _definition("gemini", "Gemini", AGENT_CHAT_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini",
                     tool_stream="gemini", max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
@@ -426,7 +430,7 @@ def _default_base_url(kind: str, endpoint_id: str | None = None) -> str:
     if definition is None:
         return ""
     if definition.endpoints:
-        selected = endpoint_id or definition.endpoints[0].value
+        selected = endpoint_id or _STORED_DEFAULT_ENDPOINT.get(kind) or definition.endpoints[0].value
         return next(
             (choice.base_url or "" for choice in definition.endpoints if choice.value == selected),
             "",
@@ -461,7 +465,7 @@ def _instance_name(inst: dict, has_dupes: bool, instance_id: str) -> str:
     definition = PROVIDER_DEFINITIONS.get(kind)
     if definition is not None and definition.endpoints:
         endpoints = definition.endpoints
-        endpoint_id = str(inst.get("endpoint_id") or endpoints[0].value)
+        endpoint_id = str(inst.get("endpoint_id") or _STORED_DEFAULT_ENDPOINT.get(kind) or endpoints[0].value)
         endpoint = next(
             (choice.label for choice in endpoints if choice.value == endpoint_id),
             endpoint_id,

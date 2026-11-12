@@ -64,7 +64,7 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 
 選擇這些方案時 Phoenix 會發出警告。語音、AI Task 和 Agent Chat 請使用提供商的按量付費 API。
 
-Groq、Mistral AI 和 Z.ai 每個請求最多接受 128 個工具，Phoenix 對 OpenAI、Gemini、Kimi、OpenRouter 和 Infron 也採用同樣的上限。Phoenix 會先給它們較小的工具集，並在模型要求時載入更多。
+Groq、Mistral AI 和 Z.ai 每個請求最多接受 128 個工具，Phoenix 對 Gemini、Kimi、OpenRouter 和 Infron 也採用同樣的上限。Phoenix 會先給它們較小的工具集，並在模型要求時載入更多。
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 

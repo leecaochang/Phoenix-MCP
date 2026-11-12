@@ -107,7 +107,8 @@ def test_malformed_load_requests_load_nothing(arguments):
 class _Scripted:
     """A provider replaying scripted rounds and recording what each request declared."""
 
-    kind = "chatgpt"
+    # A provider that caps the tools array, so a large catalog is declared in parts.
+    kind = "groq"
 
     def __init__(self, turns: list[list[dict]]) -> None:
         self.turns, self.i = turns, 0

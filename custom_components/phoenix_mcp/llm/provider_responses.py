@@ -14,7 +14,7 @@ from .base import (
     _CHAT_TIMEOUT, _error_body, _http_failure, _http_failure_code, _norm, _parse_provider_error,
     _provider_object, _ProviderResponseError, _rate_limit_headers, _refused_option,
     _RETRY_AFTER_HEADER_FIELDS, _RETRYABLE_STATUSES, _silent_stream_error, _sse_lines,
-    _transient_stream_error, EV_DONE, EV_ERROR, EV_INVALID_TOOLS,
+    _raise_stream_error, _transient_stream_error, EV_DONE, EV_ERROR, EV_INVALID_TOOLS,
 )
 from .provider_openai import OpenAICompatProvider
 
@@ -242,4 +242,5 @@ class OpenAIResponsesProvider(OpenAICompatProvider):
                 error = failed.get("error") if etype == "response.failed" else event
                 if isinstance(error, dict) and _transient_stream_error(error):
                     raise _ProviderResponseError("provider_transient")
-                raise _ProviderResponseError("provider_blocked", retryable=False)
+                # A residency mismatch or a bad image is not a content block; read it as the request's fault.
+                _raise_stream_error(error)

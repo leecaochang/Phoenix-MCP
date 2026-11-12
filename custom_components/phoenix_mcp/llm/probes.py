@@ -39,12 +39,15 @@ def _effort_probe_body(kind: str, level: str) -> dict | None:
         return {"thinking": {"type": "adaptive"}, "output_config": {"effort": level}}
     if kind in ("deepseek", "zai"):
         return {"thinking": {"type": "enabled"}, "reasoning_effort": level}
-    if kind in ("openrouter", "infron"):
+    if kind == "infron":
         # The nested object carries every level, including max.
         return {"reasoning": {"effort": level}}
+    # OpenRouter's catalogue and Ollama's /api/show declare each model's levels, and a walk would
+    # overwrite them: OpenRouter maps an unsupported level to the nearest one, and Ollama accepts
+    # every alias on a model without metadata, so both answer 200 to levels the model lacks.
     if kind in (
         "chatgpt", "grok", "gemini", "kimi", "meta", "mistral",
-        "nvidia", "opencode", "tencent", "ollama", "ollama_cloud", "groq", "together", "cerebras",
+        "nvidia", "opencode", "tencent", "groq", "together", "cerebras",
         "fireworks",
     ):
         return {"reasoning_effort": level}

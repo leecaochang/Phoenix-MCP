@@ -216,6 +216,13 @@ def _current_key(data: Any) -> Any:
 
 
 async def _evaluate(hass: HomeAssistant, data: Any, questions: dict[str, Any], state: Any) -> dict:
+    # One deadline over the whole evaluation, as on every other decision path: the account load
+    # and the request-limit reservation are bounded as well as the request itself.
+    async with asyncio.timeout(data.store.get_settings().decision_timeout_ms / 1000):
+        return await _evaluate_within_deadline(hass, data, questions, state)
+
+
+async def _evaluate_within_deadline(hass: HomeAssistant, data: Any, questions: dict[str, Any], state: Any) -> dict:
     access_key = _current_key(data)
     settings = data.store.get_settings()
     account = settings.decision_provider_id

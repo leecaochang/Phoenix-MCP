@@ -93,7 +93,7 @@ def _filter_gemini_models(models: list[str]) -> list[str]:
         mid = _strip_models_prefix(m)
         low = mid.lower()
         if low.startswith("gemini") and not _NON_CHAT_MODEL_RE.search(low) \
-                and not re.search(r"native-audio|robotics|omni|aqa|translate", low):
+                and not re.search(r"native-audio|robotics|omni|aqa|translate|decision|nano-banana", low):
             out.append(mid)
     return out or [_strip_models_prefix(m) for m in models]
 
@@ -182,6 +182,9 @@ def _mistral_capabilities(data: list[dict], models: list[str]) -> dict[str, dict
             caps["tools"] = chat and tools
         if isinstance(vision, bool):
             caps["vision"] = vision
+        if declared.get("reasoning") is False:
+            # A model Mistral declares without reasoning gets no thinking control.
+            caps["thinking"] = False
         if row.get("deprecation"):
             # Announced for retirement: automatic mode moves off it now, and the model Mistral
             # names replaces it once the catalogue drops it.
@@ -379,6 +382,14 @@ class OpenAICompatProvider:
         if parts:
             messages.append({"role": "user", "content": parts})
 
+    def _mimo_key_on_other_plan(self) -> bool:
+        """Whether a MiMo key's documented prefix names the plan the chosen route is not."""
+        if self.kind != "mimo" or not self.cfg.api_key:
+            return False
+        token_plan_route = str(self.cfg.endpoint_id or "").startswith("token_plan")
+        token_plan_key = self.cfg.api_key.startswith(("tp-", "ttp-"))
+        return token_plan_route != token_plan_key and (token_plan_key or self.cfg.api_key.startswith("sk-"))
+
     async def validate(self, session: ClientSession) -> tuple[bool, str]:
         async def _probe() -> tuple[bool, str]:
             if self._is_ollama:
@@ -395,6 +406,11 @@ class OpenAICompatProvider:
                 if resp.status == 200:
                     return True, ""
                 if resp.status in (401, 403):
+                    if self._mimo_key_on_other_plan():
+                        return False, LocalizedReason(
+                            "This key belongs to the other MiMo plan. Token Plan keys start with tp- and work "
+                            "only on a Token Plan route; pay-as-you-go keys start with sk-.",
+                            "providerMimoKeyRouteMismatch")
                     return False, LocalizedReason("API key rejected.", "providerKeyRejected")
                 if self.definition.validation_error == "fireworks" and resp.status == 412:
                     return False, LocalizedReason(
@@ -616,9 +632,12 @@ class OpenAICompatProvider:
         body: dict = {
             "model": self.cfg.model,
             "messages": full_messages,
-            "tools": tools,
             "stream": True,
         }
+        if tools:
+            # An empty array is not a valid tools value on every compatible API; a round with none
+            # (a headless closing round) leaves the field out.
+            body["tools"] = tools
         if self.definition.include_usage:
             body["stream_options"] = {"include_usage": True}
         thinking = options.get("thinking")

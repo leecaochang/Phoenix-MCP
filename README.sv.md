@@ -11,7 +11,7 @@
 
 Phoenix MCP ger dina AI-agenter säker, begränsad åtkomst till Home Assistant via MCP (Model Context Protocol), en öppen standard för att koppla AI-appar till verktyg och data. Säkerhet är avgörande när du använder AI, och Phoenix MCP har genomgått många månaders utveckling och säkerhetsgranskningar. Varje agent har en egen åtkomstnyckel, begränsad till bara de entiteter och funktioner du tillåter. Ett extra säkerhetslager ([MESA](https://github.com/leecaochang/mesa-core)) kan kräva din bekräftelse för en vald entitet eller göra den helt förbjuden, oavsett vilka behörigheter en åtkomstnyckel har fått.
 
-Phoenix MCP körs helt inuti Home Assistant, utan någon separat tjänst att driftsätta. Använd apparna du redan har, som Claude Code, Cursor, ChatGPT eller Gemini, eller chatta direkt i Home Assistant med den AI-leverantör du väljer, i molnet eller lokalt via Ollama.
+Phoenix MCP körs helt inuti Home Assistant, utan någon separat tjänst att driftsätta. Använd apparna du redan har, som Claude Code, Cursor, ChatGPT eller Gemini CLI, eller chatta direkt i Home Assistant med den AI-leverantör du väljer, i molnet eller lokalt via Ollama.
 
 En guidad konfiguration tar dig från installation till en fungerande agent på några minuter, med stöd av en katalog med 178 verktyg för att läsa, styra och skriva din konfiguration. Phoenix MCP använder ett välbekant och anpassningsbart fönsterbaserat gränssnitt som gör det enkelt att komma igång. Fullständig dokumentation är inbyggd och alltid tillgänglig.
 

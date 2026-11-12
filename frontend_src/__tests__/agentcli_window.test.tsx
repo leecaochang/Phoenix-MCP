@@ -601,7 +601,7 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
   });
   it("minimax: M3.1 Flash effort, M3 toggle, M2 always reasons; never temperature", () => {
     const flash = modelCaps("minimax", "MiniMax-M3.1-Flash", true);
-    expect(vals(flash)).toEqual(["low", "medium", "high", "max"]);
+    expect(vals(flash)).toEqual(["low", "medium", "high", "xhigh", "max"]);
     expect(flash.defaultLevel).toBe("max");
     const m3 = modelCaps("minimax", "MiniMax-M3", true);
     expect(m3.style).toBe("boolean");

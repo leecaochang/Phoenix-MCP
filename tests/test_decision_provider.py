@@ -89,7 +89,7 @@ async def test_real_http_contract(protocol, socket_enabled):
 
 
 @pytest.mark.parametrize('status,reason', [(302,'http_error'),(401,'authentication'),(403,'authentication'),
-                                        (429,'rate_limited'),(529,'rate_limited'),(500,'http_error')])
+                                        (429,'rate_limited'),(529,'unavailable'),(500,'unavailable'),(503,'unavailable')])
 async def test_http_failures_never_follow_redirects_retry_or_echo_bodies(status,reason,socket_enabled):
     count=0
     async def handler(request):
@@ -594,9 +594,10 @@ async def test_typesafe_capacity_error_is_bounded_and_secret_free(body, expected
     ('typesafe', 'systemone', 401, 'authentication'),
     ('typesafe', 'systemone', 403, 'authentication'),
     ('typesafe', 'systemone', 429, 'rate_limited'),
-    ('typesafe', 'systemone', 529, 'rate_limited'),
+    # TypeSafe's 529 is "temporarily overloaded": unavailable, not a rate limit or a refusal.
+    ('typesafe', 'systemone', 529, 'unavailable'),
     ('typesafe', 'systemone', 302, 'http_error'),
-    ('typesafe', 'systemone', 500, 'http_error'),
+    ('typesafe', 'systemone', 500, 'unavailable'),
     ('typesafe', 'systemone', 422, 'http_error'),
 ])
 async def test_capacity_code_does_not_override_status_or_other_adapters(kind, protocol, status, expected, socket_enabled):

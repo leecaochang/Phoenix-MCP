@@ -282,8 +282,11 @@ class DecisionProvider:
         """Recognize bounded TypeSafe error codes without retaining their bodies."""
         if response.status in (401, 403):
             return "authentication"
-        if response.status in (429, 529):
+        if response.status == 429:
             return "rate_limited"
+        if response.status == 529 or response.status >= 500:
+            # TypeSafe's 529 is "temporarily overloaded"; a 5xx is a server failure, neither a refusal.
+            return "unavailable"
         if response.status != 400 or self.cfg.kind != "typesafe" or self.protocol != "systemone":
             return "http_error"
         try:
