@@ -12,6 +12,7 @@ Each app connects with its own access key. Phoenix stores only a fingerprint of 
 - An app must send the key in its Authorization header. A key placed in a web address is refused.
 - The MCP connection refuses a browser request from a page outside Home Assistant, so a malicious website can't reach it through your browser.
 - A revoked or expired key stops working straight away. Requests already running stop at their next check.
+- When an app tries an unknown, revoked or expired key, Home Assistant's log names the address it came from, so you can find an app still holding an old key.
 - An app that signs in with OAuth gets a token that works only with Phoenix, for the one key an administrator approved. Home Assistant's own sign-in tokens never work with Phoenix.
 - Approve a sign-in only when you started it yourself just now. Someone could send you a sign-in link for their own app; approving it would give them the key.
 

@@ -13,7 +13,8 @@ from homeassistant.components.http import StaticPathConfig
 from custom_components.phoenix_mcp import panel
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import (
-    ACCESS_KEY_PREFIX, DOMAIN, FRONTEND_URL_PATH, MCP_SERVER_ICONS,
+    ACCESS_KEY_PREFIX, DOMAIN, FRONTEND_URL_PATH, MCP_SERVER_ICONS, REFUSED_KEY_LOG_WINDOW_SECONDS,
+    REFUSED_KEY_TRACKED_ADDRESSES_MAX,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_transport import ALL_MCP_VIEWS
@@ -64,6 +65,53 @@ async def test_expired_unarchived_bearer_is_refused_and_archived(http_authority)
     assert response.status == 401
     assert data.store.get_access_key_by_id(access_key.id) is None
     assert any(record.id == access_key.id for record in data.store.list_archived())
+
+
+_REFUSED = "Refused an unknown, revoked or expired Phoenix MCP access key"
+
+
+def _refusal_logs(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.getMessage().startswith(_REFUSED)]
+
+
+async def test_repeated_unknown_keys_are_logged_once_per_window_without_key_material(
+        http_authority, caplog, monkeypatch):
+    from custom_components.phoenix_mcp import access_key_auth
+    client, data = http_authority
+    clock = [1000.0]
+    monkeypatch.setattr(access_key_auth.time, "monotonic", lambda: clock[0])
+    raws = [ACCESS_KEY_PREFIX + format(n, "x") * 64 for n in range(1, 6)]
+    for raw in raws:
+        assert (await client.get("/api/phoenix-mcp/context", headers=_headers(raw))).status == 401
+    logs = _refusal_logs(caplog)
+    assert len(logs) == 1 and "127.0.0.1" in logs[0]
+    assert not any(raw in record.getMessage() or raw[4:12] in record.getMessage() for raw in raws
+                   for record in caplog.records)
+    clock[0] += REFUSED_KEY_LOG_WINDOW_SECONDS
+    assert (await client.get("/api/phoenix-mcp/context", headers=_headers(raws[0]))).status == 401
+    logs = _refusal_logs(caplog)
+    assert len(logs) == 2 and "and 4 more since the last report" in logs[1]
+
+
+async def test_a_revoked_key_is_logged_but_absent_and_malformed_bearers_are_not(http_authority, caplog):
+    """A client discovering sign-in sends no bearer on purpose; only a real key that failed is news."""
+    client, data = http_authority
+    access_key, raw = await data.store.async_create_access_key("revoked", "admin")
+    for headers in ({"Accept": "application/json"}, _headers("not-a-phoenix-key"), _headers(raw[:-1])):
+        assert (await client.get("/api/phoenix-mcp/context", headers=headers)).status == 401
+    assert _refusal_logs(caplog) == []
+    await data.store.async_archive_access_key(access_key.id, revoked=True, revoked_at=utcnow())
+    assert (await client.get("/api/phoenix-mcp/context", headers=_headers(raw))).status == 401
+    assert len(_refusal_logs(caplog)) == 1
+
+
+def test_refused_key_addresses_stay_bounded(caplog):
+    from custom_components.phoenix_mcp.access_key_auth import note_refused_key
+    data = PhoenixData(store=None, rate_limiter=RateLimiter(), audit=AuditLog())
+    for n in range(REFUSED_KEY_TRACKED_ADDRESSES_MAX + 5):
+        note_refused_key(data, f"10.0.{n // 256}.{n % 256}")
+    assert len(data.refused_key_addresses) == REFUSED_KEY_TRACKED_ADDRESSES_MAX
+    assert "10.0.0.0" not in data.refused_key_addresses
 
 
 async def test_real_single_request_rate_limit_is_enforced(http_authority):

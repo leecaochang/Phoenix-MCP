@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
@@ -18,7 +19,7 @@ from .approvals import (
 )
 from .const import (
     ACCESS_KEY_LENGTH, ACCESS_KEY_PREFIX, OAUTH_ACCESS_TOKEN_LENGTH, OAUTH_ACCESS_TOKEN_PREFIX,
-    OAUTH_GRANT_REQUEST_KEY,
+    OAUTH_GRANT_REQUEST_KEY, REFUSED_KEY_LOG_WINDOW_SECONDS, REFUSED_KEY_TRACKED_ADDRESSES_MAX,
 )
 from .helpers import (
     build_error_response, cancel_expiry_timer, fire_rate_limit_events, get_client_ip, log_request,
@@ -101,11 +102,13 @@ async def async_get_authenticated_access_key(
         access_key = data.store.get_access_key_by_hash(access_key_hash)
 
         if access_key is None:
+            note_refused_key(data, get_client_ip(request))
             return _401
 
         if not access_key.is_valid():
             if access_key.is_expired():
                 await async_archive_expired_access_key(hass, data, access_key)
+            note_refused_key(data, get_client_ip(request))
             return _401
 
     # Update last_used before the rate limit check so last_access reflects every
@@ -139,6 +142,33 @@ async def async_get_authenticated_access_key(
         return resp
 
     return access_key, rl_result
+
+
+def note_refused_key(data: PhoenixData, address: str | None) -> None:
+    """Log a refused, well-formed access key from one address: once per window, later ones counted.
+
+    Nothing of the key is logged. Home Assistant's failed-login handling is not used, as it
+    notifies and can ban a household client still holding a rotated key.
+    """
+    addresses = data.refused_key_addresses
+    address = address or "unknown address"
+    now = time.monotonic()
+    started, counted = addresses.pop(address, (None, 0))
+    if started is not None and now - started < REFUSED_KEY_LOG_WINDOW_SECONDS:
+        addresses[address] = (started, counted + 1)
+        return
+    minutes = REFUSED_KEY_LOG_WINDOW_SECONDS // 60
+    if counted:
+        _LOGGER.warning(
+            "Refused an unknown, revoked or expired Phoenix MCP access key from %s, and %d more "
+            "since the last report", address, counted)
+    else:
+        _LOGGER.warning(
+            "Refused an unknown, revoked or expired Phoenix MCP access key from %s; further "
+            "refusals from this address are counted and reported at most every %d minutes", address, minutes)
+    addresses[address] = (now, 0)
+    while len(addresses) > REFUSED_KEY_TRACKED_ADDRESSES_MAX:
+        del addresses[next(iter(addresses))]
 
 
 def _access_key_for_oauth_token(data: PhoenixData, request: web.Request, presented: str) -> AccessKeyRecord | None:

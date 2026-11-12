@@ -216,6 +216,10 @@ OAUTH_PENDING_MAX = 32
 OAUTH_PENDING_PER_ADDRESS_MAX = 4
 OAUTH_ADDRESS_REQUESTS_PER_MINUTE = 30
 OAUTH_TRACKED_ADDRESSES_MAX = 256
+# A well-formed access key that is unknown, revoked or expired is logged per client address:
+# the first refusal at once, later ones as one count per window, for this many addresses.
+REFUSED_KEY_LOG_WINDOW_SECONDS = 600
+REFUSED_KEY_TRACKED_ADDRESSES_MAX = 256
 OAUTH_MAX_GRANTS_PER_ACCESS_KEY = 10
 OAUTH_MAX_GRANTS = 100
 OAUTH_URL_MAX_LENGTH = 2048

@@ -113,6 +113,9 @@ class PhoenixData:
     # Tracks the monotonic time of the last rate-limit notification per access key
     # to enforce the one-per-minute throttle on phoenix_mcp_rate_limited bus events.
     rate_limit_notified: dict[str, float] = field(default_factory=dict)
+    # Per client address: the monotonic start of its refused-key log window and the refusals
+    # counted since, oldest address first. Memory only.
+    refused_key_addresses: dict[str, tuple[float, int]] = field(default_factory=dict)
     # settings_version already advised per access key, so the stale-tool-list notice
     # fires once per staleness epoch (a fresh tools/list clears the entry). In
     # memory only; after a restart the worst case is one repeated advisory.

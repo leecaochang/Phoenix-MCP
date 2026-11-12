@@ -41,6 +41,10 @@ Every route but the skill checks the key, in this order:
 
 Every `401` carries `WWW-Authenticate: Bearer realm="Phoenix MCP"`. While a key allows OAuth sign-in and the request came over HTTPS, it also names `resource_metadata`, and adds `error="invalid_token"` for an ended OAuth token. A key that passes gets its `last_used_at` updated before the rate limit check.
 
+When a `phx_` key is unknown, revoked or expired, Home Assistant's log gets a warning with the client's address, never the key. After the first one, each address gets at most one warning every 10 minutes, with a count of the refusals since.
+
+A missing or malformed key isn't logged, because apps send one on purpose to find the sign-in page.
+
 Errors on these routes have a simpler body than the admin API's: `error` and `message`, sometimes with a `suggestions` array. They carry `X-Phoenix-Request-ID` but no `message_key` and no `Cache-Control`.
 
 ```json

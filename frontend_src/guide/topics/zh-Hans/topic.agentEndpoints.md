@@ -41,6 +41,10 @@ GET    /api/phoenix-mcp/skill
 
 每个 `401` 都带有 `WWW-Authenticate: Bearer realm="Phoenix MCP"`。当密钥允许 OAuth 登录且请求通过 HTTPS 到达时，它还会指明 `resource_metadata`；对于已结束的 OAuth 令牌，还会添加 `error="invalid_token"`。通过检查的密钥会在速率限制检查前更新其 `last_used_at`。
 
+当 `phx_` 密钥未知、已吊销或已过期时，Home Assistant 日志会记录一条警告，包含客户端地址，但绝不包含密钥。第一次之后，每个地址每 10 分钟最多记录一条警告，并附上期间被拒绝的次数。
+
+缺失或格式错误的密钥不会记录，因为应用会故意发送这样的请求来找到登录页面。
+
 这些路由上的错误正文比管理 API 更简单：`error` 和 `message`，有时带一个 `suggestions` 数组。它们带有 `X-Phoenix-Request-ID`，但没有 `message_key`，也没有 `Cache-Control`。
 
 ```json
