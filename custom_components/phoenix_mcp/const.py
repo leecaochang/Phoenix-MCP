@@ -689,7 +689,6 @@ NO_TARGET_SERVICES = frozenset({
     "zone/reload",
     "person/reload",
     "schedule/reload",
-    "counter/reload",
     "timer/reload",
 })
 
@@ -1123,14 +1122,14 @@ DOMAIN_SERVICE_HINTS: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "lawn_mower": ("start_mowing", "pause", "dock"),
 })
 
-# assist_satellite feature bit for ANNOUNCE support.
-ANNOUNCE_BIT = 2
+# AssistSatelliteEntityFeature.ANNOUNCE, mirrored like the vacuum bits below. Bit 2 is
+# START_CONVERSATION, which does not imply announcements.
+ANNOUNCE_BIT = 1
 
-# vacuum feature bits (VacuumEntityFeature), mirrored rather than imported so
-# nothing here pulls a component module into the import graph; the ANNOUNCE_BIT
-# precedent. HA's own vacuum intents set required_features, so an entity that
-# cannot perform the operation is never targeted rather than being asked and
-# erroring, and the native tools mirror that.
+# vacuum feature bits (VacuumEntityFeature), mirrored rather than imported so nothing
+# here pulls a component module into the import graph. HA's own vacuum intents set
+# required_features, so an entity that cannot perform the operation is never targeted
+# rather than being asked and erroring, and the native tools mirror that.
 # HA-VERSION-SENSITIVE: a renumbered bit would silently target the wrong vacuums.
 VACUUM_START_BIT = 8192
 VACUUM_RETURN_HOME_BIT = 16

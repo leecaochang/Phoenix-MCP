@@ -165,6 +165,27 @@ class TestBroadcast:
         assert len(fired) == 1
         assert outcome == "allowed"
 
+    async def test_only_satellites_that_announce_are_chosen(self, hass: HomeAssistant):
+        from homeassistant.components.assist_satellite.const import AssistSatelliteEntityFeature
+
+        from custom_components.phoenix_mcp.policy_engine import Permission
+        from custom_components.phoenix_mcp.tools.native import _tool_hass_broadcast
+
+        hass.states.async_set("assist_satellite.announces", "idle",
+                              {"supported_features": int(AssistSatelliteEntityFeature.ANNOUNCE)})
+        hass.states.async_set("assist_satellite.converses", "idle",
+                              {"supported_features": int(AssistSatelliteEntityFeature.START_CONVERSATION)})
+        await _mesa(hass, "assist_satellite.announces", "autonomous")
+        fired: list = []
+        hass.services.async_register("assist_satellite", "announce", lambda c: fired.append(c))
+
+        with patch(f"{NATIVE}.resolve", return_value=Permission.WRITE):
+            _content, outcome, _ = await _tool_hass_broadcast({"message": "hi"}, _access_key(), hass)
+        await hass.async_block_till_done()
+
+        assert outcome == "allowed"
+        assert [call.data["entity_id"] for call in fired] == [["assist_satellite.announces"]]
+
 
 # --------------------------------------------------------------------------
 # The structural guard: no NEW actuation site may skip MESA silently
