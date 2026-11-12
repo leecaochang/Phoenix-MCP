@@ -41,6 +41,9 @@ export function TitleTab(props: IDockviewPanelHeaderProps) {
     const tab = titleRef.current?.closest(".dv-tab");
     if (!tab) return undefined;
     tab.setAttribute("data-help", "help.windowTitle");
+    // Selecting the title bar turns the Guide to this window's own page (guideTarget.ts).
+    const header = tab.closest(".dv-tabs-and-actions-container") ?? tab;
+    header.setAttribute("data-phx-window-title", props.api.id);
     // Dockview closes a tab on Delete or Backspace, around the workspace's own Close, which
     // records where the window was and what closing it means. A stray key never closes a window.
     const keys = (e: Event) => {
@@ -51,7 +54,7 @@ export function TitleTab(props: IDockviewPanelHeaderProps) {
     };
     tab.addEventListener("keydown", keys);
     return () => tab.removeEventListener("keydown", keys);
-  }, []);
+  }, [props.api.id]);
   return (
     <div ref={titleRef} className="phx-window-title" data-help="help.windowTitle">
       <span className="phx-window-title-text">{title}</span>

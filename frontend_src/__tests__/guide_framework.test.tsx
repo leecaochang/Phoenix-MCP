@@ -278,6 +278,26 @@ describe("following the reader's selection", () => {
     fireEvent.pointerDown(el("tagged"));
     expect(tracker.current()?.topic).toBe("topic.routing");
   });
+
+  it("returns to the window's own page when its title bar is selected", () => {
+    document.body.innerHTML = `<div id="root">
+      <div data-phx-window-title="settingsProviders"><span id="title">AI Providers</span></div>
+      <div data-phx-window="settingsProviders"><button id="tagged" data-guide="window.settingsProviders#tool-loading">T</button>
+        <div id="space"></div></div></div>`;
+    const tracker = new GuideTargetTracker();
+    tracker.attach(document.getElementById("root")!);
+    fireEvent.pointerDown(document.getElementById("tagged")!);
+    expect(tracker.current()).toMatchObject({ windowId: "settingsProviders", anchor: "tool-loading" });
+    fireEvent.pointerDown(document.getElementById("title")!);
+    expect(tracker.current()).toMatchObject({ windowId: "settingsProviders", topic: null, anchor: null });
+    // Back to the control, then empty space keeps it; the title bar again clears it.
+    fireEvent.pointerDown(document.getElementById("tagged")!);
+    fireEvent.pointerDown(document.getElementById("space")!);
+    expect(tracker.current()?.anchor).toBe("tool-loading");
+    fireEvent.focusIn(document.getElementById("title")!);
+    expect(tracker.current()?.anchor).toBeNull();
+    document.body.innerHTML = "";
+  });
 });
 
 describe("the Guide window with sections, Contents and Search", () => {

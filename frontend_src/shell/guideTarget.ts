@@ -20,6 +20,8 @@ export interface GuideTarget {
   topic: string | null;
   /** The section to show and highlight; null for the top of the page. */
   anchor: string | null;
+  /** Set when the reader selected the window's title bar: its own page, top, whatever was chosen before. */
+  window?: boolean;
 }
 
 /** Find the section for a control that carries no `data-guide` of its own. */
@@ -35,6 +37,8 @@ export function parseGuideRef(ref: string): { topic: string | null; anchor: stri
 
 /** The target for whatever an event landed on, or null when it is not in a window. */
 export function guideTargetFor(el: Element, resolvers: readonly GuideResolver[] = []): GuideTarget | null {
+  const title = el.closest("[data-phx-window-title]")?.getAttribute("data-phx-window-title");
+  if (title && title !== HELP_WINDOW) return { windowId: title, topic: null, anchor: null, window: true };
   const body = el.closest("[data-phx-window]");
   const windowId = body?.getAttribute("data-phx-window") ?? null;
   if (!windowId || windowId === HELP_WINDOW) return null;
@@ -75,9 +79,10 @@ export class GuideTargetTracker {
       const el = e.target;
       if (!(el instanceof Element) || el.closest(".phx-guide, .phx-guide-phone")) return;
       const next = guideTargetFor(el, this.resolvers);
-      // A click on a window's empty space keeps the section the reader had chosen there.
-      if (!next || (next.anchor === null && next.topic === null && this.target?.windowId === next.windowId)) return;
-      const same = this.target && this.target.windowId === next.windowId && this.target.topic === next.topic && this.target.anchor === next.anchor;
+      // A click on a window's empty space keeps the section the reader had chosen there; its title bar does not.
+      if (!next || (!next.window && next.anchor === null && next.topic === null && this.target?.windowId === next.windowId)) return;
+      const same = this.target && this.target.windowId === next.windowId && this.target.topic === next.topic
+        && this.target.anchor === next.anchor && !this.target.window === !next.window;
       // Selecting the same control again counts, so the Guide returns to it from another page;
       // focus coming back to it does not.
       if (same && e.type !== "pointerdown") return;
