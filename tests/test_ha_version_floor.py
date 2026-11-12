@@ -197,6 +197,9 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         # Verified present in 2026.7.0; its first release was not checked.
         "llm": "2026.7.0",
         "sun": "0.0.0",
+        # Core's target expansion, which test_trigger uses to prove a target's reach.
+        # Verified present in the 2026.7.0 reference stack.
+        "target": "2026.7.0",
         "trace": "0.0.0",
         "trigger": "0.0.0",
         # Module and async_get_translations verified in the 2025.2.0 source.

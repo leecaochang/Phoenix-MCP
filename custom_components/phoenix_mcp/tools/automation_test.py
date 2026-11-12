@@ -3,8 +3,9 @@
 test_trigger registers trigger definitions with Home Assistant's own trigger helpers for a short,
 bounded wait and reports the first firing; test_condition evaluates one condition now. Both read
 only what the key may read: every entity a definition names, by ID, registry ID or literal template
-lookup, needs Read, proved before anything runs and again before a result is returned. A definition
-whose reach cannot be proved is refused whole, and a hidden and a missing entity are refused alike.
+lookup, every entity a target expands to and every entity of a device trigger's device needs Read,
+proved before anything runs and again before a result is returned. A definition whose reach cannot
+be proved is refused whole, and a hidden and a missing reference are refused alike.
 """
 
 from __future__ import annotations
@@ -21,6 +22,8 @@ from homeassistant.core import Context, HomeAssistant, State, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import condition as ha_condition
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import target as ha_target
 from homeassistant.helpers import trace as ha_trace
 from homeassistant.helpers import trigger as ha_trigger
 from homeassistant.helpers.template import Template
@@ -53,8 +56,8 @@ _NOT_FOUND = (
     "cannot read. Name only entities the key can read; nothing was registered."
 )
 _UNSCOPED = (
-    "Device, area, floor and label references are not supported here, as they reach entities "
-    "the definition does not name. Name the entities instead, with entity_id."
+    "Device, area, floor and label references are supported only in a target block, or as the "
+    "device of a device trigger or condition. Name entities with entity_id elsewhere."
 )
 _MAX_RESULT_DEPTH = 12
 
@@ -64,11 +67,25 @@ class _Refused(Exception):
 
 
 class _Scope:
-    """What a definition reads: entity IDs, and (entity, attribute) pairs it compares."""
+    """What a definition reads: entity IDs, targets and devices to expand, and compared attributes."""
 
     def __init__(self) -> None:
         self.entities: set[str] = set()
         self.attributes: set[tuple[str, str]] = set()
+        # Each target with the trigger or condition kind that reads it.
+        self.targets: list[tuple[str, dict[str, Any]]] = []
+        self.devices: set[str] = set()
+        # Whether each kind's class expands targets to primary entities only, read from Core.
+        self.primary_only: dict[str, bool] = {}
+
+
+def _ids(value: Any) -> list[str] | None:
+    """A string or list of strings as a list, else None."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return list(value)
+    return None
 
 
 def _entity_strings(value: str, hass: HomeAssistant) -> list[str]:
@@ -100,11 +117,20 @@ def _collect(value: Any, hass: HomeAssistant, scope: _Scope, data_names: frozens
         return
     if not isinstance(value, dict):
         return
+    device_kind = any(value.get(kind) == "device" for kind in _KIND_KEYS)
     for key, item in value.items():
+        if key == "target" and isinstance(item, dict):
+            # Expanded the way Core expands it; an exclude block only narrows, so it is ignored.
+            selection = {field: _ids(ids) for field, ids in item.items() if field != "exclude" and ids}
+            if any(ids is None for ids in selection.values()):
+                raise _Refused("A target lists IDs as a string or a list of strings.")
+            kind = next((value[k] for k in _KIND_KEYS if isinstance(value.get(k), str)), "")
+            scope.targets.append((kind, selection))
+            continue
+        if key == "device_id" and device_kind and (devices := _ids(item)) is not None:
+            scope.devices.update(devices)
+            continue
         if key in AUTOMATION_TEST_UNSCOPED_KEYS and item:
-            raise _Refused(_UNSCOPED)
-        if key == "target" and isinstance(item, dict) and any(
-                field != "entity_id" and target for field, target in item.items()):
             raise _Refused(_UNSCOPED)
         if key in _KIND_KEYS and isinstance(item, str):
             continue
@@ -119,9 +145,36 @@ def _collect(value: Any, hass: HomeAssistant, scope: _Scope, data_names: frozens
         _collect(item, hass, scope, data_names, depth + 1)
 
 
+def _reached(scope: _Scope, hass: HomeAssistant) -> set[str] | None:
+    """Every entity the targets and devices reach now, or None when one names nothing that exists.
+
+    Targets use Core's own expansion with groups expanded, and with configuration and diagnostic
+    entities left out only where the kind's own class leaves them out. A device must have an entity.
+    """
+    reached: set[str] = set()
+    for kind, target in scope.targets:
+        selected = ha_target.async_extract_referenced_entity_ids(
+            hass, ha_target.TargetSelection(target), True,
+            primary_entities_only=scope.primary_only.get(kind, False))
+        if (selected.missing_devices or selected.missing_areas or selected.missing_floors
+                or selected.missing_labels):
+            return None
+        reached |= selected.referenced | selected.indirectly_referenced
+    registry = er.async_get(hass)
+    for device_id in scope.devices:
+        entities = er.async_entries_for_device(registry, device_id, include_disabled_entities=True)
+        if not entities:
+            return None
+        reached.update(entry.entity_id for entry in entities)
+    return reached
+
+
 def _scope_error(scope: _Scope, access_key: AccessKeyRecord, hass: HomeAssistant) -> str | None:
     """The refusal when a recorded reference is not readable as written, else None."""
-    for entity_id in scope.entities | {entity for entity, _ in scope.attributes}:
+    reached = _reached(scope, hass)
+    if reached is None:
+        return _NOT_FOUND
+    for entity_id in scope.entities | reached | {entity for entity, _ in scope.attributes}:
         if resolve_read(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
             return _NOT_FOUND
     for entity_id, attribute in scope.attributes:
@@ -201,8 +254,8 @@ def _condition_kinds(condition: Any, depth: int = 0) -> list[str]:
     return kinds
 
 
-async def _entity_based(hass: HomeAssistant, platform: str, key: str) -> bool:
-    """Whether a new-style trigger or condition key is one of Core's entity-target classes."""
+async def _entity_class(hass: HomeAssistant, platform: str, key: str) -> type | None:
+    """The class of a new-style trigger or condition key when it is one of Core's entity classes."""
     base: type
     try:
         if platform == "trigger":
@@ -214,20 +267,29 @@ async def _entity_based(hass: HomeAssistant, platform: str, key: str) -> bool:
             from homeassistant.helpers.condition.entity_condition import EntityConditionBase
             base, relative = EntityConditionBase, ha_condition.get_relative_description_key
     except ImportError:
-        return False
+        return None
     domain = key.split(".", 1)[0]
     try:
         module = await (await async_get_integration(hass, domain)).async_get_platform(platform)
         getter = module.async_get_triggers if platform == "trigger" else module.async_get_conditions
         found = (await getter(hass)).get(relative(domain, key))
     except Exception:  # an integration without that platform is simply not entity-based
-        return False
-    return isinstance(found, type) and issubclass(found, base)
+        return None
+    return found if isinstance(found, type) and issubclass(found, base) else None
 
 
-async def _require_entity_based(hass: HomeAssistant, platform: str, kinds: list[str]) -> None:
+async def _require_entity_based(hass: HomeAssistant, platform: str, kinds: list[str], scope: _Scope) -> None:
+    """Refuse a new-style kind that is not entity-based; record how each expands its targets."""
     for kind in kinds:
-        if "." in kind and not await _entity_based(hass, platform, kind):
+        if "." not in kind:
+            continue
+        found = await _entity_class(hass, platform, kind)
+        if found is not None:
+            # Core's class decides whether configuration and diagnostic entities are tracked;
+            # without the flag, the widest expansion is assumed.
+            primary = getattr(found, "_primary_entities_only", False)
+            scope.primary_only[kind] = primary if isinstance(primary, bool) else False
+        else:
             raise _Refused(
                 f"The {kind} {platform} cannot be tested here: only Core's entity {platform}s, "
                 "which read just the entities in their entity_id target, are supported."
@@ -286,9 +348,9 @@ async def _tool_test_trigger(
         variables = _variables(args)
         kinds = _trigger_kinds(triggers)
         _collect(triggers, hass, scope, frozenset(variables))
+        await _require_entity_based(hass, "trigger", kinds, scope)
         if (refusal := _scope_error(scope, access_key, hass)) is not None:
             return _tool_error(refusal), "not_found" if refusal is _NOT_FOUND else "denied", "test_trigger"
-        await _require_entity_based(hass, "trigger", kinds)
     except _Refused as err:
         return _tool_error(str(err)), "invalid_request", "test_trigger"
     try:
@@ -342,9 +404,9 @@ async def _tool_test_condition(
         variables = _variables(args)
         kinds = _condition_kinds(raw)
         _collect(raw, hass, scope, frozenset(variables))
+        await _require_entity_based(hass, "condition", kinds, scope)
         if (refusal := _scope_error(scope, access_key, hass)) is not None:
             return _tool_error(refusal), "not_found" if refusal is _NOT_FOUND else "denied", "test_condition"
-        await _require_entity_based(hass, "condition", kinds)
     except _Refused as err:
         return _tool_error(str(err)), "invalid_request", "test_condition"
     try:

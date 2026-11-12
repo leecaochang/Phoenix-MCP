@@ -96,9 +96,9 @@ Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#con
 
 Before saving an automation, an agent can check that a trigger fires, waiting up to 30 seconds, or that a condition holds now. Nothing is saved, and the trigger is removed after the test.
 
-Every entity the trigger or condition names must be one the key can read, including entities in its templates. Templates must name entities directly, such as `states('sensor.x')`.
+Every entity the trigger or condition reaches must be one the key can read. That includes entities in its templates, every entity of a device, area, floor or label it targets, and every entity of a device trigger's device. Templates must name entities directly, such as `states('sensor.x')`.
 
-Event, MQTT, webhook, conversation and device triggers are refused, and so are device, area, floor and label targets. They can reach entities the definition doesn't name.
+Event, MQTT, webhook and conversation triggers are refused, because no key's scope limits what they reach.
 
 Allowed by:[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
 

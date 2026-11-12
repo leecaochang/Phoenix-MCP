@@ -1272,15 +1272,16 @@ MAX_SEARCH_MEMBER_ID_LEN = 255
 MAX_SUBSCRIPTION_SECONDS = 30
 
 # test_trigger and test_condition: the classic trigger and condition types whose reach a key's
-# scope can prove. Each reads only the entities, zones and templates it names. Core's new
-# entity triggers and conditions are admitted by their base class instead. Everything else is
-# refused: an event, MQTT or webhook trigger has no entity scope, a conversation trigger
-# registers sentences, and device, area, floor and label references reach unnamed entities.
+# scope can prove. Each reads only the entities, zones and templates it names, or for a device
+# trigger or condition every entity of its device. Core's new entity triggers and conditions
+# are admitted by their base class instead, their targets expanded as Core expands them.
+# Everything else is refused: an event, MQTT or webhook trigger has no entity scope, and a
+# conversation trigger registers sentences.
 AUTOMATION_TEST_TRIGGERS = frozenset({
-    "homeassistant", "numeric_state", "state", "sun", "template", "time", "time_pattern", "zone",
+    "device", "homeassistant", "numeric_state", "state", "sun", "template", "time", "time_pattern", "zone",
 })
 AUTOMATION_TEST_CONDITIONS = frozenset({
-    "and", "not", "numeric_state", "or", "state", "sun", "template", "time", "zone",
+    "and", "device", "not", "numeric_state", "or", "state", "sun", "template", "time", "zone",
 })
 AUTOMATION_TEST_UNSCOPED_KEYS = frozenset({"area_id", "device_id", "floor_id", "label_id"})
 # Triggers one test_trigger call may register at once.

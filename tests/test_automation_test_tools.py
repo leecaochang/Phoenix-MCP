@@ -137,7 +137,6 @@ async def test_a_registry_id_naming_a_hidden_entity_is_refused(home):
     {"trigger": "mqtt", "topic": "home/#"},
     {"trigger": "webhook", "webhook_id": "probe"},
     {"trigger": "conversation", "command": "open sesame"},
-    {"trigger": "device", "device_id": "abc", "domain": "light", "type": "turned_on"},
     {"trigger": "tag", "tag_id": "x"},
 ])
 async def test_kinds_without_an_entity_scope_are_refused(home, trigger):
@@ -146,12 +145,122 @@ async def test_kinds_without_an_entity_scope_are_refused(home, trigger):
     assert "cannot be tested here" in _text(content) or "Device, area" in _text(content)
 
 
-@pytest.mark.parametrize("field", ["device_id", "area_id", "floor_id", "label_id"])
-async def test_device_area_floor_and_label_targets_are_refused(home, field):
-    content, outcome = await _call("test_trigger", {"trigger": {
-        "trigger": "light.turned_on", "target": {field: "anything"}}}, _key(), home)
-    assert outcome == "invalid_request", content
-    assert "Device, area, floor and label" in _text(content)
+@pytest.fixture
+async def rooms(home):
+    """LAMP and DESK on one device in the lounge; HIDDEN on another in the vault; a label on each."""
+    from homeassistant.helpers import area_registry as ar, device_registry as dr, floor_registry as fr
+    from homeassistant.helpers import label_registry as lr
+    from pytest_homeassistant.common import MockConfigEntry
+
+    entry = MockConfigEntry(domain="test")
+    entry.add_to_hass(home)
+    floor = fr.async_get(home).async_create("Ground")
+    lounge = ar.async_get(home).async_create("Lounge", floor_id=floor.floor_id)
+    vault = ar.async_get(home).async_create("Vault")
+    shared = lr.async_get(home).async_create("Shared")
+    lights = lr.async_get(home).async_create("Readable")
+    devices, entities = dr.async_get(home), er.async_get(home)
+    lamp_device = devices.async_get_or_create(config_entry_id=entry.entry_id, identifiers={("test", "lamps")})
+    vault_device = devices.async_get_or_create(config_entry_id=entry.entry_id, identifiers={("test", "vault")})
+    devices.async_update_device(lamp_device.id, area_id=lounge.id)
+    devices.async_update_device(vault_device.id, area_id=vault.id)
+    for entity_id, device, labels in ((LAMP, lamp_device, {shared.label_id, lights.label_id}),
+                                      (DESK, lamp_device, {lights.label_id}),
+                                      (HIDDEN, vault_device, {shared.label_id})):
+        entities.async_update_entity(entity_id, device_id=device.id, labels=labels)
+    return {"lounge": lounge.id, "vault": vault.id, "floor": floor.floor_id, "shared": shared.label_id,
+            "readable": lights.label_id, "lamp_device": lamp_device.id, "vault_device": vault_device.id,
+            "ground": floor.floor_id}
+
+
+def _targeted(field: str, value: str) -> dict:
+    return {"condition": {"condition": "light.is_on", "target": {field: value}}}
+
+
+async def _entity_conditions(home) -> bool:
+    assert await async_setup_component(home, "light", {})
+    return _has_entity_triggers()
+
+
+@pytest.mark.parametrize(("field", "readable", "hidden"), [
+    ("area_id", "lounge", "vault"),
+    ("device_id", "lamp_device", "vault_device"),
+    ("label_id", "readable", "shared"),
+])
+async def test_a_target_is_admitted_only_when_everything_it_expands_to_is_readable(home, rooms, field, readable, hidden):
+    if not await _entity_conditions(home):
+        pytest.skip("this Home Assistant release has no entity conditions")
+    allowed = await _call("test_condition", _targeted(field, rooms[readable]), _key(), home)
+    assert allowed[1] == "allowed", allowed
+    refused = await _call("test_condition", _targeted(field, rooms[hidden]), _key(), home)
+    unknown = await _call("test_condition", _targeted(field, "no-such-id"), _key(), home)
+    assert refused[1] == unknown[1] == "not_found", (refused, unknown)
+    assert _text(refused[0]) == _text(unknown[0])
+
+
+async def test_a_diagnostic_entity_counts_only_where_core_tracks_it(home, rooms):
+    """light.is_on skips configuration and diagnostic entities, as Core's own class says."""
+    if not await _entity_conditions(home):
+        pytest.skip("this Home Assistant release has no entity conditions")
+    from homeassistant.const import EntityCategory
+    signal = er.async_get(home).async_get_or_create(
+        "sensor", "test", "lamp_signal", suggested_object_id="lamp_signal",
+        device_id=rooms["lamp_device"], entity_category=EntityCategory.DIAGNOSTIC)
+    home.states.async_set(signal.entity_id, "-60")
+    allowed = await _call("test_condition", _targeted("area_id", rooms["lounge"]), _key(), home)
+    assert allowed[1] == "allowed", allowed
+    refused = await _call("test_condition", {"condition": {"condition": "device", "device_id": rooms["lamp_device"],
+                                                           "domain": "light", "type": "is_on", "entity_id": LAMP}}, _key(), home)
+    assert refused[1] == "not_found", refused
+
+
+async def test_a_floor_target_reaches_its_areas(home, rooms):
+    if not await _entity_conditions(home):
+        pytest.skip("this Home Assistant release has no entity conditions")
+    assert (await _call("test_condition", _targeted("floor_id", rooms["ground"]), _key(), home))[1] == "allowed"
+    from homeassistant.helpers import area_registry as ar
+    ar.async_get(home).async_update(rooms["vault"], floor_id=rooms["ground"])
+    assert (await _call("test_condition", _targeted("floor_id", rooms["ground"]), _key(), home))[1] == "not_found"
+
+
+async def test_an_exclude_block_does_not_narrow_what_must_be_readable(home, rooms):
+    if not await _entity_conditions(home):
+        pytest.skip("this Home Assistant release has no entity conditions")
+    content, outcome = await _call("test_condition", {"condition": {"condition": "light.is_on", "target": {
+        "label_id": rooms["shared"], "exclude": {"entity_id": HIDDEN}}}}, _key(), home)
+    assert outcome == "not_found", content
+
+
+async def test_a_device_trigger_needs_read_on_every_entity_of_its_device(home, rooms):
+    assert await async_setup_component(home, "light", {})
+    trigger = {"trigger": "device", "domain": "light", "type": "turned_on", "entity_id": DESK}
+    refused = await _call("test_trigger", {"trigger": {**trigger, "device_id": rooms["vault_device"]}, "timeout": 1}, _key(), home)
+    assert refused[1] == "not_found", refused
+    content, outcome = await _call("test_trigger", {"trigger": {**trigger, "device_id": rooms["lamp_device"]}, "timeout": 1}, _key(), home)
+    assert outcome in ("allowed", "invalid_request"), content
+    assert "Not found" not in _text(content)
+
+
+async def test_an_area_is_expanded_again_after_the_wait(home, rooms):
+    if not _has_entity_triggers():
+        pytest.skip("this Home Assistant release has no entity triggers")
+    assert await async_setup_component(home, "light", {})
+    ready = asyncio.Event()
+    real = automation_test.ha_trigger.async_initialize_triggers
+
+    async def registered(*a, **kw):
+        remove = await real(*a, **kw)
+        ready.set()
+        return remove
+
+    with patch.object(automation_test.ha_trigger, "async_initialize_triggers", registered):
+        task = asyncio.create_task(_call("test_trigger", {"trigger": {
+            "trigger": "light.turned_on", "target": {"area_id": rooms["lounge"]}}, "timeout": 2}, _key(), home))
+        await asyncio.wait_for(ready.wait(), timeout=2)
+        from homeassistant.helpers import device_registry as dr
+        dr.async_get(home).async_update_device(rooms["vault_device"], area_id=rooms["lounge"])
+        content, outcome = await task
+    assert outcome == "not_found", content
 
 
 @pytest.mark.parametrize("field", ["device_id", "area_id"])

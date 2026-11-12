@@ -3194,11 +3194,12 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Check an automation trigger before saving it: register it with Home Assistant for up to "
             "timeout seconds (max 30) and return the first firing's trigger variables, or fired=false. "
-            "Supports state, numeric_state, template, time, time_pattern, sun, homeassistant and zone "
-            "triggers, and entity triggers such as light.turned_on with an entity_id target. Every "
-            "entity it names, in any field or template, must be readable by this key; templates use "
-            "literal lookups such as states('sensor.x'). Event, MQTT, webhook, conversation and "
-            "device triggers, and device, area, floor or label targets, are refused."
+            "Supports state, numeric_state, template, time, time_pattern, sun, homeassistant, zone "
+            "and device triggers, and entity triggers such as light.turned_on with a target. Every "
+            "entity it names or reaches (in any field or template, through a target's devices, "
+            "areas, floors or labels, or a device trigger's device) must be readable by this key; "
+            "templates use literal lookups such as states('sensor.x'). Event, MQTT, webhook and "
+            "conversation triggers are refused."
         ),
         "cap": "cap_config_read",
         "inputSchema": {
@@ -3219,9 +3220,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Check an automation condition before saving it: evaluate it against current states and "
             "return result=true or false, with any template errors. Supports state, numeric_state, "
-            "template, time, sun and zone conditions, and, or and not, and entity conditions such as "
-            "switch.is_on with an entity_id target. Every entity it names must be readable by this "
-            "key. Pass variables, such as a sample trigger object, for templates that read them; "
+            "template, time, sun, zone and device conditions, and, or and not, and entity conditions "
+            "such as switch.is_on with a target. Every entity it names or reaches must be readable by "
+            "this key. Pass variables, such as a sample trigger object, for templates that read them; "
             "states are still read only by literal lookups such as states('sensor.x')."
         ),
         "cap": "cap_config_read",
