@@ -7,6 +7,7 @@ from .tool_defs import MESA_TOOL_NAMES
 from .home_companion_turn import run_request
 from .tool_catalog import _freeze_executor_tracking, _register_companion_turn, _register_executor, _register_tool
 from .tools.approvals import _tool_get_approval_status, _tool_wait_for_approval
+from .tools.automation_test import _tool_test_condition, _tool_test_trigger
 from .tools.authoring import (
     _execute_create_automation, _execute_create_scene, _execute_create_script,
     _execute_delete_automation, _execute_delete_scene, _execute_delete_script,
@@ -344,6 +345,8 @@ _register_tool("edit_helper", _tool_edit_helper)
 _register_tool("delete_helper", _tool_delete_helper)
 _register_tool("restore_configuration", _tool_restore_configuration)
 _register_tool("watch_entity", _tool_watch_entity)
+_register_tool("test_trigger", _tool_test_trigger)
+_register_tool("test_condition", _tool_test_condition)
 _register_tool("list_files", _tool_list_files)
 _register_tool("read_file", _tool_read_file)
 _register_tool("get_energy_config", _tool_get_energy_config)

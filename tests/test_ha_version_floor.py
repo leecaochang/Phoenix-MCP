@@ -179,6 +179,9 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "category_registry": "2024.4.0",
         # Verified present in the 2026.7.0 reference stack.
         "chat_session": "2026.7.0",
+        # Automation helpers whose validate, initialize and check entry points test_trigger
+        # and test_condition call, verified in the 2026.7.0 reference stack and long older.
+        "condition": "0.0.0",
         "service": "0.0.0",
         "config_validation": "0.0.0",
         "device_registry": "0.0.0",
@@ -194,6 +197,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         # Verified present in 2026.7.0; its first release was not checked.
         "llm": "2026.7.0",
         "sun": "0.0.0",
+        "trace": "0.0.0",
+        "trigger": "0.0.0",
         # Module and async_get_translations verified in the 2025.2.0 source.
         "translation": "2025.2.0",
     },
@@ -228,6 +233,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.helpers.template": {
         # Core's template-syntax predicate, verified in 2026.7.0 and long older.
         "is_template_string": "0.0.0",
+        "Template": "0.0.0",
     },
     "homeassistant.helpers.service": {
         # Present in 2024.1.0, older than any claimed floor.

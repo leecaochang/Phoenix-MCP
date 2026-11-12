@@ -207,26 +207,26 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
     }
     assert metrics == {
         "read_only": {
-            "tool_count": 54,
-            "canonical_bytes": 65154,
-            "claude_bytes": 59581,
-            "openai_bytes": 61147,
+            "tool_count": 56,
+            "canonical_bytes": 67418,
+            "claude_bytes": 61779,
+            "openai_bytes": 63403,
         },
         "write_capable": {
-            "tool_count": 100,
-            "canonical_bytes": 129997,
-            "claude_bytes": 119071,
-            "openai_bytes": 121971,
+            "tool_count": 102,
+            "canonical_bytes": 132261,
+            "claude_bytes": 121269,
+            "openai_bytes": 124227,
         },
         "announce_all": {
-            "tool_count": 168,
-            "canonical_bytes": 206506,
-            "claude_bytes": 188590,
-            "openai_bytes": 193462,
+            "tool_count": 170,
+            "canonical_bytes": 208770,
+            "claude_bytes": 190788,
+            "openai_bytes": 195718,
         },
     }
-    assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 168
-    assert tool_catalog.tool_catalog_counts()["total"] == 174
+    assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 170
+    assert tool_catalog.tool_catalog_counts()["total"] == 176
 
 
 def test_descriptions_name_only_tools_that_exist():

@@ -3190,6 +3190,54 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         },
     },
     {
+        "name": "test_trigger",
+        "description": (
+            "Check an automation trigger before saving it: register it with Home Assistant for up to "
+            "timeout seconds (max 30) and return the first firing's trigger variables, or fired=false. "
+            "Supports state, numeric_state, template, time, time_pattern, sun, homeassistant and zone "
+            "triggers, and entity triggers such as light.turned_on with an entity_id target. Every "
+            "entity it names, in any field or template, must be readable by this key; templates use "
+            "literal lookups such as states('sensor.x'). Event, MQTT, webhook, conversation and "
+            "device triggers, and device, area, floor or label targets, are refused."
+        ),
+        "cap": "cap_config_read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "trigger": {
+                    "description": "One trigger as in an automation's triggers list, or a list of up to 10.",
+                    "oneOf": [{"type": "object"}, {"type": "array", "items": {"type": "object"}, "minItems": 1, "maxItems": 10}],
+                },
+                "timeout": {"type": "integer", "minimum": 1, "maximum": 30, "default": 30, "description": "Maximum seconds to wait for a firing."},
+                "variables": {"type": "object", "description": "Plain values the trigger's templates may read by name."},
+            },
+            "required": ["trigger"],
+        },
+    },
+    {
+        "name": "test_condition",
+        "description": (
+            "Check an automation condition before saving it: evaluate it against current states and "
+            "return result=true or false, with any template errors. Supports state, numeric_state, "
+            "template, time, sun and zone conditions, and, or and not, and entity conditions such as "
+            "switch.is_on with an entity_id target. Every entity it names must be readable by this "
+            "key. Pass variables, such as a sample trigger object, for templates that read them; "
+            "states are still read only by literal lookups such as states('sensor.x')."
+        ),
+        "cap": "cap_config_read",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "condition": {
+                    "description": "One condition as in an automation's conditions list, or a template string.",
+                    "oneOf": [{"type": "object"}, {"type": "string"}],
+                },
+                "variables": {"type": "object", "description": "Plain values the condition's templates may read by name."},
+            },
+            "required": ["condition"],
+        },
+    },
+    {
         "name": "list_files",
         "description": (
             "List files in an allowed config directory (www/, themes/, custom_templates/), a page at a time. "
@@ -4230,6 +4278,8 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "get_scene": _annot(True, False, True),
     "list_helpers": _annot(True, False, True),
     "watch_entity": _annot(True, False, True),
+    "test_trigger": _annot(True, False, True),
+    "test_condition": _annot(True, False, True),
     "list_files": _annot(True, False, True),
     "read_file": _annot(True, False, True),
     "get_yaml_config": _annot(True, False, True),

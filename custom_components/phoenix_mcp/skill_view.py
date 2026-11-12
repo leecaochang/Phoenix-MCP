@@ -247,6 +247,9 @@ config is good on the strength of validation alone if you can compile it.
   whether the entities it references exist and are accessible, before you save. Its
   `warnings` name a service Home Assistant does not have and a target the service, trigger or
   condition does not apply to; Core accepts both, so fix them before saving.
+- `test_trigger` and `test_condition`: check one trigger or condition against the live home
+  before saving. `test_trigger` waits up to 30 seconds for a firing; `test_condition` answers
+  true or false now. Pass sample `variables` for a condition that reads `trigger` data.
 
 ### 4. Act
 - Prefer the native intent tools (`intent__HassTurnOn`, `intent__HassTurnOff`,
@@ -386,7 +389,8 @@ General, for automations, scripts, and scenes:
   `input_number`, `timer`, `counter`; native triggers and conditions) over
   hand-written templates when a native option exists. Templates are powerful but
   harder to debug and easier to break across upgrades.
-- Validate first (`validate_automation_or_script`), then write, then verify with a trace.
+- Validate first (`validate_automation_or_script`), test the trigger and conditions
+  (`test_trigger`, `test_condition`), then write, then verify with a trace.
 - Reference only entities you can actually access; a config that points at
   out-of-scope entities will not behave as written. In a dashboard read, an
   entity id returned as `<redacted>` is outside your scope; do not write it back.

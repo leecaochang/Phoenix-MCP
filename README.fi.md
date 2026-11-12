@@ -13,7 +13,7 @@ Phoenix MCP antaa AI-agenteillesi turvallisen ja rajatun pääsyn Home Assistant
 
 Phoenix MCP toimii kokonaan Home Assistant -järjestelmän sisällä, eikä erillistä palvelua tarvitse ottaa käyttöön. Käytä sovelluksia, jotka sinulla jo on, kuten Claude Code, Cursor, ChatGPT tai Gemini, tai keskustele suoraan Home Assistant -järjestelmässä valitsemasi AI-palveluntarjoajan kanssa pilvessä tai paikallisesti Ollama-palvelun kautta.
 
-Opastettu käyttöönotto vie sinut asennuksesta toimivaan agenttiin muutamassa minuutissa, ja tukena on 174 työkalun valikoima kokoonpanosi lukemiseen, ohjaamiseen ja laatimiseen. Phoenix MCP käyttää tuttua ja mukautettavaa ikkunoihin perustuvaa käyttöliittymää, joten alkuun pääsee helposti. Täydellinen dokumentaatio on sisäänrakennettu ja aina käytettävissä.
+Opastettu käyttöönotto vie sinut asennuksesta toimivaan agenttiin muutamassa minuutissa, ja tukena on 176 työkalun valikoima kokoonpanosi lukemiseen, ohjaamiseen ja laatimiseen. Phoenix MCP käyttää tuttua ja mukautettavaa ikkunoihin perustuvaa käyttöliittymää, joten alkuun pääsee helposti. Täydellinen dokumentaatio on sisäänrakennettu ja aina käytettävissä.
 
 ## Kuvakaappaukset
 

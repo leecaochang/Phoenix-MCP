@@ -45,11 +45,16 @@ def scope_refusal(construct: str) -> str:
     )
 
 
-def template_entities(source: str) -> set[str]:
+def template_entities(
+    source: str, data_names: frozenset[str] = frozenset(),
+    attributes: set[tuple[str, str]] | None = None,
+) -> set[str]:
     """Return the literal entity IDs a helper template depends on, without evaluating it.
 
     Accepts only literal state lookups and explicit pure operations; anything else raises
-    HelperScopeError naming it. Self-assigned set and for names are allowed.
+    HelperScopeError naming it. Self-assigned names are allowed, and so are ``data_names``
+    and paths below them, which the caller supplies as plain data. ``attributes`` collects
+    each (entity, attribute) a literal lookup reads.
     """
     if not any(marker in source for marker in ("{{", "{%", "{#")):
         return set()
@@ -77,24 +82,35 @@ def template_entities(source: str) -> set[str]:
                 and node.node.attr in HELPER_TEMPLATE_TIME_METHODS
                 and time_value(node.node.node))
 
-    def entity(node: nodes.Node, function: str) -> None:
+    def entity(node: nodes.Node, function: str) -> str:
         if (not isinstance(node, nodes.Const) or not isinstance(node.value, str)
                 or not _ENTITY_ID_RE.fullmatch(node.value)):
             raise refuse(f"'{function}' without a literal entity ID")
         found.add(node.value)
+        return node.value
 
-    def attribute(node: nodes.Node | None) -> None:
+    def attribute(node: nodes.Node | None, entity_id: str = "") -> None:
         if (not isinstance(node, nodes.Const) or not isinstance(node.value, str)
                 or is_sensitive_key(node.value)):
             raise HelperScopeError(
                 "Helper templates require literal nonsensitive attributes; "
                 "sensitive attributes and whole state/attribute objects are not supported."
             )
+        if attributes is not None and entity_id:
+            attributes.add((entity_id, node.value))
 
-    def attribute_argument(node: nodes.Call | nodes.Filter | nodes.Test, index: int) -> None:
+    def attribute_argument(node: nodes.Call | nodes.Filter | nodes.Test, index: int, entity_id: str) -> None:
         value = node.args[index] if len(node.args) > index else next(
             (kw.value for kw in node.kwargs if kw.key == "name"), None)
-        attribute(value)
+        attribute(value, entity_id)
+
+    def data_path(node: nodes.Node) -> bool:
+        """Whether a name, attribute or item path starts at caller-supplied plain data."""
+        while isinstance(node, (nodes.Getattr, nodes.Getitem)):
+            if isinstance(node, nodes.Getattr) and node.attr.startswith("_"):
+                raise refuse(f"the private attribute '{node.attr}'")
+            node = node.node
+        return isinstance(node, nodes.Name) and node.ctx == "load" and node.name in data_names
 
     def state_path(node: nodes.Node, depth: int = 0) -> list[str] | None:
         if depth > HELPER_TEMPLATE_MAX_DEPTH:
@@ -138,6 +154,12 @@ def template_entities(source: str) -> set[str]:
             for child in node.iter_child_nodes(exclude=("target",)):
                 visit(child, depth + 1)
             return
+        if isinstance(node, (nodes.Getattr, nodes.Getitem)) and data_path(node):
+            while isinstance(node, (nodes.Getattr, nodes.Getitem)):
+                if isinstance(node, nodes.Getitem):
+                    visit(node.arg, depth + 1)
+                node = node.node
+            return
         if isinstance(node, (nodes.Getattr, nodes.Getitem)):
             path = state_path(node)
             if path is not None:
@@ -148,7 +170,9 @@ def template_entities(source: str) -> set[str]:
                 if suffix and suffix[0] == "attributes":
                     if len(suffix) < 2:
                         attribute(None)
-                    for part in suffix[1:]:
+                    for part in suffix[1:2]:
+                        attribute(nodes.Const(part), candidate)
+                    for part in suffix[2:]:
                         attribute(nodes.Const(part))
                 elif len(suffix) != 1 or suffix[0] not in HELPER_TEMPLATE_STATE_PROPERTIES:
                     attribute(None)
@@ -158,7 +182,7 @@ def template_entities(source: str) -> set[str]:
                     and not (time_value(node.node) and node.attr in HELPER_TEMPLATE_TIME_ATTRIBUTES)):
                 raise refuse(f"the attribute '{node.attr}'")
         if isinstance(node, nodes.Name):
-            if node.ctx == "load" and node.name in assigned:
+            if node.ctx == "load" and (node.name in assigned or node.name in data_names):
                 return
             raise refuse(f"the name '{node.name}'")
         if isinstance(node, nodes.Call):
@@ -185,9 +209,9 @@ def template_entities(source: str) -> set[str]:
                     (kw.value for kw in node.kwargs if kw.key == "entity_id"), None)
                 if first is None:
                     raise refuse(f"'{name}' without a literal entity ID")
-                entity(first, name)
+                entity_id = entity(first, name)
                 if name in ("state_attr", "is_state_attr"):
-                    attribute_argument(node, 1)
+                    attribute_argument(node, 1, entity_id)
             elif name and name not in HELPER_TEMPLATE_PURE_FUNCTIONS:
                 raise refuse(f"the function '{name}'")
             for child in [*node.args, *node.kwargs]:
@@ -201,9 +225,9 @@ def template_entities(source: str) -> set[str]:
             if node.name in HELPER_TEMPLATE_STATE_FUNCTIONS:
                 if node.node is None:
                     raise refuse(f"the {kind} '{node.name}' without a literal entity ID")
-                entity(node.node, node.name)
+                entity_id = entity(node.node, node.name)
                 if node.name in ("state_attr", "is_state_attr"):
-                    attribute_argument(node, 0)
+                    attribute_argument(node, 0, entity_id)
             elif node.name not in allowed:
                 raise refuse(f"the {kind} '{node.name}'")
         for child in node.iter_child_nodes():

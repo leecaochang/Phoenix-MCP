@@ -14,7 +14,7 @@ Phoenix MCP gives your AI agents safe, limited access to Home Assistant through 
 
 Phoenix MCP runs entirely inside Home Assistant, with no separate service to deploy. Use the apps you already have, such as Claude Code, Cursor, ChatGPT, or Gemini, or chat from inside Home Assistant itself with your choice of AI provider, in the cloud or locally via Ollama.
 
-A guided setup takes you from install to a working agent within minutes, backed by a catalog of 174 tools for reading, controlling, and authoring your configuration. Phoenix MCP uses a familiar and customizable windowed interface, making it easy to get started. Full documentation is built in and available at any time.
+A guided setup takes you from install to a working agent within minutes, backed by a catalog of 176 tools for reading, controlling, and authoring your configuration. Phoenix MCP uses a familiar and customizable windowed interface, making it easy to get started. Full documentation is built in and available at any time.
 
 ## Screenshots
 

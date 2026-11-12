@@ -1271,6 +1271,21 @@ MAX_SEARCH_MEMBER_ID_LEN = 255
 # It blocks the tool call up to this many seconds waiting for a state change.
 MAX_SUBSCRIPTION_SECONDS = 30
 
+# test_trigger and test_condition: the classic trigger and condition types whose reach a key's
+# scope can prove. Each reads only the entities, zones and templates it names. Core's new
+# entity triggers and conditions are admitted by their base class instead. Everything else is
+# refused: an event, MQTT or webhook trigger has no entity scope, a conversation trigger
+# registers sentences, and device, area, floor and label references reach unnamed entities.
+AUTOMATION_TEST_TRIGGERS = frozenset({
+    "homeassistant", "numeric_state", "state", "sun", "template", "time", "time_pattern", "zone",
+})
+AUTOMATION_TEST_CONDITIONS = frozenset({
+    "and", "not", "numeric_state", "or", "state", "sun", "template", "time", "zone",
+})
+AUTOMATION_TEST_UNSCOPED_KEYS = frozenset({"area_id", "device_id", "floor_id", "label_id"})
+# Triggers one test_trigger call may register at once.
+AUTOMATION_TEST_MAX_TRIGGERS = 10
+
 # How often the MCP endpoint writes to an SSE-framed response while the request
 # is still being handled. A confirm gate can hold a response for up to
 # MAX_CONFIRM_INLINE_WAIT_SECONDS with nothing on the wire, which is exactly the
