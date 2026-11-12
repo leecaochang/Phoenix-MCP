@@ -109,6 +109,8 @@ How much text results say. Default: {{label:settings.detailBalanced}}. Tasks tha
 
 Gives Home Assistant a second entity, Phoenix MCP Decisions, for the Evaluate action. Automations and scripts use it to ask yes-or-no, choice and rating questions about text or data they pass in. Your decision provider answers, and each answer comes with probabilities.
 
+After each answer, the entity's answering_model attribute names the model that gave it, such as jev-1.14.0. An automation that compares probabilities with a threshold can check it, since jev-latest moves to each new JEV release.
+
 This section shows only on Home Assistant 2026.11 or later, while a decision provider is in use. To add or choose one, go to [{{label:workspace.aiProviders}}](guide:window.settingsProviders#decision-provider).
 
 The questions and the data passed in go to your decision provider, and every request sent counts towards your [request limit](guide:window.settingsProviders#decision-request-limit). An automation that acts on an answer runs as Home Assistant, outside Phoenix's checks.

@@ -31,6 +31,7 @@ from .routing_tables import (
 from .routing_tables import TOOL_ROUTING_MAX_BYTES, TOOL_ROUTING_MAX_GROUPS
 from .routing_tables import (
     DECISION_SEQUENTIAL_MAX_TARGETS, DECISION_FOLLOWED_ALIASES, DECISION_FOLLOWED_REVISION,
+    DECISION_SEQUENTIAL_EXECUTION_MODELS, DECISION_TYPESAFE_BASE_URL, DECISION_PINNABLE_MODELS,
 )
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
@@ -132,6 +133,19 @@ def revision_admitted(registry: Mapping[tuple[str, str, str], frozenset[str]], c
         return False
     return returned in registry[key] or (
         key in DECISION_FOLLOWED_ALIASES and re.fullmatch(DECISION_FOLLOWED_REVISION, returned) is not None)
+
+
+def sequential_revision_admitted(cfg: Any, classify_model: Any, target_model: Any) -> bool:
+    """Whether a sequential classify and target answer may act together for this account.
+
+    Both answers must come from one revision. At TypeSafe's own endpoint that revision must be
+    qualified for sequential execution; a custom endpoint is the operator's own choice.
+    """
+    if not isinstance(classify_model, str) or classify_model != target_model:
+        return False
+    if (cfg.kind, cfg.base_url) == ("typesafe", DECISION_TYPESAFE_BASE_URL):
+        return revision_admitted(DECISION_SEQUENTIAL_EXECUTION_MODELS, cfg, classify_model)
+    return True
 
 
 def distribution_fits(values: Iterable[float], rounding_error: float = 0) -> bool:
@@ -370,6 +384,12 @@ class DecisionProvider:
                 raise DecisionError("malformed")
             models.append(name)
         return sorted(set(models))
+
+    def selectable(self, listed: list[str]) -> list[str]:
+        """The listed models plus the fixed revisions reviewed at this endpoint, which the list may omit."""
+        pinned = {model for kind, base_url, model in DECISION_PINNABLE_MODELS
+                  if (kind, base_url) == (self.cfg.kind, self.cfg.base_url)}
+        return sorted(set(listed) | pinned)
 
     async def validate(self, session: ClientSession) -> tuple[bool, str]:
         try:

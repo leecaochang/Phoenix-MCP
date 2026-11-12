@@ -556,6 +556,13 @@ if _EVALUATE_FEATURE is not None:
             self._attr_unique_id = f"{entry.entry_id}_{_EVALUATE_SUFFIX}"
 
         @property
+        def extra_state_attributes(self) -> dict[str, Any] | None:
+            """The model that answered the last evaluation, which a followed alias can move."""
+            data = self.hass.data.get(DOMAIN)
+            model = getattr(data, "decision_evaluation_model", None)
+            return {"answering_model": model} if model else None
+
+        @property
         def available(self) -> bool:
             """Return True while configured, with its account loaded and its key current."""
             data = self.hass.data.get(DOMAIN)
@@ -573,6 +580,8 @@ if _EVALUATE_FEATURE is not None:
                 raise HomeAssistantError("Phoenix MCP is not set up.")
             answers = await async_evaluate(self.hass, data, task.name, task.questions, task.state,
                                            entity_id=self.entity_id, user_id=_task_user_id())
+            # Home Assistant writes the state before the answer; this shows the model that gave it.
+            self.async_write_ha_state()
             return _ai_task.EvaluationTaskResult(
                 answers={name: _evaluation_answer(answer) for name, answer in answers.items()})
 

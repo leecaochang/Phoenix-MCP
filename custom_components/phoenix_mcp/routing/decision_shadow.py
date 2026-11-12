@@ -21,7 +21,7 @@ from .routing_tables import (
     DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES,
     DECISION_EXECUTION_CATEGORIES, DECISION_ENTITY_CATEGORIES,
 )
-from .decision_provider import DecisionProvider, _evaluate_guarded
+from .decision_provider import DecisionProvider, _evaluate_guarded, sequential_revision_admitted
 from .decision_types import DecisionError, confident_choice
 from .routing_tables import TOOL_ROUTING_SETTINGS, TOOL_ROUTING_REASONS
 from .decision_metrics import DecisionMetrics
@@ -289,11 +289,14 @@ class DecisionShadow:
             if operation is not None:
                 selection["value_check"] = compare_percentage(source_value, proposal[operation.proposal_field])
             if prepare:
+                if not sequential_revision_admitted(provider.cfg, category.get("model"), answer.get("model")):
+                    return result("model_unverified", decision=answer)
                 plan = _capture_plan(hass, authority.data, access_key, proposal, ingress=ingress)
                 if plan is None:
                     return result("targets_changed")
                 plan["decision_target_evidence"] = _digest(proposal)
-                plan.update(decision_category=category["choice"], decision_catalog=snapshot.digest())
+                plan.update(decision_category=category["choice"], decision_catalog=snapshot.digest(),
+                            decision_revision=answer["model"])
                 selection["_plan"] = plan
             return selection
         except DecisionError as error:

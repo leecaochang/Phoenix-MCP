@@ -827,3 +827,21 @@ def schema_baseline(tool_def: dict) -> dict:
             "changes": {},
         }
     return schema_placeholder("arguments", tool_def.get("inputSchema", {}) or {})
+
+
+def qualify_test_decision_model(monkeypatch) -> None:
+    """Treat the fixtures' `test-model` at TypeSafe's endpoint as a revision qualified for sequential execution.
+
+    The real registry admits only reviewed JEV revisions there; these fixtures stand for such a
+    revision so the routing tests keep exercising execution, while the refusal of unqualified
+    revisions has tests of its own.
+    """
+    from types import MappingProxyType
+
+    from custom_components.phoenix_mcp.routing import decision_provider
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_TYPESAFE_BASE_URL
+
+    monkeypatch.setattr(decision_provider, "DECISION_SEQUENTIAL_EXECUTION_MODELS", MappingProxyType({
+        **decision_provider.DECISION_SEQUENTIAL_EXECUTION_MODELS,
+        ("typesafe", DECISION_TYPESAFE_BASE_URL, "test-model"): frozenset({"test-model"}),
+    }))

@@ -445,7 +445,7 @@ async def _checked_decision_models(provider, session, model: object, rid: str) -
     if not isinstance(model, str) or not model.strip() or len(model) > 200:
         return [], _err("invalid_request", "A model is required.", 400, rid, key="providerModelRequired")
     try:
-        models = await provider.list_models(session)
+        models = provider.selectable(await provider.list_models(session))
     except DecisionError as error:
         reason = decision_error_reason(str(error))
         return [], _err("invalid_request", "Could not load decision provider models.", 400, rid,
@@ -711,7 +711,10 @@ class PhoenixAgentCliModelsView(PhoenixView):
             )
         session = async_get_clientsession(self.hass)
         try:
-            models = await _build_setup_provider(cfg).list_models(session)
+            provider = _build_setup_provider(cfg)
+            models = await provider.list_models(session)
+            if isinstance(provider, DecisionProvider):
+                models = provider.selectable(models)
         except DecisionError:
             return _err("invalid_request", "Could not connect to the decision provider.", 400, rid,
                         key="providerConnectionFailedNoDetail")

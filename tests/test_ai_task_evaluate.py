@@ -141,6 +141,10 @@ async def test_an_entity_answers_through_home_assistants_own_action(hass, home, 
     assert result.as_dict()["answers"]["arrived"] == {"noul": 0.75, "type": "noul"}
     assert result.answers["urgency"].probabilities == [1.0, 0.0, 0.0]
     assert result.answers["door"].choice == "front"
+    # Home Assistant's response has no room for the model, so the entity names the one that answered.
+    await hass.async_block_till_done()
+    answered = hass.states.get(entity.entity_id).attributes.get("answering_model")
+    assert answered == home.wire.model == "jev-1.13.0"
 
 
 @pytest.mark.parametrize(("state", "sent"), [

@@ -88,6 +88,8 @@ Phoenix 會不時重新讀取每個帳戶的模型清單。這能讓清單保持
 
 Phoenix 提供一個決策提供者：TypeSafe / JEV。在此新增你的帳戶並選擇模型。
 
+jev-latest 模型會跟隨每個新的 JEV 版本，因此 TypeSafe 的更新可能改變它執行哪些命令以及如何回答，而無需更新 Phoenix。要固定在一個版本，請選擇 jev-1.13.0 這樣的固定版本。jev-preview 模型只觀察，從不執行命令。
+
 若要使用它，請選擇其帳戶。選擇 **{{label:routing.noProvider}}** 可停止使用它；命令隨後只依賴句子比對。
 
 它也可以為自動化和腳本回答 Home Assistant 的「評估」動作，請參閱[決策](guide:window.settingsHome#ai-decisions)。

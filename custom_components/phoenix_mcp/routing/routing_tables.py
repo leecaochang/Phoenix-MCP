@@ -395,6 +395,16 @@ DECISION_PERCENTAGE_EXECUTION_MODELS = MappingProxyType({
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
 })
+# Fixed JEV revisions reviewed for execution. TypeSafe's model list names only its aliases, so
+# these are offered and accepted at its endpoint even when unlisted; versioned ids are documented.
+DECISION_PINNABLE_MODELS = frozenset({("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0")})
+# Sequential classify-then-target execution at TypeSafe's own endpoint, where jev-preview and other
+# unqualified revisions must not act. A custom endpoint keeps sequential execution by operator
+# decision; there the classify and target answers must still come from one revision.
+DECISION_SEQUENTIAL_EXECUTION_MODELS = MappingProxyType({
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
+})
 DECISION_ROUTE_CHOICES = MappingProxyType({
     "light_on": "One immediate, explicit request to turn on one light, without a brightness setting or adjustment.",
     "light_off": "One immediate, explicit request to turn off one light, without a brightness setting or adjustment.",

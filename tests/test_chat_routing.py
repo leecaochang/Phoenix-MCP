@@ -23,7 +23,7 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionNode, PermissionTree
-from tests.runtime_fixtures import patch_readers
+from tests.runtime_fixtures import patch_readers, qualify_test_decision_model
 
 
 @pytest.fixture(autouse=True)
@@ -41,7 +41,8 @@ def untimed_recognition(monkeypatch):
 
 
 @pytest.fixture
-async def chat_home(hass, access_key_store, immediate_command_observation):
+async def chat_home(hass, access_key_store, immediate_command_observation, monkeypatch):
+    qualify_test_decision_model(monkeypatch)
     access_key, _ = await access_key_store.async_create_access_key('chat', 'test', rate_limit_requests=0)
     access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
     data = PhoenixData(store=access_key_store, audit=AuditLog(), rate_limiter=RateLimiter())

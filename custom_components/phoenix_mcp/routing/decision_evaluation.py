@@ -240,7 +240,9 @@ async def _evaluate(hass: HomeAssistant, data: Any, questions: dict[str, Any], s
     body = await provider.request_evaluation(async_get_clientsession(hass), wire_state, questions,
                                              settings.decision_timeout_ms)
     guard()
-    return parse_evaluation(body, questions, provider.rounding_error)
+    answers = parse_evaluation(body, questions, provider.rounding_error)
+    data.decision_evaluation_model = body["model"]
+    return answers
 
 
 @tracked_turn("ai_task")

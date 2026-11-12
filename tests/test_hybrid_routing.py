@@ -23,11 +23,12 @@ from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
-from tests.runtime_fixtures import patch_readers
+from tests.runtime_fixtures import patch_readers, qualify_test_decision_model
 
 
 @pytest.fixture
-async def hybrid_home(hass, access_key_store, immediate_command_observation):
+async def hybrid_home(hass, access_key_store, immediate_command_observation, monkeypatch):
+    qualify_test_decision_model(monkeypatch)
     access_key, _ = await access_key_store.async_create_access_key("hybrid", "test", rate_limit_requests=0)
     access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
     access_key.cap_physical_control = "allow"
@@ -216,9 +217,13 @@ async def mutate(hass, home, change):
     elif change == "mesa":
         data.mesa.store.set(entity_id, SemanticProfile.from_dict(entity_id,
             {"semantic_profile": {"operational_boundaries": {"control_mode": "prohibited"}}}, default_origin=MetadataOrigin.USER))
+    elif change == "revision":
+        # The revision that planned it is no longer qualified (the fixture's monkeypatch restores it).
+        from custom_components.phoenix_mcp.routing import decision_provider, routing_tables
+        decision_provider.DECISION_SEQUENTIAL_EXECUTION_MODELS = routing_tables.DECISION_SEQUENTIAL_EXECUTION_MODELS
 
 
-@pytest.mark.parametrize("change", ["none", "account", "model_restored", "deleted", "settings", "revoked", "scope", "name", "new_candidate", "mesa"])
+@pytest.mark.parametrize("change", ["none", "account", "model_restored", "deleted", "settings", "revoked", "scope", "name", "new_candidate", "mesa", "revision"])
 @pytest.mark.parametrize("category,service", [("light_on", "turn_on"), ("light_off", "turn_off")])
 async def test_saved_decision_approval_revalidates_account_and_full_catalog(hass, hybrid_home, change, category, service):
     data, access_key, _, _, entity_id = hybrid_home
@@ -1585,3 +1590,57 @@ async def test_temporal_missing_name_falls_back_before_approval(hass, temporal_h
     provider.assert_awaited_once()
     call.assert_not_called()
     assert not temporal_home[0].store.get_pending_approvals()
+
+
+@pytest.mark.parametrize("route_model,target_model", [
+    # A revision not qualified for sequential execution at TypeSafe's endpoint.
+    ("jev-9.9.9", "jev-9.9.9"),
+    # Classify and target answered by different revisions.
+    ("test-model", "jev-9.9.9"),
+])
+async def test_official_endpoint_refuses_sequential_execution_by_an_unqualified_revision(
+    hass, hybrid_home, route_model, target_model,
+):
+    async def respond(session, method, path, timeout, payload):
+        model = route_model if "route" in payload["questions"] else target_model
+        return wire_answer(payload, "light_on", model=model)
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, hybrid_home, request=respond)
+    call.assert_not_called()
+    provider.assert_awaited_once()
+    assert answer == "Provider answer"
+
+
+async def test_jev_preview_at_the_official_endpoint_never_executes_sequentially(hass, hybrid_home):
+    data, _, store, *_ = hybrid_home
+    account = await store.add("typesafe", {"api_key": "preview-secret", "model": "jev-preview"})
+    await data.store.async_patch_settings(decision_provider_id=account)
+    async def respond(session, method, path, timeout, payload=None):
+        if method == "GET":
+            return {"data": [{"id": "jev-latest"}, {"id": "jev-preview"}]}
+        return wire_answer(payload, "light_on", model="jev-preview")
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        _, _, provider = await run_voice(hass, hybrid_home, request=respond)
+    call.assert_not_called()
+    provider.assert_awaited_once()
+
+
+def test_sequential_admission_rule():
+    from types import SimpleNamespace
+
+    from custom_components.phoenix_mcp.routing.decision_provider import sequential_revision_admitted
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_TYPESAFE_BASE_URL
+    official = lambda model: SimpleNamespace(kind="typesafe", base_url=DECISION_TYPESAFE_BASE_URL, model=model)
+    custom = SimpleNamespace(kind="typesafe", base_url="https://custom.test/v1", model="anything")
+    # The followed alias admits any JEV revision; a pinned revision only itself.
+    assert sequential_revision_admitted(official("jev-latest"), "jev-1.14.0", "jev-1.14.0")
+    assert sequential_revision_admitted(official("jev-1.13.0"), "jev-1.13.0", "jev-1.13.0")
+    assert not sequential_revision_admitted(official("jev-1.13.0"), "jev-1.14.0", "jev-1.14.0")
+    assert not sequential_revision_admitted(official("jev-preview"), "jev-preview", "jev-preview")
+    assert not sequential_revision_admitted(official("jev-latest"), "jev-1.14.0", "jev-1.13.0")
+    # A custom endpoint keeps sequential execution, but still with one revision.
+    assert sequential_revision_admitted(custom, "my-build", "my-build")
+    assert not sequential_revision_admitted(custom, "my-build", "other-build")
+    assert not sequential_revision_admitted(custom, None, None)

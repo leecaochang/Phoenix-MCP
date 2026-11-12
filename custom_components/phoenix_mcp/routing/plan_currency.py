@@ -18,7 +18,7 @@ from .decision_batch import (
     batch_catalog_digest, batch_execution_eligible, capture_batch_targets,
     percentage_execution_eligible,
 )
-from .decision_provider import revision_admitted
+from .decision_provider import revision_admitted, sequential_revision_admitted
 from .decision_targets import capture_sequential_targets
 from .routing_tables import (
     COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_PLAN_KEY, COMMAND_ROUTING_READ_INTENTS,
@@ -98,6 +98,13 @@ def _decision_plan_current(plan: dict, hass: HomeAssistant, data: Any, access_ke
         if batch_catalog_digest(snapshot) != review["catalog"] or category not in snapshot[1]:
             return False
         catalog_digest = snapshot[1][category].digest()
+    else:
+        # A sequential plan names the one revision that classified and targeted it.
+        account = settings.decision_provider_id
+        cfg = loaded_decision_account(hass, account) if account else None
+        revision = plan.get("decision_revision")
+        if cfg is None or not sequential_revision_admitted(cfg, revision, revision):
+            return False
     return bool((category in DECISION_EXECUTION_CATEGORIES or category == "state_summary" or numeric or temporal)
                 and mode == "hybrid" and settings.decision_provider_id
                 and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]

@@ -109,6 +109,8 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 為 Home Assistant 新增第二個實體 Phoenix MCP Decisions，用於「評估」動作。自動化和腳本可以用它對傳入的文字或資料提出是非題、選擇題和評分題。決策提供者負責回答，每個回答都附帶機率。
 
+每次回答後，該實體的 answering_model 屬性會寫明給出回答的模型，例如 jev-1.14.0。用閾值比較機率的自動化可以檢查它，因為 jev-latest 會隨每個新的 JEV 版本而變化。
+
 此部分僅在 Home Assistant 2026.11 或更新版本上、且正在使用決策提供者時顯示。若要新增或選擇決策提供者，請前往 [{{label:workspace.aiProviders}}](guide:window.settingsProviders#decision-provider)。
 
 問題和傳入的資料會傳送到你的決策提供者，每次傳送的請求都計入[請求限額](guide:window.settingsProviders#decision-request-limit)。依回答執行動作的自動化以 Home Assistant 的身分執行，不受 Phoenix 檢查。

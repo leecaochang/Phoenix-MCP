@@ -174,6 +174,9 @@ class PhoenixData:
     # sync can remove it; the source of truth for "does the entity currently exist".
     ai_task_entity: object | None = None
     ai_evaluate_entity: object | None = None
+    # The model that answered the last successful ai_task.evaluate call, shown on the Decisions
+    # entity so an automation can tell when a followed alias moved to a new revision.
+    decision_evaluation_model: str | None = None
     # Called by the admin settings PATCH when audit_flush_interval changes, so
     # the periodic flush timer picks up the new interval immediately.
     reschedule_audit_flush: Callable | None = None

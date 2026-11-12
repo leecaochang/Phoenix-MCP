@@ -86,6 +86,8 @@ It works with **{{label:routing.enableChat}}** and **{{label:routing.enableVoice
 
 Phoenix offers one decision provider, TypeSafe / JEV. Add your account here and select the model.
 
+The jev-latest model follows each new JEV release, so a TypeSafe update can change which commands it carries out and how it answers, without a Phoenix update. To keep one release, choose a fixed version such as jev-1.13.0. The jev-preview model only observes and never carries out commands.
+
 To use it, choose its account. Choose **{{label:routing.noProvider}}** to stop using it; commands then rely on sentence matching alone.
 
 It can also answer Home Assistant's Evaluate action for automations and scripts: see [Decisions](guide:window.settingsHome#ai-decisions).

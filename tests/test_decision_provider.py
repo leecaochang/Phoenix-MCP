@@ -766,3 +766,28 @@ def test_revision_admission_follows_only_the_official_alias(model, base_url, ret
                      DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_REFERENCE_EXECUTION_MODELS):
         assert revision_admitted(registry, cfg, returned) is admitted
     assert revision_admitted({}, cfg, returned) is False
+
+
+async def test_a_reviewed_fixed_revision_is_selectable_where_the_listing_names_only_aliases():
+    """TypeSafe lists only jev-latest and jev-preview; a reviewed fixed revision is accepted anyway."""
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.phoenix_mcp import agent_chat_views
+    from custom_components.phoenix_mcp.llm.accounts import ProviderConfig
+    from custom_components.phoenix_mcp.routing.routing_tables import DECISION_TYPESAFE_BASE_URL
+
+    def provider(base_url: str) -> DecisionProvider:
+        return DecisionProvider(ProviderConfig(kind="typesafe", model="jev-latest", base_url=base_url,
+                                               api_key="k"), "systemone")
+    official, custom = provider(DECISION_TYPESAFE_BASE_URL), provider("https://custom.test/v1")
+    listed = ["jev-latest", "jev-preview"]
+    assert official.selectable(listed) == ["jev-1.13.0", "jev-latest", "jev-preview"]
+    assert custom.selectable(listed) == listed
+    for candidate, accepted in ((official, True), (custom, False)):
+        with patch.object(DecisionProvider, "list_models", AsyncMock(return_value=listed)):
+            _, error = await agent_chat_views._checked_decision_models(candidate, None, "jev-1.13.0", "rid")
+        assert (error is None) is accepted
+    # An unreviewed revision stays refused even at the official endpoint.
+    with patch.object(DecisionProvider, "list_models", AsyncMock(return_value=listed)):
+        _, error = await agent_chat_views._checked_decision_models(official, None, "jev-1.14.0", "rid")
+    assert error is not None
