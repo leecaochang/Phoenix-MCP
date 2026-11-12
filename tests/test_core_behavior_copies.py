@@ -29,6 +29,7 @@ from custom_components.phoenix_mcp.const import (
     DOMAIN_IMPORTANT_ATTRIBUTES,
     LOCAL_BACKUP_AGENT_IDS,
     MEDIA_SOURCE_ENTITY_DOMAINS,
+    MEDIA_SOURCE_RECORDING_DOMAINS,
     MESA_SUGGEST_COVER_DEVICE_CLASSES,
     NO_TARGET_SERVICES,
     REACH_WIDENING_FLAGS,
@@ -214,7 +215,7 @@ def test_every_core_speech_service_has_been_judged() -> None:
     assert speech - ANNOUNCEMENT_SERVICES - set(_SPEECH_SERVICES_ELSEWHERE) == set()
 
 
-# Core media sources whose identifiers are not entity IDs, so a key's scope cannot judge them.
+# Core media sources whose identifiers are not entity IDs and that serve no camera recordings.
 _MEDIA_SOURCES_NOT_ENTITIES = {
     "ai_task": "generated images, admitted only to the key that generated them",
     "dlna_dms": "a DLNA server's library, keyed by server",
@@ -223,23 +224,29 @@ _MEDIA_SOURCES_NOT_ENTITIES = {
     "image_upload": "uploaded images, keyed by upload ID",
     "immich": "a photo server's library",
     "jellyfin": "a media server's library",
-    "motioneye": "camera recordings, keyed by config entry and camera",
-    "nest": "camera events, keyed by device",
-    "netatmo": "camera events, keyed by home and camera",
     "radio_browser": "internet radio stations",
-    "reolink": "camera recordings, keyed by config entry and channel",
     "synology_dsm": "a photo library",
     "system_bridge": "files of a remote host",
     "tts": "speech generated on request",
-    "unifiprotect": "camera events, keyed by console and camera",
     "xbox": "game captures of an account",
 }
 
 
 def test_every_core_media_source_has_been_judged() -> None:
     sources = {path.parent.name for path in _COMPONENTS.glob("*/media_source.py")}
-    assert MEDIA_SOURCE_ENTITY_DOMAINS <= sources
-    assert sources - MEDIA_SOURCE_ENTITY_DOMAINS - set(_MEDIA_SOURCES_NOT_ENTITIES) == set()
+    assert MEDIA_SOURCE_ENTITY_DOMAINS | MEDIA_SOURCE_RECORDING_DOMAINS <= sources
+    judged = MEDIA_SOURCE_ENTITY_DOMAINS | MEDIA_SOURCE_RECORDING_DOMAINS | set(_MEDIA_SOURCES_NOT_ENTITIES)
+    assert sources - judged == set()
+
+
+@pytest.mark.parametrize("source", sorted(MEDIA_SOURCE_RECORDING_DOMAINS))
+def test_each_recording_source_is_named_by_its_integration_with_cameras(source) -> None:
+    """The check maps a source to the camera entities its integration registered."""
+    component = _COMPONENTS / source
+    assert (component / "camera.py").is_file()
+    media_source = (component / "media_source.py").read_text()
+    assert "super().__init__(DOMAIN)" in media_source or "MediaSource(DOMAIN" in media_source
+    assert re.search(rf'^DOMAIN(: Final)? = "{source}"$', (component / "const.py").read_text(), re.MULTILINE)
 
 
 # Core backup agents that keep every backup, each under its own name or ID.

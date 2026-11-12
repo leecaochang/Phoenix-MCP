@@ -25,7 +25,7 @@
 
 ### {{label:caps.cap_camera_read.label}} {#camera-read}
 
-從金鑰可存取的攝影機取得靜態影像。以媒體來源指定攝影機或影像的操作（例如 AI 任務附件）也需要它。沒有角色允許它，直通模式也不允許。
+從金鑰可存取的攝影機取得靜態影像。以媒體來源指定攝影機、影像或攝影機錄影的操作（例如 AI 任務附件）也需要它。沒有角色允許它，直通模式也不允許。
 
 ### {{label:caps.cap_template_render.label}} {#template-render}
 

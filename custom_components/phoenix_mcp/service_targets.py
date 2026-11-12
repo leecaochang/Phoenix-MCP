@@ -23,6 +23,7 @@ from .const import (
     DEVICE_ACTUATOR_DOMAINS,
     DOMAIN,
     MEDIA_SOURCE_ENTITY_DOMAINS,
+    MEDIA_SOURCE_RECORDING_DOMAINS,
     MUSIC_ASSISTANT_LIBRARY_SERVICES,
     NO_TARGET_SERVICES,
     PHYSICAL_COMMAND_SERVICES,
@@ -768,13 +769,19 @@ def _strings(value: object) -> Iterator[str]:
             pending.extend(item)
 
 
-def _media_source_entity(value: str) -> tuple[str, str] | None:
-    """Return (source, identifier) of a camera or image media-source ID, lowercased, else None."""
+def _media_source(value: str) -> tuple[str, str] | None:
+    """Return (source, identifier) of any media-source ID, lowercased, else None."""
     text = value.strip().lower()
     if not text.startswith(_MEDIA_SOURCE_SCHEME):
         return None
     source, _, identifier = text.removeprefix(_MEDIA_SOURCE_SCHEME).partition("/")
-    return (source, identifier.strip()) if source in MEDIA_SOURCE_ENTITY_DOMAINS else None
+    return source.strip(), identifier.strip()
+
+
+def _media_source_entity(value: str) -> tuple[str, str] | None:
+    """Return (source, identifier) of a camera or image media-source ID, lowercased, else None."""
+    parsed = _media_source(value)
+    return parsed if parsed is not None and parsed[0] in MEDIA_SOURCE_ENTITY_DOMAINS else None
 
 
 def media_source_entities(service_data: object) -> list[tuple[str, str]]:
@@ -785,6 +792,18 @@ def media_source_entities(service_data: object) -> list[tuple[str, str]]:
     """
     named = (_media_source_entity(value) for value in _strings(service_data))
     return list(dict.fromkeys(item for item in named if item is not None))
+
+
+def media_source_recordings(service_data: object) -> list[str]:
+    """Return each camera-recording source a call's data names by media-source ID, as its domain.
+
+    The identifier is the integration's own, so only the source is read; any ID counts,
+    a folder or a malformed one included.
+    """
+    named = (_media_source(value) for value in _strings(service_data))
+    return list(dict.fromkeys(
+        item[0] for item in named if item is not None and item[0] in MEDIA_SOURCE_RECORDING_DOMAINS
+    ))
 
 
 def unscoped_attachments(domain: str, service_data: object, generated: Collection[str] = ()) -> bool:

@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant, valid_entity_id
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from ..const import AI_TASK_GENERATED_IMAGES_KEPT, AI_TASK_IMAGE_SERVICE, CAP_ALLOW, MESA_MODE_OFF
@@ -25,7 +26,9 @@ from ..mesa import build_caller_context
 from ..mesa_audit import request_context
 from ..policy_engine import Permission, canonical_entity_id, resolve_read
 from ..access_key_store import AccessKeyRecord
-from ..service_targets import AI_TASK_ATTACHMENT_REFUSAL, media_source_entities, unscoped_attachments
+from ..service_targets import (
+    AI_TASK_ATTACHMENT_REFUSAL, media_source_entities, media_source_recordings, unscoped_attachments,
+)
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _tool_error
 from ..component_guard import require_component
 
@@ -101,6 +104,31 @@ MEDIA_READ_REFUSAL = (
     "This call names a camera or image as a media-source ID, which Home Assistant reads. That "
     "needs camera image access to it, as get_camera_image does. No action was dispatched."
 )
+RECORDING_READ_REFUSAL = (
+    "This call names a camera recording as a media-source ID, which Home Assistant reads. Its "
+    "integration can reach any of its cameras, so it needs camera image access to every camera "
+    "of that integration. No action was dispatched."
+)
+
+
+def _recording_read_denied(
+    source: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
+    request_id: str, client_ip: str | None, *, preview: bool,
+) -> bool:
+    """Whether some camera of the integration behind a recording source fails the picture read.
+
+    Every registered camera of that integration counts, disabled ones too, as the integration
+    still serves their recordings. An integration with no camera entity proves nothing, so it fails.
+    """
+    cameras = [
+        entry.entity_id for entry in er.async_get(hass).entities.values()
+        if entry.platform == source and entry.entity_id.startswith("camera.")
+    ]
+    return not cameras or any(
+        picture_read_denied(camera, access_key, hass, data, request_id, client_ip,
+                            caller="call_service", preview=preview) is not None
+        for camera in cameras
+    )
 
 
 def media_read_refusal(
@@ -110,22 +138,27 @@ def media_read_refusal(
     """Return (message, outcome) when a call's data names a picture the key may not read.
 
     Every camera or image media-source ID needs cap_camera_read and the read check of
-    get_camera_image; a hidden and a missing one read alike. An AI Task attachment from any
-    other source is refused, as nothing scopes it, unless this key generated that image.
+    get_camera_image; a hidden and a missing one read alike. A camera recording needs that read
+    on every camera of its integration. An AI Task attachment from any other source is refused,
+    as nothing scopes it, unless this key generated that image.
     """
     if unscoped_attachments(domain, service_data, data.generated_images.get(access_key.id, ())):
         return AI_TASK_ATTACHMENT_REFUSAL, "invalid_request"
     named = media_source_entities(service_data)
-    if not named:
+    recordings = media_source_recordings(service_data)
+    if not named and not recordings:
         return None
     if effective_cap(access_key, "cap_camera_read") != CAP_ALLOW:
-        return MEDIA_READ_REFUSAL, "denied"
+        return (MEDIA_READ_REFUSAL if named else RECORDING_READ_REFUSAL), "denied"
     for source, identifier in named:
         entity_id = canonical_entity_id(identifier, hass)
         if (not valid_entity_id(entity_id) or entity_id.split(".", 1)[0] != source
                 or picture_read_denied(entity_id, access_key, hass, data, request_id, client_ip,
                                        caller="call_service", preview=preview) is not None):
             return MEDIA_READ_REFUSAL, "denied"
+    if any(_recording_read_denied(source, access_key, hass, data, request_id, client_ip, preview=preview)
+           for source in recordings):
+        return RECORDING_READ_REFUSAL, "denied"
     return None
 
 

@@ -334,6 +334,140 @@ async def test_a_call_without_media_ids_needs_no_camera_capability(hass, other_v
     assert len(entity.tasks) == 1
 
 
+PLAYER = "media_player.lounge"
+FRONT, YARD, GARAGE = "camera.front", "camera.yard", "camera.garage"
+RECORDING = "media-source://unifiprotect/nvr-1:event:4f2a"
+
+
+@pytest.fixture
+def recorder(hass):
+    """A player that resolves media IDs, and three cameras of one recording integration."""
+    calls = async_mock_service(hass, "media_player", "play_media", schema=vol.Schema(
+        {vol.Required("entity_id"): cv.entity_ids}, extra=vol.ALLOW_EXTRA))
+    _picture(hass, PLAYER)
+    registry = er.async_get(hass)
+    for camera in (FRONT, YARD):
+        registry.async_get_or_create("camera", "unifiprotect", camera, suggested_object_id=camera.split(".")[1])
+        hass.states.async_set(camera, "idle")
+    registry.async_get_or_create("camera", "unifiprotect", GARAGE, suggested_object_id="garage",
+                                 disabled_by=er.RegistryEntryDisabler.USER)
+    _picture(hass, CAMERA)
+    return calls
+
+
+def _play(media_id: str, field: str = "media_content_id") -> dict:
+    return {"service": {"domain": "media_player", "name": "play_media", "data": {
+        field: media_id, "media_content_type": "video", "extra": [{"nested": media_id}]}},
+        "targets": [{"kind": "entity", "ids": [PLAYER]}]}
+
+
+_EVERY_CAMERA = {PLAYER: "GREEN", FRONT: "YELLOW", YARD: "YELLOW", GARAGE: "YELLOW"}
+
+
+async def test_a_recording_plays_when_every_camera_of_its_integration_is_readable(hass, recorder):
+    data, _ = _environment(hass)
+    played = await _call_tool("call_service", _play(RECORDING), _key(_EVERY_CAMERA), hass, data)
+    assert played[1] == "allowed", played
+    assert len(recorder) == 1
+
+
+@pytest.mark.parametrize("hidden", [YARD, GARAGE])
+async def test_one_unreadable_camera_refuses_its_integrations_recordings(hass, recorder, hidden):
+    """A disabled camera counts too: its integration still serves the recordings."""
+    data, _ = _environment(hass)
+    key = _key({**_EVERY_CAMERA, hidden: "RED"})
+    refused = await _call_tool("call_service", _play(RECORDING), key, hass, data)
+    assert refused[1] == "denied", refused
+    assert "every camera of that integration" in _text(refused[0])
+    assert recorder == []
+
+
+@pytest.mark.parametrize("media_id", [
+    RECORDING.upper().replace("MEDIA-SOURCE://UNIFIPROTECT", "media-source://UniFiProtect"),
+    "  media-source://unifiprotect",
+    "media-source://unifiprotect/",
+    "media-source://nest/device-1/event-2",
+])
+async def test_any_recording_id_is_judged_by_its_source(hass, recorder, media_id):
+    """Case, spacing, a folder and another recording source are judged alike."""
+    data, _ = _environment(hass)
+    key = _key({PLAYER: "GREEN", FRONT: "YELLOW", YARD: "RED", GARAGE: "YELLOW"})
+    refused = await _call_tool("call_service", _play(media_id, "anything"), key, hass, data)
+    assert refused[1] == "denied", refused
+    assert recorder == []
+
+
+async def test_a_recording_source_without_camera_entities_is_refused(hass, recorder):
+    data, _ = _environment(hass)
+    refused = await _call_tool("call_service", _play("media-source://reolink/CAM|entry|0|main"),
+                               _key(_EVERY_CAMERA), hass, data)
+    assert refused[1] == "denied", refused
+    assert recorder == []
+
+
+@pytest.mark.parametrize("capability", ["deny", "confirm"])
+async def test_a_recording_needs_the_camera_capability(hass, recorder, capability):
+    data, pending = _environment(hass)
+    refused = await _call_tool("call_service", _play(RECORDING), _key(_EVERY_CAMERA, cap_camera_read=capability), hass, data)
+    assert refused[1] == "denied", refused
+    assert "camera recording" in _text(refused[0])
+    assert recorder == [] and pending == []
+
+
+async def test_pass_through_with_the_camera_capability_plays_recordings(hass, recorder):
+    data, _ = _environment(hass)
+    played = await _call_tool("call_service", _play(RECORDING), _key({}, pass_through=True), hass, data)
+    assert played[1] == "allowed", played
+
+
+async def test_a_mesa_privacy_denial_on_one_camera_refuses_the_recording(hass, recorder):
+    data, _ = _environment(hass, mesa_mode=MESA_MODE_ADVISORY, mesa=MagicMock())
+    data.mesa.resolver.resolve.side_effect = lambda entity_id: SimpleNamespace(
+        privacy_classification="private" if entity_id == YARD else "public", domain="camera",
+        person_traits=SimpleNamespace(is_minor=None))
+    data.mesa.enforcer.privacy.evaluate.side_effect = lambda classification, *_a, **_k: SimpleNamespace(
+        allowed=classification != "private")
+    refused = await _call_tool("call_service", _play(RECORDING), _key(_EVERY_CAMERA), hass, data)
+    assert refused[1] == "denied", refused
+    assert recorder == []
+
+
+async def test_a_saved_recording_approval_is_refused_once_a_camera_left_scope(hass, recorder):
+    data, pending = _environment(hass)
+    announce = _play(RECORDING)
+    announce["service"]["data"]["announce"] = True
+    queued = await _call_tool("call_service", announce, _key(_EVERY_CAMERA, cap_broadcast="confirm"), hass, data)
+    assert len(pending) == 1, queued
+    saved = pending[0]["args"]
+    result, outcome, _ = await async_execute_approved_tool(
+        "call_service", saved, _key({**_EVERY_CAMERA, FRONT: "RED"}, cap_broadcast="allow"), hass, data)
+    assert outcome == "denied", result
+    assert "every camera of that integration" in _text(result)
+    assert recorder == []
+    allowed = await async_execute_approved_tool(
+        "call_service", saved, _key(_EVERY_CAMERA, cap_broadcast="allow"), hass, data)
+    assert allowed[1] == "allowed", allowed
+    assert len(recorder) == 1
+
+
+async def test_the_preview_predicts_a_recording_refusal(hass, recorder):
+    data, _ = _environment(hass)
+    key = _key({**_EVERY_CAMERA, YARD: "RED"}, cap_search="allow")
+    preview = await _call_tool("dry_run_service", _play(RECORDING), key, hass, data)
+    assert preview[1] == "denied" and "every camera of that integration" in _text(preview[0]), preview
+    allowed = await _call_tool("dry_run_service", _play(RECORDING), _key(_EVERY_CAMERA, cap_search="allow"), hass, data)
+    assert allowed[1] == "allowed", allowed
+    assert recorder == []
+
+
+async def test_a_recording_source_name_only_mentioned_in_text_passes(hass, recorder):
+    data, _ = _environment(hass)
+    key = _key({PLAYER: "GREEN"}, cap_camera_read="deny")
+    call = _play("http://example.invalid/clip.mp4")
+    call["service"]["data"]["caption"] = f"see {RECORDING} later"
+    assert (await _call_tool("call_service", call, key, hass, data))[1] == "allowed"
+
+
 def test_core_still_names_the_attachment_field_and_its_scheme():
     """Phoenix reads Core's field and scheme by name; a rename must fail here, not pass silently."""
     from homeassistant.components.ai_task.const import ATTR_ATTACHMENTS

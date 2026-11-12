@@ -990,6 +990,10 @@ SCRIPT_INPUT_FIELD = "variables"
 # Media sources whose identifier is an entity ID: Home Assistant reads that camera or image
 # for a media-source ID in any field of any service, checking only a context user's access.
 MEDIA_SOURCE_ENTITY_DOMAINS = frozenset({"camera", "image"})
+# Media sources that serve camera recordings and events under device, entry or console IDs no
+# entity names, each named by its integration's domain. An ID from one can reach any camera that
+# integration manages, so it needs the picture read of every camera entity the integration has.
+MEDIA_SOURCE_RECORDING_DOMAINS = frozenset({"motioneye", "nest", "netatmo", "reolink", "unifiprotect"})
 # AI Task hands each attachment to the model, which describes it to the caller. Only an
 # entity source can be scoped, so an attachment from any other source is refused, except an
 # image the same key generated: every caller's images share one folder under guessable names.

@@ -58,6 +58,7 @@
 - 通知播放需要广播能力：`assist_satellite.announce`、`start_conversation`、`ask_question`、`music_assistant.play_announcement`、带 `announce` 的 `media_player.play_media` 和 `tts.speak`。
 - `tts.speak` 还需要对其指定的每个音箱有 W。普通播放只需要 W。
 - 操作数据中以 `media-source://camera/<entity_id>` 或 `media-source://image/<entity_id>` 指定的摄像头或图像，需要 {{label:caps.cap_camera_read.label}} 和对它的 R，与获取静态图像相同。
+- 以 `media-source://` ID 指定的 Nest、UniFi Protect、Reolink、motionEye 或 Netatmo 录像，需要 {{label:caps.cap_camera_read.label}} 和对该集成每个摄像头的 R。只要有一个摄像头不可见，全部录像都会被拒绝。
 - AI 任务的附件只能是摄像头、图像，或同一密钥自上次重启以来用 `ai_task.generate_image` 生成的图片。
 - ESPHome 设备操作只需要设备上的 W。MESA 不检查它们，也不检查重新加载或重启。
 - 搜索或列出 Music Assistant 音乐库需要服务响应数据，以及某个 Music Assistant 实体（例如音箱）上的 R。这些操作不会播放任何内容，所以 MESA 也不检查它们。
