@@ -945,14 +945,23 @@ class _ThinkSplitter:
         return out
 
 
-def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> None:
+def _apply_claude_options(
+    body: dict, options: dict, kind: str = "claude", *,
+    thinking_off: str | None = None, effort_supported: bool | None = None,
+) -> None:
     """Map the panel's generation options into an Anthropic-format request body.
 
-    Claude takes adaptive thinking with a display mode plus an output_config effort. MiniMax takes
-    `{type: adaptive}`, and `output_config.effort` only on MiniMax-M3.1-Flash.
+    Claude takes adaptive thinking with a display mode plus an output_config effort. With thinking
+    off it takes the model's declared off type (`between_tools` or `disabled`, at effort high or
+    below and with no other field), or no thinking object where none was declared. A model declared
+    without effort gets none. MiniMax takes `{type: adaptive}`, and `output_config.effort` only on
+    MiniMax-M3.1-Flash.
     """
     body["max_tokens"] = int(options.get("max_tokens") or AGENT_CHAT_DEFAULT_MAX_TOKENS)
     thinking = options.get("thinking", True)
+    off_type = thinking_off if kind == "claude" and thinking_off in _CLAUDE_THINKING_OFF_TYPES else None
+    if not thinking and off_type:
+        body["thinking"] = {"type": off_type}
     if thinking:
         if kind == "minimax":
             body["thinking"] = {"type": "adaptive"}
@@ -964,7 +973,11 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
             body["thinking"] = {"type": "adaptive", "display": display}
     if kind == "claude":
         effort = options.get("effort", AGENT_CHAT_DEFAULT_EFFORT)
-        if effort in AGENT_CHAT_EFFORT_LEVELS:
+        if effort in AGENT_CHAT_EFFORT_LEVELS and effort_supported is not False:
+            if (not thinking and off_type and AGENT_CHAT_EFFORT_LEVEL_ORDER.index(effort)
+                    > AGENT_CHAT_EFFORT_LEVEL_ORDER.index("high")):
+                # Both off types are refused above high.
+                effort = "high"
             body["output_config"] = {"effort": effort}
     elif (kind == "minimax" and thinking and options.get("effort") in AGENT_CHAT_EFFORT_LEVELS
           and re.match(r"minimax-m3\.1", str(body.get("model") or ""), re.I)):
@@ -972,6 +985,9 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
         # the control for that model alone, and Voice sends none.
         body["output_config"] = {"effort": options["effort"]}
 
+
+# Thinking types that turn Claude's thinking off, as the Models API names them.
+_CLAUDE_THINKING_OFF_TYPES = frozenset({"between_tools", "disabled"})
 
 # The output cap every Anthropic-format model has accepted; the fallback for a
 # model that refuses AGENT_CHAT_DEFAULT_MAX_TOKENS.
@@ -1172,11 +1188,12 @@ _IMAGE_REFUSAL = re.compile(
 _REFUSAL_STATUSES = frozenset({400, 422})
 
 
-def _refused_option(status: int, message: str, sent: dict) -> str | None:
+def _refused_option(status: int, message: str, sent: dict, ignore: tuple[str, ...] = ()) -> str | None:
     """The request key a provider just refused, when it named one of ours.
 
     It needs a 400 or 422, a key whose refusal has one unambiguous consequence, and one Phoenix
-    actually sent in this request.
+    actually sent in this request. Keys in `ignore` are never learned: a provider that declares the
+    capability, and has other refusals that name the key, passes them here.
     """
     # A wrong answer here disables a control the operator was using. The last guard stops an
     # unrelated error mentioning "temperature" from teaching Phoenix that temperature is
@@ -1199,7 +1216,7 @@ def _refused_option(status: int, message: str, sent: dict) -> str | None:
         # models require the Responses API for them).
         return "tools"
     for key in AGENT_CHAT_LEARNABLE_OPTIONS:
-        if key == "tools":
+        if key == "tools" or key in ignore:
             continue
         if key in sent and re.search(rf"\b{re.escape(key)}\b", low):
             return key
@@ -1293,8 +1310,9 @@ async def _ollama_capabilities(
             "thinking": "thinking" in caps,
             "vision": "vision" in caps,
         }
-        # A model with reasoning levels lists them (false means it can be turned
-        # off, which the panel's own Off covers). Ollama answers an unknown level
+        # A model with reasoning levels lists them, and `false` when it can be
+        # turned off (sent as "none" on the compatibility endpoint); `default` is
+        # what it runs at when nothing is sent. Ollama answers an unknown level
         # with the default rather than a refusal, so a probe cannot learn them.
         thinking = body.get("thinking")
         values = thinking.get("values") if isinstance(thinking, dict) else None
@@ -1302,6 +1320,10 @@ async def _ollama_capabilities(
             levels = [level for level in AGENT_CHAT_EFFORT_LEVEL_ORDER if level != "none" and level in values]
             if levels:
                 row["effort_levels"] = levels
+            row["thinking_off"] = "none" if False in values else ""
+            default = thinking.get("default")
+            if isinstance(default, str) and default in levels:
+                row["thinking_default"] = default
         return name, row
 
     pairs = await asyncio.gather(*(_one(m) for m in models))

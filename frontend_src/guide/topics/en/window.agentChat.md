@@ -42,7 +42,7 @@ The line under the title shows the access key, provider and model in use. Select
 - **{{label:agentchat.accessKey}}**: the agent works with this key's permissions.
 - **{{label:agentchat.provider}}**: the AI provider account that runs the agent.
 - **{{label:agentchat.model}}**: the model to use, from that account's list.
-- **{{label:agentchat.thinking}}** and **{{label:agentchat.temperature}}**: shown only when the model offers them. Leave Temperature empty for the provider's default.
+- **{{label:agentchat.thinking}}** and **{{label:agentchat.temperature}}**: shown only when the model offers them. Thinking starts at the model's own level, and offers Off only where the model can stop thinking. Leave Temperature empty for the provider's default.
 
 Changing the access key or provider starts a new conversation. You can't change the key, provider or model while a reply is running.
 

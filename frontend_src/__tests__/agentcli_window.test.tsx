@@ -26,6 +26,7 @@ import {
   memoryMessages,
   buildOptions,
   modelCaps,
+  thinkValue,
   snapResizeRect,
   clampPosToViewport,
   resolveAgentCliTopMargin,
@@ -509,8 +510,11 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
     const table: Record<string, string[]> = {
       "gemini-2.5-flash": ["none", "low", "medium", "high"],
       "gemini-2.5-pro": ["low", "medium", "high"],
+      "gemini-2.5-flash-lite": ["none", "low", "medium", "high"],
       "gemini-3-flash-preview": ["minimal", "low", "medium", "high"],
       "gemini-3.6-flash": ["minimal", "low", "medium", "high"],
+      "gemini-3.1-flash-lite": ["minimal", "low", "medium", "high"],
+      "gemini-3.5-flash-lite": ["minimal", "low", "medium", "high"],
       "gemini-3-pro-preview": ["low", "high"],
       "gemini-3.1-pro-preview": ["low", "medium", "high"],
       "gemini-3.8-flash": ["low", "medium", "high"],
@@ -521,8 +525,15 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
       expect(vals(g)).toEqual(levels);
       expect(g.temperature).toBe(false);
     }
-    expect(modelCaps("gemini", "gemini-3.6-flash", false).defaultLevel).toBe("high");
-    expect(modelCaps("gemini", "gemini-2.5-flash", false).defaultLevel).toBe("medium");
+    // Each model's own default, so an untouched control changes nothing.
+    const defaults: Record<string, string> = {
+      "gemini-3.6-flash": "medium", "gemini-3.8-flash": "medium", "gemini-4-argon": "medium",
+      "gemini-4-carbon": "medium", "gemini-3.1-flash-lite": "minimal", "gemini-3.5-flash-lite": "minimal",
+      "gemini-3.1-pro-preview": "high", "gemini-3-pro-preview": "high", "gemini-2.5-flash": "medium",
+      "gemini-2.5-flash-lite": "none",
+    };
+    for (const [model, level] of Object.entries(defaults))
+      expect(modelCaps("gemini", model, false).defaultLevel, model).toBe(level);
     const g15 = modelCaps("gemini", "gemini-1.5-pro", false);
     expect(g15.thinking).toEqual([]);
     expect(g15.temperature).toBe(false);
@@ -536,7 +547,18 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
     // Grok 4.5 and later always reason: no Off; xhigh from 4.6.
     expect(vals(modelCaps("grok", "grok-4.5", false))).toEqual(["low", "medium", "high"]);
     expect(vals(modelCaps("grok", "grok-4.7", false))).toEqual(["low", "medium", "high", "xhigh"]);
-    expect(vals(modelCaps("grok", "grok-4.20-reasoning", false))).toEqual(["low", "medium", "high", "xhigh"]);
+    // Grok 4.20 came between 4.1 and 4.3 and documents no effort.
+    expect(modelCaps("grok", "grok-4.20-0309-reasoning", false).thinking).toEqual([]);
+    expect(modelCaps("grok", "grok-4.20-0309-reasoning", false).temperature).toBe(false);
+    expect(modelCaps("grok", "grok-4.20-0309-non-reasoning", false).thinking).toEqual([]);
+    expect(modelCaps("grok", "grok-4.20-0309-non-reasoning", false).temperature).toBe(true);
+    // Grok 4.3: none is its off, default low.
+    const g43 = modelCaps("grok", "grok-4.3", true);
+    expect(vals(g43)).toEqual(["none", "low", "medium", "high", "xhigh"]);
+    expect(g43.defaultLevel).toBe("low");
+    const base = { thinking: true, temperature: "", verbose: false };
+    expect(buildOptions("grok", { ...base, effort: "" }, g43).effort).toBe("low");
+    expect(buildOptions("grok", { ...base, effort: "none" }, g43).effort).toBe("none");
     expect(modelCaps("grok", "grok-4.7", false).defaultLevel).toBe("high");
     expect(modelCaps("grok", "grok-4.20-multi-agent", false).thinking).toEqual([]);
   });
@@ -617,6 +639,47 @@ describe("agentCLI generation options mapping", () => {
     const caps = modelCaps("claude", "claude-opus-4-8", true);
     expect(buildOptions("claude", { thinking: true, effort: "xhigh", temperature: "", verbose: false }, caps))
       .toEqual({ thinking: true, effort: "xhigh", show_thinking: false });
+  });
+  it("claude sends what the dropdown shows, not the stored values", () => {
+    const o = { thinking: false, effort: "xhigh", temperature: "", verbose: true };
+    // Sonnet 4.6 declares no xhigh: the dropdown shows the default, and that is sent.
+    const s46 = modelCaps("claude", "claude-sonnet-4-6", true,
+      { thinking: true, thinking_off: "disabled", effort_levels: ["low", "medium", "high", "max"] });
+    expect(buildOptions("claude", { ...o, thinking: true }, s46)).toEqual({ thinking: true, effort: "high", show_thinking: true });
+    // An Off carried over from another model is not sent where the model has none.
+    const o55 = modelCaps("claude", "claude-opus-5-5", true);
+    expect(buildOptions("claude", o, o55)).toEqual({ thinking: true, effort: "xhigh", show_thinking: true });
+    expect(o55.defaultLevel).toBe("medium");
+    expect(buildOptions("claude", { ...o, thinking: true, effort: "" }, o55).effort).toBe("medium");
+    // Declared off switches give Claude 5 models a real Off; none takes it away.
+    for (const [model, off] of [["claude-sonnet-5-5", "between_tools"], ["claude-opus-5", "disabled"]] as const) {
+      const caps = modelCaps("claude", model, true, { thinking: true, thinking_off: off });
+      expect(vals(caps)[0], model).toBe("off");
+      expect(buildOptions("claude", o, caps), model).toEqual({ thinking: false, effort: "xhigh", show_thinking: true });
+    }
+    expect(vals(modelCaps("claude", "claude-opus-4-8", true, { thinking: true, thinking_off: "" }))[0]).toBe("low");
+    // A model without effort levels gets only on and off, and sends no effort.
+    const h45 = modelCaps("claude", "claude-haiku-4-5", true, { thinking: true, thinking_off: "disabled", effort: false });
+    expect(h45.style).toBe("boolean");
+    expect(vals(h45)).toEqual(["off", "on"]);
+    expect(buildOptions("claude", { ...o, thinking: true }, h45)).toEqual({ thinking: true, effort: "", show_thinking: true });
+    expect(buildOptions("claude", o, h45)).toEqual({ thinking: false, effort: "", show_thinking: true });
+  });
+  it("ollama follows the declared off switch and default level", () => {
+    const o = { thinking: true, effort: "", temperature: "", verbose: false };
+    const gptOss = modelCaps("ollama", "gpt-oss:20b", true,
+      { thinking: true, effort_levels: ["low", "medium", "high"], thinking_off: "", thinking_default: "medium" });
+    expect(vals(gptOss)).toEqual(["low", "medium", "high"]);
+    expect(buildOptions("ollama", { ...o, thinking: false }, gptOss).effort).toBe("medium");
+    const dsk = modelCaps("ollama", "deepseek-v4-pro:0813", true,
+      { thinking: true, effort_levels: ["low", "high", "max"], thinking_off: "none", thinking_default: "low" });
+    expect(vals(dsk)).toEqual(["off", "low", "high", "max"]);
+    expect(buildOptions("ollama", o, dsk)).toEqual({ thinking: true, effort: "low", show_thinking: false });
+    // A boolean model that cannot stop thinking shows only On.
+    const always = modelCaps("ollama", "qwq", true, { thinking: true, thinking_off: "" });
+    expect(vals(always)).toEqual(["on"]);
+    expect(thinkValue(always, { ...o, thinking: false })).toBe("on");
+    expect(buildOptions("ollama", { ...o, thinking: false }, always).thinking).toBe(true);
   });
   it("deepseek: thinking on -> toggle + effort, no temperature; off -> temperature", () => {
     const on = modelCaps("deepseek", "deepseek-chat", true);

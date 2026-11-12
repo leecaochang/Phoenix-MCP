@@ -83,6 +83,11 @@ class ProviderConfig:
     vision: bool | None = None
     endpoint_id: str | None = None
     decision_routing_revision: str = ""
+    # How the model turns thinking off, as the provider declared it: a request
+    # value such as "disabled", "" when it cannot, None when nothing was declared.
+    thinking_off: str | None = None
+    # False when the provider declared that the model takes no effort level.
+    effort: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -766,9 +771,11 @@ class AgentCliStore:
             model = self._effective(cfg)[0]
         model_caps = _with_learned(cfg).get(model) or {}
         vision = model_caps.get("vision") if isinstance(model_caps.get("vision"), bool) else None
+        thinking_off = model_caps.get("thinking_off") if isinstance(model_caps.get("thinking_off"), str) else None
+        effort = model_caps.get("effort") if isinstance(model_caps.get("effort"), bool) else None
         return ProviderConfig(
             kind=kind, model=model, base_url=base_url, api_key=cfg.get("api_key"),
-            endpoint_id=endpoint_id, vision=vision,
+            endpoint_id=endpoint_id, vision=vision, thinking_off=thinking_off, effort=effort,
             decision_routing_revision=str(cfg.get("decision_routing_revision") or "") if purpose == "decision" else "",
         )
 

@@ -247,8 +247,8 @@ Phoenix uses each option only where the provider supports it.
 
 | Field | Type | Notes |
 |---|---|---|
-| `thinking` | boolean | Turns the model's reasoning on. Default `true`. |
-| `effort` | string | `low`, `medium`, `high`, `xhigh` or `max`. Default `high`. |
+| `thinking` | boolean | Turns the model's reasoning on. Default `true`. For Claude, `false` sends the off setting the model declares, with `effort` at most `high`. |
+| `effort` | string | `low`, `medium`, `high`, `xhigh` or `max`. Default `high`. For Claude, an empty string sends none. |
 | `show_thinking` | boolean | Whether to show the model's reasoning. |
 | `temperature` | number | The provider's sampling temperature. |
 | `max_tokens` | integer | The most tokens the model may write. Default 32000. |

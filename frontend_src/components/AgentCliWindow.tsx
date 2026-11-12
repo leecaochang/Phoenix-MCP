@@ -304,6 +304,12 @@ function applyDeclared(
   const out = { ...caps };
   if (declared.thinking === false) out.thinking = [];
   if (declared.temperature === false) out.temperature = false;
+  if (declared.effort === false && out.thinking.length) {
+    // A model that thinks but takes no effort level: only on and off.
+    out.style = "boolean";
+    out.thinking = thinkOpts(["off", "on"]);
+    out.defaultLevel = "on";
+  }
   // Probed effort levels REPLACE the table's guess rather than narrowing it, and
   // may even CREATE a control the table does not offer (the aggregator case: one
   // key fronting many vendors, so no single built-in answer fits). That is sound
@@ -328,6 +334,18 @@ function applyDeclared(
       out.defaultLevel = declared.effort_levels[declared.effort_levels.length - 1];
     }
   }
+  if (declared.thinking_default && out.thinking.some((o) => o.value === declared.thinking_default)) {
+    out.defaultLevel = declared.thinking_default;
+  }
+  if (typeof declared.thinking_off === "string" && out.thinking.length) {
+    // A declared off switch settles whether Off is offered: added for a Claude 5
+    // model that has one, removed for a model that cannot stop thinking. A level
+    // named "none" already is the off switch.
+    const levels = out.thinking.filter((o) => o.value !== "off");
+    const canOff = declared.thinking_off !== "" && !levels.some((o) => o.value === "none");
+    out.thinking = [...(canOff ? thinkOpts(["off"]) : []), ...levels];
+    if (out.style === "boolean" && !canOff) out.thinking = thinkOpts(["on"]);
+  }
   return out;
 }
 
@@ -343,22 +361,24 @@ function claudeAlwaysThinks(m: string): boolean {
   return /^claude-(?:[a-z]+-)?(?:[5-9]|\d{2})(?:[-.]|$)/.test(m) || /^claude-fable/.test(m);
 }
 
-/** Google's per-model Gemini thinking levels, or [] for a model without them. */
-function geminiLevels(m: string): string[] {
-  if (/gemini-3-pro/.test(m)) return ["low", "high"];
-  if (/gemini-3(\.\d+)?-flash(?!-lite)/.test(m) && !/gemini-3\.8/.test(m)) return ["minimal", "low", "medium", "high"];
-  if (/gemini-(?:[4-9]|3\.)/.test(m)) return ["low", "medium", "high"];
-  if (/gemini-2\.5-flash/.test(m)) return ["none", "low", "medium", "high"];
-  if (/gemini-2\.5/.test(m)) return ["low", "medium", "high"];
-  return [];
+/** Google's per-model Gemini thinking levels and default; no levels for a model without them. */
+function geminiThinking(m: string): { levels: string[]; defaultLevel: string } {
+  const all = ["minimal", "low", "medium", "high"];
+  if (/gemini-3-pro/.test(m)) return { levels: ["low", "high"], defaultLevel: "high" };
+  if (/gemini-3(\.\d+)?-flash-lite/.test(m)) return { levels: all, defaultLevel: "minimal" };
+  if (/gemini-3(\.\d+)?-flash/.test(m) && !/gemini-3\.8/.test(m)) return { levels: all, defaultLevel: "medium" };
+  if (/gemini-(?:[4-9]|3\.)/.test(m))
+    return { levels: ["low", "medium", "high"], defaultLevel: /flash|gemini-[4-9]/.test(m) ? "medium" : "high" };
+  if (/gemini-2\.5-flash-lite/.test(m)) return { levels: ["none", "low", "medium", "high"], defaultLevel: "none" };
+  if (/gemini-2\.5-flash/.test(m)) return { levels: ["none", "low", "medium", "high"], defaultLevel: "medium" };
+  if (/gemini-2\.5/.test(m)) return { levels: ["low", "medium", "high"], defaultLevel: "medium" };
+  return { levels: [], defaultLevel: "high" };
 }
 
-/** Whether a Grok model is at least major.minor (grok-4.20 is later than 4.6). */
-function grokAtLeast(m: string, major: number, minor: number): boolean {
-  const match = /^grok-(\d+)(?:[.-](\d+))?/.exec(m);
-  if (!match) return false;
-  const [have, sub] = [Number(match[1]), Number(match[2] ?? 0)];
-  return have > major || (have === major && sub >= minor);
+/** Whether a Grok model is at least `version`, read as a decimal (4.20 came between 4.1 and 4.3). */
+function grokAtLeast(m: string, version: number): boolean {
+  const match = /^grok-(\d+)(?:\.(\d+))?/.exec(m);
+  return !!match && Number(`${match[1]}.${match[2] ?? "0"}`) >= version;
 }
 
 /** OpenAI's documented reasoning levels and default for one model id, or null.
@@ -393,8 +413,11 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       // Anthropic output_config.effort. Opus does not take temperature. Leaving
       // thinking out turns it off only before the Claude 5 generation; from it
       // on, the model still thinks adaptively, so no Off is offered there.
+      // Opus 5.5 and Haiku 5.5 default to medium; the declared off switch adds
+      // Off back where a Claude 5 model has one.
       return { thinking: thinkOpts([...(claudeAlwaysThinks(m) ? [] : ["off"]), "low", "medium", "high", "xhigh", "max"]),
-               style: "effort", defaultLevel: "high", temperature: false };
+               style: "effort", defaultLevel: /^claude-(?:opus|haiku)-5-5/.test(m) ? "medium" : "high",
+               temperature: false };
     case "deepseek":
       // A thinking on/off toggle plus reasoning_effort low/high/max, default high;
       // thinking mode ignores temperature. Nothing about the model NAME says which
@@ -417,21 +440,27 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       // temperature on its reasoning models, so none is offered. Levels follow
       // Google's per-model table; reasoning cannot be turned off on Gemini 3 or
       // later, and only 2.5 Flash takes "none".
-      const levels = geminiLevels(m);
-      // Gemini 3 and later default to high thinking; 2.5 to a medium budget.
-      return { thinking: thinkOpts(levels), style: "effort",
-               defaultLevel: /gemini-2\./.test(m) ? "medium" : "high", temperature: false };
+      // The default is the model's own (medium on current Flash and Gemini 4,
+      // minimal on Flash-Lite, high on Pro), so an untouched control changes nothing.
+      const { levels, defaultLevel } = geminiThinking(m);
+      return { thinking: thinkOpts(levels), style: "effort", defaultLevel, temperature: false };
     }
     case "grok": {
       // xAI reasoning_effort. Grok 4.5 and later always reason (default high):
-      // low/medium/high, plus xhigh from 4.6. The multi-agent model reads the
-      // field as an agent count, so it gets no control. Older reasoning models
-      // take low/high and can run without it. Sending an effort marks a
-      // reasoning turn, which drops temperature.
+      // low/medium/high, plus xhigh from 4.6. Grok 4.3 takes none (off) to xhigh,
+      // default low. Grok 4.20 documents no effort, and the multi-agent model
+      // reads the field as an agent count, so neither gets a control. Older
+      // reasoning models take low/high and can run without it. Sending an effort
+      // marks a reasoning turn, which drops temperature.
       if (m.includes("multi-agent")) return { thinking: [], style: "effort", defaultLevel: "high", temperature: false };
-      if (grokAtLeast(m, 4, 5))
-        return { thinking: thinkOpts(["low", "medium", "high", ...(grokAtLeast(m, 4, 6) ? ["xhigh"] : [])]),
+      if (/^grok-4\.20/.test(m))
+        return { thinking: [], style: "effort", defaultLevel: "high", temperature: m.includes("non-reasoning") };
+      if (grokAtLeast(m, 4.5))
+        return { thinking: thinkOpts(["low", "medium", "high", ...(grokAtLeast(m, 4.6) ? ["xhigh"] : [])]),
                  style: "effort", defaultLevel: "high", temperature: false };
+      if (/^grok-4\.3/.test(m))
+        return { thinking: thinkOpts(["none", "low", "medium", "high", "xhigh"]), style: "effort",
+                 defaultLevel: "low", temperature: false };
       return { thinking: thinkOpts(["off", "low", "high"]), style: "effort",
                defaultLevel: "low", temperature: !thinkingOn };
     }
@@ -534,7 +563,7 @@ function hasOff(caps: ModelCaps): boolean {
 
 // The dropdown value for the current options.
 export function thinkValue(caps: ModelCaps, o: GenOptions): string {
-  if (caps.style === "boolean") return o.thinking ? "on" : "off";
+  if (caps.style === "boolean") return o.thinking || !hasOff(caps) ? "on" : "off";
   if (hasOff(caps) && !o.thinking) return "off";
   const levels = caps.thinking.filter((opt) => opt.value !== "off").map((opt) => opt.value);
   return levels.includes(o.effort) ? o.effort : caps.defaultLevel;
@@ -552,11 +581,22 @@ export function applyThink(
 export function buildOptions(
   kind: AgentCliProviderKind, o: GenOptions, caps: ModelCaps,
 ): Record<string, unknown> {
-  if (kind === "claude") return { thinking: o.thinking, effort: o.effort, show_thinking: o.verbose };
+  if (kind === "claude") {
+    // What the dropdown shows, not the stored values: a level the model lacks
+    // falls to its default, and Off counts only where the model offers it.
+    const shown = caps.thinking.length ? thinkValue(caps, o) : "off";
+    const levels = caps.thinking.filter((opt) => opt.value !== "off").map((opt) => opt.value);
+    return {
+      thinking: shown !== "off",
+      effort: caps.style === "boolean" || !levels.length ? ""
+        : levels.includes(o.effort) ? o.effort : caps.defaultLevel,
+      show_thinking: o.verbose,
+    };
+  }
   const out: Record<string, unknown> = { show_thinking: o.verbose };
   if (caps.thinking.length) {
     if (caps.style === "boolean") {
-      out.thinking = o.thinking;
+      out.thinking = thinkValue(caps, o) === "on";
     } else if (hasOff(caps)) {
       // DeepSeek: an on/off toggle plus a reasoning_effort level when on.
       out.thinking = o.thinking;

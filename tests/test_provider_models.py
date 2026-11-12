@@ -143,6 +143,46 @@ async def test_automatic_mode_skips_a_model_that_cannot_call_tools():
 
 
 @pytest.mark.asyncio
+async def test_resolve_carries_the_declared_off_switch_and_effort_support():
+    store = llm_accounts.AgentCliStore(AsyncMock())
+    iid = await store.add("claude", {"api_key": "k", "model": "claude-sonnet-5-5"})
+    await store.set_catalog(iid, ["claude-sonnet-5-5", "claude-haiku-4-5", "claude-opus-4-8"], {}, "t1")
+    await store.set_capabilities(iid, {
+        "claude-sonnet-5-5": {"thinking": True, "thinking_off": "between_tools"},
+        "claude-haiku-4-5": {"thinking": True, "thinking_off": "disabled", "effort": False},
+    }, "t1")
+    sonnet = store.resolve(iid)
+    assert (sonnet.thinking_off, sonnet.effort) == ("between_tools", None)
+    haiku = store.resolve(iid, "claude-haiku-4-5")
+    assert (haiku.thinking_off, haiku.effort) == ("disabled", False)
+    # Nothing declared stays unknown, never "cannot".
+    opus = store.resolve(iid, "claude-opus-4-8")
+    assert (opus.thinking_off, opus.effort) == (None, None)
+
+
+@pytest.mark.asyncio
+async def test_claude_turn_sends_the_declared_off_and_learns_nothing_from_thinking_refusals():
+    sonnet = ProviderConfig(kind="claude", model="claude-sonnet-5-5", base_url="https://a", api_key="k",
+                            thinking_off="between_tools")
+    refusal = _Resp(status=400, text=json.dumps({"error": {"type": "invalid_request_error",
+                    "message": "thinking blocks in the latest assistant message cannot be modified"}}))
+    session = _Session(refusal)
+    events = await _collect(ClaudeProvider(sonnet).stream_turn(
+        session, system_prompt="s", messages=[], tools=[],
+        options={"thinking": False, "effort": "max", "show_thinking": True}))
+    sent = session.calls[0]["json"]
+    assert sent["thinking"] == {"type": "between_tools"}
+    assert sent["output_config"] == {"effort": "high"}
+    failure = events[-1]
+    assert failure["type"] == "provider_error" and failure.get("refused") is None
+    # MiniMax publishes no capabilities, so its thinking refusals still teach.
+    minimax = ProviderConfig(kind="minimax", model="MiniMax-M3", base_url="https://m", api_key="k")
+    events = await _collect(ClaudeProvider(minimax).stream_turn(
+        _Session(refusal), system_prompt="s", messages=[], tools=[], options={"thinking": True}))
+    assert events[-1].get("refused") == "thinking"
+
+
+@pytest.mark.asyncio
 async def test_decision_accounts_never_follow_the_catalogue():
     store = llm_accounts.AgentCliStore(AsyncMock())
     iid = await store.add("typesafe", {"api_key": "k", "model": "jev-1.13.0"})
@@ -162,17 +202,38 @@ async def test_claude_list_models_follows_pagination_and_reads_capabilities():
                                                    "high": {"supported": True}, "max": {"supported": False}}}}],
              "has_more": True, "last_id": "claude-opus-5-5"}
     page2 = {"data": [{"id": "claude-haiku-4-5", "created_at": "1970-01-01T00:00:00Z",
-                       "capabilities": {"image_input": {"supported": False}}}], "has_more": False}
+                       "capabilities": {"image_input": {"supported": False}}},
+                      {"id": "claude-sonnet-5-5", "created_at": "1970-01-01T00:00:00Z",
+                       "capabilities": {"thinking": {"supported": True, "types": {
+                           "adaptive": {"supported": True}, "disabled": {"supported": False},
+                           "between_tools": {"supported": True}}}}},
+                      {"id": "claude-opus-5", "created_at": "1970-01-01T00:00:00Z",
+                       "capabilities": {"thinking": {"supported": True, "types": {
+                           "adaptive": {"supported": True}, "disabled": {"supported": True}}},
+                           "effort": {"supported": False}}},
+                      {"id": "claude-sonnet-5", "created_at": "1970-01-01T00:00:00Z",
+                       "capabilities": {"thinking": {"supported": True, "types": {
+                           "disabled": {"supported": True}, "between_tools": {"supported": True}}}}},
+                      {"id": "claude-fable-5-2", "created_at": "1970-01-01T00:00:00Z",
+                       "capabilities": {"thinking": {"supported": True, "types": {
+                           "adaptive": {"supported": True}, "disabled": {"supported": False},
+                           "enabled": {"supported": False}}}}}], "has_more": False}
     session = _Session(_Resp(json_data=page1), _Resp(json_data=page2))
     provider = ClaudeProvider(ProviderConfig(kind="claude", model="", base_url="https://a", api_key="k"))
     models = await provider.list_models(session)
-    assert models == ["claude-opus-5-5", "claude-haiku-4-5"]
+    assert models == ["claude-opus-5-5", "claude-haiku-4-5", "claude-sonnet-5-5", "claude-opus-5", "claude-sonnet-5",
+                      "claude-fable-5-2"]
     assert session.calls[0]["params"]["limit"] == "1000"
     assert session.calls[1]["params"]["after_id"] == "claude-opus-5-5"
     assert provider.model_created == {"claude-opus-5-5": pytest.approx(1784851200.0)}
     caps = await provider.list_model_capabilities(session, models)
     assert caps["claude-opus-5-5"] == {"vision": True, "thinking": True, "effort_levels": ["low", "high"]}
     assert caps["claude-haiku-4-5"] == {"vision": False}
+    # How Off is sent: disabled, a real off, before between_tools; "" where thinking cannot stop.
+    assert caps["claude-sonnet-5-5"] == {"thinking": True, "thinking_off": "between_tools"}
+    assert caps["claude-opus-5"] == {"thinking": True, "thinking_off": "disabled", "effort": False}
+    assert caps["claude-sonnet-5"] == {"thinking": True, "thinking_off": "disabled"}
+    assert caps["claude-fable-5-2"] == {"thinking": True, "thinking_off": ""}
 
 
 @pytest.mark.asyncio

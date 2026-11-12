@@ -247,8 +247,8 @@ Phoenix 只在提供者支援的地方使用每個選項。
 
 | 欄位 | 類型 | 說明 |
 |---|---|---|
-| `thinking` | boolean | 開啟模型的推理。預設 `true`。 |
-| `effort` | string | `low`、`medium`、`high`、`xhigh` 或 `max`。預設 `high`。 |
+| `thinking` | boolean | 開啟模型的推理。預設 `true`。對於 Claude，`false` 會傳送模型宣告的關閉設定，`effort` 最高為 `high`。 |
+| `effort` | string | `low`、`medium`、`high`、`xhigh` 或 `max`。預設 `high`。對於 Claude，空字串表示不傳送。 |
 | `show_thinking` | boolean | 是否顯示模型的推理。 |
 | `temperature` | number | 提供者的取樣溫度。 |
 | `max_tokens` | integer | 模型最多可以寫入的 token 數。預設 32000。 |

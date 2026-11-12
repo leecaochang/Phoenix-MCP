@@ -31,6 +31,8 @@ export interface AgentCliDurable {
   instanceId: string;
   model: string;
   options: AgentCliOptions;
+  /** 2 from when an untouched effort is stored empty, so the model's own default applies. */
+  optionsRev: number;
   // One-shot text seeded into the message box on the next window mount (used by
   // the onboarding wizard's test prompt); the window clears it after reading.
   prefill: string;
@@ -48,6 +50,7 @@ export interface AgentCliDurable {
 }
 
 const LS_KEY = "phx-agentcli";
+const OPTIONS_REV = 2;
 const TURN_KEY = "phx-agentcli-turn";
 let ownerId: string | null = null;
 let draftTimer: ReturnType<typeof setTimeout> | null = null;
@@ -110,7 +113,9 @@ export function defaultDurable(): AgentCliDurable {
     accessKeyId: "",
     instanceId: "",
     model: "",
-    options: { thinking: true, effort: "high", temperature: "", verbose: false },
+    // An empty effort is the model's own default level; one is stored only when chosen.
+    options: { thinking: true, effort: "", temperature: "", verbose: false },
+    optionsRev: OPTIONS_REV,
     prefill: "",
     freshConversation: false,
     showFooter: true,
@@ -161,9 +166,12 @@ export function getDurable(): AgentCliDurable {
       accessKeyId: ofType("string", p.accessKeyId, ofType("string", legacyAccessKeyId, d.accessKeyId)),
       instanceId: ofType("string", p.instanceId, d.instanceId),
       model: ofType("string", p.model, d.model),
+      optionsRev: OPTIONS_REV,
       options: {
         thinking: ofType("boolean", options.thinking, d.options.thinking),
-        effort: ofType("string", options.effort, d.options.effort),
+        // Before revision 2 every untouched control stored "high", which is not a
+        // choice, so the stored effort is dropped once and the model default applies.
+        effort: p.optionsRev === OPTIONS_REV ? ofType("string", options.effort, d.options.effort) : d.options.effort,
         temperature: ofType("string", options.temperature, d.options.temperature),
         verbose: ofType("boolean", options.verbose, d.options.verbose),
       },

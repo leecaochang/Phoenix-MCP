@@ -42,7 +42,7 @@
 - **{{label:agentchat.accessKey}}**：智能体按此密钥的权限工作。
 - **{{label:agentchat.provider}}**：运行智能体的 AI 提供商账户。
 - **{{label:agentchat.model}}**：要使用的模型，来自该账户的列表。
-- **{{label:agentchat.thinking}}** 和 **{{label:agentchat.temperature}}**：仅在模型提供它们时显示。温度留空表示使用提供商的默认值。
+- **{{label:agentchat.thinking}}** 和 **{{label:agentchat.temperature}}**：仅在模型提供它们时显示。思考从模型自己的默认级别开始，只有模型能停止思考时才提供关闭。温度留空表示使用提供商的默认值。
 
 更改访问密钥或提供商会开始新对话。回复运行期间，你无法更改密钥、提供商或模型。
 

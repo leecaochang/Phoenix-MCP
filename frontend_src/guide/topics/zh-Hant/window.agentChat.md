@@ -42,7 +42,7 @@
 - **{{label:agentchat.accessKey}}**：智慧體依此金鑰的權限工作。
 - **{{label:agentchat.provider}}**：執行智慧體的 AI 提供者帳戶。
 - **{{label:agentchat.model}}**：要使用的模型，來自該帳戶的清單。
-- **{{label:agentchat.thinking}}** 和 **{{label:agentchat.temperature}}**：僅在模型提供它們時顯示。溫度留空表示使用提供者的預設值。
+- **{{label:agentchat.thinking}}** 和 **{{label:agentchat.temperature}}**：僅在模型提供它們時顯示。思考從模型自己的預設級別開始，只有模型能停止思考時才提供關閉。溫度留空表示使用提供者的預設值。
 
 變更存取金鑰或提供者會開始新對話。回覆執行期間，你無法變更金鑰、提供者或模型。
 

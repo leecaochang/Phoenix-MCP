@@ -202,8 +202,8 @@ class ClaudeProvider:
     ) -> dict[str, dict]:
         """Per-model capabilities from the `capabilities` object on each model row.
 
-        Anthropic declares image input, thinking and effort levels, so they are not probed. MiniMax
-        rows carry none and yield nothing.
+        Anthropic declares image input, thinking, how thinking turns off and effort levels, so they
+        are not probed. MiniMax rows carry none and yield nothing.
         """
         out: dict[str, dict] = {}
         for model in models:
@@ -217,7 +217,16 @@ class ClaudeProvider:
             thinking = (declared.get("thinking") or {}).get("supported")
             if isinstance(thinking, bool):
                 caps["thinking"] = thinking
+            types = (declared.get("thinking") or {}).get("types")
+            if isinstance(types, dict):
+                # How Off is sent: disabled where the model takes it (Opus 5, Haiku 5.5), else
+                # between_tools (Sonnet 5.5, its lowest setting), else not at all ("").
+                caps["thinking_off"] = next(
+                    (kind for kind in ("disabled", "between_tools")
+                     if isinstance(types.get(kind), dict) and types[kind].get("supported") is True), "")
             effort = declared.get("effort") or {}
+            if isinstance(effort, dict) and effort.get("supported") is False:
+                caps["effort"] = False
             if isinstance(effort, dict) and effort.get("supported") is True:
                 caps["effort_levels"] = [
                     level for level in AGENT_CHAT_EFFORT_LEVEL_ORDER
@@ -244,7 +253,8 @@ class ClaudeProvider:
             "tools": tools,
             "stream": True,
         }
-        _apply_claude_options(body, options, self.kind)
+        _apply_claude_options(body, options, self.kind,
+                              thinking_off=self.cfg.thinking_off, effort_supported=self.cfg.effort)
         if options.get("tool_choice") == "none" and tools:
             body["tool_choice"] = {"type": "none"}
         if (self.cfg.base_url, self.cfg.model) in _CLAUDE_NO_ADAPTIVE:
@@ -276,7 +286,11 @@ class ClaudeProvider:
                         yield _http_failure(self.kind, resp.status, text, code=_http_failure_code(resp.status),
                                             retryable=resp.status in _RETRYABLE_STATUSES,
                                             api_key=self.cfg.api_key,
-                                            refused=_refused_option(resp.status, msg, body),
+                                            refused=_refused_option(
+                                                resp.status, msg, body,
+                                                # Anthropic declares thinking per model, and refuses
+                                                # replayed or edited thinking with messages naming it.
+                                                ignore=("thinking",) if self.kind == "claude" else ()),
                                             **({"rate_limit": rate_limit} if rate_limit else {}))
                         return
                     async for ev in self._parse(resp):

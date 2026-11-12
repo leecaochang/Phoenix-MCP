@@ -290,6 +290,12 @@ export interface DeclaredModelCaps {
    *  proved to be validated first, so an empty or absent value means "unknown",
    *  never "none". */
   effort_levels?: string[];
+  /** How the model turns thinking off ("" when it cannot); absent when not declared. */
+  thinking_off?: string;
+  /** The level the model runs at when none is sent, when the provider declared one. */
+  thinking_default?: string;
+  /** False when the provider declared that the model takes no effort level. */
+  effort?: boolean;
 }
 
 // One configured provider account. Multiple of the same kind are allowed (e.g.

@@ -582,7 +582,7 @@ describe("window state read from storage", () => {
     const saved = {
       open: true, minimized: true, maximized: false, pos: { x: 1, y: 2 }, pillPos: { x: 3, y: 4 }, mobilePillPos: { x: 5, y: 6 },
       size: { w: 500, h: 600 }, accessKeyId: "k", instanceId: "i", model: "m",
-      options: { thinking: false, effort: "low", temperature: "0.5", verbose: true },
+      options: { thinking: false, effort: "low", temperature: "0.5", verbose: true }, optionsRev: 2,
       prefill: "hello", freshConversation: true, showFooter: false, showTimestamps: true, textSizePt: 12.25,
     };
     expect(read(saved)).toEqual(saved);
@@ -613,6 +613,14 @@ describe("window state read from storage", () => {
     expect(durable.pillPos).toEqual({ x: -1, y: 4 });
     expect(durable.mobilePillPos).toEqual({ x: 5, y: -1 });
     expect(durable.size).toEqual({ w: 440, h: 560 });
-    expect(durable.options).toEqual({ thinking: true, effort: "high", temperature: "", verbose: false });
+    expect(durable.options).toEqual({ thinking: true, effort: "", temperature: "", verbose: false });
+  });
+
+  it("drops an effort stored before revision 2, when every untouched control stored high", () => {
+    const options = { thinking: false, effort: "high", temperature: "0.5", verbose: true };
+    expect(read({ options }).options).toEqual({ ...options, effort: "" });
+    expect(read({ options, optionsRev: 1 }).options.effort).toBe("");
+    expect(read({ options, optionsRev: 2 }).options.effort).toBe("high");
+    expect(read({ options }).optionsRev).toBe(2);
   });
 });

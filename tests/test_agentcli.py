@@ -711,6 +711,18 @@ async def test_ollama_reasoning_effort_maps_to_openai_body():
     assert sent["reasoning_effort"] == "none"
     assert "think" not in sent
 
+    # On with no level (a boolean model): a recognised level, which Ollama reads
+    # as think true; nothing would leave a default-off model off.
+    session = _FakeSession(_FakeResp(200, body))
+    await _collect(provider.stream_turn(
+        session, system_prompt="s", messages=[], tools=[], options={"thinking": True}))
+    assert session.calls[-1][1]["json"]["reasoning_effort"] == "high"
+
+    # A turn with no choice (Voice, AI Task) still sends nothing.
+    session = _FakeSession(_FakeResp(200, body))
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
+    assert "reasoning_effort" not in session.calls[-1][1]["json"]
+
 
 @pytest.mark.asyncio
 async def test_gemini_sends_reasoning_effort_and_never_temperature():
@@ -1227,6 +1239,49 @@ def test_claude_show_thinking_controls_display():
     body = {}
     llm_base._apply_claude_options(body, {"thinking": False, "show_thinking": True})
     assert "thinking" not in body
+
+
+@pytest.mark.parametrize(("off", "effort", "thinking", "sent_effort"), [
+    # Sonnet 5.5's off switch and the disabled type, both refused above high.
+    ("between_tools", "max", {"type": "between_tools"}, "high"),
+    ("disabled", "xhigh", {"type": "disabled"}, "high"),
+    ("disabled", "low", {"type": "disabled"}, "low"),
+    # Nothing declared, or a model that cannot stop: no thinking object, as before.
+    (None, "max", None, "max"),
+    ("", "max", None, "max"),
+    ("adaptive", "max", None, "max"),
+])
+def test_claude_off_uses_the_declared_off_type(off, effort, thinking, sent_effort):
+    body: dict = {}
+    llm_base._apply_claude_options(body, {"thinking": False, "show_thinking": True, "effort": effort},
+                                   thinking_off=off)
+    assert body.get("thinking") == thinking
+    assert body["output_config"] == {"effort": sent_effort}
+    # With thinking on, the off type changes nothing.
+    body = {}
+    llm_base._apply_claude_options(body, {"thinking": True, "effort": effort}, thinking_off=off)
+    assert body["thinking"]["type"] == "adaptive"
+    assert body["output_config"] == {"effort": effort}
+
+
+def test_claude_model_without_effort_gets_none():
+    body: dict = {}
+    llm_base._apply_claude_options(body, {"thinking": True, "effort": "high"}, effort_supported=False)
+    assert "output_config" not in body
+    body = {}
+    llm_base._apply_claude_options(body, {"thinking": True, "effort": "high"}, effort_supported=True)
+    assert body["output_config"] == {"effort": "high"}
+    # MiniMax ignores both.
+    body = {"model": "MiniMax-M3"}
+    llm_base._apply_claude_options(body, {"thinking": False, "effort": "high"}, "minimax", thinking_off="disabled")
+    assert "thinking" not in body and "output_config" not in body
+
+
+def test_refused_option_skips_ignored_keys():
+    sent = {"thinking": {"type": "adaptive"}, "messages": []}
+    message = "thinking blocks in the latest assistant message cannot be modified"
+    assert llm_base._refused_option(400, message, sent) == "thinking"
+    assert llm_base._refused_option(400, message, sent, ignore=("thinking",)) is None
 
 
 @pytest.mark.asyncio
@@ -6711,6 +6766,29 @@ async def test_ollama_show_supplies_thinking_levels():
             return _FakeResp(200, json_data=body)
     caps = await llm_base._ollama_capabilities(_Show(), "http://o", {}, ["qwen3.8:27b"])
     assert caps["qwen3.8:27b"]["effort_levels"] == ["low", "medium", "xhigh"]
+    assert caps["qwen3.8:27b"]["thinking_off"] == "none"
+    assert caps["qwen3.8:27b"]["thinking_default"] == "medium"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("thinking", "expected"), [
+    # gpt-oss: levels, no false, so no off switch.
+    ({"values": ["low", "medium", "high"], "default": "medium"},
+     {"effort_levels": ["low", "medium", "high"], "thinking_off": "", "thinking_default": "medium"}),
+    # A boolean model: no levels, an off switch, a default that is not a level.
+    ({"values": [False, True], "default": False}, {"thinking_off": "none"}),
+    # An unknown default is not recorded.
+    ({"values": [False, "low"], "default": "turbo"}, {"effort_levels": ["low"], "thinking_off": "none"}),
+    # No thinking metadata at all: nothing declared.
+    (None, {}),
+])
+async def test_ollama_show_declares_off_switch_and_default(thinking, expected):
+    class _Show:
+        def post(self, url, headers=None, json=None, timeout=None, allow_redirects=None):
+            body = {"capabilities": ["completion", "thinking"], **({"thinking": thinking} if thinking else {})}
+            return _FakeResp(200, json_data=body)
+    row = (await llm_base._ollama_capabilities(_Show(), "http://o", {}, ["m"]))["m"]
+    assert {k: v for k, v in row.items() if k in ("effort_levels", "thinking_off", "thinking_default")} == expected
 
 
 _PRESERVED = {"type": "enabled", "clear_thinking": False}

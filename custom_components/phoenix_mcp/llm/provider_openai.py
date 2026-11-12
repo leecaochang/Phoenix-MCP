@@ -741,6 +741,11 @@ class OpenAICompatProvider:
                 body["reasoning_effort"] = effort
             elif thinking is False:
                 body["reasoning_effort"] = "none"
+            elif thinking is True:
+                # On for a model without levels: Ollama reads any recognised level
+                # as `think: true`, and nothing at all as the model's default,
+                # which is off for some.
+                body["reasoning_effort"] = "high"
         temp = options.get("temperature")
         skip_temp = (
             (self.definition.reasoning == "deepseek" and thinking_on)
