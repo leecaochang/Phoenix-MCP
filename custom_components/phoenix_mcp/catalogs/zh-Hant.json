@@ -904,7 +904,7 @@
         "label": "通知"
       },
       "cap_camera_read": {
-        "description": "從明確授權的 Home Assistant 攝影機讀取靜態影像。",
+        "description": "從授權的攝影機讀取靜態影像，並使用攝影機錄影和私人相片、檔案、擷取畫面庫。",
         "label": "讀取攝影機影像"
       },
       "cap_config_read": {

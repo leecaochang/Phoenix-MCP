@@ -1128,7 +1128,7 @@
         "label": "Kalenderskriving"
       },
       "cap_camera_read": {
-        "description": "Hent stillbilder fra Home Assistant-kameraer som er uttrykkelig tillatt.",
+        "description": "Hent stillbilder fra tillatte kameraer, og bruk kameraopptak og private bilde-, fil- eller opptaksbiblioteker.",
         "label": "Lesing av kamerabilde"
       },
       "cap_config_read": {

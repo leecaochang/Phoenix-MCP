@@ -7,7 +7,7 @@
       },
       "cap_camera_read": {
         "label": "Lectura de imágenes de cámara",
-        "description": "Recupera imágenes fijas de las cámaras de Home Assistant explícitamente permitidas."
+        "description": "Recupera imágenes fijas de cámaras permitidas y usa grabaciones de cámara y bibliotecas privadas de fotos, archivos o capturas."
       },
       "cap_template_render": {
         "label": "Representación de plantillas",

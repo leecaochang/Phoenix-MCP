@@ -917,7 +917,7 @@
         "label": "Notifiche"
       },
       "cap_camera_read": {
-        "description": "Recupera immagini fisse dalle telecamere di Home Assistant esplicitamente autorizzate.",
+        "description": "Recupera immagini fisse dalle telecamere autorizzate e usa registrazioni delle telecamere e librerie private di foto, file o acquisizioni.",
         "label": "Lettura immagini telecamera"
       },
       "cap_config_read": {

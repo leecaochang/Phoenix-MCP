@@ -332,7 +332,7 @@
       },
       "cap_camera_read": {
         "label": "Kamerabild lesen",
-        "description": "Standbilder von ausdrücklich freigegebenen Home Assistant-Kameras abrufen."
+        "description": "Standbilder von freigegebenen Kameras abrufen und Kameraaufnahmen sowie private Foto-, Datei- oder Aufnahmebibliotheken verwenden."
       },
       "cap_template_render": {
         "label": "Template rendern",

@@ -441,7 +441,7 @@
         "label": "Powiadomienia"
       },
       "cap_camera_read": {
-        "description": "Pobieraj obrazy nieruchome z jawnie dozwolonych kamer Home Assistant.",
+        "description": "Pobieraj obrazy nieruchome z dozwolonych kamer i korzystaj z nagrań kamer oraz prywatnych bibliotek zdjęć, plików lub przechwyceń.",
         "label": "Odczyt obrazów kamery"
       },
       "cap_config_read": {

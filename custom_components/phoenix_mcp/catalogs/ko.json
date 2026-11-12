@@ -176,7 +176,7 @@
       },
       "cap_camera_read": {
         "label": "카메라 이미지 읽기",
-        "description": "명시적으로 허용된 Home Assistant 카메라에서 정지 이미지를 가져옵니다."
+        "description": "허용된 카메라에서 정지 이미지를 가져오고 카메라 녹화와 비공개 사진, 파일 또는 캡처 라이브러리를 사용합니다."
       },
       "cap_template_render": {
         "label": "템플릿 렌더링",

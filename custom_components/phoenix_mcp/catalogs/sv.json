@@ -1128,7 +1128,7 @@
         "label": "Skrivning i kalender"
       },
       "cap_camera_read": {
-        "description": "Hämta stillbilder från Home Assistant-kameror som uttryckligen har tillåtits.",
+        "description": "Hämta stillbilder från tillåtna kameror och använd kamerainspelningar och privata bild-, fil- eller inspelningsbibliotek.",
         "label": "Läsning av kamerabild"
       },
       "cap_config_read": {

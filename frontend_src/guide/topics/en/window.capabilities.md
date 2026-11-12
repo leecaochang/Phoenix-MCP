@@ -25,7 +25,7 @@ Reads Home Assistant's configuration, Energy settings, solar forecast, blueprint
 
 ### {{label:caps.cap_camera_read.label}} {#camera-read}
 
-Takes still images from cameras the key can reach. An action that names a camera, an image or a camera recording as a media source, such as an AI Task attachment, needs it too. No persona allows it, and pass-through doesn't either.
+Takes still images from cameras the key can reach. An action that names a camera, an image or a camera recording as a media source, such as an AI Task attachment, needs it too. So does one that names a private photo, file or capture library. No persona allows it, and pass-through doesn't either.
 
 ### {{label:caps.cap_template_render.label}} {#template-render}
 

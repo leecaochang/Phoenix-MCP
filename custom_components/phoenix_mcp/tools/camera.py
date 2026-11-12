@@ -27,7 +27,8 @@ from ..mesa_audit import request_context
 from ..policy_engine import Permission, canonical_entity_id, resolve_read
 from ..access_key_store import AccessKeyRecord
 from ..service_targets import (
-    AI_TASK_ATTACHMENT_REFUSAL, media_source_entities, media_source_recordings, unscoped_attachments,
+    AI_TASK_ATTACHMENT_REFUSAL, media_source_entities, media_source_library_items, media_source_recordings,
+    unscoped_attachments,
 )
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _tool_error
 from ..component_guard import require_component
@@ -109,6 +110,10 @@ RECORDING_READ_REFUSAL = (
     "integration can reach any of its cameras, so it needs camera image access to every camera "
     "of that integration. No action was dispatched."
 )
+LIBRARY_READ_REFUSAL = (
+    "This call names a private photo, file or capture library item as a media-source ID, which "
+    "Home Assistant reads for any caller. That needs camera image access. No action was dispatched."
+)
 
 
 def _recording_read_denied(
@@ -139,17 +144,22 @@ def media_read_refusal(
 
     Every camera or image media-source ID needs cap_camera_read and the read check of
     get_camera_image; a hidden and a missing one read alike. A camera recording needs that read
-    on every camera of its integration. An AI Task attachment from any other source is refused,
-    as nothing scopes it, unless this key generated that image.
+    on every camera of its integration, and a private library item needs the capability alone.
+    An AI Task attachment from any other source is refused, as nothing scopes it, unless this key
+    generated that image; such an image needs nothing more anywhere.
     """
-    if unscoped_attachments(domain, service_data, data.generated_images.get(access_key.id, ())):
+    generated = data.generated_images.get(access_key.id, ())
+    if unscoped_attachments(domain, service_data, generated):
         return AI_TASK_ATTACHMENT_REFUSAL, "invalid_request"
     named = media_source_entities(service_data)
     recordings = media_source_recordings(service_data)
-    if not named and not recordings:
+    library = [item for item in media_source_library_items(service_data)
+               if not (item[0] == "ai_task" and item[1] in generated)]
+    if not named and not recordings and not library:
         return None
     if effective_cap(access_key, "cap_camera_read") != CAP_ALLOW:
-        return (MEDIA_READ_REFUSAL if named else RECORDING_READ_REFUSAL), "denied"
+        refusal = MEDIA_READ_REFUSAL if named else RECORDING_READ_REFUSAL if recordings else LIBRARY_READ_REFUSAL
+        return refusal, "denied"
     for source, identifier in named:
         entity_id = canonical_entity_id(identifier, hass)
         if (not valid_entity_id(entity_id) or entity_id.split(".", 1)[0] != source

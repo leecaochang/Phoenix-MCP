@@ -1128,7 +1128,7 @@
         "label": "Kalenterin kirjoitus"
       },
       "cap_camera_read": {
-        "description": "Nouda pysäytyskuvia Home Assistant -kameroista, jotka on erikseen sallittu.",
+        "description": "Nouda pysäytyskuvia sallituista kameroista ja käytä kameratallenteita sekä yksityisiä kuva-, tiedosto- tai kaappauskirjastoja.",
         "label": "Kamerakuvan luku"
       },
       "cap_config_read": {

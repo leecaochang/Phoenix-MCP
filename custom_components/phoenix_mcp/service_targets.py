@@ -23,6 +23,7 @@ from .const import (
     DEVICE_ACTUATOR_DOMAINS,
     DOMAIN,
     MEDIA_SOURCE_ENTITY_DOMAINS,
+    MEDIA_SOURCE_LIBRARY_DOMAINS,
     MEDIA_SOURCE_RECORDING_DOMAINS,
     MUSIC_ASSISTANT_LIBRARY_SERVICES,
     NO_TARGET_SERVICES,
@@ -803,6 +804,15 @@ def media_source_recordings(service_data: object) -> list[str]:
     named = (_media_source(value) for value in _strings(service_data))
     return list(dict.fromkeys(
         item[0] for item in named if item is not None and item[0] in MEDIA_SOURCE_RECORDING_DOMAINS
+    ))
+
+
+def media_source_library_items(service_data: object) -> list[tuple[str, str]]:
+    """Return (source, ID as written) for each private library media-source ID in a call's data."""
+    named = ((_media_source(value), value) for value in _strings(service_data))
+    return list(dict.fromkeys(
+        (item[0], value) for item, value in named
+        if item is not None and item[0] in MEDIA_SOURCE_LIBRARY_DOMAINS
     ))
 
 

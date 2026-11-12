@@ -431,7 +431,7 @@
         "label": "Meldingen"
       },
       "cap_camera_read": {
-        "description": "Stilstaande beelden ophalen van expliciet toegestane Home Assistant-camera's.",
+        "description": "Stilstaande beelden ophalen van toegestane camera's en camera-opnamen en privébibliotheken met foto's, bestanden of opnamen gebruiken.",
         "label": "Camerabeelden lezen"
       },
       "cap_config_read": {

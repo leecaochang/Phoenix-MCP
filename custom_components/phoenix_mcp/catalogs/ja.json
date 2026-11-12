@@ -177,7 +177,7 @@
       },
       "cap_camera_read": {
         "label": "カメラ画像の読み取り",
-        "description": "明示的に許可された Home Assistant のカメラから静止画を取得します。"
+        "description": "許可されたカメラから静止画を取得し、カメラの録画や写真・ファイル・キャプチャの非公開ライブラリを使用します。"
       },
       "cap_template_render": {
         "label": "テンプレートのレンダリング",

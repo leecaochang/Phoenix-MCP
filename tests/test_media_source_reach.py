@@ -37,6 +37,7 @@ from custom_components.phoenix_mcp.access_key_store import (
 from custom_components.phoenix_mcp.const import (
     AI_TASK_GENERATED_IMAGES_KEPT,
     DOMAIN,
+    MEDIA_SOURCE_LIBRARY_DOMAINS,
     MESA_MODE_ADVISORY,
     MESA_MODE_OFF,
 )
@@ -555,3 +556,94 @@ async def test_a_refused_generation_remembers_nothing(hass, other_vendor):
             "targets": [{"kind": "entity", "ids": [TASK]}]}
     assert (await _call_tool("call_service", call, key, hass, data))[1] == "denied"
     assert data.generated_images == {}
+
+
+SENDER = "mail_bot.family"
+_LIBRARY_IDS = {
+    "google_photos": "media-source://google_photos/entry/p/abc",
+    "icloud": "media-source://icloud/entry/album/123",
+    "image_upload": "media-source://image_upload/0f3c/original",
+    "immich": "media-source://immich/entry|albums|1|asset|image/jpeg",
+    "synology_dsm": "media-source://synology_dsm/entry/0_0/1_2",
+    "system_bridge": "media-source://system_bridge/entry~~documents~~tax.pdf",
+    "xbox": "media-source://xbox/xuid/screenshots/1",
+}
+
+
+@pytest.fixture
+def sender(hass):
+    """An outbound sender that would hand any media it resolves to its recipients."""
+    calls = async_mock_service(hass, "mail_bot", "send", schema=vol.Schema(
+        {vol.Required("entity_id"): cv.entity_ids}, extra=vol.ALLOW_EXTRA))
+    _picture(hass, SENDER)
+    return calls
+
+
+def _send(media_id: str) -> dict:
+    return {"service": {"domain": "mail_bot", "name": "send", "data": {
+        "message": "look", "data": {"attachments": [{"media_content_id": media_id}]}}},
+        "targets": [{"kind": "entity", "ids": [SENDER]}]}
+
+
+def test_every_library_source_has_a_sample_id():
+    assert set(_LIBRARY_IDS) == MEDIA_SOURCE_LIBRARY_DOMAINS - {"ai_task"}
+
+
+@pytest.mark.parametrize("capability", ["deny", "confirm"])
+@pytest.mark.parametrize("source", sorted(_LIBRARY_IDS))
+async def test_a_private_library_item_needs_the_camera_capability(hass, sender, source, capability):
+    data, pending = _environment(hass)
+    refused = await _call_tool("call_service", _send(_LIBRARY_IDS[source]),
+                               _key({SENDER: "GREEN"}, cap_camera_read=capability), hass, data)
+    assert refused[1] == "denied", refused
+    assert "private photo, file or capture library" in _text(refused[0])
+    assert sender == [] and pending == []
+
+
+@pytest.mark.parametrize("source", sorted(_LIBRARY_IDS))
+async def test_a_private_library_item_is_sent_with_the_camera_capability(hass, sender, source):
+    data, _ = _environment(hass)
+    sent = await _call_tool("call_service", _send(_LIBRARY_IDS[source]), _key({SENDER: "GREEN"}), hass, data)
+    assert sent[1] == "allowed", sent
+    assert len(sender) == 1
+
+
+async def test_pass_through_alone_does_not_admit_a_library_item(hass, sender):
+    data, _ = _environment(hass)
+    key = _key({}, pass_through=True, cap_camera_read="deny")
+    refused = await _call_tool("call_service", _send("  MEDIA-SOURCE://Google_Photos/x"), key, hass, data)
+    assert refused[1] == "denied", refused
+    assert sender == []
+
+
+@pytest.mark.parametrize("media_id", [
+    "media-source://media_source/local/music/song.mp3",
+    "media-source://radio_browser/station-uuid",
+    "media-source://tts/tts.cloud?message=hello",
+    "media-source://jellyfin/track-id",
+    "media-source://dlna_dms/server/:item",
+])
+async def test_local_media_radio_speech_and_music_servers_stay_open(hass, sender, media_id):
+    data, _ = _environment(hass)
+    sent = await _call_tool("call_service", _send(media_id), _key({SENDER: "GREEN"}, cap_camera_read="deny"), hass, data)
+    assert sent[1] == "allowed", sent
+
+
+async def test_a_key_may_send_an_image_it_generated_but_not_anothers(hass, sender, other_vendor):
+    data, _ = _environment(hass)
+    mine = _key({TASK: "GREEN", SENDER: "GREEN"}, cap_camera_read="deny")
+    assert (await _generate_image(hass, data, mine, _generated(1)))[1] == "allowed"
+    assert (await _call_tool("call_service", _send(_generated(1)), mine, hass, data))[1] == "allowed"
+    theirs = await _call_tool("call_service", _send(_generated(2)), mine, hass, data)
+    assert theirs[1] == "denied", theirs
+    other = _key({SENDER: "GREEN"}, key_id="other", cap_camera_read="deny")
+    assert (await _call_tool("call_service", _send(_generated(1)), other, hass, data))[1] == "denied"
+    assert len(sender) == 1
+
+
+async def test_the_preview_predicts_a_library_refusal(hass, sender):
+    data, _ = _environment(hass)
+    key = _key({SENDER: "GREEN"}, cap_camera_read="deny", cap_search="allow")
+    preview = await _call_tool("dry_run_service", _send(_LIBRARY_IDS["immich"]), key, hass, data)
+    assert preview[1] == "denied" and "private photo" in _text(preview[0]), preview
+    assert sender == []

@@ -84,7 +84,7 @@
       },
       "cap_camera_read": {
         "label": "读取摄像头图像",
-        "description": "从明确授权的 Home Assistant 摄像头读取静态图像。"
+        "description": "从授权的摄像头读取静态图像，并使用摄像头录像和私人照片、文件、截图库。"
       },
       "cap_diagnostics": {
         "label": "诊断",

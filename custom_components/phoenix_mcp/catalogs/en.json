@@ -177,7 +177,7 @@
       },
       "cap_camera_read": {
         "label": "Camera image read",
-        "description": "Retrieve still images from explicitly permitted Home Assistant cameras."
+        "description": "Retrieve still images from permitted cameras, and use camera recordings and private photo, file or capture libraries."
       },
       "cap_template_render": {
         "label": "Template render",

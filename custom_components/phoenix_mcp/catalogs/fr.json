@@ -177,7 +177,7 @@
       },
       "cap_camera_read": {
         "label": "Lecture d'images de caméra",
-        "description": "Récupérer des images fixes depuis les caméras Home Assistant explicitement autorisées."
+        "description": "Récupérer des images fixes des caméras autorisées et utiliser les enregistrements de caméra et les bibliothèques privées de photos, fichiers ou captures."
       },
       "cap_template_render": {
         "label": "Rendu de modèles",

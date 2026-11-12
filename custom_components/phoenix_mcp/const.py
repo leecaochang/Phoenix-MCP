@@ -994,6 +994,13 @@ MEDIA_SOURCE_ENTITY_DOMAINS = frozenset({"camera", "image"})
 # entity names, each named by its integration's domain. An ID from one can reach any camera that
 # integration manages, so it needs the picture read of every camera entity the integration has.
 MEDIA_SOURCE_RECORDING_DOMAINS = frozenset({"motioneye", "nest", "netatmo", "reolink", "unifiprotect"})
+# Media sources holding private photos, files and captures that no entity scopes: an ID from one
+# needs cap_camera_read, as a sender such as smtp or ntfy would hand the item to anyone. ai_task
+# serves generated images, which the key that generated one may still name without it. Local
+# media, radio, speech and music servers stay open.
+MEDIA_SOURCE_LIBRARY_DOMAINS = frozenset({
+    "ai_task", "google_photos", "icloud", "image_upload", "immich", "synology_dsm", "system_bridge", "xbox",
+})
 # AI Task hands each attachment to the model, which describes it to the caller. Only an
 # entity source can be scoped, so an attachment from any other source is refused, except an
 # image the same key generated: every caller's images share one folder under guessable names.

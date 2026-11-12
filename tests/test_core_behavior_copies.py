@@ -29,6 +29,7 @@ from custom_components.phoenix_mcp.const import (
     DOMAIN_IMPORTANT_ATTRIBUTES,
     LOCAL_BACKUP_AGENT_IDS,
     MEDIA_SOURCE_ENTITY_DOMAINS,
+    MEDIA_SOURCE_LIBRARY_DOMAINS,
     MEDIA_SOURCE_RECORDING_DOMAINS,
     MESA_SUGGEST_COVER_DEVICE_CLASSES,
     NO_TARGET_SERVICES,
@@ -215,27 +216,21 @@ def test_every_core_speech_service_has_been_judged() -> None:
     assert speech - ANNOUNCEMENT_SERVICES - set(_SPEECH_SERVICES_ELSEWHERE) == set()
 
 
-# Core media sources whose identifiers are not entity IDs and that serve no camera recordings.
+# Core media sources left open: their items are shared media, not a household's private content.
 _MEDIA_SOURCES_NOT_ENTITIES = {
-    "ai_task": "generated images, admitted only to the key that generated them",
     "dlna_dms": "a DLNA server's library, keyed by server",
-    "google_photos": "an account's photo library",
-    "icloud": "an account's photo library",
-    "image_upload": "uploaded images, keyed by upload ID",
-    "immich": "a photo server's library",
     "jellyfin": "a media server's library",
     "radio_browser": "internet radio stations",
-    "synology_dsm": "a photo library",
-    "system_bridge": "files of a remote host",
     "tts": "speech generated on request",
-    "xbox": "game captures of an account",
 }
 
 
 def test_every_core_media_source_has_been_judged() -> None:
     sources = {path.parent.name for path in _COMPONENTS.glob("*/media_source.py")}
     assert MEDIA_SOURCE_ENTITY_DOMAINS | MEDIA_SOURCE_RECORDING_DOMAINS <= sources
-    judged = MEDIA_SOURCE_ENTITY_DOMAINS | MEDIA_SOURCE_RECORDING_DOMAINS | set(_MEDIA_SOURCES_NOT_ENTITIES)
+    gated = MEDIA_SOURCE_ENTITY_DOMAINS | MEDIA_SOURCE_RECORDING_DOMAINS | MEDIA_SOURCE_LIBRARY_DOMAINS
+    assert gated <= sources
+    judged = gated | set(_MEDIA_SOURCES_NOT_ENTITIES)
     assert sources - judged == set()
 
 
