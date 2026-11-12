@@ -17,6 +17,7 @@ from typing import Any
 
 from .provider_constants import (
     AGENT_CHAT_CORE_TOOLS, AGENT_CHAT_LOAD_TOOLS_NAME, AGENT_CHAT_TOOL_GROUPS, AGENT_CHAT_TOOL_LOADING_MIN_BYTES,
+    AGENT_CHAT_TOOL_SEARCH_BLOCKS, AGENT_CHAT_TOOL_SEARCH_MODELS, AGENT_CHAT_TOOL_SEARCH_TOOL,
     AGENT_CHAT_VOICE_PRELOADED_GROUPS,
 )
 
@@ -259,3 +260,59 @@ class ToolLoader:
         if self.capacity is None:
             return len(self.deferred)
         return self.capacity - len(self._loaded) + sum(1 for name in self._loaded if name not in self._pinned)
+
+
+def without_tool_search(messages: list[dict]) -> list[dict]:
+    """A copy without Anthropic tool search blocks, for a turn that does not use tool search.
+
+    Any other provider, and Claude without the search tool declared, would refuse them.
+    """
+    out = []
+    for message in messages:
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list) and any(
+                isinstance(block, dict) and block.get("type") in AGENT_CHAT_TOOL_SEARCH_BLOCKS for block in content):
+            message = {**message, "content": [block for block in content if not (
+                isinstance(block, dict) and block.get("type") in AGENT_CHAT_TOOL_SEARCH_BLOCKS)]}
+        out.append(message)
+    return out
+
+
+class ToolSearch:
+    """One turn's catalog for Anthropic's server-side tool search.
+
+    The starting set is declared as usual and every deferred tool with defer_loading, beside the
+    search tool, so the tools array is the same on every request of a conversation. A short fixed
+    note names what the deferred tools cover, since a model that does not know they exist does not
+    search for them.
+    """
+
+    def __init__(self, catalog: list[dict], preload: tuple[str, ...] = ()) -> None:
+        groups: dict[str, list[str]] = {}
+        for tool in catalog:
+            group = tool_group(tool["name"])
+            if group is not None and group not in preload:
+                groups.setdefault(group, []).append(tool["name"])
+        self.groups = {group: groups[group] for group in AGENT_CHAT_TOOL_GROUPS if group in groups}
+        self.deferred = frozenset(name for names in self.groups.values() for name in names)
+
+    @classmethod
+    def plan(cls, catalog: list[dict], kind: str, model: str, *, mode: str = "auto", surface: str = "chat",
+             exempt: bool = False) -> ToolSearch | None:
+        """Tool search for a Claude model that supports it, unless the account says never or the turn is exempt."""
+        if kind != "claude" or mode == "never" or exempt or not re.match(AGENT_CHAT_TOOL_SEARCH_MODELS, model or ""):
+            return None
+        search = cls(catalog, AGENT_CHAT_VOICE_PRELOADED_GROUPS if surface == "voice" else ())
+        return search if search.deferred else None
+
+    def request_tools(self, formatted: list[dict]) -> list[dict]:
+        """The provider-formatted catalog with the search tool first and deferred tools marked."""
+        return [dict(AGENT_CHAT_TOOL_SEARCH_TOOL), *(
+            {**tool, "defer_loading": True} if tool.get("name") in self.deferred else tool for tool in formatted)]
+
+    def note(self) -> str:
+        """The system-prompt note naming what the deferred tools cover."""
+        covered = "; ".join(f"{group.replace('_', ' ')} ({AGENT_CHAT_TOOL_GROUPS[group][1].rstrip('.')})"
+                            for group in self.groups)
+        return ("\n\nMore tools of this access key are available through tool search: search for them before "
+                f"saying something cannot be done. They cover: {covered}.")

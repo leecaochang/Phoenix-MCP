@@ -31,6 +31,14 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 
 這會消耗少量額度，因此 Phoenix 會先詢問。將指標懸停在按鈕上可查看上次執行的時間。
 
+### 移除帳戶 {#remove-account}
+
+移除帳戶會刪除其儲存的金鑰。你需要先就地確認。
+
+如果語音智慧體或 AI 任務使用了該帳戶，它們會失去它，Phoenix 會移除為它們建立的 Assist 助理和 AI 任務實體。
+
+相關：[語音智慧體](guide:window.settingsHome#voice-agent)、[AI 任務](guide:window.settingsHome#ai-task)
+
 ### {{label:settings.toolLoadingLabel}} {#tool-loading}
 
 決定 Agent Chat、語音智慧體和 AI 任務如何把存取金鑰的工具交給此帳戶的模型。
@@ -39,17 +47,11 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 
 分批載入讓每個請求傳送的 token 少得多，結果相同。請求需要尚未載入的工具時，會多一步。語音智慧體一開始就帶有裝置控制工具，因此語音命令不用等這一步。
 
+使用較新的 Claude 模型時，無論工具多少，Phoenix 都改用 Anthropic 內建的工具搜尋。模型會搜尋所需的工具，Phoenix 每次請求都傳送同一份清單，因此提供者的快取仍然有效。
+
 **{{label:settings.toolLoadingAlways}}** 無論工具多少都分批載入。**{{label:settings.toolLoadingNever}}** 一律傳送全部工具，但只接受 128 個工具的提供者除外。
 
 載入不會給模型更多權限。清單只顯示該存取金鑰自己的工具，Phoenix 照常檢查每次呼叫。Home Companion 金鑰一律取得完整的工具集。
-
-### 移除帳戶 {#remove-account}
-
-移除帳戶會刪除其儲存的金鑰。你需要先就地確認。
-
-如果語音智慧體或 AI 任務使用了該帳戶，它們會失去它，Phoenix 會移除為它們建立的 Assist 助理和 AI 任務實體。
-
-相關：[語音智慧體](guide:window.settingsHome#voice-agent)、[AI 任務](guide:window.settingsHome#ai-task)
 
 ## 新增帳戶 {#provider-add}
 

@@ -22,7 +22,9 @@ from custom_components.phoenix_mcp.provider_constants import (
     AGENT_CHAT_LOAD_TOOLS_NAME, AGENT_CHAT_TOOL_LOADING_MIN_BYTES,
 )
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
-from custom_components.phoenix_mcp.tool_loading import ToolLoader, catalog_bytes, history_tool_calls
+from custom_components.phoenix_mcp.tool_loading import (
+    ToolLoader, ToolSearch, catalog_bytes, history_tool_calls, without_tool_search,
+)
 from tests.runtime_fixtures import patch_readers
 
 
@@ -376,3 +378,114 @@ async def test_agent_chat_carries_loaded_tools_into_the_next_message(hass):
 
     assert provider.declared[0][-1] == "esphome_tool_0"
     assert [call.args[2]["name"] for call in dispatch.await_args_list] == ["esphome_tool_0"]
+
+
+# --- Anthropic's tool search -------------------------------------------------------------------
+
+
+def _claude(model: str = "claude-sonnet-5-5", mode: str = "auto"):
+    return MagicMock(kind="claude", cfg=MagicMock(model=model, tool_loading=mode))
+
+
+def test_tool_search_is_for_supported_claude_models_at_any_size():
+    small = _catalog()
+    assert ToolSearch.plan(small, "claude", "claude-sonnet-5-5") is not None
+    assert ToolSearch.plan(small, "claude", "claude-haiku-5-5") is not None
+    assert ToolSearch.plan(small, "claude", "claude-opus-4-8") is not None
+    assert ToolSearch.plan(small, "claude", "claude-haiku-4-5-20251001") is None
+    assert ToolSearch.plan(small, "minimax", "claude-sonnet-5-5") is None
+    assert ToolSearch.plan(small, "deepseek", "deepseek-flash") is None
+    assert ToolSearch.plan(small, "claude", "claude-sonnet-5-5", mode="never") is None
+    assert ToolSearch.plan(small, "claude", "claude-sonnet-5-5", exempt=True) is None
+
+
+def test_tool_search_declares_everything_once_with_deferred_tools_marked():
+    catalog = _catalog(3, 2, 1) + [_tool("intent__HassTurnOn")]
+    search = ToolSearch.plan(catalog, "claude", "claude-sonnet-5-5")
+    formatted = [{"name": t["name"], "description": "d", "input_schema": {}} for t in catalog]
+    declared = search.request_tools(formatted)
+    assert declared[0] == {"type": "tool_search_tool_bm25_20251119", "name": "tool_search_tool_bm25"}
+    deferred = {t["name"] for t in declared[1:] if t.get("defer_loading")}
+    assert deferred == {"esphome_tool_0", "esphome_tool_1", "dashboard_tool_0", "intent__HassTurnOn"}
+    assert {t["name"] for t in declared[1:]} == {t["name"] for t in catalog}
+    note = search.note()
+    assert "tool search" in note and "esphome (" in note and "dashboards (" in note and "device control (" in note
+
+
+def test_voice_keeps_device_control_out_of_tool_search():
+    catalog = _catalog(3, 2, 1) + [_tool("intent__HassTurnOn")]
+    search = ToolSearch.plan(catalog, "claude", "claude-sonnet-5-5", surface="voice")
+    assert "intent__HassTurnOn" not in search.deferred and "device_control" not in search.groups
+
+
+def test_search_blocks_are_stripped_for_a_turn_without_tool_search():
+    history = [{"role": "user", "content": "hi"},
+               {"role": "assistant", "content": [
+                   {"type": "server_tool_use", "id": "s", "name": "tool_search_tool_bm25", "input": {}},
+                   {"type": "tool_search_tool_result", "tool_use_id": "s", "content": {}},
+                   {"type": "text", "text": "Done."}]}]
+    stripped = without_tool_search(history)
+    assert stripped[1]["content"] == [{"type": "text", "text": "Done."}] and stripped[0] is history[0]
+    assert len(history[1]["content"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_agent_chat_on_claude_sends_the_same_searchable_catalog_every_round(hass):
+    provider = _Scripted([
+        [_call("a", "esphome_tool_0", {"file": "x.yaml"}),
+         {"type": llm_base.EV_DONE, "stop_reason": "tool_use", "assistant_msg": {"role": "assistant", "content": [
+             {"type": "server_tool_use", "id": "s", "name": "tool_search_tool_bm25", "input": {"query": "esphome"}}]}}],
+        [{"type": llm_base.EV_DONE, "stop_reason": "pause_turn", "assistant_msg": {"role": "assistant", "content": [
+            {"type": "server_tool_use", "id": "s2", "name": "tool_search_tool_bm25", "input": {}}]}}],
+        [{"type": llm_base.EV_TEXT, "text": "Done."}, _done("end_turn")],
+    ])
+    provider.kind, provider.cfg = "claude", MagicMock(model="claude-sonnet-5-5", tool_loading="auto")
+    dispatch = AsyncMock(return_value=({"result": {"content": [{"type": "text", "text": "ok"}]}}, "m", "r", "allowed"))
+
+    async def emit(name, payload):
+        return None
+
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=_catalog(10, 4, 3)), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", dispatch):
+        await agent_chat.async_run_agent_turn(
+            hass=hass, data=_data(), access_key=MagicMock(), provider=provider, session=MagicMock(), messages=[],
+            options={}, client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event())
+
+    # Three rounds: the tool round, the paused search the loop sent back, and the answer.
+    assert len(provider.declared) == 3 and provider.declared[0] == provider.declared[1] == provider.declared[2]
+    assert provider.declared[0][0] == "tool_search_tool_bm25" and AGENT_CHAT_LOAD_TOOLS_NAME not in provider.declared[0]
+    assert "available through tool search" in provider.system_prompts[0]
+    assert [call.args[2]["name"] for call in dispatch.await_args_list] == ["esphome_tool_0"]
+
+
+@pytest.mark.asyncio
+async def test_agent_chat_strips_search_blocks_when_the_turn_does_not_search(hass):
+    seen: list = []
+    provider = _Scripted([[{"type": llm_base.EV_TEXT, "text": "Hi."}, _done("end_turn")]])
+    provider.kind, provider.cfg = "deepseek", MagicMock(tool_loading="auto")
+    original = provider.stream_turn
+
+    async def recording(session, *, system_prompt, messages, tools, options):
+        seen.append(messages)
+        async for event in original(session, system_prompt=system_prompt, messages=messages, tools=tools, options=options):
+            yield event
+
+    provider.stream_turn = recording
+    history = [{"role": "user", "content": "first"},
+               {"role": "assistant", "content": [
+                   {"type": "server_tool_use", "id": "s", "name": "tool_search_tool_bm25", "input": {}},
+                   {"type": "text", "text": "Answer."}]},
+               {"role": "user", "content": "next"}]
+
+    async def emit(name, payload):
+        return None
+
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=_catalog(10, 4, 3)), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"):
+        await agent_chat.async_run_agent_turn(
+            hass=hass, data=_data(), access_key=MagicMock(), provider=provider, session=MagicMock(), messages=history,
+            options={}, client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event())
+
+    sent = seen[0][1]["content"]
+    assert sent == [{"type": "text", "text": "Answer."}]

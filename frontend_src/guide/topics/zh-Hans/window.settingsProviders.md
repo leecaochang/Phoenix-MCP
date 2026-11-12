@@ -31,6 +31,14 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 
 这会消耗少量额度，因此 Phoenix 会先询问。将指针悬停在按钮上可查看上次运行的时间。
 
+### 移除账户 {#remove-account}
+
+移除账户会删除其存储的密钥。你需要先就地确认。
+
+如果语音智能体或 AI 任务使用了该账户，它们会失去它，Phoenix 会移除为它们创建的 Assist 助手和 AI 任务实体。
+
+相关：[语音智能体](guide:window.settingsHome#voice-agent)、[AI 任务](guide:window.settingsHome#ai-task)
+
 ### {{label:settings.toolLoadingLabel}} {#tool-loading}
 
 决定 Agent Chat、语音智能体和 AI 任务如何把访问密钥的工具交给此账户的模型。
@@ -39,17 +47,11 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 
 分批加载让每个请求发送的 token 少得多，结果相同。请求需要尚未加载的工具时，会多一步。语音智能体一开始就带有设备控制工具，因此语音命令不用等这一步。
 
+使用较新的 Claude 模型时，无论工具多少，Phoenix 都改用 Anthropic 自带的工具搜索。模型会搜索所需的工具，Phoenix 每次请求都发送同一份列表，因此提供商的缓存仍然有效。
+
 **{{label:settings.toolLoadingAlways}}** 无论工具多少都分批加载。**{{label:settings.toolLoadingNever}}** 总是发送全部工具，但只接受 128 个工具的提供商除外。
 
 加载不会给模型更多权限。列表只显示该访问密钥自己的工具，Phoenix 照常检查每次调用。Home Companion 密钥始终获得完整的工具集。
-
-### 移除账户 {#remove-account}
-
-移除账户会删除其存储的密钥。你需要先就地确认。
-
-如果语音智能体或 AI 任务使用了该账户，它们会失去它，Phoenix 会移除为它们创建的 Assist 助手和 AI 任务实体。
-
-相关：[语音智能体](guide:window.settingsHome#voice-agent)、[AI 任务](guide:window.settingsHome#ai-task)
 
 ## 添加账户 {#provider-add}
 

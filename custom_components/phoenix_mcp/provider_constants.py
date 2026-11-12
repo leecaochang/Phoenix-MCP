@@ -247,6 +247,15 @@ AGENT_CHAT_CORE_TOOLS = (
     "get_capability_summary", "get_overview", "search_entities", "describe_entity", "get_state",
     "call_service", "find_available_actions", "get_approval_status", "wait_for_approval", "llm__GetDateTime",
 )
+# Anthropic's server-side tool search: on Claude, deferred tools are declared with defer_loading
+# and found by this tool, so the tools array (and the prompt cache) never changes in a
+# conversation. Measured: same outcomes as the complete catalog at about a quarter of its cost.
+AGENT_CHAT_TOOL_SEARCH_TOOL: Mapping[str, str] = MappingProxyType(
+    {"type": "tool_search_tool_bm25_20251119", "name": "tool_search_tool_bm25"})
+# Claude models that use it; any other model keeps Phoenix's own loading.
+AGENT_CHAT_TOOL_SEARCH_MODELS = r"^claude-(?:(?:opus|sonnet)-(?:4-[5-9]|[5-9])|haiku-[5-9]|fable-|mythos-)"
+# Content blocks Anthropic's tool search adds to an assistant message.
+AGENT_CHAT_TOOL_SEARCH_BLOCKS = ("server_tool_use", "tool_search_tool_result")
 # Groups declared from the start on Voice, where an extra load round is an audible pause.
 AGENT_CHAT_VOICE_PRELOADED_GROUPS = ("device_control",)
 # Deferred groups: id -> (members, directory summary). A member is an exact tool name or a

@@ -527,18 +527,6 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
           </div>
         ) : (
           <>
-          {/* How this account's turns receive the access key's tools; saved as soon as it changes. */}
-          <div className="agentcli-settings-tool-loading" {...helpRow(t("settings.toolLoadingHelp"))}>
-            <label htmlFor={`${uid}tool-loading-${inst.id}`}>{t("settings.toolLoadingLabel")}</label>
-            <BusySelect id={`${uid}tool-loading-${inst.id}`} className="input input-auto" busy={busy}
-                    value={inst.tool_loading ?? "auto"}
-                    onChange={(e) => void saveToolLoading(inst.id, e.target.value as ToolLoadingMode)}>
-              <option value="auto">{t("settings.toolLoadingAuto")}</option>
-              <option value="always">{t("settings.toolLoadingAlways")}</option>
-              <option value="never">{t("settings.toolLoadingNever")}</option>
-            </BusySelect>
-          </div>
-          {toolLoadingError && <div className="banner banner-error" role="alert">{toolLoadingError}</div>}
           <div className="phx-window-actions agentcli-account-actions">
             <ActionButton icon="edit" label={t("settings.accountChangeModel")} className="btn btn-outline btn-sm" busy={busy} guide="window.settingsProviders#change-model" help="settings.changeModelHelp"
               onClick={() => { setEditing(inst.id); setModelDraft(currentDraft(inst)); setModelError(null); setConfirmProbe(null); setConfirmRemove(null); }} />
@@ -547,7 +535,8 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                 time rides on the button's tooltip. */}
             {confirmProbe === inst.id ? (
               <span className="row-actions" ref={askBox} data-guide="window.settingsProviders#check-options">
-                <ActionButton icon="probe" label={probing === inst.id ? t("settings.agentcliProbing") : t("settings.agentcliProbeRun")}
+                {/* The confirming step has its own icon, so it reads as a different button from Check Options. */}
+                <ActionButton icon="check" label={probing === inst.id ? t("settings.agentcliProbing") : t("settings.agentcliProbeRun")}
                   className="btn btn-outline btn-sm" helpText={probeHelp} busy={busy || probing !== null}
                   onClick={() => void probeCaps(inst)} />
                 <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={probing !== null} help="help.cancelAction"
@@ -577,6 +566,18 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                 busy={busy} onClick={() => { setConfirmRemove(inst.id); setConfirmProbe(null); }} />
             )}
           </div>
+          {/* How this account's turns receive the access key's tools; saved as soon as it changes. */}
+          <div className="agentcli-settings-tool-loading" data-guide="window.settingsProviders#tool-loading" {...helpRow(t("settings.toolLoadingHelp"))}>
+            <label htmlFor={`${uid}tool-loading-${inst.id}`}>{t("settings.toolLoadingLabel")}</label>
+            <BusySelect id={`${uid}tool-loading-${inst.id}`} className="input input-auto" busy={busy}
+                    value={inst.tool_loading ?? "auto"}
+                    onChange={(e) => void saveToolLoading(inst.id, e.target.value as ToolLoadingMode)}>
+              <option value="auto">{t("settings.toolLoadingAuto")}</option>
+              <option value="always">{t("settings.toolLoadingAlways")}</option>
+              <option value="never">{t("settings.toolLoadingNever")}</option>
+            </BusySelect>
+          </div>
+          {toolLoadingError && <div className="banner banner-error" role="alert">{toolLoadingError}</div>}
           </>
         )}
         {removeError && <div className="banner banner-error" role="alert">{removeError}</div>}

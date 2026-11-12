@@ -27,8 +27,9 @@ from ..provider_constants import (
     AGENT_CHAT_MAX_MODEL_ID_LENGTH, AGENT_CHAT_MAX_SSE_BUFFER_BYTES, AGENT_CHAT_MAX_STREAM_BYTES,
     AGENT_CHAT_PROVIDER_DETAIL_CHARS, AGENT_CHAT_PROVIDER_ERROR_BYTES,
     AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS, AGENT_CHAT_TOOL_LOADING_DEFAULT, AGENT_CHAT_TOOL_LOADING_MODES,
+    AGENT_CHAT_TOOL_SEARCH_BLOCKS,
 )
-from ..tool_loading import ToolLoader
+from ..tool_loading import ToolLoader, ToolSearch
 from ..time_text import parse_date, parse_datetime
 
 
@@ -932,6 +933,14 @@ def _tool_loader(provider: Any, catalog: list[dict], *, surface: str = "chat", h
     return loader
 
 
+def _tool_search(provider: Any, catalog: list[dict], *, surface: str = "chat", exempt: bool = False) -> ToolSearch | None:
+    """Anthropic's tool search for this turn when the account and model use it, else None."""
+    cfg = getattr(provider, "cfg", None)
+    mode = getattr(cfg, "tool_loading", AGENT_CHAT_TOOL_LOADING_DEFAULT)
+    return ToolSearch.plan(catalog, str(getattr(provider, "kind", "")), str(getattr(cfg, "model", "") or ""),
+                           mode=mode, surface=surface, exempt=exempt)
+
+
 def _local_tool_results(
     loader: ToolLoader | None, tool_calls: list[dict], data: PhoenixData,
 ) -> tuple[list[dict | None], list[dict]]:
@@ -1115,7 +1124,8 @@ _CACHE_MARKER = {"cache_control": {"type": "ephemeral"}}
 def _cache_marked_message(message: dict) -> dict | None:
     """Copy one message with a cache breakpoint on its last markable block, or None.
 
-    Anthropic refuses a breakpoint on a thinking block or an empty text block.
+    Anthropic refuses a breakpoint on a thinking block or an empty text block; tool search blocks are
+    left unmarked too.
     """
     content = message.get("content")
     if isinstance(content, str):
@@ -1124,7 +1134,7 @@ def _cache_marked_message(message: dict) -> dict | None:
         return None
     for i in range(len(content) - 1, -1, -1):
         block = content[i]
-        if (isinstance(block, dict) and block.get("type") not in ("thinking", "redacted_thinking")
+        if (isinstance(block, dict) and block.get("type") not in ("thinking", "redacted_thinking", *AGENT_CHAT_TOOL_SEARCH_BLOCKS)
                 and not (block.get("type") == "text" and not block.get("text"))):
             return {**message, "content": [*content[:i], {**block, **_CACHE_MARKER}, *content[i + 1:]]}
     return None
@@ -1427,10 +1437,12 @@ _FINISH_FAILURES: dict[str, tuple[str, bool]] = {
 
 
 def _norm_stop(raw: str) -> str:
-    """Normalize provider stop reasons to end_turn / tool_use / max_tokens / error."""
+    """Normalize provider stop reasons to end_turn / tool_use / max_tokens / pause_turn."""
     return {
         "end_turn": "end_turn", "tool_use": "tool_use", "max_tokens": "max_tokens",
         "stop": "end_turn", "tool_calls": "tool_use", "length": "max_tokens",
+        # Anthropic paused a long server-side tool turn (tool search); the loop sends it back to go on.
+        "pause_turn": "pause_turn",
     }.get(raw, "end_turn")
 
 

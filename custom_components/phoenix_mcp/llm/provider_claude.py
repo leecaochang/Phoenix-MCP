@@ -25,7 +25,7 @@ from .base import (
 )
 from ..provider_constants import (
     AGENT_CHAT_ANTHROPIC_VERSION, AGENT_CHAT_EFFORT_LEVEL_ORDER, AGENT_CHAT_MINIMAX_MODELS,
-    AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS,
+    AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS, AGENT_CHAT_TOOL_SEARCH_BLOCKS,
 )
 
 
@@ -347,6 +347,16 @@ class ClaudeProvider:
                     if not isinstance(cb.get("data"), str):
                         raise _ProviderResponseError()
                     blocks[idx] = {"type": "redacted_thinking", "data": cb["data"]}
+                elif cb.get("type") == "server_tool_use":
+                    # Anthropic's own tool search, run on its side: kept for the history, never dispatched.
+                    initial_input = cb.get("input", {})
+                    if not isinstance(initial_input, dict) or not isinstance(cb.get("id"), str):
+                        raise _ProviderResponseError()
+                    blocks[idx] = {"type": "server_tool_use", "id": cb["id"], "name": cb.get("name"), "input": {}}
+                    tool_json[idx] = json.dumps(initial_input) if initial_input else ""
+                elif cb.get("type") == "tool_search_tool_result":
+                    # Its result arrives whole and goes back unchanged; its tool references load the tools.
+                    blocks[idx] = json.loads(json.dumps(cb))
                 else:
                     blocks[idx] = {"type": "text", "text": ""}
             elif etype == "content_block_delta":
@@ -376,6 +386,14 @@ class ClaudeProvider:
                     raise _ProviderResponseError()
                 open_blocks.remove(idx)
                 blk = blocks.get(idx)
+                if blk and blk.get("type") == "server_tool_use":
+                    try:
+                        server_input = json.loads(tool_json.get(idx) or "{}")
+                    except json.JSONDecodeError:
+                        raise _ProviderResponseError() from None
+                    if not isinstance(server_input, dict):
+                        raise _ProviderResponseError()
+                    blk["input"] = server_input
                 if blk and blk.get("type") == "tool_use":
                     parsed_tools.append(_norm(EV_TOOL, id=blk["id"], name=blk["name"],
                                               input=tool_json.get(idx) or "{}", _block_index=idx))
@@ -422,7 +440,7 @@ class ClaudeProvider:
             raise _ProviderResponseError("provider_blocked", retryable=False)
         if stop_reason == "model_context_window_exceeded":
             raise _ProviderResponseError("provider_context_limit", retryable=False)
-        if stop_reason not in ("end_turn", "tool_use", "max_tokens", "stop_sequence"):
+        if stop_reason not in ("end_turn", "tool_use", "max_tokens", "stop_sequence", "pause_turn"):
             raise _ProviderResponseError()
         if stop_reason == "tool_use" and not parsed_tools:
             raise _ProviderResponseError()
@@ -472,6 +490,8 @@ class ClaudeProvider:
                 content.append({"type": "text", "text": blk["text"]})
             elif blk["type"] == "tool_use":
                 content.append({"type": "tool_use", "id": blk["id"], "name": blk["name"], "input": blk["input"]})
+            elif blk["type"] in AGENT_CHAT_TOOL_SEARCH_BLOCKS:
+                content.append(dict(blk))
         assistant_msg = {"role": "assistant", "content": content}
         if invalid:
             # The response finished cleanly but a call's arguments do not parse:

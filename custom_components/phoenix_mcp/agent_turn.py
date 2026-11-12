@@ -44,7 +44,7 @@ from .llm.accounts import PROVIDER_DEFINITIONS
 from .llm.base import (
     _CONNECT_RETRY_BACKOFF_SECONDS, _CONNECT_RETRY_MAX_ATTEMPTS, _CONNECT_RETRY_WINDOW_SECONDS,
     _invalid_tools_error, _local_tool_results, _merged_results, _tool_limit_problem,
-    _tool_loader, _usage_int, EV_DONE, EV_ERROR, EV_INVALID_TOOLS, EV_RETRYING, EV_TEXT,
+    _tool_loader, _tool_search, _usage_int, EV_DONE, EV_ERROR, EV_INVALID_TOOLS, EV_RETRYING, EV_TEXT,
     EV_THINKING, EV_TOOL, EV_USAGE,
 )
 from .llm.provider_claude import ClaudeProvider
@@ -1946,14 +1946,20 @@ async def _run_headless_turn(
 
     review_state = None if is_companion(access_key) else create_review_state(data, access_key, routing_surface)
     agent_tools = build_agent_tool_list(access_key, data, routing_surface)
-    loader = _tool_loader(provider, agent_tools, surface=routing_surface, exempt=is_companion(access_key))
+    search = _tool_search(provider, agent_tools, surface=routing_surface, exempt=is_companion(access_key))
+    loader = None if search is not None else _tool_loader(
+        provider, agent_tools, surface=routing_surface, exempt=is_companion(access_key))
     if loader is not None:
         system += loader.directory()
+    if search is not None:
+        system += search.note()
     declared = loader.round_tools() if loader is not None else agent_tools
     tools = provider.format_tools(declared)
     tools_key = tuple(tool["name"] for tool in declared)
     if (too_many := _tool_limit_problem(provider, tools)) is not None:
         return _HeadlessTurnResult("", [], outcome=TURN_PROVIDER_ERROR, detail=too_many["message"])
+    if search is not None:
+        tools = search.request_tools(tools)
     run = _HeadlessRun(
         hass=hass, data=data, access_key=access_key, provider=provider, session=session, base_url=base_url,
         client_ip=client_ip, system=system, max_iterations=max_iterations, routing_surface=routing_surface,
@@ -1967,8 +1973,9 @@ async def _run_headless_turn(
         # A provider that binds replayed reasoning to the prefix gets the closing instruction
         # after the history instead, with the same tools and tool calls switched off. Only
         # this turn's earlier rounds carry reasoning; finished history is stored without it.
+        # Tool search history needs the search tool declared, so its closing round keeps the tools too.
         keep_prefix = (final_round and iteration > 0
-                       and getattr(provider, "keeps_prefix_on_final_round", False) is True)
+                       and (getattr(provider, "keeps_prefix_on_final_round", False) is True or search is not None))
         round_system = system
         if final_round and not keep_prefix:
             round_system += _FINAL_ROUND_SYSTEM
@@ -2006,6 +2013,9 @@ async def _run_headless_turn(
             run.turn_output_bytes = prospective
         if final_round and model.tool_calls:
             return _refuse_final_round_tools(run, model.tool_calls)
+        if run.stop_reason == "pause_turn" and not model.tool_calls and not final_round:
+            # Anthropic paused its own tool search; sending the conversation back lets it go on.
+            continue
         if run.stop_reason != "tool_use":
             if _retry_invalid_read_report(run, iteration):
                 continue

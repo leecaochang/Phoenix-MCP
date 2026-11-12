@@ -7093,3 +7093,57 @@ class TestToolLoadingSetting:
             resp = await view.patch(_admin_request({"tool_loading": "never"}), instance_id="pid")
         assert resp.status == 400
         secret_store.set_tool_loading.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_claude_keeps_tool_search_blocks_in_order_and_dispatches_only_its_own_calls():
+    """Anthropic's tool search runs on its side: its blocks return unchanged, and only tool_use is a call."""
+    body = _sse(
+        'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":1}}}',
+        'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srv_1","name":"tool_search_tool_bm25","input":{}}}',
+        'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"query\\": \\"esphome logs\\"}"}}',
+        'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}',
+        'event: content_block_start\ndata: {"type":"content_block_start","index":1,"content_block":{"type":"tool_search_tool_result","tool_use_id":"srv_1","content":{"type":"tool_search_tool_search_result","tool_references":[{"type":"tool_reference","tool_name":"get_esphome_device_logs"}]}}}',
+        'event: content_block_stop\ndata: {"type":"content_block_stop","index":1}',
+        'event: content_block_start\ndata: {"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tu_1","name":"get_esphome_device_logs","input":{}}}',
+        'event: content_block_delta\ndata: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\\"file\\": \\"a.yaml\\"}"}}',
+        'event: content_block_stop\ndata: {"type":"content_block_stop","index":2}',
+        'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":20}}',
+        'event: message_stop\ndata: {"type":"message_stop"}',
+    )
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-sonnet-5-5", base_url="https://x", api_key="k"))
+    events = await _collect(provider.stream_turn(
+        _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
+    assert [e["name"] for e in events if e["type"] == llm_base.EV_TOOL] == ["get_esphome_device_logs"]
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
+    assert done["stop_reason"] == "tool_use"
+    assert [b["type"] for b in done["assistant_msg"]["content"]] == ["server_tool_use", "tool_search_tool_result", "tool_use"]
+    assert done["assistant_msg"]["content"][0]["input"] == {"query": "esphome logs"}
+    assert done["assistant_msg"]["content"][1]["content"]["tool_references"][0]["tool_name"] == "get_esphome_device_logs"
+
+
+@pytest.mark.asyncio
+async def test_claude_pause_turn_is_reported_for_the_loop_to_continue():
+    body = _sse(
+        'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":1}}}',
+        'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srv_1","name":"tool_search_tool_bm25","input":{"query":"x"}}}',
+        'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}',
+        'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"pause_turn"},"usage":{"output_tokens":3}}',
+        'event: message_stop\ndata: {"type":"message_stop"}',
+    )
+    provider = ClaudeProvider(ProviderConfig(kind="claude", model="claude-sonnet-5-5", base_url="https://x", api_key="k"))
+    events = await _collect(provider.stream_turn(
+        _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
+    done = next(e for e in events if e["type"] == llm_base.EV_DONE)
+    assert done["stop_reason"] == "pause_turn"
+    assert done["assistant_msg"]["content"] == [{"type": "server_tool_use", "id": "srv_1", "name": "tool_search_tool_bm25",
+                                                 "input": {"query": "x"}}]
+
+
+def test_cache_breakpoints_skip_tool_search_blocks():
+    message = {"role": "assistant", "content": [
+        {"type": "text", "text": "Looking."}, {"type": "server_tool_use", "id": "s", "name": "tool_search_tool_bm25", "input": {}},
+        {"type": "tool_search_tool_result", "tool_use_id": "s", "content": {}}]}
+    marked = llm_base._cache_marked_message(message)
+    assert "cache_control" in marked["content"][0]
+    assert all("cache_control" not in block for block in marked["content"][1:])

@@ -31,6 +31,14 @@ Finds out which effort levels the model supports and whether it can read images,
 
 This uses a little credit, so Phoenix asks first. Hover over the button to see when it last ran.
 
+### Removing an account {#remove-account}
+
+Removing an account deletes its stored key. You confirm in place first.
+
+If the Voice Agent or AI Task used the account, they lose it, and Phoenix removes the Assist assistant and AI Task entity it created for them.
+
+Related: [Voice Agent](guide:window.settingsHome#voice-agent), [AI Task](guide:window.settingsHome#ai-task)
+
 ### {{label:settings.toolLoadingLabel}} {#tool-loading}
 
 Decides how Agent Chat, the Voice Agent and AI Task give this account's model the access key's tools.
@@ -39,17 +47,11 @@ Decides how Agent Chat, the Voice Agent and AI Task give this account's model th
 
 Loading in parts sends far fewer tokens with each request, with the same results. A request that needs a tool not loaded yet takes one extra step. The Voice Agent starts with the device control tools, so spoken commands don't wait for that step.
 
+With a recent Claude model, Phoenix uses Anthropic's own tool search instead, whatever the number of tools. The model searches for the tools it needs, and Phoenix sends the same list on every request, so the provider's cache keeps working.
+
 **{{label:settings.toolLoadingAlways}}** loads in parts whatever the size. **{{label:settings.toolLoadingNever}}** always sends every tool, except to providers that accept only 128 tools.
 
 Loading never gives the model more access. The list shows only the access key's own tools, and Phoenix checks every call as usual. Home Companion keys always get their full set of tools.
-
-### Removing an account {#remove-account}
-
-Removing an account deletes its stored key. You confirm in place first.
-
-If the Voice Agent or AI Task used the account, they lose it, and Phoenix removes the Assist assistant and AI Task entity it created for them.
-
-Related: [Voice Agent](guide:window.settingsHome#voice-agent), [AI Task](guide:window.settingsHome#ai-task)
 
 ## Adding an account {#provider-add}
 

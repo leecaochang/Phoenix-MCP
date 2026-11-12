@@ -34,7 +34,7 @@ from .home_companion import is_companion, internal_turn
 from .home_companion_turn import async_delegate
 from .llm.base import (
     _invalid_tools_error, _local_tool_results, _merged_results, _operator_message_index,
-    _tool_limit_problem, _tool_loader,
+    _tool_limit_problem, _tool_loader, _tool_search,
 )
 from .llm.provider_claude import ClaudeProvider
 from .llm.provider_openai import OpenAICompatProvider
@@ -46,6 +46,7 @@ from .routing.command_routing import RoutingAuthority
 from .routing.routing_statistics import tracked_turn, untracked_turn, voice_result
 from .routing.tool_routing import create_review_state, async_review_tools, withheld_results
 from .tool_catalog import build_agent_tool_list
+from .tool_loading import without_tool_search
 from .tool_dispatch import _build_instructions
 
 _LOGGER = logging.getLogger(__name__)
@@ -135,7 +136,11 @@ async def async_run_agent_turn(
 
 
     agent_tools = build_agent_tool_list(access_key, data, "chat")
-    loader = _tool_loader(provider, agent_tools, surface="chat", history=messages)
+    search = _tool_search(provider, agent_tools, surface="chat")
+    loader = None if search is not None else _tool_loader(provider, agent_tools, surface="chat", history=messages)
+    if search is None:
+        # Search blocks from an earlier Claude turn would be refused by a request without the search tool.
+        messages = without_tool_search(messages)
     system = (
         _build_instructions(access_key, data, base_url, hass)
         + _conversation_behavior_prompt(
@@ -144,6 +149,7 @@ async def async_run_agent_turn(
         + _AGENT_CHAT_ADDENDUM
         + _home_focus_output_contract(home_focused)
         + (loader.directory() if loader is not None else "")
+        + (search.note() if search is not None else "")
         + _agentcli_time_guidance()
     )
     # The clock goes on the operator's message in each request copy, after the
@@ -158,7 +164,10 @@ async def async_run_agent_turn(
     declared = loader.round_tools() if loader is not None else agent_tools
     tools = provider.format_tools(declared)
     tools_key = tuple(tool["name"] for tool in declared)
-    if (too_many := _tool_limit_problem(provider, tools)) is not None:
+    too_many = _tool_limit_problem(provider, tools)
+    if search is not None:
+        tools = search.request_tools(tools)
+    if too_many is not None:
         await emit("error", too_many)
         await emit("messages", {"messages": messages})
         await emit("done", {"stop_reason": "error"})
@@ -290,6 +299,9 @@ async def async_run_agent_turn(
             await emit("notice", {"code": "bad_tool_call_retry", "message": (
                 "The model sent a tool call whose arguments were not valid JSON. Nothing from that "
                 "response ran; the error was returned so the model can send the call again.")})
+            continue
+        if stop_reason == "pause_turn" and not tool_calls:
+            # Anthropic paused its own tool search; sending the conversation back lets it go on.
             continue
         if stop_reason != "tool_use":
             break
