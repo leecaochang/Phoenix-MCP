@@ -83,7 +83,7 @@
       },
       "cap_integration_reconfigure": {
         "label": "Reconfiguración de integraciones",
-        "description": "Envía credenciales, hosts y otros valores revisados a través del flujo oficial de reconfiguración de Home Assistant. Phoenix no puede revertir los cambios automáticamente."
+        "description": "Cambia integraciones mediante los flujos propios de Home Assistant: reconfiguración, subentradas como agentes de IA y reparaciones. Sin reversión automática."
       },
       "cap_lovelace_write": {
         "label": "Gestionar paneles de control",
@@ -185,7 +185,9 @@
       "device.zigbee_group.add_members": "añadido al grupo Zigbee: {name}",
       "device.zigbee_group.create": "grupo Zigbee creado: {name}",
       "device.zigbee_group.delete": "grupo Zigbee eliminado: {name}",
-      "device.zigbee_group.remove_members": "quitado del grupo Zigbee: {name}"
+      "device.zigbee_group.remove_members": "quitado del grupo Zigbee: {name}",
+      "config_subentry.create": "añadido {subject}",
+      "config_subentry.reconfigure": "reconfigurado {subject}"
     },
     "mesaSuggestion": {
       "baseline_note": " El modo Prohibido coincide con la línea base integrada para este dominio, por lo que el perfil hace explícita esa intención. Para permitir en su lugar el control del agente con aprobación del administrador, elija Confirmar en el Editor de perfiles antes de guardar; la aprobación se aplica mientras MESA está en modo aplicado.",
@@ -1011,7 +1013,10 @@
       "zigbee_group.named.add_members": "Añadir dispositivos al grupo Zigbee {name}",
       "zigbee_group.named.create": "Crear el grupo Zigbee {name}",
       "zigbee_group.named.delete": "Eliminar el grupo Zigbee {name}",
-      "zigbee_group.named.remove_members": "Quitar dispositivos del grupo Zigbee {name}"
+      "zigbee_group.named.remove_members": "Quitar dispositivos del grupo Zigbee {name}",
+      "integration.subentry.create": "Añadir {subject} a la integración {label}",
+      "integration.subentry.reconfigure": "Reconfigurar {subject} de la integración {label}",
+      "repair.fix": "Corregir reparación: {label}"
     },
     "adminError": {
       "authRequired": "Se requiere autenticación.",
@@ -2345,7 +2350,13 @@
       "zigbee_group.named.delete.title": "Eliminar el grupo Zigbee {name}",
       "zigbee_group.named.delete.body": "Se eliminará el grupo Zigbee {name}. Sus dispositivos siguen emparejados, pero ya no se controlan conjuntamente.",
       "zigbee_group.named.remove_members.title": "Quitar dispositivos del grupo Zigbee {name}",
-      "zigbee_group.named.remove_members.body": "Se quitarán dispositivos del grupo Zigbee {name}. Revise a continuación el cambio exacto de miembros."
+      "zigbee_group.named.remove_members.body": "Se quitarán dispositivos del grupo Zigbee {name}. Revise a continuación el cambio exacto de miembros.",
+      "integration.subentry.create.title": "Añadir {subject} a la integración {label}",
+      "integration.subentry.create.body": "Phoenix añadirá {subject} a {label} mediante el flujo propio de Home Assistant, con los valores del agente que se muestran abajo. En un agente de IA, estos ajustes deciden qué herramientas e instrucciones de Home Assistant recibe. Phoenix no puede revertirlo.",
+      "integration.subentry.reconfigure.title": "Reconfigurar {subject} de la integración {label}",
+      "integration.subentry.reconfigure.body": "Phoenix cambiará {subject} de {label} mediante el flujo propio de Home Assistant, con los valores del agente que se muestran abajo. En un agente de IA, estos ajustes deciden qué herramientas e instrucciones de Home Assistant recibe. Phoenix no puede revertirlo.",
+      "repair.fix.title": "Corregir reparación: {label}",
+      "repair.fix.body": "Phoenix ejecutará la corrección propia de la integración para esta reparación, respondiéndola con los valores del agente que se muestran abajo. La integración decide qué cambia la corrección, y Phoenix no puede revertirla."
     },
     "common": {
       "after": "Después",

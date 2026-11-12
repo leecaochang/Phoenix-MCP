@@ -125,7 +125,7 @@
 
 ### {{label:caps.cap_integration_reconfigure.label}} {#integration-reconfigure}
 
-重新配置集成。
+重新配置集成，添加或更改其子条目（例如 AI 代理），并修复其修复项。子条目和修复始终需要你的批准，即使设为允许也是如此。
 
 ### {{label:caps.cap_lovelace_write.label}} {#lovelace-write}
 

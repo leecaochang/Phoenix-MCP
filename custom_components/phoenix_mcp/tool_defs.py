@@ -3428,6 +3428,57 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         },
     },
     {
+        "name": "set_integration_subentry",
+        "description": (
+            "Add a config subentry to an integration (subentry_type), such as an AI integration's "
+            "conversation agent or AI Task entity, or reconfigure one (subentry_id from list_integrations), "
+            "through Home Assistant's own subentry flow. Every call waits for an administrator's approval: an "
+            "AI agent's settings, such as llm_hass_api and its prompt, decide which tools and instructions it "
+            "gets. Requires complete WRITE coverage of the integration. Values are validated by the "
+            "integration only after approval; flat form values and ordered menu choices as for "
+            "reconfigure_integration. Applied results are never safe to retry automatically."
+        ),
+        "cap": "cap_integration_reconfigure",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "entry_id": {"type": "string", "minLength": 1, "description": "The config entry id returned by list_integrations."},
+                "subentry_type": {"type": "string", "minLength": 1, "description": "To add a subentry: its type, such as conversation or ai_task_data."},
+                "subentry_id": {"type": "string", "minLength": 1, "description": "To reconfigure a subentry: its id from list_integrations."},
+                "config": {"type": "object", "description": "Flat field values for the subentry forms."},
+                "menu_choices": {
+                    "type": "array", "maxItems": 10, "items": {"type": "string", "minLength": 1},
+                    "description": "Optional menu step choices, consumed in encounter order.",
+                },
+            },
+            "required": ["entry_id", "config"],
+        },
+    },
+    {
+        "name": "fix_repair",
+        "description": (
+            "Fix a fixable Home Assistant repair issue (is_fixable in get_repairs) through its integration's "
+            "own fix flow, answered with flat config values and ordered menu choices. Every fix waits for an "
+            "administrator's approval, since the integration decides what it changes. Requires complete WRITE "
+            "coverage of the issue's integration; issues from Home Assistant itself or from integrations "
+            "without a config entry are refused. Status is fixed, finished_issue_remains, "
+            "not_finished_may_have_changed or not_started; retry only when retry_safe is true."
+        ),
+        "cap": "cap_integration_reconfigure",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "repair_ref": {"type": "string", "minLength": 1, "description": "The repair_ref get_repairs returned."},
+                "config": {"type": "object", "description": "Flat values for the fix flow's forms; empty for a confirm-only fix."},
+                "menu_choices": {
+                    "type": "array", "maxItems": 10, "items": {"type": "string", "minLength": 1},
+                    "description": "Optional menu step choices, consumed in encounter order.",
+                },
+            },
+            "required": ["repair_ref"],
+        },
+    },
+    {
         "name": "set_integration_enabled",
         "description": (
             "Enable or disable a user-controlled integration by entry_id. Requires complete WRITE coverage and "
@@ -4326,6 +4377,8 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "set_integration_enabled": _annot(False, True, True),
     "set_integration": _annot(False, True, True),
     "reconfigure_integration": _annot(False, True, False),
+    "set_integration_subentry": _annot(False, True, False),
+    "fix_repair": _annot(False, True, False),
     "reload_integration": _annot(False, True, True),
     "remove_integration": _annot(False, True, True),
     "create_backup": _annot(False, False, False),

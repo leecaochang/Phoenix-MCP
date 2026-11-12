@@ -8,6 +8,8 @@ from .home_companion_turn import run_request
 from .tool_catalog import _freeze_executor_tracking, _register_companion_turn, _register_executor, _register_tool
 from .tools.approvals import _tool_get_approval_status, _tool_wait_for_approval
 from .tools.automation_test import _tool_test_condition, _tool_test_trigger
+from .tools.integration_subentry import _execute_set_integration_subentry, _tool_set_integration_subentry
+from .tools.repair_fix import _execute_fix_repair, _tool_fix_repair
 from .tools.authoring import (
     _execute_create_automation, _execute_create_scene, _execute_create_script,
     _execute_delete_automation, _execute_delete_scene, _execute_delete_script,
@@ -153,6 +155,8 @@ _register_executor("install_esphome_firmware", _execute_install_esphome_firmware
 _register_executor("set_integration_enabled", _execute_set_integration_enabled)
 _register_executor("set_integration", _execute_set_integration)
 _register_executor("reconfigure_integration", _execute_reconfigure_integration)
+_register_executor("set_integration_subentry", _execute_set_integration_subentry)
+_register_executor("fix_repair", _execute_fix_repair)
 _register_executor("set_integration_log_level", _execute_set_integration_log_level)
 _register_executor("reload_integration", _execute_reload_integration)
 _register_executor("remove_integration", _execute_remove_integration)
@@ -359,6 +363,8 @@ _register_tool("list_integrations", _tool_list_integrations)
 _register_tool("set_integration_enabled", _tool_set_integration_enabled)
 _register_tool("set_integration", _tool_set_integration)
 _register_tool("reconfigure_integration", _tool_reconfigure_integration)
+_register_tool("set_integration_subentry", _tool_set_integration_subentry)
+_register_tool("fix_repair", _tool_fix_repair)
 _register_tool("reload_integration", _tool_reload_integration)
 _register_tool("remove_integration", _tool_remove_integration)
 _register_tool("list_backups", _tool_list_backups)

@@ -125,7 +125,7 @@
 
 ### {{label:caps.cap_integration_reconfigure.label}} {#integration-reconfigure}
 
-重新設定整合。
+重新設定整合，新增或變更其子項目（例如 AI 代理），並修復其修復項。子項目和修復始終需要你的核准，即使設為允許也是如此。
 
 ### {{label:caps.cap_lovelace_write.label}} {#lovelace-write}
 

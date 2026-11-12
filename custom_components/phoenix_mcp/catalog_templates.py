@@ -132,6 +132,9 @@ DIFF_SUMMARY_TEMPLATES: Mapping[str, str] = MappingProxyType({
     "integration.disable": "Disable integration {label}",
     "integration.update": "Update integration {label}",
     "integration.reconfigure": "Reconfigure integration {label}",
+    "integration.subentry.create": "Add {subject} to integration {label}",
+    "integration.subentry.reconfigure": "Reconfigure {subject} of integration {label}",
+    "repair.fix": "Fix repair: {label}",
     "integration.log_level": "Change integration log level for {label}",
     "integration.reload": "Reload integration {label}",
     "integration.remove": "Remove integration {label}",
@@ -250,6 +253,20 @@ _APPROVAL_SUMMARY_BODIES = MappingProxyType({
         "steps are unsupported, and Phoenix cannot automatically roll this change back."
     ),
     "integration.remove": "This will remove the {label} integration and its configuration from Home Assistant.",
+    "integration.subentry.create": (
+        "Phoenix will add {subject} to {label} through Home Assistant's own flow, using the "
+        "agent's values below. For an AI agent, these settings decide which Home Assistant tools "
+        "and instructions it gets. Phoenix cannot roll this back."
+    ),
+    "integration.subentry.reconfigure": (
+        "Phoenix will change {subject} of {label} through Home Assistant's own flow, using the "
+        "agent's values below. For an AI agent, these settings decide which Home Assistant tools "
+        "and instructions it gets. Phoenix cannot roll this back."
+    ),
+    "repair.fix": (
+        "Phoenix will run the integration's own fix for this repair, answering it with the agent's "
+        "values below. The integration decides what the fix changes, and Phoenix cannot roll it back."
+    ),
     "delete_entity": "This will delete the registry entry for {entity_id}. The entity may be recreated later by its integration.",
     "remove_device": "This will remove {device_id} from its integration. The device may need to be added again.",
     "install_esphome_firmware": "This will compile and flash firmware to {label}. Do not disconnect the device during the update.",
@@ -392,6 +409,8 @@ VERSION_SUMMARY_TEMPLATES: Mapping[str, str] = MappingProxyType({
     "energy.sources": "sources: {count}, devices: {devices}",
     "config_entry.options": "reconfigured {subject}",
     "config_entry.reconfigure": "reconfigured {subject}",
+    "config_subentry.create": "added {subject}",
+    "config_subentry.reconfigure": "reconfigured {subject}",
     "patch.set": "set {subject}",
     "patch.append": "appended to {subject}",
     "patch.remove": "removed {subject}",

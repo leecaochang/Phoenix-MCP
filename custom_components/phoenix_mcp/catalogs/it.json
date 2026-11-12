@@ -738,7 +738,13 @@
       "zigbee_group.named.delete.title": "Rimuovi il gruppo Zigbee {name}",
       "zigbee_group.named.delete.body": "Verrà rimosso il gruppo Zigbee {name}. I suoi dispositivi restano abbinati ma non vengono più controllati insieme.",
       "zigbee_group.named.remove_members.title": "Rimuovi dispositivi dal gruppo Zigbee {name}",
-      "zigbee_group.named.remove_members.body": "Verranno rimossi dispositivi dal gruppo Zigbee {name}. Rivedi qui sotto la modifica esatta dei membri."
+      "zigbee_group.named.remove_members.body": "Verranno rimossi dispositivi dal gruppo Zigbee {name}. Rivedi qui sotto la modifica esatta dei membri.",
+      "integration.subentry.create.title": "Aggiungi {subject} all'integrazione {label}",
+      "integration.subentry.create.body": "Phoenix aggiungerà {subject} a {label} tramite il flusso di Home Assistant, con i valori dell'agente mostrati sotto. Per un agente IA, queste impostazioni decidono quali strumenti e istruzioni di Home Assistant riceve. Phoenix non può annullare l'operazione.",
+      "integration.subentry.reconfigure.title": "Riconfigura {subject} dell'integrazione {label}",
+      "integration.subentry.reconfigure.body": "Phoenix modificherà {subject} di {label} tramite il flusso di Home Assistant, con i valori dell'agente mostrati sotto. Per un agente IA, queste impostazioni decidono quali strumenti e istruzioni di Home Assistant riceve. Phoenix non può annullare l'operazione.",
+      "repair.fix.title": "Correggi la riparazione: {label}",
+      "repair.fix.body": "Phoenix eseguirà la correzione propria dell'integrazione per questa riparazione, rispondendo con i valori dell'agente mostrati sotto. È l'integrazione a decidere cosa cambia la correzione, e Phoenix non può annullarla."
     },
     "mesaSuggestion": {
       "baseline_note": " Vietato corrisponde alla base integrata per questo dominio, quindi il profilo rende esplicita tale intenzione. Per consentire invece il controllo dell'agente con l'approvazione dell'amministratore, scegli Conferma nell'Editor dei profili prima di salvare; l'approvazione si applica quando MESA è applicato.",
@@ -949,7 +955,7 @@
         "label": "Gestisci aiutanti"
       },
       "cap_integration_reconfigure": {
-        "description": "Invia credenziali, host e altri valori verificati tramite il flusso di riconfigurazione ufficiale di Home Assistant. Phoenix non può annullare automaticamente le modifiche.",
+        "description": "Modifica le integrazioni tramite i flussi di Home Assistant: riconfigurazione, sotto-voci come agenti IA e riparazioni. Nessun annullamento automatico.",
         "label": "Riconfigurazione dell'integrazione"
       },
       "cap_integration_write": {
@@ -1843,7 +1849,9 @@
       "device.zigbee_group.add_members": "aggiunto al gruppo Zigbee: {name}",
       "device.zigbee_group.create": "gruppo Zigbee creato: {name}",
       "device.zigbee_group.delete": "gruppo Zigbee rimosso: {name}",
-      "device.zigbee_group.remove_members": "rimosso dal gruppo Zigbee: {name}"
+      "device.zigbee_group.remove_members": "rimosso dal gruppo Zigbee: {name}",
+      "config_subentry.create": "aggiunto {subject}",
+      "config_subentry.reconfigure": "riconfigurato {subject}"
     },
     "changes": {
       "added": "Aggiunto",
@@ -2305,7 +2313,10 @@
       "zigbee_group.named.add_members": "Aggiungi dispositivi al gruppo Zigbee {name}",
       "zigbee_group.named.create": "Crea il gruppo Zigbee {name}",
       "zigbee_group.named.delete": "Rimuovi il gruppo Zigbee {name}",
-      "zigbee_group.named.remove_members": "Rimuovi dispositivi dal gruppo Zigbee {name}"
+      "zigbee_group.named.remove_members": "Rimuovi dispositivi dal gruppo Zigbee {name}",
+      "integration.subentry.create": "Aggiungi {subject} all'integrazione {label}",
+      "integration.subentry.reconfigure": "Riconfigura {subject} dell'integrazione {label}",
+      "repair.fix": "Correggi la riparazione: {label}"
     },
     "wizard": {
       "accessSub": "Seleziona il triangolo accanto a <code>light</code> per aprire il gruppo delle luci. Elenca i tuoi dispositivi di illuminazione; seleziona il triangolo accanto a un dispositivo per vederne le entità. Oppure digita il nome della luce nel campo filtro. Poi seleziona <strong>W</strong> su una luce che puoi verificare, così l'agente può leggerla e controllarla. Puoi aggiungere altre autorizzazioni in seguito.",

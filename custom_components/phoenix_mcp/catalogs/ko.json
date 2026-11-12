@@ -141,7 +141,9 @@
       "device.zigbee_group.add_members": "Zigbee 그룹에 추가됨: {name}",
       "device.zigbee_group.create": "Zigbee 그룹 생성됨: {name}",
       "device.zigbee_group.delete": "Zigbee 그룹 제거됨: {name}",
-      "device.zigbee_group.remove_members": "Zigbee 그룹에서 제거됨: {name}"
+      "device.zigbee_group.remove_members": "Zigbee 그룹에서 제거됨: {name}",
+      "config_subentry.create": "{subject} 추가됨",
+      "config_subentry.reconfigure": "{subject} 재구성됨"
     },
     "inject": {
       "profileSet": "{key}에 MESA 프로필이 설정됨 - 클릭하여 편집",
@@ -252,7 +254,7 @@
       },
       "cap_integration_reconfigure": {
         "label": "통합 구성 요소 재구성",
-        "description": "Home Assistant의 공식 재구성 흐름을 통해 검토된 자격 증명, 호스트 및 기타 값을 제출합니다. Phoenix는 변경 사항을 자동으로 되돌릴 수 없습니다."
+        "description": "Home Assistant 자체 흐름으로 통합 구성 요소를 변경합니다. 재구성, AI 에이전트 같은 하위 항목, 수리 항목 해결이 포함됩니다. 자동으로 되돌릴 수 없습니다."
       },
       "cap_lovelace_write": {
         "label": "대시보드 관리",
@@ -841,7 +843,10 @@
       "zigbee_group.named.add_members": "Zigbee 그룹 {name}에 기기 추가",
       "zigbee_group.named.create": "Zigbee 그룹 {name} 생성",
       "zigbee_group.named.delete": "Zigbee 그룹 {name} 제거",
-      "zigbee_group.named.remove_members": "Zigbee 그룹 {name}에서 기기 제거"
+      "zigbee_group.named.remove_members": "Zigbee 그룹 {name}에서 기기 제거",
+      "integration.subentry.create": "통합 구성 요소 {label}에 {subject} 추가",
+      "integration.subentry.reconfigure": "통합 구성 요소 {label}의 {subject} 재구성",
+      "repair.fix": "수리 실행: {label}"
     },
     "adminError": {
       "activeAccessKeyRequired": "선택한 액세스 키는 철회되었거나 만료되었습니다. 다른 액세스 키를 선택하십시오.",
@@ -1979,7 +1984,13 @@
       "zigbee_group.named.delete.body": "Zigbee 그룹 {name}을(를) 제거합니다. 기기는 페어링된 상태로 유지되지만 더 이상 함께 제어되지 않습니다.",
       "zigbee_group.named.delete.title": "Zigbee 그룹 {name} 제거",
       "zigbee_group.named.remove_members.body": "Zigbee 그룹 {name}에서 기기를 제거합니다. 아래에서 정확한 구성원 변경을 확인해 주십시오.",
-      "zigbee_group.named.remove_members.title": "Zigbee 그룹 {name}에서 기기 제거"
+      "zigbee_group.named.remove_members.title": "Zigbee 그룹 {name}에서 기기 제거",
+      "integration.subentry.create.title": "통합 구성 요소 {label}에 {subject} 추가",
+      "integration.subentry.create.body": "Phoenix가 Home Assistant 자체 흐름을 통해 {label}에 {subject}를 추가하며, 아래에 표시된 에이전트의 값을 사용합니다. AI 에이전트의 경우 이 설정에 따라 받는 Home Assistant 도구와 지침이 결정됩니다. Phoenix는 이를 되돌릴 수 없습니다.",
+      "integration.subentry.reconfigure.title": "통합 구성 요소 {label}의 {subject} 재구성",
+      "integration.subentry.reconfigure.body": "Phoenix가 Home Assistant 자체 흐름을 통해 {label}의 {subject}를 변경하며, 아래에 표시된 에이전트의 값을 사용합니다. AI 에이전트의 경우 이 설정에 따라 받는 Home Assistant 도구와 지침이 결정됩니다. Phoenix는 이를 되돌릴 수 없습니다.",
+      "repair.fix.title": "수리 실행: {label}",
+      "repair.fix.body": "Phoenix가 이 수리 항목에 대해 통합 구성 요소 자체의 해결 방법을 실행하고 아래에 표시된 에이전트의 값으로 응답합니다. 해결 방법이 무엇을 바꿀지는 통합 구성 요소가 결정하며, Phoenix는 이를 되돌릴 수 없습니다."
     },
     "approvals": {
       "approve": "승인",

@@ -891,7 +891,13 @@
       "zigbee_group.named.delete.body": "Dette fjerner Zigbee-gruppen {name}. Dens enheder forbliver parret, men styres ikke længere samlet.",
       "zigbee_group.named.delete.title": "Fjern Zigbee-gruppen {name}",
       "zigbee_group.named.remove_members.body": "Dette fjerner enheder fra Zigbee-gruppen {name}. Gennemgå den præcise ændring af medlemskabet nedenfor.",
-      "zigbee_group.named.remove_members.title": "Fjern enheder fra Zigbee-gruppen {name}"
+      "zigbee_group.named.remove_members.title": "Fjern enheder fra Zigbee-gruppen {name}",
+      "integration.subentry.create.title": "Tilføj {subject} til integrationen {label}",
+      "integration.subentry.create.body": "Phoenix tilføjer {subject} til {label} via Home Assistants eget flow med agentens værdier nedenfor. For en AI-agent bestemmer disse indstillinger, hvilke Home Assistant-værktøjer og instruktioner den får. Phoenix kan ikke rulle dette tilbage.",
+      "integration.subentry.reconfigure.title": "Genkonfigurér {subject} i integrationen {label}",
+      "integration.subentry.reconfigure.body": "Phoenix ændrer {subject} i {label} via Home Assistants eget flow med agentens værdier nedenfor. For en AI-agent bestemmer disse indstillinger, hvilke Home Assistant-værktøjer og instruktioner den får. Phoenix kan ikke rulle dette tilbage.",
+      "repair.fix.title": "Udfør reparation: {label}",
+      "repair.fix.body": "Phoenix kører integrationens egen løsning på denne reparation og besvarer den med agentens værdier nedenfor. Integrationen bestemmer, hvad løsningen ændrer, og Phoenix kan ikke rulle det tilbage."
     },
     "approvals": {
       "approve": "Godkend",
@@ -1160,7 +1166,7 @@
         "label": "Administrér hjælpere"
       },
       "cap_integration_reconfigure": {
-        "description": "Indsend gennemgåede legitimationsoplysninger, værter og andre værdier via Home Assistants officielle genkonfigurationsflow. Phoenix kan ikke automatisk rulle ændringer tilbage.",
+        "description": "Ændr integrationer via Home Assistants egne flows: genkonfiguration, underposter som AI-agenter og reparationer. Ingen automatisk tilbagerulning.",
         "label": "Genkonfiguration af integration"
       },
       "cap_integration_write": {
@@ -1680,7 +1686,10 @@
       "zigbee_group.named.add_members": "Tilføj enheder til Zigbee-gruppen {name}",
       "zigbee_group.named.create": "Opret Zigbee-gruppen {name}",
       "zigbee_group.named.delete": "Fjern Zigbee-gruppen {name}",
-      "zigbee_group.named.remove_members": "Fjern enheder fra Zigbee-gruppen {name}"
+      "zigbee_group.named.remove_members": "Fjern enheder fra Zigbee-gruppen {name}",
+      "integration.subentry.create": "Tilføj {subject} til integrationen {label}",
+      "integration.subentry.reconfigure": "Genkonfigurér {subject} i integrationen {label}",
+      "repair.fix": "Udfør reparation: {label}"
     },
     "inject": {
       "mesaProfile": "MESA-profil",
@@ -2593,7 +2602,9 @@
       "device.zigbee_group.add_members": "tilføjet til Zigbee-gruppe: {name}",
       "device.zigbee_group.create": "oprettede Zigbee-gruppe: {name}",
       "device.zigbee_group.delete": "fjernede Zigbee-gruppe: {name}",
-      "device.zigbee_group.remove_members": "fjernet fra Zigbee-gruppe: {name}"
+      "device.zigbee_group.remove_members": "fjernet fra Zigbee-gruppe: {name}",
+      "config_subentry.create": "tilføjede {subject}",
+      "config_subentry.reconfigure": "genkonfigurerede {subject}"
     },
     "wizard": {
       "accessKeyCreatedBanner": "Adgangsnøgle oprettet. Du kan omdøbe den senere fra Nøglehandlinger. Dens udløb kan ikke ændres.",

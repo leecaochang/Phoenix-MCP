@@ -265,7 +265,9 @@
       "device.zigbee_group.add_members": "toegevoegd aan Zigbee-groep: {name}",
       "device.zigbee_group.create": "Zigbee-groep gemaakt: {name}",
       "device.zigbee_group.delete": "Zigbee-groep verwijderd: {name}",
-      "device.zigbee_group.remove_members": "verwijderd uit Zigbee-groep: {name}"
+      "device.zigbee_group.remove_members": "verwijderd uit Zigbee-groep: {name}",
+      "config_subentry.create": "{subject} toegevoegd",
+      "config_subentry.reconfigure": "{subject} opnieuw geconfigureerd"
     },
     "changes": {
       "added": "Toegevoegd",
@@ -463,7 +465,7 @@
         "label": "Helpers beheren"
       },
       "cap_integration_reconfigure": {
-        "description": "Beoordeelde inloggegevens, hosts en andere waarden via de officiële herconfiguratieworkflow van Home Assistant indienen. Phoenix kan wijzigingen niet automatisch terugdraaien.",
+        "description": "Integraties wijzigen via de eigen workflows van Home Assistant: herconfiguratie, subitems zoals AI-agents en reparaties. Niet automatisch terug te draaien.",
         "label": "Integratie herconfigureren"
       },
       "cap_integration_write": {
@@ -734,7 +736,10 @@
       "zigbee_group.named.add_members": "Apparaten toevoegen aan Zigbee-groep {name}",
       "zigbee_group.named.create": "Zigbee-groep {name} maken",
       "zigbee_group.named.delete": "Zigbee-groep {name} verwijderen",
-      "zigbee_group.named.remove_members": "Apparaten verwijderen uit Zigbee-groep {name}"
+      "zigbee_group.named.remove_members": "Apparaten verwijderen uit Zigbee-groep {name}",
+      "integration.subentry.create": "{subject} toevoegen aan integratie {label}",
+      "integration.subentry.reconfigure": "{subject} van integratie {label} herconfigureren",
+      "repair.fix": "Reparatie uitvoeren: {label}"
     },
     "approvals": {
       "approve": "Goedkeuren",
@@ -2531,7 +2536,13 @@
       "zigbee_group.named.delete.body": "Hiermee wordt Zigbee-groep {name} verwijderd. De apparaten blijven aan het netwerk gekoppeld, maar worden niet langer samen bestuurd.",
       "zigbee_group.named.delete.title": "Zigbee-groep {name} verwijderen",
       "zigbee_group.named.remove_members.body": "Hiermee worden apparaten verwijderd uit Zigbee-groep {name}. Bekijk hieronder de exacte lidmaatschapswijziging.",
-      "zigbee_group.named.remove_members.title": "Apparaten verwijderen uit Zigbee-groep {name}"
+      "zigbee_group.named.remove_members.title": "Apparaten verwijderen uit Zigbee-groep {name}",
+      "integration.subentry.create.title": "{subject} toevoegen aan integratie {label}",
+      "integration.subentry.create.body": "Phoenix voegt {subject} toe aan {label} via de eigen workflow van Home Assistant, met de waarden van de agent hieronder. Bij een AI-agent bepalen deze instellingen welke Home Assistant-tools en instructies hij krijgt. Phoenix kan dit niet terugdraaien.",
+      "integration.subentry.reconfigure.title": "{subject} van integratie {label} herconfigureren",
+      "integration.subentry.reconfigure.body": "Phoenix wijzigt {subject} van {label} via de eigen workflow van Home Assistant, met de waarden van de agent hieronder. Bij een AI-agent bepalen deze instellingen welke Home Assistant-tools en instructies hij krijgt. Phoenix kan dit niet terugdraaien.",
+      "repair.fix.title": "Reparatie uitvoeren: {label}",
+      "repair.fix.body": "Phoenix voert de eigen oplossing van de integratie voor deze reparatie uit en beantwoordt die met de waarden van de agent hieronder. De integratie bepaalt wat de oplossing wijzigt, en Phoenix kan dit niet terugdraaien."
     },
     "routing": {
       "providerOptions": "Laad de modellijst van dit account opnieuw. Er wordt geen opdracht uitgevoerd en niet getest hoe goed een model routeert.",

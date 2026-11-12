@@ -123,7 +123,7 @@ Adds, changes, enables, disables, reloads and removes integrations, and removes 
 
 ### {{label:caps.cap_integration_reconfigure.label}} {#integration-reconfigure}
 
-Reconfigures an integration.
+Reconfigures an integration, adds or changes its subentries, such as an AI agent, and fixes its repair issues. Subentries and repair fixes always need your approval, even at Allow.
 
 ### {{label:caps.cap_lovelace_write.label}} {#lovelace-write}
 

@@ -112,7 +112,7 @@
       },
       "cap_integration_reconfigure": {
         "label": "重新配置集成",
-        "description": "通过 Home Assistant 官方重新配置流程提交经审核的凭据、主机及其他值。Phoenix 无法自动回滚更改。"
+        "description": "通过 Home Assistant 自身的流程更改集成：重新配置、AI 代理等子条目以及修复项。无法自动回滚。"
       },
       "cap_log_read": {
         "label": "读取系统日志",
@@ -1036,7 +1036,9 @@
       "device.zigbee_group.add_members": "已加入 Zigbee 群组：{name}",
       "device.zigbee_group.create": "已创建 Zigbee 群组：{name}",
       "device.zigbee_group.delete": "已移除 Zigbee 群组：{name}",
-      "device.zigbee_group.remove_members": "已从 Zigbee 群组移除：{name}"
+      "device.zigbee_group.remove_members": "已从 Zigbee 群组移除：{name}",
+      "config_subentry.create": "添加了 {subject}",
+      "config_subentry.reconfigure": "重新配置了 {subject}"
     },
     "diff": {
       "blueprint.create": "创建 {domain} 蓝图“{rel}”",
@@ -1152,7 +1154,10 @@
       "zigbee_group.named.add_members": "向 Zigbee 群组 {name} 添加设备",
       "zigbee_group.named.create": "创建 Zigbee 群组 {name}",
       "zigbee_group.named.delete": "移除 Zigbee 群组 {name}",
-      "zigbee_group.named.remove_members": "从 Zigbee 群组 {name} 移除设备"
+      "zigbee_group.named.remove_members": "从 Zigbee 群组 {name} 移除设备",
+      "integration.subentry.create": "向集成 {label} 添加 {subject}",
+      "integration.subentry.reconfigure": "重新配置集成 {label} 的 {subject}",
+      "repair.fix": "执行修复：{label}"
     },
     "approvals": {
       "approve": "批准",
@@ -2450,7 +2455,13 @@
       "zigbee_group.named.delete.body": "这将移除 Zigbee 群组 {name}。其设备仍保持配对，但不再一起受控。",
       "zigbee_group.named.delete.title": "移除 Zigbee 群组 {name}",
       "zigbee_group.named.remove_members.body": "这将从 Zigbee 群组 {name} 移除设备。请在下方查看确切的成员变更。",
-      "zigbee_group.named.remove_members.title": "从 Zigbee 群组 {name} 移除设备"
+      "zigbee_group.named.remove_members.title": "从 Zigbee 群组 {name} 移除设备",
+      "integration.subentry.create.title": "向集成 {label} 添加 {subject}",
+      "integration.subentry.create.body": "Phoenix 将通过 Home Assistant 自身的流程向 {label} 添加 {subject}，并使用下方显示的代理值。对于 AI 代理，这些设置决定它获得哪些 Home Assistant 工具和指示。Phoenix 无法回滚此操作。",
+      "integration.subentry.reconfigure.title": "重新配置集成 {label} 的 {subject}",
+      "integration.subentry.reconfigure.body": "Phoenix 将通过 Home Assistant 自身的流程更改 {label} 的 {subject}，并使用下方显示的代理值。对于 AI 代理，这些设置决定它获得哪些 Home Assistant 工具和指示。Phoenix 无法回滚此操作。",
+      "repair.fix.title": "执行修复：{label}",
+      "repair.fix.body": "Phoenix 将运行集成自身针对此修复项的修复，并用下方显示的代理值作答。修复会更改什么由集成决定，Phoenix 无法回滚。"
     },
     "routing": {
       "providerOptions": "重新加载此账户的模型列表。不会执行任何命令，也不会测试模型的路由效果。",

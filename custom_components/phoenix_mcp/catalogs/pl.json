@@ -273,7 +273,9 @@
       "device.zigbee_group.add_members": "dodano do grupy Zigbee: {name}",
       "device.zigbee_group.create": "utworzono grupę Zigbee: {name}",
       "device.zigbee_group.delete": "usunięto grupę Zigbee: {name}",
-      "device.zigbee_group.remove_members": "usunięto z grupy Zigbee: {name}"
+      "device.zigbee_group.remove_members": "usunięto z grupy Zigbee: {name}",
+      "config_subentry.create": "dodano {subject}",
+      "config_subentry.reconfigure": "przekonfigurowano {subject}"
     },
     "changes": {
       "added": "Dodano",
@@ -473,7 +475,7 @@
         "label": "Zarządzaj pomocnikami"
       },
       "cap_integration_reconfigure": {
-        "description": "Przesyłaj przejrzane poświadczenia, hosty i inne wartości przez oficjalny przepływ rekonfiguracji Home Assistant. Phoenix nie może automatycznie cofać zmian.",
+        "description": "Zmieniaj integracje własnymi przepływami Home Assistant: rekonfiguracja, podwpisy takie jak agenci AI oraz naprawy. Bez automatycznego cofania.",
         "label": "Rekonfiguracja integracji"
       },
       "cap_integration_write": {
@@ -744,7 +746,10 @@
       "zigbee_group.named.add_members": "Dodaj urządzenia do grupy Zigbee {name}",
       "zigbee_group.named.create": "Utwórz grupę Zigbee {name}",
       "zigbee_group.named.delete": "Usuń grupę Zigbee {name}",
-      "zigbee_group.named.remove_members": "Usuń urządzenia z grupy Zigbee {name}"
+      "zigbee_group.named.remove_members": "Usuń urządzenia z grupy Zigbee {name}",
+      "integration.subentry.create": "Dodaj {subject} do integracji {label}",
+      "integration.subentry.reconfigure": "Przekonfiguruj {subject} integracji {label}",
+      "repair.fix": "Wykonaj naprawę: {label}"
     },
     "approvals": {
       "approve": "Zatwierdź",
@@ -2585,7 +2590,13 @@
       "zigbee_group.named.delete.body": "Spowoduje to usunięcie grupy Zigbee {name}. Jej urządzenia pozostaną sparowane, ale nie będą już sterowane razem.",
       "zigbee_group.named.delete.title": "Usuń grupę Zigbee {name}",
       "zigbee_group.named.remove_members.body": "Spowoduje to usunięcie urządzeń z grupy Zigbee {name}. Przejrzyj poniżej dokładną zmianę członkostwa.",
-      "zigbee_group.named.remove_members.title": "Usuń urządzenia z grupy Zigbee {name}"
+      "zigbee_group.named.remove_members.title": "Usuń urządzenia z grupy Zigbee {name}",
+      "integration.subentry.create.title": "Dodaj {subject} do integracji {label}",
+      "integration.subentry.create.body": "Phoenix doda {subject} do {label} za pomocą własnego przepływu Home Assistant, używając wartości agenta pokazanych poniżej. W przypadku agenta AI te ustawienia decydują, jakie narzędzia i instrukcje Home Assistant otrzyma. Phoenix nie może tego cofnąć.",
+      "integration.subentry.reconfigure.title": "Przekonfiguruj {subject} integracji {label}",
+      "integration.subentry.reconfigure.body": "Phoenix zmieni {subject} integracji {label} za pomocą własnego przepływu Home Assistant, używając wartości agenta pokazanych poniżej. W przypadku agenta AI te ustawienia decydują, jakie narzędzia i instrukcje Home Assistant otrzyma. Phoenix nie może tego cofnąć.",
+      "repair.fix.title": "Wykonaj naprawę: {label}",
+      "repair.fix.body": "Phoenix uruchomi własną poprawkę integracji dla tej naprawy, odpowiadając wartościami agenta pokazanymi poniżej. To integracja decyduje, co poprawka zmienia, a Phoenix nie może tego cofnąć."
     },
     "routing": {
       "providerOptions": "Wczytaj ponownie listę modeli tego konta. Nie wykonuje żadnego polecenia i nie sprawdza, jak dobrze model kieruje żądania.",

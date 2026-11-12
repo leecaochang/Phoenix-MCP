@@ -253,7 +253,7 @@
       },
       "cap_integration_reconfigure": {
         "label": "インテグレーションの再設定",
-        "description": "確認済みの認証情報、ホスト、その他の値を Home Assistant 公式の再設定フローから送信します。Phoenix は変更を自動的にロールバックできません。"
+        "description": "Home Assistant 独自のフローでインテグレーションを変更します。再設定、AI エージェントなどのサブエントリ、修復が対象です。自動では元に戻せません。"
       },
       "cap_lovelace_write": {
         "label": "ダッシュボードの管理",
@@ -995,7 +995,9 @@
       "device.zigbee_group.add_members": "Zigbee グループに追加: {name}",
       "device.zigbee_group.create": "Zigbee グループを作成: {name}",
       "device.zigbee_group.delete": "Zigbee グループを削除: {name}",
-      "device.zigbee_group.remove_members": "Zigbee グループから削除: {name}"
+      "device.zigbee_group.remove_members": "Zigbee グループから削除: {name}",
+      "config_subentry.create": "{subject} を追加",
+      "config_subentry.reconfigure": "{subject} を再設定"
     },
     "mesaSuggestion": {
       "baseline_note": " 禁止はこのドメインの組み込みの基準と一致するため、このプロファイルによって意図が明示されます。代わりに管理者の承認を条件にエージェントの制御を許可するには、保存する前にプロファイルエディターで「確認」を選択してください。承認は MESA が強制モードの場合に適用されます。",
@@ -1534,7 +1536,10 @@
       "zigbee_group.named.add_members": "Zigbee グループ {name} にデバイスを追加",
       "zigbee_group.named.create": "Zigbee グループ {name} を作成",
       "zigbee_group.named.delete": "Zigbee グループ {name} を削除",
-      "zigbee_group.named.remove_members": "Zigbee グループ {name} からデバイスを削除"
+      "zigbee_group.named.remove_members": "Zigbee グループ {name} からデバイスを削除",
+      "integration.subentry.create": "インテグレーション {label} に {subject} を追加",
+      "integration.subentry.reconfigure": "インテグレーション {label} の {subject} を再設定",
+      "repair.fix": "修復を実行: {label}"
     },
     "settings": {
       "addProviderFirst": "先に「AI プロバイダー」でプロバイダーアカウントを追加してください。",
@@ -2450,7 +2455,13 @@
       "zigbee_group.named.delete.body": "Zigbee グループ {name} を削除します。デバイスはペアリングされたままですが、まとめて制御されなくなります。",
       "zigbee_group.named.delete.title": "Zigbee グループ {name} を削除",
       "zigbee_group.named.remove_members.body": "Zigbee グループ {name} からデバイスを削除します。以下で正確なメンバーの変更を確認してください。",
-      "zigbee_group.named.remove_members.title": "Zigbee グループ {name} からデバイスを削除"
+      "zigbee_group.named.remove_members.title": "Zigbee グループ {name} からデバイスを削除",
+      "integration.subentry.create.title": "インテグレーション {label} に {subject} を追加",
+      "integration.subentry.create.body": "Phoenix は Home Assistant 独自のフローで {label} に {subject} を追加し、下に示すエージェントの値を使います。AI エージェントの場合、これらの設定で受け取る Home Assistant のツールと指示が決まります。Phoenix はこれを元に戻せません。",
+      "integration.subentry.reconfigure.title": "インテグレーション {label} の {subject} を再設定",
+      "integration.subentry.reconfigure.body": "Phoenix は Home Assistant 独自のフローで {label} の {subject} を変更し、下に示すエージェントの値を使います。AI エージェントの場合、これらの設定で受け取る Home Assistant のツールと指示が決まります。Phoenix はこれを元に戻せません。",
+      "repair.fix.title": "修復を実行: {label}",
+      "repair.fix.body": "Phoenix はこの修復に対してインテグレーション独自の修正を実行し、下に示すエージェントの値で回答します。修正で何が変わるかはインテグレーションが決め、Phoenix は元に戻せません。"
     },
     "routing": {
       "providerOptions": "このアカウントのモデル一覧を再読み込みします。コマンドは実行せず、ルーティングの精度もテストしません。",

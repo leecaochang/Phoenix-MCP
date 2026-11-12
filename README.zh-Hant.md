@@ -13,7 +13,7 @@ Phoenix MCP 透過 MCP（Model Context Protocol，一種連接 AI 應用程式�
 
 Phoenix MCP 完全在 Home Assistant 內執行，無需部署單獨的服務。您可以使用現有的應用程式，例如 Claude Code、Cursor、ChatGPT 或 Gemini，也可以直接在 Home Assistant 內，透過您選擇的 AI 供應商聊天，供應商可以在雲端，也可以透過 Ollama 在本機執行。
 
-引導式設定讓您在幾分鐘內從安裝到獲得可用的智慧體，並提供包含 176 個工具的目錄，用於讀取、控制和編寫您的設定。Phoenix MCP 使用熟悉且可自訂的視窗式介面，上手非常容易。完整文件已內建，隨時可用。
+引導式設定讓您在幾分鐘內從安裝到獲得可用的智慧體，並提供包含 178 個工具的目錄，用於讀取、控制和編寫您的設定。Phoenix MCP 使用熟悉且可自訂的視窗式介面，上手非常容易。完整文件已內建，隨時可用。
 
 ## 螢幕截圖
 

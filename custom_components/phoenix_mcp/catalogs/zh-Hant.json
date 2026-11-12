@@ -695,7 +695,13 @@
       "zigbee_group.named.delete.body": "這將移除 Zigbee 群組 {name}。其裝置仍保持配對，但不再一起受控。",
       "zigbee_group.named.delete.title": "移除 Zigbee 群組 {name}",
       "zigbee_group.named.remove_members.body": "這將從 Zigbee 群組 {name} 移除裝置。請在下方檢視確切的成員變更。",
-      "zigbee_group.named.remove_members.title": "從 Zigbee 群組 {name} 移除裝置"
+      "zigbee_group.named.remove_members.title": "從 Zigbee 群組 {name} 移除裝置",
+      "integration.subentry.create.title": "向整合 {label} 新增 {subject}",
+      "integration.subentry.create.body": "Phoenix 會透過 Home Assistant 自身的流程向 {label} 新增 {subject}，並使用下方顯示的代理值。對於 AI 代理，這些設定決定它獲得哪些 Home Assistant 工具和指示。Phoenix 無法回滾此操作。",
+      "integration.subentry.reconfigure.title": "重新設定整合 {label} 的 {subject}",
+      "integration.subentry.reconfigure.body": "Phoenix 會透過 Home Assistant 自身的流程變更 {label} 的 {subject}，並使用下方顯示的代理值。對於 AI 代理，這些設定決定它獲得哪些 Home Assistant 工具和指示。Phoenix 無法回滾此操作。",
+      "repair.fix.title": "執行修復：{label}",
+      "repair.fix.body": "Phoenix 會執行整合自身針對此修復項的修復，並以下方顯示的代理值作答。修復會變更什麼由整合決定，Phoenix 無法回滾。"
     },
     "approvals": {
       "approve": "核准",
@@ -936,7 +942,7 @@
         "label": "管理輔助項目"
       },
       "cap_integration_reconfigure": {
-        "description": "透過 Home Assistant 官方重新設定流程提交經審核的憑據、主機及其他值。Phoenix 無法自動回滾更改。",
+        "description": "透過 Home Assistant 自身的流程變更整合：重新設定、AI 代理等子項目以及修復項。無法自動回滾。",
         "label": "重新設定整合"
       },
       "cap_integration_write": {
@@ -1271,7 +1277,10 @@
       "zigbee_group.named.add_members": "向 Zigbee 群組 {name} 新增裝置",
       "zigbee_group.named.create": "新增 Zigbee 群組 {name}",
       "zigbee_group.named.delete": "移除 Zigbee 群組 {name}",
-      "zigbee_group.named.remove_members": "從 Zigbee 群組 {name} 移除裝置"
+      "zigbee_group.named.remove_members": "從 Zigbee 群組 {name} 移除裝置",
+      "integration.subentry.create": "向整合 {label} 新增 {subject}",
+      "integration.subentry.reconfigure": "重新設定整合 {label} 的 {subject}",
+      "repair.fix": "執行修復：{label}"
     },
     "inject": {
       "mesaProfile": "MESA 策略",
@@ -2311,7 +2320,9 @@
       "device.zigbee_group.add_members": "已加入 Zigbee 群組：{name}",
       "device.zigbee_group.create": "已新增 Zigbee 群組：{name}",
       "device.zigbee_group.delete": "已移除 Zigbee 群組：{name}",
-      "device.zigbee_group.remove_members": "已從 Zigbee 群組移除：{name}"
+      "device.zigbee_group.remove_members": "已從 Zigbee 群組移除：{name}",
+      "config_subentry.create": "新增了 {subject}",
+      "config_subentry.reconfigure": "重新設定了 {subject}"
     },
     "wizard": {
       "accessSub": "選擇 <code>light</code> 旁邊的三角形，打開燈光分組。其中列出您的燈光裝置；選擇裝置旁邊的三角形，即可查看它的實體。也可以在篩選框中輸入燈的名稱。然後在一個您可以親自驗證的燈上選擇 <strong>W</strong>，讓智慧體可以讀取並控制它。之後還可以新增更多權限。",

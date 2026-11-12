@@ -891,7 +891,13 @@
       "zigbee_group.named.delete.body": "Detta tar bort Zigbee-gruppen {name}. Dess enheter förblir parkopplade men styrs inte längre tillsammans.",
       "zigbee_group.named.delete.title": "Ta bort Zigbee-gruppen {name}",
       "zigbee_group.named.remove_members.body": "Detta tar bort enheter från Zigbee-gruppen {name}. Granska den exakta ändringen av medlemskapet nedan.",
-      "zigbee_group.named.remove_members.title": "Ta bort enheter från Zigbee-gruppen {name}"
+      "zigbee_group.named.remove_members.title": "Ta bort enheter från Zigbee-gruppen {name}",
+      "integration.subentry.create.title": "Lägg till {subject} i integrationen {label}",
+      "integration.subentry.create.body": "Phoenix lägger till {subject} i {label} via Home Assistants eget flöde med agentens värden nedan. För en AI-agent avgör inställningarna vilka Home Assistant-verktyg och instruktioner den får. Phoenix kan inte ångra detta.",
+      "integration.subentry.reconfigure.title": "Konfigurera om {subject} i integrationen {label}",
+      "integration.subentry.reconfigure.body": "Phoenix ändrar {subject} i {label} via Home Assistants eget flöde med agentens värden nedan. För en AI-agent avgör inställningarna vilka Home Assistant-verktyg och instruktioner den får. Phoenix kan inte ångra detta.",
+      "repair.fix.title": "Åtgärda reparation: {label}",
+      "repair.fix.body": "Phoenix kör integrationens egen åtgärd för den här reparationen och besvarar den med agentens värden nedan. Integrationen avgör vad åtgärden ändrar, och Phoenix kan inte ångra den."
     },
     "approvals": {
       "approve": "Godkänn",
@@ -1160,7 +1166,7 @@
         "label": "Hantera hjälpare"
       },
       "cap_integration_reconfigure": {
-        "description": "Skicka granskade autentiseringsuppgifter, värdar och andra värden via Home Assistants officiella flöde för omkonfigurering. Phoenix kan inte automatiskt rulla tillbaka ändringar.",
+        "description": "Ändra integrationer via Home Assistants egna flöden: omkonfigurering, underposter som AI-agenter och reparationer. Ingen automatisk återställning.",
         "label": "Omkonfigurering av integration"
       },
       "cap_integration_write": {
@@ -1680,7 +1686,10 @@
       "zigbee_group.named.add_members": "Lägg till enheter i Zigbee-gruppen {name}",
       "zigbee_group.named.create": "Skapa Zigbee-gruppen {name}",
       "zigbee_group.named.delete": "Ta bort Zigbee-gruppen {name}",
-      "zigbee_group.named.remove_members": "Ta bort enheter från Zigbee-gruppen {name}"
+      "zigbee_group.named.remove_members": "Ta bort enheter från Zigbee-gruppen {name}",
+      "integration.subentry.create": "Lägg till {subject} i integrationen {label}",
+      "integration.subentry.reconfigure": "Konfigurera om {subject} i integrationen {label}",
+      "repair.fix": "Åtgärda reparation: {label}"
     },
     "inject": {
       "mesaProfile": "MESA-profil",
@@ -2593,7 +2602,9 @@
       "device.zigbee_group.add_members": "tillagd i Zigbee-grupp: {name}",
       "device.zigbee_group.create": "skapade Zigbee-grupp: {name}",
       "device.zigbee_group.delete": "tog bort Zigbee-grupp: {name}",
-      "device.zigbee_group.remove_members": "borttagen från Zigbee-grupp: {name}"
+      "device.zigbee_group.remove_members": "borttagen från Zigbee-grupp: {name}",
+      "config_subentry.create": "lade till {subject}",
+      "config_subentry.reconfigure": "omkonfigurerade {subject}"
     },
     "wizard": {
       "accessKeyCreatedBanner": "Åtkomstnyckeln har skapats. Du kan byta namn på den senare från Nyckelåtgärder. Dess utgång kan inte ändras.",

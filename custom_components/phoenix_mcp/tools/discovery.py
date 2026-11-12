@@ -2224,8 +2224,9 @@ async def _tool_get_repairs(
         "truncated": len(matches) > limit,
         "issues": projected,
         "note": (
-            "Repair references are access-key-specific. Open Home Assistant Repairs "
-            "to view localized descriptions, links, and repair flows."
+            "Repair references are access-key-specific. A fixable issue can be fixed with "
+            "fix_repair and its repair_ref, after an administrator approves; open Home "
+            "Assistant Repairs for localized descriptions and links."
         ),
     }
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_repairs"

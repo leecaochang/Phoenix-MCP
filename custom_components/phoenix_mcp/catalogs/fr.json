@@ -253,7 +253,7 @@
       },
       "cap_integration_reconfigure": {
         "label": "Reconfiguration d'intégration",
-        "description": "Soumettre des identifiants, des hôtes et d'autres valeurs relus via le flux de reconfiguration officiel de Home Assistant. Phoenix ne peut pas annuler automatiquement les modifications."
+        "description": "Modifier les intégrations via les flux propres à Home Assistant : reconfiguration, sous-entrées comme les agents d'IA et réparations. Sans annulation automatique."
       },
       "cap_lovelace_write": {
         "label": "Gérer les tableaux de bord",
@@ -1890,7 +1890,10 @@
       "zigbee_group.named.add_members": "Ajouter des appareils au groupe Zigbee {name}",
       "zigbee_group.named.create": "Créer le groupe Zigbee {name}",
       "zigbee_group.named.delete": "Supprimer le groupe Zigbee {name}",
-      "zigbee_group.named.remove_members": "Retirer des appareils du groupe Zigbee {name}"
+      "zigbee_group.named.remove_members": "Retirer des appareils du groupe Zigbee {name}",
+      "integration.subentry.create": "Ajouter {subject} à l'intégration {label}",
+      "integration.subentry.reconfigure": "Reconfigurer {subject} de l'intégration {label}",
+      "repair.fix": "Corriger la réparation : {label}"
     },
     "version": {
       "card.added": "ajouté {subject} ({where})",
@@ -1922,7 +1925,9 @@
       "device.zigbee_group.add_members": "ajouté au groupe Zigbee : {name}",
       "device.zigbee_group.create": "groupe Zigbee créé : {name}",
       "device.zigbee_group.delete": "groupe Zigbee supprimé : {name}",
-      "device.zigbee_group.remove_members": "retiré du groupe Zigbee : {name}"
+      "device.zigbee_group.remove_members": "retiré du groupe Zigbee : {name}",
+      "config_subentry.create": "ajout de {subject}",
+      "config_subentry.reconfigure": "reconfiguration de {subject}"
     },
     "adminError": {
       "authRequired": "Authentification requise.",
@@ -2450,7 +2455,13 @@
       "zigbee_group.named.delete.title": "Supprimer le groupe Zigbee {name}",
       "zigbee_group.named.delete.body": "Cela supprimera le groupe Zigbee {name}. Ses appareils restent appairés mais ne sont plus contrôlés ensemble.",
       "zigbee_group.named.remove_members.title": "Retirer des appareils du groupe Zigbee {name}",
-      "zigbee_group.named.remove_members.body": "Cela retirera des appareils du groupe Zigbee {name}. Révisez la modification exacte des membres ci-dessous."
+      "zigbee_group.named.remove_members.body": "Cela retirera des appareils du groupe Zigbee {name}. Révisez la modification exacte des membres ci-dessous.",
+      "integration.subentry.create.title": "Ajouter {subject} à l'intégration {label}",
+      "integration.subentry.create.body": "Phoenix ajoutera {subject} à {label} via le flux propre à Home Assistant, avec les valeurs de l'agent ci-dessous. Pour un agent d'IA, ces paramètres déterminent les outils et instructions Home Assistant qu'il reçoit. Phoenix ne peut pas annuler cette opération.",
+      "integration.subentry.reconfigure.title": "Reconfigurer {subject} de l'intégration {label}",
+      "integration.subentry.reconfigure.body": "Phoenix modifiera {subject} de {label} via le flux propre à Home Assistant, avec les valeurs de l'agent ci-dessous. Pour un agent d'IA, ces paramètres déterminent les outils et instructions Home Assistant qu'il reçoit. Phoenix ne peut pas annuler cette opération.",
+      "repair.fix.title": "Corriger la réparation : {label}",
+      "repair.fix.body": "Phoenix exécutera le correctif propre à l'intégration pour cette réparation, en y répondant avec les valeurs de l'agent ci-dessous. L'intégration décide de ce que le correctif modifie, et Phoenix ne peut pas l'annuler."
     },
     "routing": {
       "providerOptions": "Rechargez la liste des modèles de ce compte. Aucune commande n’est exécutée et la qualité de routage d’un modèle n’est pas testée.",

@@ -778,7 +778,13 @@
       "zigbee_group.named.delete.body": "Будет удалена группа Zigbee {name}. Её устройства останутся сопряжёнными, но больше не будут управляться вместе.",
       "zigbee_group.named.delete.title": "Удалить группу Zigbee {name}",
       "zigbee_group.named.remove_members.body": "Устройства будут удалены из группы Zigbee {name}. Просмотрите точное изменение состава ниже.",
-      "zigbee_group.named.remove_members.title": "Удалить устройства из группы Zigbee {name}"
+      "zigbee_group.named.remove_members.title": "Удалить устройства из группы Zigbee {name}",
+      "integration.subentry.create.title": "Добавить {subject} в интеграцию {label}",
+      "integration.subentry.create.body": "Phoenix добавит {subject} в {label} через собственный поток Home Assistant, используя значения агента ниже. Для ИИ-агента эти настройки определяют, какие инструменты и инструкции Home Assistant он получит. Phoenix не может это откатить.",
+      "integration.subentry.reconfigure.title": "Перенастроить {subject} интеграции {label}",
+      "integration.subentry.reconfigure.body": "Phoenix изменит {subject} интеграции {label} через собственный поток Home Assistant, используя значения агента ниже. Для ИИ-агента эти настройки определяют, какие инструменты и инструкции Home Assistant он получит. Phoenix не может это откатить.",
+      "repair.fix.title": "Выполнить исправление: {label}",
+      "repair.fix.body": "Phoenix запустит собственное исправление интеграции для этой проблемы, ответив на него значениями агента ниже. Что изменит исправление, решает интеграция, и Phoenix не может это откатить."
     },
     "approvals": {
       "approve": "Одобрить",
@@ -1021,7 +1027,7 @@
         "label": "Управление помощниками"
       },
       "cap_integration_reconfigure": {
-        "description": "Отправка проверенных учётных данных, хостов и других значений через официальный поток перенастройки Home Assistant. Phoenix не может автоматически откатывать изменения.",
+        "description": "Изменение интеграций через собственные потоки Home Assistant: перенастройка, подзаписи, например ИИ-агенты, и исправления. Без автоматического отката.",
         "label": "Перенастройка интеграций"
       },
       "cap_integration_write": {
@@ -1367,7 +1373,10 @@
       "zigbee_group.named.add_members": "Добавить устройства в группу Zigbee {name}",
       "zigbee_group.named.create": "Создать группу Zigbee {name}",
       "zigbee_group.named.delete": "Удалить группу Zigbee {name}",
-      "zigbee_group.named.remove_members": "Удалить устройства из группы Zigbee {name}"
+      "zigbee_group.named.remove_members": "Удалить устройства из группы Zigbee {name}",
+      "integration.subentry.create": "Добавить {subject} в интеграцию {label}",
+      "integration.subentry.reconfigure": "Перенастроить {subject} интеграции {label}",
+      "repair.fix": "Выполнить исправление: {label}"
     },
     "mesa": {
       "addAreaProfile": "Добавить профиль пространства",
@@ -2234,7 +2243,9 @@
       "device.zigbee_group.add_members": "добавлено в группу Zigbee: {name}",
       "device.zigbee_group.create": "создана группа Zigbee: {name}",
       "device.zigbee_group.delete": "удалена группа Zigbee: {name}",
-      "device.zigbee_group.remove_members": "удалено из группы Zigbee: {name}"
+      "device.zigbee_group.remove_members": "удалено из группы Zigbee: {name}",
+      "config_subentry.create": "добавлено: {subject}",
+      "config_subentry.reconfigure": "перенастроено: {subject}"
     },
     "wizard": {
       "accessSub": "Выберите треугольник рядом с <code>light</code>, чтобы открыть группу света. В ней перечислены ваши осветительные устройства; выберите треугольник рядом с устройством, чтобы увидеть его объекты. Или введите название света в поле фильтра. Затем выберите <strong>W</strong> у света, который вы можете проверить, чтобы агент мог читать его состояние и управлять им. Позже можно добавить больше разрешений.",

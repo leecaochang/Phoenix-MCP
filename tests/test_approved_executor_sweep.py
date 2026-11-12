@@ -71,6 +71,8 @@ GATE_EXEMPT: dict[str, str] = {
     "install_esphome_firmware": "Needs a running Device Builder add-on.",
     "permit_zigbee_join": ZIGBEE,
     "reconfigure_integration": "Needs an integration with a reconfigure flow.",
+    "fix_repair": "Needs a fixable repair issue from an integration with a config entry.",
+    "set_integration_subentry": "Needs an integration that offers config subentries.",
     "reconfigure_zigbee_device": ZIGBEE,
     "remove_device": "Needs an integration that supports device removal.",
     "remove_zigbee_device": ZIGBEE,

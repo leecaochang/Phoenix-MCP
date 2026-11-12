@@ -891,7 +891,13 @@
       "zigbee_group.named.delete.body": "Tämä poistaa Zigbee-ryhmän {name}. Sen laitteet pysyvät pariliitettyinä, mutta niitä ei enää ohjata yhdessä.",
       "zigbee_group.named.delete.title": "Poista Zigbee-ryhmä {name}",
       "zigbee_group.named.remove_members.body": "Tämä poistaa laitteita Zigbee-ryhmästä {name}. Tarkista täsmällinen jäsenyysmuutos alla.",
-      "zigbee_group.named.remove_members.title": "Poista laitteita Zigbee-ryhmästä {name}"
+      "zigbee_group.named.remove_members.title": "Poista laitteita Zigbee-ryhmästä {name}",
+      "integration.subentry.create.title": "Lisää {subject} integraatioon {label}",
+      "integration.subentry.create.body": "Phoenix lisää kohteen {subject} integraatioon {label} Home Assistantin omalla prosessilla käyttäen alla näkyviä agentin arvoja. Tekoälyagentilla nämä asetukset ratkaisevat, mitkä Home Assistant -työkalut ja ohjeet se saa. Phoenix ei voi peruuttaa tätä.",
+      "integration.subentry.reconfigure.title": "Määritä integraation {label} {subject} uudelleen",
+      "integration.subentry.reconfigure.body": "Phoenix muuttaa integraation {label} kohdetta {subject} Home Assistantin omalla prosessilla käyttäen alla näkyviä agentin arvoja. Tekoälyagentilla nämä asetukset ratkaisevat, mitkä Home Assistant -työkalut ja ohjeet se saa. Phoenix ei voi peruuttaa tätä.",
+      "repair.fix.title": "Suorita korjaus: {label}",
+      "repair.fix.body": "Phoenix suorittaa integraation oman korjauksen tälle korjauskohteelle ja vastaa siihen alla näkyvillä agentin arvoilla. Integraatio päättää, mitä korjaus muuttaa, eikä Phoenix voi peruuttaa sitä."
     },
     "approvals": {
       "approve": "Hyväksy",
@@ -1160,7 +1166,7 @@
         "label": "Hallitse apureita"
       },
       "cap_integration_reconfigure": {
-        "description": "Lähetä tarkistetut tunnistetiedot, isäntänimet ja muut arvot Home Assistantin virallisen uudelleenmäärityksen työnkulun kautta. Phoenix ei voi automaattisesti peruuttaa muutoksia.",
+        "description": "Muuta integraatioita Home Assistantin omilla prosesseilla: uudelleenmääritys, aliyhteydet kuten tekoälyagentit ja korjaukset. Ei automaattista peruutusta.",
         "label": "Integraation uudelleenmääritys"
       },
       "cap_integration_write": {
@@ -1680,7 +1686,10 @@
       "zigbee_group.named.add_members": "Lisää laitteita Zigbee-ryhmään {name}",
       "zigbee_group.named.create": "Luo Zigbee-ryhmä {name}",
       "zigbee_group.named.delete": "Poista Zigbee-ryhmä {name}",
-      "zigbee_group.named.remove_members": "Poista laitteita Zigbee-ryhmästä {name}"
+      "zigbee_group.named.remove_members": "Poista laitteita Zigbee-ryhmästä {name}",
+      "integration.subentry.create": "Lisää {subject} integraatioon {label}",
+      "integration.subentry.reconfigure": "Määritä integraation {label} {subject} uudelleen",
+      "repair.fix": "Suorita korjaus: {label}"
     },
     "inject": {
       "mesaProfile": "MESA-profiili",
@@ -2593,7 +2602,9 @@
       "device.zigbee_group.add_members": "lisätty Zigbee-ryhmään: {name}",
       "device.zigbee_group.create": "loi Zigbee-ryhmän: {name}",
       "device.zigbee_group.delete": "poisti Zigbee-ryhmän: {name}",
-      "device.zigbee_group.remove_members": "poistettu Zigbee-ryhmästä: {name}"
+      "device.zigbee_group.remove_members": "poistettu Zigbee-ryhmästä: {name}",
+      "config_subentry.create": "lisäsi kohteen {subject}",
+      "config_subentry.reconfigure": "määritti kohteen {subject} uudelleen"
     },
     "wizard": {
       "accessKeyCreatedBanner": "Käyttöavain luotu. Voit nimetä sen uudelleen myöhemmin kohdasta Avaimen toiminnot. Sen vanhenemista ei voi muuttaa.",

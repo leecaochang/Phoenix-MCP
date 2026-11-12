@@ -408,7 +408,7 @@
       },
       "cap_integration_reconfigure": {
         "label": "Integration neu konfigurieren",
-        "description": "Überprüfte Anmeldedaten, Hosts und andere Werte über den offiziellen Neukonfigurations-Ablauf von Home Assistant übermitteln. Phoenix kann Änderungen nicht automatisch rückgängig machen."
+        "description": "Integrationen über die eigenen Abläufe von Home Assistant ändern: Neukonfiguration, Untereinträge wie KI-Agenten und Reparaturen. Kein automatisches Zurücksetzen."
       },
       "cap_lovelace_write": {
         "label": "Dashboards verwalten",
@@ -1605,7 +1605,10 @@
       "zigbee_group.named.add_members": "Geräte zur Zigbee-Gruppe {name} hinzufügen",
       "zigbee_group.named.create": "Zigbee-Gruppe {name} erstellen",
       "zigbee_group.named.delete": "Zigbee-Gruppe {name} entfernen",
-      "zigbee_group.named.remove_members": "Geräte aus der Zigbee-Gruppe {name} entfernen"
+      "zigbee_group.named.remove_members": "Geräte aus der Zigbee-Gruppe {name} entfernen",
+      "integration.subentry.create": "{subject} zur Integration {label} hinzufügen",
+      "integration.subentry.reconfigure": "{subject} der Integration {label} neu konfigurieren",
+      "repair.fix": "Reparatur ausführen: {label}"
     },
     "adminError": {
       "authRequired": "Authentifizierung erforderlich.",
@@ -2114,7 +2117,13 @@
       "zigbee_group.named.delete.body": "Dadurch wird die Zigbee-Gruppe {name} entfernt. Ihre Geräte bleiben gekoppelt, werden aber nicht mehr gemeinsam gesteuert.",
       "zigbee_group.named.delete.title": "Zigbee-Gruppe {name} entfernen",
       "zigbee_group.named.remove_members.body": "Dadurch werden Geräte aus der Zigbee-Gruppe {name} entfernt. Prüfen Sie unten die genaue Änderung der Mitgliedschaft.",
-      "zigbee_group.named.remove_members.title": "Geräte aus der Zigbee-Gruppe {name} entfernen"
+      "zigbee_group.named.remove_members.title": "Geräte aus der Zigbee-Gruppe {name} entfernen",
+      "integration.subentry.create.title": "{subject} zur Integration {label} hinzufügen",
+      "integration.subentry.create.body": "Phoenix fügt {subject} über den eigenen Ablauf von Home Assistant zu {label} hinzu und verwendet dabei die unten gezeigten Werte des Agenten. Bei einem KI-Agenten bestimmen diese Einstellungen, welche Home Assistant-Werkzeuge und Anweisungen er erhält. Phoenix kann dies nicht rückgängig machen.",
+      "integration.subentry.reconfigure.title": "{subject} der Integration {label} neu konfigurieren",
+      "integration.subentry.reconfigure.body": "Phoenix ändert {subject} von {label} über den eigenen Ablauf von Home Assistant und verwendet dabei die unten gezeigten Werte des Agenten. Bei einem KI-Agenten bestimmen diese Einstellungen, welche Home Assistant-Werkzeuge und Anweisungen er erhält. Phoenix kann dies nicht rückgängig machen.",
+      "repair.fix.title": "Reparatur ausführen: {label}",
+      "repair.fix.body": "Phoenix führt die integrationseigene Behebung dieser Reparatur aus und beantwortet sie mit den unten gezeigten Werten des Agenten. Was die Behebung ändert, entscheidet die Integration, und Phoenix kann es nicht rückgängig machen."
     },
     "common": {
       "after": "Nachher",
@@ -2431,7 +2440,9 @@
       "device.zigbee_group.add_members": "zur Zigbee-Gruppe hinzugefügt: {name}",
       "device.zigbee_group.create": "Zigbee-Gruppe erstellt: {name}",
       "device.zigbee_group.delete": "Zigbee-Gruppe entfernt: {name}",
-      "device.zigbee_group.remove_members": "aus der Zigbee-Gruppe entfernt: {name}"
+      "device.zigbee_group.remove_members": "aus der Zigbee-Gruppe entfernt: {name}",
+      "config_subentry.create": "{subject} hinzugefügt",
+      "config_subentry.reconfigure": "{subject} neu konfiguriert"
     },
     "mesaSuggestion": {
       "baseline_note": " Verboten entspricht der integrierten Grundlinie für diese Domäne, daher macht das Profil diese Absicht explizit. Um stattdessen die Agentensteuerung hinter einer Genehmigung durch den Administrator zuzulassen, wählen Sie vor dem Speichern im Profileditor Bestätigen; die Genehmigung gilt, wenn MESA erzwungen ist.",

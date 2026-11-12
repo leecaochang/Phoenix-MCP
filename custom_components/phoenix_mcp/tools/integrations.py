@@ -569,6 +569,13 @@ async def _tool_list_integrations(
         }
         if serial_usage and entry.entry_id in serial_usage:
             row["serial_ports"] = serial_usage[entry.entry_id]
+        if subentries := getattr(entry, "subentries", None):
+            # set_integration_subentry reconfigures one by its ID; titles get the title scrub.
+            row["subentries"] = [
+                {"subentry_id": sub.subentry_id, "subentry_type": sub.subentry_type,
+                 "title": redact_diagnostics(sub.title)}
+                for sub in subentries.values()
+            ]
         integrations.append(row)
     if query:
         integrations = [row for row in integrations
