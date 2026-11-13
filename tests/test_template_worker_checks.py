@@ -33,6 +33,7 @@ from custom_components.phoenix_mcp.template_limits import (
     TEMPLATE_WORKER_CPU_SECONDS, TEMPLATE_WORKER_MEMORY_BYTES, TEMPLATE_WORKER_STARTUP_CPU_SECONDS,
 )
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
+from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config, async_save_lovelace_config
 
 REAL_TEMPLATE_WORKER = True
 
@@ -120,6 +121,24 @@ async def test_a_costly_or_crashing_template_costs_only_the_worker(hass, tool, c
     assert outcome == "invalid_request", content
     assert stall < 0.5, stall
     assert not any("approval" in str(call) for call in data.store.method_calls)
+    text = content["content"][0]["text"]
+    assert "CPU budget" in text or "exited unexpectedly" in text or "too long to compile" in text, text
+
+
+@pytest.mark.parametrize("template", [POWER, COMPUTED_SURROGATE])
+async def test_a_dashboard_card_template_costs_only_the_worker(hass, template):
+    """A card's Jinja is checked before any approval, whose Preview would hand it to Core."""
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    layout = {"views": [{"title": "V", "cards": [{"type": "markdown", "content": "plain"}]}]}
+    await async_save_lovelace_config(hass, None, layout)
+    data = _data()
+    stall, (content, outcome, _) = await _longest_stall(_call_tool(
+        "add_dashboard_card", {"view_index": 0, "card": {"type": "markdown", "content": template}},
+        _key(cap_lovelace_write="confirm"), hass, data))
+    assert outcome == "invalid_request", content
+    assert stall < 0.5, stall
+    assert not any("approval" in str(call) for call in data.store.method_calls)
+    assert await async_get_lovelace_config(hass, None) == layout
     text = content["content"][0]["text"]
     assert "CPU budget" in text or "exited unexpectedly" in text or "too long to compile" in text, text
 

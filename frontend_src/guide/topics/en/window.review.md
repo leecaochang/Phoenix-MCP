@@ -31,6 +31,8 @@ How the change is shown depends on what the request does:
 - Deletes, renames, helpers, integrations and other system actions: why the request needs your approval, what happens, what uses the item and which Phoenix settings name it. Unfold **{{label:approvals.previewAllDetails}}** at the bottom to see everything.
 - Removing to-do items: each item with its status, and a warning that removal is permanent.
 
+Templates in a dashboard change were already tried in a separate process, and a change whose template failed there never reaches you.
+
 The other view choices are kept in this browser, and Changes uses them too.
 
 ## Stepping through requests {#step}

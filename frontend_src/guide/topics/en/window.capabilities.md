@@ -133,6 +133,8 @@ Reads and changes dashboards. Without it, the agent can't read dashboards either
 
 Cards run with the access of whoever opens the dashboard. So a change that adds a template, a custom card that runs code, or a picture or link from another site waits for your approval, even on Allow. So does an agent's restore of an earlier layout that brings such a card back. Ordinary cards follow the mode you set.
 
+Templates in a dashboard change are first tried in a separate process, and a change whose template fails there is refused.
+
 ### {{label:caps.cap_registry_write.label}} {#registry-write}
 
 Renames entities, changes their area, device, labels and categories, and deletes them. An entity's ID can change within its domain. Purging an entity's recorded history with `recorder.purge_entities` needs this capability too.

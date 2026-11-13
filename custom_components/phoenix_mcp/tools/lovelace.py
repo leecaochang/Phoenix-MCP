@@ -6,8 +6,9 @@ card ops and patch_dashboard carry only the change, because resending a whole da
 call blows weaker providers' output limits. All guard with an optimistic-lock content_hash, checked
 pre-gate and at apply time, and bind what their review showed, refused at apply time once changed.
 A layout is active content: cards render templates and fetch URLs with each viewer's authority, so
-a write adding any of that needs a person's review even under Allow (_active_content). This module
-never imports the dispatcher.
+a write adding any of that needs a person's review even under Allow (_active_content), and Jinja it
+adds must first pass the template worker (_dashboard_template_refusal). This module never imports
+the dispatcher.
 """
 
 from __future__ import annotations
@@ -49,6 +50,8 @@ from ..policy_engine import Permission, filter_service_response, is_sensitive_ke
 from ..access_key_store import AccessKeyRecord
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..request_authority import AuthorityChangedError, mark_dispatch_started, write_boundary
+from ..template_render import TemplateRenderError, async_check_caller_templates
+from ..template_scope import is_template
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _bind_reviewed,
@@ -586,6 +589,41 @@ def _active_content(written: Any, current: Any) -> list[str]:
     return labels[:_ACTIVE_CONTENT_SHOWN] + (["..."] if len(labels) > _ACTIVE_CONTENT_SHOWN else [])
 
 
+def _jinja_strings(layout: Any) -> set[str]:
+    """Every string in a layout, keys included, that holds a Jinja marker; never recursive."""
+    found: set[str] = set()
+    stack: list[Any] = [layout]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            stack.extend(node.keys())
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+        elif is_template(node):
+            found.add(node)
+    return found
+
+
+async def _dashboard_template_refusal(
+    written: Any, current: Any, hass: HomeAssistant, data: PhoenixData, tool_name: str,
+) -> tuple[dict, str, str] | None:
+    """Refuse a layout write whose added Jinja fails the template worker check, before any approval.
+
+    Only strings the stored layout does not already hold are checked. A refusal covers a lone
+    surrogate, more strings than one worker request takes, a dead or timed-out worker, an exceeded
+    limit and a slow compile; ``[[[ ]]]`` JavaScript alone is not Jinja and is not checked.
+    """
+    added = sorted(_jinja_strings(written) - _jinja_strings(current))
+    try:
+        await async_check_caller_templates(added, hass, data)
+    except TemplateRenderError as err:
+        return _tool_refused_before_write(
+            f"Templates in this dashboard change were refused before any review: {err} Nothing was written."
+        ), "invalid_request", tool_name
+    return None
+
+
 async def _tool_create_dashboard(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
@@ -1058,6 +1096,8 @@ async def _tool_set_dashboard_config(
         conflict = _cas_conflict(args.get("expected_hash"), current, "set_dashboard_config")
         if conflict is not None:
             return conflict
+    if refusal := await _dashboard_template_refusal(args.get("config"), current, hass, data, "set_dashboard_config"):
+        return refusal
     args = _bind_reviewed(args, current)
     active = _active_content(args.get("config"), current)
     blocked = await _gate(
@@ -1405,6 +1445,8 @@ async def _tool_dashboard_card(
     new_config, _, reason = _apply_dashboard_card_op(current, op, args)
     if reason is not None:
         return _tool_error(reason), "invalid_request", tool_name
+    if refusal := await _dashboard_template_refusal(new_config, current, hass, data, tool_name):
+        return refusal
     args = _bind_reviewed(args, _reviewed_card_target(current, op, args))
     active = _active_content(new_config, current)
     blocked = await _gate(
@@ -1669,6 +1711,8 @@ async def _tool_patch_dashboard(
     new_config, _, reason = _apply_dashboard_patch(current, args)
     if reason is not None:
         return _tool_error(reason), "invalid_request", tool
+    if refusal := await _dashboard_template_refusal(new_config, current, hass, data, tool):
+        return refusal
     args = _bind_reviewed(args, current)
     active = _active_content(new_config, current)
     blocked = await _gate(

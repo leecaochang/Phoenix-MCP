@@ -5,11 +5,14 @@
  * registers <hui-card> in this session, callers hide the Preview toggle.
  *
  * ACCEPTED RISK, on request only. A pending approval's card configuration is
- * written by an MCP client, and drawing it runs that card's code in the
- * reviewing administrator's authenticated session before the decision: a
- * custom card that evaluates JavaScript templates executes them with the
- * administrator's hass, and a built-in card may fetch URLs named in its
- * configuration. So the approval review always opens on the text diff, and
+ * written by an MCP client. Its added Jinja passed the server's template
+ * worker check before the approval was created, so Core's render_template
+ * only sees templates that neither stalled nor crashed the worker. Drawing
+ * the card still runs its code in the reviewing administrator's authenticated
+ * session before the decision: a custom card that evaluates JavaScript
+ * templates executes them in this browser with the administrator's hass, and
+ * a built-in card may fetch URLs named in its configuration. So the approval
+ * review always opens on the text diff, and
  * this renderer draws a pending card only after the administrator chooses
  * Preview for that request; the choice is never remembered for the next one.
  * Faithful rendering of every installed card is the requirement once asked

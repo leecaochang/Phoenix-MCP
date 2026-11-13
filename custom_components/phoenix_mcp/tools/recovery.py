@@ -42,7 +42,8 @@ from ..ws_dispatch import (
     WsDashboardNotFoundError, async_get_lovelace_config, WsDispatchError, async_ws_command,
 )
 from .lovelace import (
-    _active_content, _dashboard_layout_snapshot, _recoverable_dashboard_save, capturing_layout_delete, dashboard_registry_refused,
+    _active_content, _dashboard_layout_snapshot, _dashboard_template_refusal, _recoverable_dashboard_save,
+    capturing_layout_delete, dashboard_registry_refused,
     _dashboard_registry_snapshot,
 )
 
@@ -412,6 +413,10 @@ async def _tool_restore_dashboard_layout(
     # A snapshot can hold an active card a person has since removed: putting it back is the same
     # reach as writing it, so it needs the same review set_dashboard_config gives it under Allow.
     active = _active_content(snapshot["config"], current)
+    # An administrator's restore is its own review and creates no approval to preview.
+    if _restore_ctx.get() is None and (
+            refusal := await _dashboard_template_refusal(snapshot["config"], current, hass, data, tool)):
+        return refusal
 
     def diff() -> dict:
         return {"kind": "yaml_diff", **_summary("restore.dashboard_layout", label=url_path or "(default dashboard)"),
