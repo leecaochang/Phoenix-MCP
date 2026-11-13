@@ -102,13 +102,15 @@
 
 儲存自動化之前，智慧體可以檢查觸發條件是否會觸發（最多等待 30 秒），或條件目前是否成立。測試不會儲存任何內容，觸發條件在測試後即被移除。
 
-觸發條件或條件涉及的每個實體都必須是金鑰可讀取的。這包括條件範本中的實體、所指定裝置、區域、樓層或標籤下的每個實體，以及裝置觸發條件所屬裝置的每個實體。沒有任何內容的裝置、區域、樓層或標籤會像不存在一樣被拒絕。
+觸發條件或條件涉及的每個實體都必須是金鑰可讀取的。這包括其範本中的實體、所指定裝置、區域、樓層或標籤下的每個實體，以及裝置觸發條件所屬裝置的每個實體。沒有任何內容的裝置、區域、樓層或標籤會像不存在一樣被拒絕。
 
-條件中的範本與模板渲染在同一個個別受限程序中執行，作用於金鑰可讀取狀態的副本，並且必須直接指定實體，例如 `states('sensor.x')`。觸發條件中的範本會被拒絕，因為 Home Assistant 會在每次變化時執行它們。要檢查範本觸發條件，請把它的範本當作條件來測試。
+條件中的範本與模板渲染在同一個個別受限程序中執行，作用於金鑰可讀取狀態的副本。範本必須直接指定實體，例如 `states('sensor.x')`。
+
+觸發條件中的範本需要 {{label:caps.cap_automation_write.label}}，因為測試期間 Home Assistant 會在每次變化時執行它們。它們會先在那個個別程序中試執行，與新自動化中的範本一樣。沒有該能力時，請把範本當作條件來測試。
 
 事件、MQTT、Webhook 和對話觸發條件會被拒絕，因為任何金鑰的範圍都無法限制它們涉及的內容。
 
-允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
+允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；範本觸發條件還需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write)
 
 ## Home Companion {#home-companion}
 
@@ -218,7 +220,7 @@
 
 - 搜尋與發現會搜尋和描述實體、分區及其關聯方式，比較它們，並找出可用的操作。
 - 讀取登錄檔會列出分區、樓層、區域、裝置、分類、自動化、腳本、場景和輔助項目。
-- 自動化追蹤會讀取自動化的執行方式。檢查過金鑰無法讀取的實體的步驟不顯示任何值。自動化的設定和 webhook 的請求還需要 {{label:caps.cap_automation_write.label}} 或 {{label:caps.cap_script_write.label}}。
+- 自動化追蹤會讀取自動化的執行方式。檢查過金鑰無法讀取的實體的步驟不顯示任何值。自動化的設定，以及由 webhook 啟動的執行中的變數，還需要 {{label:caps.cap_automation_write.label}} 或 {{label:caps.cap_script_write.label}}。
 - 診斷會檢查設定並讀取系統健康狀況、修復項、無線網路和 ESPHome 概覽。
 
 只有在 YAML 設定不是拒絕存取時，設定檢查才會指出檔案和行號。

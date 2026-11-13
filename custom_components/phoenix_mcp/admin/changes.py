@@ -21,7 +21,7 @@ from ..esphome_yaml import redact_esphome_text
 from ..template_snapshots import template_snapshot
 from ..tools.esphome import _read_esphome_secrets
 from ..tools.helper import _public_helper_config, _storage_items
-from ..tools.restore import async_restore_configuration, async_restore_version, restore_refusal
+from ..tools.restore import async_restore_configuration, async_restore_version, restore_active_content, restore_refusal
 from ..view_base import PhoenixView, _err
 from ..ws_dispatch import async_ws_command
 from .common import _audit_admin, _ok, _parse_pagination, _read_body, require_admin
@@ -395,6 +395,10 @@ class PhoenixAdminVersionView(PhoenixView):
         body["restore_refusals"] = {
             side: restore_refusal(record, side, self.hass) for side in ("before", "after")
         }
+        # A dashboard side holding active content the layout no longer has: the administrator
+        # is the reviewer, so Changes warns before Restore instead of asking for an approval.
+        if active := await restore_active_content(record, self.hass):
+            body["restore_active_content"] = active
         return _ok(body, request_id=rid)
 
 

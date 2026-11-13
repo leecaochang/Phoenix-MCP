@@ -208,21 +208,21 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
     assert metrics == {
         "read_only": {
             "tool_count": 56,
-            "canonical_bytes": 67917,
-            "claude_bytes": 62278,
-            "openai_bytes": 63902,
+            "canonical_bytes": 67979,
+            "claude_bytes": 62340,
+            "openai_bytes": 63964,
         },
         "write_capable": {
             "tool_count": 102,
-            "canonical_bytes": 133316,
-            "claude_bytes": 122324,
-            "openai_bytes": 125282,
+            "canonical_bytes": 133378,
+            "claude_bytes": 122386,
+            "openai_bytes": 125344,
         },
         "announce_all": {
             "tool_count": 172,
-            "canonical_bytes": 212785,
-            "claude_bytes": 194651,
-            "openai_bytes": 199639,
+            "canonical_bytes": 212847,
+            "claude_bytes": 194713,
+            "openai_bytes": 199701,
         },
     }
     assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 172

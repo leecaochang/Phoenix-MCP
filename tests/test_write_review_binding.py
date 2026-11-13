@@ -318,3 +318,48 @@ class TestDashboardActiveContent:
         assert outcome == "pending_approval"
         diff = store.pending[0]["diff"] if isinstance(store.pending[0], dict) else store.pending[0].diff
         assert diff["reviewed_actions"] == ["https://example.invalid"]
+
+    @pytest.mark.parametrize("card", [
+        dict(TEMPLATE_CARD),
+        {"type": "custom:button-card", "name": "plain"},
+        {"type": "iframe", "url": "http://example.invalid/"},
+    ])
+    async def test_restore_bringing_back_a_removed_active_card_waits_for_approval(self, hass, card):
+        """A layout snapshot is checked like a write: putting back a removed active card needs review."""
+        await _seed_dashboard(hass, [dict(WEATHER), card])
+        data, store = _data()
+        key = _key(cap_lovelace_write="allow")
+        plain = {"views": [{"title": "V", "cards": [dict(WEATHER)]}]}
+        content, outcome, _ = await _call_tool("set_dashboard_config", {"config": plain}, key, hass, data)
+        assert outcome == "allowed" and store.pending == []
+        args = {"recovery_id": json.loads(_text(content))["recovery_id"], "side": "before"}
+        content, outcome, _ = await _call_tool("restore_configuration", args, key, hass, data)
+        receipt = json.loads(_text(content))
+        assert outcome == "allowed" and receipt["diff"]["reviewed_actions"]
+        args.update({field: receipt[field] for field in ("snapshot_digest", "target_fingerprint")})
+        _, outcome, _ = await _call_tool("restore_configuration", args, key, hass, data)
+        assert outcome == "pending_approval"
+        assert await async_get_lovelace_config(hass, None) == plain
+        approval = store.pending[0]
+        diff = approval["diff"] if isinstance(approval, dict) else approval.diff
+        assert diff["reviewed_actions"] == receipt["diff"]["reviewed_actions"]
+        # Positive control: the person's approval puts the reviewed layout back.
+        _, outcome, _ = await async_execute_approved_tool(_tool(approval), _args(approval), key, hass, data)
+        assert outcome == "allowed"
+        assert card in (await async_get_lovelace_config(hass, None))["views"][0]["cards"]
+
+    async def test_restore_without_new_active_content_stays_allow(self, hass):
+        await _seed_dashboard(hass, [dict(TEMPLATE_CARD), dict(WEATHER)])
+        data, store = _data()
+        key = _key(cap_lovelace_write="allow")
+        # Removing a plain card keeps the template card, so restoring the plain card adds no reach.
+        content, outcome, _ = await _call_tool(
+            "set_dashboard_config", {"config": {"views": [{"title": "V", "cards": [dict(TEMPLATE_CARD)]}]}}, key, hass, data)
+        assert outcome == "allowed"
+        args = {"recovery_id": json.loads(_text(content))["recovery_id"], "side": "before"}
+        receipt = json.loads(_text((await _call_tool("restore_configuration", args, key, hass, data))[0]))
+        assert "reviewed_actions" not in receipt["diff"]
+        args.update({field: receipt[field] for field in ("snapshot_digest", "target_fingerprint")})
+        _, outcome, _ = await _call_tool("restore_configuration", args, key, hass, data)
+        assert outcome == "allowed" and store.pending == []
+        assert WEATHER in (await async_get_lovelace_config(hass, None))["views"][0]["cards"]

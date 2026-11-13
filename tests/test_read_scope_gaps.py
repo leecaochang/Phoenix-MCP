@@ -144,10 +144,15 @@ def test_a_substitution_behind_a_credential_is_masked():
     assert _KEY in inline_secret_values(doc)
 
 
-def test_folded_and_non_ascii_names_are_refused():
-    for name in ("ſecrets.yaml", "ſECRETS.yaml", "packages/ſecrets.yaml", "eſphome/door.yaml", "ﬁle.yaml"):
-        assert not esphome_rel_path_ok(name)
-    assert esphome_rel_path_ok("door.yaml")
+def test_folded_names_and_hidden_characters_are_refused():
+    refused = (
+        "ſecrets.yaml", "ſECRETS.yaml", "packages/ſecrets.yaml", "secr\u200bets.yaml",
+        "packages/door\u202eamly.yaml", "door\u200d.yaml", "door\x07.yaml", "door\u0378.yaml",
+    )
+    for name in refused:
+        assert not esphome_rel_path_ok(name), name
+    for name in ("door.yaml", "packages/küche.yaml", "厨房/灯.yaml", "ﬁle.yaml", "eſphome/door.yaml"):
+        assert esphome_rel_path_ok(name), name
 
 
 @pytest.fixture
@@ -177,6 +182,25 @@ async def test_get_yaml_config_never_opens_a_secrets_file(hass, config_dir):
     (config_dir / "configuration.yaml").write_text("homeassistant:\n  name: Home\n")
     _content, outcome, _ = await _call_tool("get_yaml_config", {}, key, hass, _yaml_data())
     assert outcome == "allowed"
+
+
+async def test_get_yaml_config_reads_printable_non_ascii_names(hass, config_dir):
+    (config_dir / "secrets.yaml").write_text("alarm_code: 1234\n")
+    (config_dir / "packages").mkdir()
+    (config_dir / "packages" / "küche.yaml").write_text("light_level: 3\n")
+    (config_dir / "厨房.yaml").write_text("fan_speed: 2\n")
+    os.link(config_dir / "secrets.yaml", config_dir / "密钥.yaml")
+    key = _key(cap_yaml_edit="allow")
+    for name, value in (("packages/küche.yaml", "light_level"), ("厨房.yaml", "fan_speed")):
+        content, outcome, _ = await _call_tool("get_yaml_config", {"file": name}, key, hass, _yaml_data())
+        assert outcome == "allowed", name
+        assert value in content["content"][0]["text"]
+    hidden = ("ſecrets.yaml", "secr\u200bets.yaml", "secrets\u202e.yaml", "\u202esecrets.yaml", "密钥.yaml",
+              "eſphome/door.yaml")
+    for name in hidden:
+        content, outcome, _ = await _call_tool("get_yaml_config", {"file": name}, key, hass, _yaml_data())
+        assert outcome == "invalid_request", name
+        assert "1234" not in content["content"][0]["text"]
 
 
 async def test_the_audit_summary_answers_a_hidden_entity_as_not_found(hass):

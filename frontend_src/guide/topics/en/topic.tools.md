@@ -97,13 +97,15 @@ Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#con
 
 Before saving an automation, an agent can check that a trigger fires, waiting up to 30 seconds, or that a condition holds now. Nothing is saved, and the trigger is removed after the test.
 
-Every entity the trigger or condition reaches must be one the key can read. That includes entities in a condition's templates, every entity of a device, area, floor or label it targets, and every entity of a device trigger's device. A device, area, floor or label with nothing in it is refused like one that doesn't exist.
+Every entity the trigger or condition reaches must be one the key can read. That includes entities in its templates, every entity of a device, area, floor or label it targets, and every entity of a device trigger's device. A device, area, floor or label with nothing in it is refused like one that doesn't exist.
 
-A condition's templates run in the same separate, limited process as Template render, on a copy of the states the key can read. They must name entities directly, such as `states('sensor.x')`. Templates in a trigger are refused, because Home Assistant would run them on every change. To check a template trigger, test its template as a condition.
+A condition's templates run in the same separate, limited process as Template render, on a copy of the states the key can read. Templates must name entities directly, such as `states('sensor.x')`.
+
+Templates in a trigger need {{label:caps.cap_automation_write.label}}, because Home Assistant runs them on every change during the test. They're first tried in that separate process, like templates in a new automation. Without that capability, test the template as a condition.
 
 Event, MQTT, webhook and conversation triggers are refused, because no key's scope limits what they reach.
 
-Allowed by:[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
+Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read); template triggers also need [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write)
 
 ## Home Companion {#home-companion}
 
@@ -213,7 +215,7 @@ These tools only read. They help an agent find its way before it acts.
 
 - Search & discovery searches and describes entities, areas and how things relate, compares them, and finds what actions are available.
 - Registry read lists areas, floors, zones, devices, labels, automations, scripts, scenes and helpers.
-- Automation traces reads how automations ran. A step that checked an entity the key can't read shows no values. The automation's settings and a webhook's request also need {{label:caps.cap_automation_write.label}} or {{label:caps.cap_script_write.label}}.
+- Automation traces reads how automations ran. A step that checked an entity the key can't read shows no values. The automation's settings, and the variables of a run a webhook started, also need {{label:caps.cap_automation_write.label}} or {{label:caps.cap_script_write.label}}.
 - Diagnostics checks the configuration and reads system health, repairs, radio networks and the ESPHome overview.
 
 A configuration check names the file and line only when YAML configuration isn't Deny.

@@ -102,13 +102,15 @@
 
 保存自动化之前，智能体可以检查触发器是否会触发（最多等待 30 秒），或条件当前是否成立。测试不会保存任何内容，触发器在测试后即被移除。
 
-触发器或条件涉及的每个实体都必须是密钥可读取的。这包括条件模板中的实体、所指定设备、区域、楼层或标签下的每个实体，以及设备触发器所属设备的每个实体。没有任何内容的设备、区域、楼层或标签会像不存在一样被拒绝。
+触发器或条件涉及的每个实体都必须是密钥可读取的。这包括其模板中的实体、所指定设备、区域、楼层或标签下的每个实体，以及设备触发器所属设备的每个实体。没有任何内容的设备、区域、楼层或标签会像不存在一样被拒绝。
 
-条件中的模板与模板渲染在同一个单独的受限进程中运行，作用于密钥可读取状态的副本，并且必须直接指定实体，例如 `states('sensor.x')`。触发器中的模板会被拒绝，因为 Home Assistant 会在每次变化时运行它们。要检查模板触发器，请把它的模板作为条件来测试。
+条件中的模板与模板渲染在同一个单独的受限进程中运行，作用于密钥可读取状态的副本。模板必须直接指定实体，例如 `states('sensor.x')`。
+
+触发器中的模板需要 {{label:caps.cap_automation_write.label}}，因为测试期间 Home Assistant 会在每次变化时运行它们。它们会先在那个单独的进程中试运行，与新自动化中的模板一样。没有该能力时，请把模板作为条件来测试。
 
 事件、MQTT、Webhook 和对话触发器会被拒绝，因为任何密钥的范围都无法限制它们涉及的内容。
 
-允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
+允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；模板触发器还需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write)
 
 ## Home Companion {#home-companion}
 
@@ -218,7 +220,7 @@
 
 - 搜索与发现会搜索和描述实体、区域及其关联方式，比较它们，并找出可用的操作。
 - 读取注册表会列出区域、楼层、地点、设备、标签、自动化、脚本、场景和辅助元素。
-- 自动化跟踪会读取自动化的运行方式。检查过密钥无法读取的实体的步骤不显示任何值。自动化的设置和 webhook 的请求还需要 {{label:caps.cap_automation_write.label}} 或 {{label:caps.cap_script_write.label}}。
+- 自动化跟踪会读取自动化的运行方式。检查过密钥无法读取的实体的步骤不显示任何值。自动化的设置，以及由 webhook 启动的运行中的变量，还需要 {{label:caps.cap_automation_write.label}} 或 {{label:caps.cap_script_write.label}}。
 - 诊断会检查配置并读取系统健康状况、修复项、无线电网络和 ESPHome 概览。
 
 只有在 YAML 配置不为拒绝访问时，配置检查才会指出文件和行号。

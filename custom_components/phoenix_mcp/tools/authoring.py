@@ -1282,8 +1282,6 @@ def _scope_trace(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant, d
 # Where a trace step path starts in the stored configuration, by the key's both spellings.
 _TRACE_ROOTS = {"trigger": ("triggers", "trigger"), "condition": ("conditions", "condition"),
                 "action": ("actions", "action"), "sequence": ("sequence",)}
-# A webhook trigger's request: what was posted to it, which the authoring capability guards.
-_WEBHOOK_REQUEST_KEYS = ("json", "query", "data", "headers")
 
 
 def _trace_step_node(config: Any, path: str) -> Any:
@@ -1329,10 +1327,12 @@ def _scoped_run_detail(detail: dict, domain: str, access_key: AccessKeyRecord, h
 
     A step's result and changed variables go when the configuration it evaluated names an entity
     the key cannot read, or when that configuration cannot be located and any of it does. The stored
-    configuration, blueprint inputs and a webhook trigger's request need the authoring capability.
+    configuration, blueprint inputs and every variable of a webhook-triggered run need the
+    authoring capability, since any of those variables may be computed from the request.
     """
     nested = detail.get("extended_dict")
     extended: dict = nested if isinstance(nested, dict) else detail
+    webhook_run = _webhook_triggered(extended)
     config, inputs = extended.get("config"), extended.get("blueprint_inputs")
     whole_hidden: bool | None = None
     trace: dict[str, Any] = {}
@@ -1354,22 +1354,30 @@ def _scoped_run_detail(detail: dict, domain: str, access_key: AccessKeyRecord, h
     if effective_cap(access_key, capability) == CAP_DENY:
         scoped.pop("config", None)
         scoped.pop("blueprint_inputs", None)
-        for path, steps in trace.items():
-            trace[path] = [_without_webhook_request(step) for step in steps]
-        scoped["withheld"] = [f"The configuration and a webhook trigger's request need {capability}."]
+        if webhook_run:
+            for path, steps in trace.items():
+                trace[path] = [
+                    {key: item for key, item in step.items() if key != "changed_variables"}
+                    if isinstance(step, dict) else step
+                    for step in steps
+                ]
+        scoped["withheld"] = [
+            f"The configuration and the variables of a webhook-triggered run need {capability}."]
     return {**detail, "extended_dict": scoped} if extended is not detail else scoped
 
 
-def _without_webhook_request(step: Any) -> Any:
-    """A trace step whose webhook trigger variables keep no request body, query or headers."""
-    variables = step.get("changed_variables") if isinstance(step, dict) else None
-    if not isinstance(variables, dict):
-        return step
-    trigger = variables.get("trigger")
-    if not (isinstance(trigger, dict) and trigger.get("platform") == "webhook"):
-        return step
-    trigger = {key: item for key, item in trigger.items() if key not in _WEBHOOK_REQUEST_KEYS}
-    return {**step, "changed_variables": {**variables, "trigger": trigger}}
+def _webhook_triggered(extended: dict) -> bool:
+    """Whether a run was started by a webhook trigger, by its trigger step or its description."""
+    if extended.get("trigger") == "webhook":
+        return True
+    traces = extended.get("trace")
+    for steps in (traces.values() if isinstance(traces, dict) else ()):
+        for step in (steps if isinstance(steps, list) else ()):
+            variables = step.get("changed_variables") if isinstance(step, dict) else None
+            trigger = variables.get("trigger") if isinstance(variables, dict) else None
+            if isinstance(trigger, dict) and trigger.get("platform") == "webhook":
+                return True
+    return False
 
 
 def _resolve_trace_target(raw: str, hass: HomeAssistant) -> tuple[str | None, str | None]:

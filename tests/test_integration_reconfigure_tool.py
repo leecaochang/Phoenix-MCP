@@ -177,6 +177,27 @@ async def test_complete_config_entry_write_is_required(
     runner.assert_not_awaited()
 
 
+async def test_a_template_the_worker_refuses_never_reaches_the_flow(hass, reconfigure_env):
+    """A reconfigure form's template fields compile in Home Assistant, with no approval in Allow."""
+    data = await _data(hass)
+    runner, gate = AsyncMock(), AsyncMock(return_value=None)
+    with patch("custom_components.phoenix_mcp.tools.integrations.async_run_reconfigure_flow", runner), \
+            patch("custom_components.phoenix_mcp.tools.integrations._gate", gate):
+        content, outcome, _resource = await _call_tool(
+            "reconfigure_integration",
+            {"entry_id": reconfigure_env["entry"].entry_id,
+             "config": {"value_template": "{{ as_timestamp('\\ud800', 0) }}"}},
+            _access_key(reconfigure_env),
+            hass,
+            data,
+        )
+    assert outcome == "invalid_request", content
+    assert "Templates refused" in content["content"][0]["text"]
+    assert "lone surrogate" in content["content"][0]["text"]
+    runner.assert_not_awaited()
+    gate.assert_not_awaited()
+
+
 async def test_list_integrations_accepts_either_capability(hass, reconfigure_env):
     data = await _data(hass)
     content, outcome, _resource = await _call_tool(

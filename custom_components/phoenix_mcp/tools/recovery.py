@@ -17,8 +17,8 @@ from ..request_authority import AuthorityChangedError, check_request_authority, 
 from ..template_recovery import restore_template, validate_restore_scope
 from ..template_snapshots import async_import_template_flow, validate_snapshot, TEMPLATE_RECOVERY_ADAPTERS, template_snapshot
 from ..tool_common import (
-    _CAP_FORBIDDEN_MESSAGE, _check_authority_before_dispatch, _gate, _recovery_failure, _restore_ctx, _tool_error, _tool_success, _tool_uncertain,
-    _record_version, _version_content_payload,
+    _CAP_FORBIDDEN_MESSAGE, _check_authority_before_dispatch, _gate, _noting_reviewed_actions, _recovery_failure, _restore_ctx,
+    _tool_error, _tool_success, _tool_uncertain, _record_version, _version_content_payload,
 )
 from .blueprint import (
     _blueprint_denied, _blueprint_recovery_snapshot, _canonical_blueprint_source,
@@ -42,7 +42,7 @@ from ..ws_dispatch import (
     WsDashboardNotFoundError, async_get_lovelace_config, WsDispatchError, async_ws_command,
 )
 from .lovelace import (
-    _dashboard_layout_snapshot, _recoverable_dashboard_save, capturing_layout_delete, dashboard_registry_refused,
+    _active_content, _dashboard_layout_snapshot, _recoverable_dashboard_save, capturing_layout_delete, dashboard_registry_refused,
     _dashboard_registry_snapshot,
 )
 
@@ -409,16 +409,20 @@ async def _tool_restore_dashboard_layout(
         digest, fingerprint = content_hash(snapshot), content_hash(target)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
+    # A snapshot can hold an active card a person has since removed: putting it back is the same
+    # reach as writing it, so it needs the same review set_dashboard_config gives it under Allow.
+    active = _active_content(snapshot["config"], current)
+
+    def diff() -> dict:
+        return {"kind": "yaml_diff", **_summary("restore.dashboard_layout", label=url_path or "(default dashboard)"),
+                "target": {"type": "dashboard", "id": snapshot["resource_id"], "label": url_path or "(default dashboard)"},
+                "before": json.dumps(filter_service_response(current, access_key, hass), default=str) if current else None,
+                "after": json.dumps(filter_service_response(snapshot["config"], access_key, hass), default=str)}
     if args.get("snapshot_digest") is None and args.get("target_fingerprint") is None:
         return _tool_success(json.dumps({
             "status": "needs_confirmation", "recovery_id": record["id"], "side": side,
             "snapshot_digest": digest, "target_fingerprint": fingerprint,
-            "diff": {
-                "kind": "yaml_diff", **_summary("restore.dashboard_layout", label=url_path or "(default dashboard)"),
-                "target": {"type": "dashboard", "id": snapshot["resource_id"], "label": url_path or "(default dashboard)"},
-                "before": json.dumps(filter_service_response(current, access_key, hass), default=str) if current else None,
-                "after": json.dumps(filter_service_response(snapshot["config"], access_key, hass), default=str),
-            },
+            "diff": {**diff(), "reviewed_actions": active} if active else diff(),
         }, default=str)), "allowed", tool
     if args.get("snapshot_digest") != digest or args.get("target_fingerprint") != fingerprint:
         return _tool_error("The selected dashboard snapshot or target changed; request a fresh restore receipt."), "invalid_request", tool
@@ -427,10 +431,7 @@ async def _tool_restore_dashboard_layout(
     blocked = await _gate(
         "cap_lovelace_write", access_key, hass, data, tool_name=tool, args=bound,
         request_id=request_id, client_ip=client_ip,
-        diff=lambda: {"kind": "yaml_diff", **_summary("restore.dashboard_layout", label=url_path or "(default dashboard)"),
-                      "target": {"type": "dashboard", "id": snapshot["resource_id"], "label": url_path or "(default dashboard)"},
-                      "before": json.dumps(filter_service_response(current, access_key, hass), default=str) if current else None,
-                      "after": json.dumps(filter_service_response(snapshot["config"], access_key, hass), default=str)},
+        diff=_noting_reviewed_actions(diff, active), review=bool(active),
     )
     if blocked is not None:
         return blocked

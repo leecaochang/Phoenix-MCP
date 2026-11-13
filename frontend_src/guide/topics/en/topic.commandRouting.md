@@ -9,7 +9,7 @@ Simple commands like "turn off the kitchen light" don't need a full AI model. Wh
 2. The decision provider, if you use one. It handles the commands sentence matching missed.
 3. Your AI model, for everything else, just as without command handling.
 
-Once a step carries out a command, the later steps aren't used.
+Once a step carries out a command, the later steps aren't used. When sentence matching or the decision provider changes something, the reply names the action that ran, so you hear what happened.
 
 Related: [Decision provider](guide:window.settingsProviders#decision-provider)
 
@@ -33,8 +33,6 @@ The decision provider picks the action from your words. Phoenix checks that you 
 - Disarming or triggering an alarm
 
 Phoenix asks you to say these commands plainly instead, like "unlock the front door", so sentence matching handles them.
-
-When the decision provider runs any other command, the reply names the action that ran, so you hear what happened.
 
 ## Limits {#limits}
 

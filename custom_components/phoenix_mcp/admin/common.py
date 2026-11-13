@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Collection, Callable
 from datetime import datetime
-import asyncio
 import functools
 import json
 import logging
@@ -20,6 +19,7 @@ from homeassistant.util.dt import as_utc
 from ..const import ADMIN_BODY_READ_TIMEOUT_SECONDS, DOMAIN, MAX_REQUEST_BODY_BYTES, RUNTIME_READY_KEY
 from ..data import PhoenixData
 from ..durable_storage import MesaSaveError
+from ..helpers import read_bounded_body
 from ..tool_input import parse_json_body
 from ..view_base import _err
 from ..time_text import parse_datetime
@@ -93,32 +93,12 @@ async def _read_body(
     if request.content_length is not None and request.content_length > limit:
         return _err("request_too_large", "Request body too large.", 413, request_id, key="bodyTooLarge")
 
-    # aiohttp's StreamReader.read(n) is a SHORT read: it returns as soon as the
-    # buffer has ANY data, up to n bytes, not once n bytes have actually
-    # arrived. A single read(MAX_REQUEST_BODY_BYTES + 1) call would therefore
-    # silently truncate a larger body that arrived across multiple TCP/chunked
-    # segments (an intermittent "Invalid JSON body." on bigger payloads, e.g.
-    # importing many MESA profiles). Loop until EOF, accumulating chunks and
-    # bailing as soon as the cap is exceeded.
-    chunks: list[bytes] = []
-    total = 0
     try:
-        async with asyncio.timeout(ADMIN_BODY_READ_TIMEOUT_SECONDS):
-            while True:
-                chunk = await request.content.read(limit - total + 1)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                total += len(chunk)
-                if total > limit:
-                    return _err("request_too_large", "Request body too large.", 413, request_id, key="bodyTooLarge")
-                at_eof = getattr(request.content, "at_eof", None)
-                if callable(at_eof) and at_eof():
-                    break
+        body_bytes = await read_bounded_body(request.content, limit, ADMIN_BODY_READ_TIMEOUT_SECONDS)
     except Exception:
         return _err("invalid_request", "Failed to read request body.", 400, request_id, key="bodyUnreadable")
-
-    body_bytes = b"".join(chunks)
+    if len(body_bytes) > limit:
+        return _err("request_too_large", "Request body too large.", 413, request_id, key="bodyTooLarge")
 
     if not body_bytes:
         return {}
@@ -126,7 +106,7 @@ async def _read_body(
     try:
         parsed = parse_json_body(body_bytes)
     except (ValueError, RecursionError):  # Invalid JSON or text, numeric overflow, or excessive nesting.
-        # Diagnostic only (never logs the body content itself). The loop above
+        # Diagnostic only (never logs the body content itself). The read above
         # reads to EOF, so a byte count short of Content-Length points at
         # something upstream of Phoenix MCP (a proxy or tunnel), not this reader.
         _LOGGER.warning(

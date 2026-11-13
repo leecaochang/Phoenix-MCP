@@ -2,7 +2,7 @@
 // canonical tag (namespace.qualifier) displayed dot-free. Entry is canonical-only:
 // only tags present in the registry can be committed.
 import React, { useId, useMemo, useRef, useState } from "react";
-import { t } from "../i18n";
+import { foldForSearch, t } from "../i18n";
 import { isImeKey } from "../utils/ime";
 
 const MAX_DEFAULT = 6;
@@ -37,15 +37,15 @@ export function TagInput({
   const atMax = value.length >= max;
 
   // Match on the START of any word (namespace or qualifier, split on . and _),
-  // and only after at least one character is typed.
+  // and only after at least one character is typed. Case and accents fold, so "kuche" finds "küche".
   const matches = useMemo(() => {
-    const terms = query.trim().toLowerCase().split(/[\s._]+/).filter(Boolean);
+    const terms = foldForSearch(query.trim()).split(/[\s._]+/).filter(Boolean);
     if (terms.length === 0) return [];
     const selected = new Set(value);
     return canonicalTags
       .filter((tag) => !selected.has(tag))
       .filter((tag) => {
-        const words = tag.toLowerCase().split(/[._]/).filter(Boolean);
+        const words = foldForSearch(tag).split(/[._]/).filter(Boolean);
         return terms.every((term) => words.some((w) => w.startsWith(term)));
       })
       .slice(0, 10);

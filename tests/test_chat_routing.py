@@ -290,9 +290,8 @@ async def test_chat_local_dispatches_once_without_either_model(hass, executing_c
     call.assert_awaited_once_with('light', service, {'entity_id': ['light.test_desk'], **extra}, blocking=True, return_response=False)
     provider.stream_turn.assert_not_called()
     decision.assert_not_called()
-    assert messages[-1] == {'role': 'assistant', 'content': (
-        'Home Assistant reports the requested state.' if service == 'turn_off' else
-        'Command sent. Home Assistant has not yet confirmed the requested state.')}
+    assert messages[-1] == {'role': 'assistant', 'content': await decision_write_reply(
+        hass, 'light', service, matched=service == 'turn_off')}
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
     assert data.agent_recovery.records(access_key.id) == []
     assert data.store.get_settings().voice_agent_routing_mode == 'off'
@@ -315,7 +314,7 @@ async def test_chat_read_then_explicit_command_uses_local_routing(hass, executin
     followup.stream_turn.assert_not_called()
     call.assert_awaited_once_with('light', 'turn_on', {'entity_id': ['light.test_desk']}, blocking=True, return_response=False)
     assert result[:2] == messages
-    assert result[-1]['content'] == 'Command sent. Home Assistant has not yet confirmed the requested state.'
+    assert result[-1]['content'] == await decision_write_reply(hass, 'light', 'turn_on', matched=False)
     decision.assert_not_called()
 
 
@@ -825,12 +824,12 @@ async def test_chat_hybrid_recovery_covers_effect_and_response_delivery(hass, hy
     assert len(data.agent_recovery.records(access_key.id)) == 1
 
 
-@pytest.mark.parametrize('language,alias,sentence,reply', [
-    ('zh-Hans', '台灯', '打开台灯', '命令已发送。Home Assistant 尚未确认请求的状态。'),
-    ('es', 'Lámpara', 'enciende la lámpara', 'Comando enviado. Home Assistant aún no ha confirmado el estado solicitado.'),
+@pytest.mark.parametrize('language,alias,sentence', [
+    ('zh-Hans', '台灯', '打开台灯'),
+    ('es', 'Lámpara', 'enciende la lámpara'),
 ])
 @pytest.mark.parametrize('routing_mode', ['local', 'auto'])
-async def test_selected_language_local_chat_executes_without_a_model(hass, executing_chat, language, alias, sentence, reply, routing_mode):
+async def test_selected_language_local_chat_executes_without_a_model(hass, executing_chat, language, alias, sentence, routing_mode):
     await executing_chat[0].store.async_patch_settings(agentcli_routing_mode=routing_mode)
     from custom_components.phoenix_mcp.tools import service as service_tools
     data, _ = executing_chat
@@ -841,7 +840,7 @@ async def test_selected_language_local_chat_executes_without_a_model(hass, execu
           patch.object(DecisionProvider, '_request') as remote):
         provider, _, messages = await chat_turn(hass, executing_chat,
             [{'role': 'user', 'content': sentence}], language=language)
-    assert messages[-1]['content'] == reply
+    assert messages[-1]['content'] == await decision_write_reply(hass, 'light', 'turn_on', matched=False, language=language)
     call.assert_awaited_once_with('light', 'turn_on', {'entity_id': ['light.test_desk']}, blocking=True, return_response=False)
     provider.stream_turn.assert_not_called()
     remote.assert_not_called()
@@ -985,7 +984,7 @@ async def test_mixed_chat_routes_fixed_numeric_command_and_preserves_history(has
     call.assert_awaited_once_with('light', 'turn_on', {'entity_id': ['light.test_desk'], 'brightness_pct': 37},
                                  blocking=True, return_response=False)
     assert result[:2] == CONTEXT_HISTORY
-    assert result[-1]['content'] == 'Command sent. Home Assistant has not yet confirmed the requested state.'
+    assert result[-1]['content'] == await decision_write_reply(hass, 'light', 'turn_on', matched=False)
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
     assert not data.command_routing.chat_history._entries
     assert not data.agent_recovery.records(access_key.id)

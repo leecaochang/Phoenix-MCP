@@ -1,7 +1,7 @@
 """A run's trace detail tells a key no more than its scope and capabilities allow.
 
 Step results name no entity, so a step that evaluated a hidden entity loses its values; the
-stored configuration and a webhook's request need the authoring capability.
+stored configuration and a webhook-triggered run's variables need the authoring capability.
 """
 
 from __future__ import annotations
@@ -110,3 +110,31 @@ async def test_configuration_and_webhook_request_need_the_authoring_capability(h
     assert "body-marker" in text
     # A webhook ID is a credential to Home Assistant itself, so even an author reads it elsewhere.
     assert WEBHOOK_ID not in text
+
+
+async def test_variables_computed_from_a_webhook_request_need_the_authoring_capability(hass, hass_client_no_auth):
+    assert await async_setup_component(hass, "http", {})
+    assert await async_setup_component(hass, "webhook", {})
+    assert await async_setup_component(hass, "automation", {"automation": [{
+        "id": "hook_vars", "alias": "Hook vars",
+        "triggers": [{"trigger": "webhook", "webhook_id": WEBHOOK_ID, "allowed_methods": ["POST"]}],
+        "variables": {"top_note": "{{ trigger.json.note | upper }}"},
+        "actions": [{"variables": {"step_note": "{{ trigger.json.note ~ '-step' }}"}}],
+    }]})
+    await hass.async_block_till_done()
+    client = await hass_client_no_auth()
+    assert (await client.post(f"/api/webhook/{WEBHOOK_ID}", json={"note": "derived-marker"})).status == 200
+    await hass.async_block_till_done()
+
+    caps = dict(PERSONA_DEFINITIONS[PERSONA_READ_ONLY])
+    reader = _key({"automation": "YELLOW"}, **caps)
+    text, detail = await _run_detail(hass, reader, "automation.hook_vars")
+    for leaked in ("derived-marker", "DERIVED-MARKER", "derived-marker-step"):
+        assert leaked not in text
+    steps = [step for steps in detail["trace"].values() for step in steps]
+    assert steps and all("changed_variables" not in step for step in steps)
+    assert detail["withheld"]
+
+    author = _key({"automation": "YELLOW"}, **{**caps, "cap_automation_write": "confirm"})
+    text, detail = await _run_detail(hass, author, "automation.hook_vars")
+    assert "DERIVED-MARKER" in text and "derived-marker-step" in text

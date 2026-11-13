@@ -106,6 +106,10 @@ async def _longest_stall(call) -> tuple[float, object]:
     ("validate_automation_or_script", {"cap_diagnostics": "allow"},
      {"type": "automation", "config": _automation("{{ ('%c' % 55296) | as_timestamp(0) > 0 }}")}),
     ("create_automation", {"cap_automation_write": "confirm"}, {"config": _automation(POWER)}),
+    ("test_trigger", {"cap_config_read": "allow", "cap_automation_write": "confirm"},
+     {"trigger": {"trigger": "template", "value_template": POWER}, "timeout": 1}),
+    ("test_trigger", {"cap_config_read": "allow", "cap_automation_write": "allow"},
+     {"trigger": {"trigger": "template", "value_template": COMPUTED_SURROGATE}, "timeout": 1}),
     ("create_script", {"cap_script_write": "confirm"},
      {"script_id": "probe", "config": {"sequence": [{"condition": "template", "value_template": POWER}]}}),
 ])

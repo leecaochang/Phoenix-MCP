@@ -24,7 +24,9 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from aiohttp import web
+from homeassistant.core import HomeAssistant
 
+from .approvals import REASON_OAUTH_SIGN_IN_ENDED, async_cancel_sign_in_approvals
 from .audit import generate_request_id
 from .const import (
     DOMAIN, OAUTH_CODE_LENGTH, OAUTH_CODE_PREFIX, OAUTH_FORM_MAX_BYTES, OAUTH_FORM_READ_TIMEOUT_SECONDS,
@@ -343,12 +345,13 @@ class PhoenixOAuthTokenView(PhoenixView):
         _audit(data, request, rid, access_key, "allowed", _code_app(code))
         return _json(_tokens_body(tokens), rid=rid)
 
-    @staticmethod
-    async def _end_reused(request: web.Request, data: PhoenixData, rid: str, grant_id: str) -> None:
+    async def _end_reused(self, request: web.Request, data: PhoenixData, rid: str, grant_id: str) -> None:
         removed = await data.oauth_grants.async_remove(grant_id)
         access_key = data.store.get_access_key_by_id(removed.access_key_id) if removed else None
         if access_key is not None and removed is not None:
             _audit(data, request, rid, access_key, "denied", removed.audit_label())
+        if removed is not None:
+            await _cancel_ended_sign_in_approvals(self.hass, data, removed.access_key_id, removed.id)
 
     async def _refresh(self, request: web.Request, data: PhoenixData, form: dict[str, str], rid: str) -> web.Response:
         raw = form.get("refresh_token", "")
@@ -361,6 +364,8 @@ class PhoenixOAuthTokenView(PhoenixView):
         )
         if outcome == "issued" and tokens is not None:
             return _json(_tokens_body(tokens), rid=rid)
+        if outcome == "reused" and grant is not None:
+            await _cancel_ended_sign_in_approvals(self.hass, data, grant.access_key_id, grant.id)
         # Reuse, a wrong client or an ended sign-in: recorded against the sign-in's key
         # whenever the token names one.
         if grant is not None:
@@ -368,6 +373,22 @@ class PhoenixOAuthTokenView(PhoenixView):
             if access_key is not None:
                 _audit(data, request, rid, access_key, "denied", grant.audit_label())
         return _oauth_error("invalid_grant", rid=rid)
+
+
+async def _cancel_ended_sign_in_approvals(
+    hass: HomeAssistant, data: PhoenixData, access_key_id: str, grant_id: str,
+) -> None:
+    """Cancel the approvals a sign-in ended by token reuse or revocation queued, inline waits too.
+
+    Best effort: the sign-in is already gone and approve rechecks it, so a failure here never
+    changes the token or revoke endpoint's answer.
+    """
+    try:
+        await async_cancel_sign_in_approvals(
+            hass, data, access_key_id, REASON_OAUTH_SIGN_IN_ENDED, sign_in_id=grant_id,
+        )
+    except Exception:
+        _LOGGER.warning("Could not cancel the approvals of an ended OAuth sign-in", exc_info=True)
 
 
 class PhoenixOAuthRevokeView(PhoenixView):
@@ -403,6 +424,7 @@ class PhoenixOAuthRevokeView(PhoenixView):
                 await data.oauth_grants.async_remove(grant.id)
             except DurableStorageError:
                 return _oauth_error("temporarily_unavailable", 503, rid)
+            await _cancel_ended_sign_in_approvals(self.hass, data, grant.access_key_id, grant.id)
         return _json({}, rid=rid)
 
 

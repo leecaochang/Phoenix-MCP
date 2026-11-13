@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import pytest
 from jinja2.exceptions import TemplateAssertionError
+from homeassistant.helpers.template import Template
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp.template_sandbox import build_permitted_states, render_template_snapshot
+from custom_components.phoenix_mcp.template_sandbox import (
+    ScrubbedState, build_permitted_states, render_template_snapshot,
+)
 from custom_components.phoenix_mcp.access_key_store import (
     PermissionNode,
     PermissionTree,
@@ -45,6 +48,23 @@ def two_states(hass):
     hass.states.async_set("sensor.allowed", "42")
     hass.states.async_set("sensor.secret", "topsecret")
     return hass
+
+
+@pytest.mark.parametrize("attributes", [{"unit_of_measurement": "%"}, {}, {"unit_of_measurement": ""}])
+async def test_state_with_unit_matches_core_outside_sensor_rounding(hass, attributes):
+    """Core rounds a sensor to its display precision; elsewhere the two agree exactly."""
+    hass.states.async_set("input_number.level", "42.0", attributes)
+    expected = Template("{{ states.input_number.level.state_with_unit }}", hass).async_render(parse_result=False)
+    access_key = AccessKeyRecord(
+        id="t2", name="unit", access_key_hash="x", created_at=utcnow(), created_by="admin",
+        permissions=PermissionTree(entities={"input_number.level": PermissionNode(state="YELLOW")}),
+    )
+    permitted = build_permitted_states(access_key, hass)
+    detached = {entity_id: ScrubbedState.from_dict(state.as_dict()) for entity_id, state in permitted.items()}
+    for snapshot in (permitted, detached):
+        assert render_template_snapshot("{{ states.input_number.level.state_with_unit }}", snapshot) == expected
+        assert render_template_snapshot(
+            "{% for s in states.input_number %}{{ s.state_with_unit }}{% endfor %}", snapshot) == expected
 
 
 def test_permitted_entity_renders(two_states):

@@ -193,13 +193,11 @@ def esphome_availability(hass: HomeAssistant) -> EsphomeAvailability:
     )
 
 
-def _esphome_actions_for_entity(
-    hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str, writable: bool
-) -> list[dict]:
+def _esphome_actions_for_entity(hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str) -> list[dict]:
     """The owning ESPHome device's user-defined actions, as find_available_actions rows.
 
     Availability follows write scope over the whole device and the capability call_service asks for, not
-    ``writable``, the described entity's own. `args` is included because these schemas are device-defined.
+    the described entity's own. `args` is included because these schemas are device-defined.
     """
     entry = esphome_entry_for_entity(hass, entity_id)
     if entry is None:

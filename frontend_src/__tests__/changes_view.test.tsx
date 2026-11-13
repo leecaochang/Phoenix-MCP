@@ -326,6 +326,21 @@ describe("Comparison and Restore", () => {
     await waitFor(() => expect(within(comparisonWindow()).getByRole("button", { name: "Next Record" })).toBeEnabled());
   });
 
+  it("warns before restoring active content the layout no longer has", async () => {
+    const edit = version({ action: "edit", has_before: true });
+    const newer = version({ id: "v2", action: "edit" });
+    vi.mocked(api.listVersions).mockResolvedValueOnce(page([edit])).mockResolvedValue(page([newer, edit]));
+    vi.mocked(api.getVersion).mockResolvedValue({ ...record(edit), restore_active_content: { before: ["{{ }}", "custom:button-card"], after: [] } });
+    renderChanges();
+    await choose("My automation");
+    fireEvent.click(openRestore()[0]);
+    const confirm = within(comparisonWindow()).getByRole("group", { name: "Restore" });
+    expect(confirm.textContent).toContain("Needs your review because it adds: {{ }}, custom:button-card");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel Restore" }));
+    fireEvent.click(openRestore()[1]);
+    expect(within(comparisonWindow()).getByRole("group", { name: "Restore" }).textContent).not.toContain("Needs your review");
+  });
+
   it("names the reason the server gives for a side it would refuse", async () => {
     const edit = version({ action: "edit", has_before: true, resource_type: "entity", resource_id: "light.gone" });
     const newer = version({ id: "v2", action: "edit", resource_type: "entity", resource_id: "light.gone" });

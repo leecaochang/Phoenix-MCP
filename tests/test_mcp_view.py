@@ -2992,6 +2992,27 @@ async def test_inline_confirm_reports_rejection_without_retry(hass):
 
 
 @pytest.mark.asyncio
+async def test_inline_confirm_sees_a_decision_made_before_it_subscribed(hass):
+    """A decision whose event fired before the wait listened is read from the record at once."""
+    import asyncio
+    from types import SimpleNamespace
+    from custom_components.phoenix_mcp.tool_common import _await_inline_confirm
+
+    data = _inline_wait_data([_approval_record("rejected", closure_reason="admin_cancelled")])
+    access_key = _make_physical_access_key("confirm")
+    access_key.confirm_inline_wait_seconds = 60
+    approval = SimpleNamespace(id="appr-1", tool_name="create_scene", expires_at=None)
+
+    # No event fires: without the re-read the wait would hold for its whole minute.
+    async with asyncio.timeout(2):
+        content, outcome, _ = await _await_inline_confirm(hass, data, access_key, approval)
+
+    assert content.get("isError") is True
+    assert json.loads(content["content"][0]["text"])["status"] == "rejected"
+    assert outcome == "pending_approval"
+
+
+@pytest.mark.asyncio
 async def test_inline_confirm_falls_back_to_pending_on_timeout(hass):
     """No decision inside the window falls back to the normal pending reply.
 

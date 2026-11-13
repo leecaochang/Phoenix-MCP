@@ -23,6 +23,7 @@ from custom_components.phoenix_mcp.const import VERSION_STORAGE_VERSION
 from custom_components.phoenix_mcp.version_store import VersionRecord, VersionStore
 from custom_components.phoenix_mcp.policy_engine import resolve_esphome_user_service
 from custom_components.phoenix_mcp.ws_dispatch import ALLOWED_WS_COMMANDS
+from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 from tests.runtime_fixtures import DEVICE_YAML, FakeBuilder, esphome_access_key as _access_key, esphome_call as _call, esphome_device_info as _device_info, esphome_entry as _esphome_entry, esphome_json as _json, esphome_runtime as _runtime, esphome_yaml_access_key as _yaml_access_key
 
@@ -359,6 +360,21 @@ class TestUserServiceDryRun:
         body = _json(content)
         assert body["would_execute"] is False
         assert body["predicted_outcome"] == "denied"
+
+
+    async def test_mesa_without_a_runtime_predicts_denied(self, hass, esphome_entries):
+        """The device action is refused while a configured MESA has no runtime, so the preview says so."""
+        _esphome_entry(hass, esphome_entries, runtime=_runtime(services={1: _user_service()}))
+        hass.states.async_set("sensor.rf_blaster1_rssi", "-60")
+        data = MagicMock()
+        data.mesa = None
+        data.store.get_settings.return_value = SimpleNamespace(mesa_mode="enforced")
+        content, _, _ = await _call_tool("dry_run_service", {"service": {
+            "domain": "esphome", "name": "rf_blaster1_transmit_raw", "data": {"timings": [1], "repeats": 1}}},
+            _access_key(cap_search="allow"), hass, data)
+        body = _json(content)
+        assert body["predicted_outcome"] == "denied" and body["would_execute"] is False
+        assert {b["rule"] for b in body["mesa"]["blocked"]} == {"mesa:runtime_unavailable"}
 
 
 class TestUserServiceDiscovery:

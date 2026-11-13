@@ -1,4 +1,4 @@
-import { t } from "../i18n";
+import { foldForSearch, t } from "../i18n";
 
 const SOURCE_LABEL_KEYS: Record<string, string> = {
   agentcli: "agentchat.title",
@@ -23,9 +23,9 @@ export function isNamedAuditSource(source: string): boolean {
  * Network addresses and ambiguous text pass through unchanged.
  */
 export function auditSourceFilterValue(value: string): string {
-  const query = value.trim().toLowerCase();
+  const query = foldForSearch(value.trim());
   if (!query) return value;
   const matches = Object.entries(SOURCE_LABEL_KEYS)
-    .filter(([, key]) => t(key).toLowerCase().includes(query));
+    .filter(([, key]) => foldForSearch(t(key)).includes(query));
   return matches.length === 1 ? matches[0][0] : value;
 }

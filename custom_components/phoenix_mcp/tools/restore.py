@@ -18,7 +18,7 @@ from ..helpers import content_hash
 from ..template_recovery import restore_template
 from ..template_snapshots import validate_snapshot
 from ..tool_common import _restore_ctx, _tool_error, _tool_success, _tool_uncertain
-from ..ws_dispatch import async_ws_command
+from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from .authoring import (
     _execute_create_automation, _execute_create_scene, _execute_create_script,
     _execute_edit_automation, _execute_edit_scene, _execute_edit_script,
@@ -36,7 +36,7 @@ from .helper import (
 from .integrations import _CONFIG_ENTRY_METADATA_SNAPSHOT, _execute_set_integration
 from .labels import restore_label_version
 from .locations import restore_location_version
-from .lovelace import _execute_set_dashboard_config
+from .lovelace import _active_content, _execute_set_dashboard_config
 from .recovery import _execute_restore_configuration, _tool_restore_configuration
 from .registry import _execute_set_device, _execute_set_entity
 
@@ -128,6 +128,24 @@ def restore_refusal(record, side: str, hass: HomeAssistant) -> str | None:
         if all(registry.async_get(candidate) is None for candidate in candidates):
             return "entity_missing"
     return None
+
+
+async def restore_active_content(record: Any, hass: HomeAssistant) -> dict[str, list[str]]:
+    """For a dashboard version, what restoring each side adds that renders with viewers' authority.
+
+    The same check set_dashboard_config and restore_configuration review. An administrator's restore
+    is its own review, so Changes shows this as a warning instead of asking for an approval. An
+    unreadable current layout compares against nothing, so every active item is listed.
+    """
+    if record.resource_type != "dashboard":
+        return {}
+    try:
+        current = await async_get_lovelace_config(
+            hass, None if record.resource_id == "lovelace" else record.resource_id, storage_only=True)
+    except WsDispatchError:
+        current = None
+    return {side: _active_content(value, current) if isinstance(value, dict) else []
+            for side, value in (("before", record.before), ("after", record.after))}
 
 
 async def async_restore_version(

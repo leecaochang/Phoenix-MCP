@@ -439,6 +439,36 @@ async def test_restore_refusals_name_the_sides_restore_would_refuse(hass):
 
 
 @pytest.mark.asyncio
+async def test_a_dashboard_version_names_the_active_content_restore_would_add():
+    """The administrator reviews the restore, so the read warns instead of asking for an approval."""
+    data = _data()
+    template = {"type": "markdown", "content": "{{ states('lock.front') }}"}
+    plain = {"views": [{"cards": [{"type": "markdown", "content": "Plain"}]}]}
+    rec = await data.versions.record(
+        resource_type="dashboard", resource_id="lovelace", action="edit",
+        before={"views": [{"cards": [template, {"type": "custom:button-card"}]}]}, after=plain)
+    view = PhoenixAdminVersionView()
+    view.hass = _hass(data)
+    with patch_readers("custom_components.phoenix_mcp.tools.restore.async_get_lovelace_config",
+                       AsyncMock(return_value=plain)) as read:
+        body = _body(await view.get(_request(), version_id=rec.id))
+    read.assert_awaited_once_with(view.hass, None, storage_only=True)
+    assert body["restore_active_content"] == {"before": ["custom:button-card", "{{ }}"], "after": []}
+    # Content the current layout already holds adds no reach.
+    with patch_readers("custom_components.phoenix_mcp.tools.restore.async_get_lovelace_config",
+                       AsyncMock(return_value=rec.before)):
+        body = _body(await view.get(_request(), version_id=rec.id))
+    assert body["restore_active_content"] == {"before": [], "after": []}
+
+
+async def test_other_versions_carry_no_active_content_warning():
+    data = _data()
+    rec = await _seed(data)
+    view = PhoenixAdminVersionView()
+    view.hass = _hass(data)
+    assert "restore_active_content" not in _body(await view.get(_request(), version_id=rec.id))
+
+
 async def test_a_version_reads_with_its_restore_refusals():
     data = _data()
     await data.versions.record(resource_type="automation", resource_id="a", action="create",

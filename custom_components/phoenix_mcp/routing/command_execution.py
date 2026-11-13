@@ -143,9 +143,8 @@ async def _dispatch_command(hass: HomeAssistant, data: Any, access_key: Any, pla
     warnings = payload.get("mesa_advisory", [])
     advisory = " ".join(warning for warning in warnings if isinstance(warning, str)) if isinstance(warnings, list) else ""
     matched = payload.get("state_verification") == "matched"
-    # A decision provider chose this operation, not the user's words: say which one ran.
-    operation = (await async_service_label(hass, arguments["service"]["domain"], arguments["service"]["name"], language)
-                 if "decision_category" in plan else None)
+    # Name the operation that ran, whether local recognition or a decision provider chose it.
+    operation = await async_service_label(hass, arguments["service"]["domain"], arguments["service"]["name"], language)
     if operation is not None:
         text = voice_text(language, "local_operation_matched" if matched else "local_operation_unconfirmed", operation=operation)
     else:

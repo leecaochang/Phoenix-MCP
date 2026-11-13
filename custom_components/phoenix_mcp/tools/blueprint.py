@@ -35,6 +35,7 @@ from ..redaction import redact_secrets_in_text
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..request_authority import AuthorityChangedError, write_boundary
 from ..access_key_store import AccessKeyRecord
+from ..authoring_validation import async_template_refusal
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _gate,
@@ -207,6 +208,31 @@ def _validate_blueprint_source(domain: str, content: str) -> str | None:
     except Exception as err:  # never leak an unexpected type
         _LOGGER.debug("blueprint validation error", exc_info=True)
         return f"blueprint validation failed: {err}"
+    return None
+
+
+def _parsed_blueprint(content: str) -> Any:
+    """Blueprint source as parsed YAML, or None when it does not parse."""
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.util import yaml as yaml_util
+
+    try:
+        return yaml_util.parse_yaml(content)
+    except (HomeAssistantError, YamlParseError, RecursionError):
+        return None
+
+
+async def _blueprint_template_refusal(
+    hass: HomeAssistant, content: str, data: PhoenixData, tool_name: str,
+) -> tuple[dict, str, str] | None:
+    """Refuse blueprint templates the template worker cannot compile and trial-render in time.
+
+    Home Assistant compiles them when an automation or script built on the blueprint is
+    validated, which create and edit of those do before any approval exists.
+    """
+    parsed = await hass.async_add_executor_job(_parsed_blueprint, content)
+    if refusal := await async_template_refusal(parsed, hass, data):
+        return _tool_error(refusal), "invalid_request", tool_name
     return None
 
 
@@ -445,6 +471,9 @@ async def _tool_create_blueprint(
         args, hass, "create_blueprint", needs_content=True)
     if pre is not None:
         return pre
+    pre = await _blueprint_template_refusal(hass, args["content"], data, "create_blueprint")
+    if pre is not None:
+        return pre
     pre = await _blueprint_recovery_precheck(hass, target, args["domain"], rel, args["content"], "create_blueprint")
     if pre is not None:
         return pre
@@ -470,6 +499,9 @@ async def _tool_edit_blueprint(
         return denied
     pre, target, rel = await _blueprint_write_precheck(
         args, hass, "edit_blueprint", needs_content=True)
+    if pre is not None:
+        return pre
+    pre = await _blueprint_template_refusal(hass, args["content"], data, "edit_blueprint")
     if pre is not None:
         return pre
     current = await _read_blueprint_source(hass, target)

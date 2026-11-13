@@ -2994,10 +2994,11 @@ async def _tool_set_helper_settings(
         args.get("expected_hash"), _readable_settings(_settings_store(entry, mechanism), access_key, hass), tool)
     if conflict is not None:
         return conflict
+    # A settings form with template fields (Template, History stats and others) compiles them on
+    # the event loop, with no approval in Allow mode: the worker checks them first.
+    if template_refusal := await async_template_refusal(args["settings"], hass, data):
+        return _tool_error(template_refusal), "invalid_request", tool
     if entry.domain == "template":
-        # The settings form compiles templates on the event loop: the worker checks them first.
-        if template_refusal := await async_template_refusal(args["settings"], hass, data):
-            return _tool_error(template_refusal), "invalid_request", tool
         refusal = await _preflight_template_settings(hass, entry, args["settings"], access_key)
         if refusal is not None:
             return refusal

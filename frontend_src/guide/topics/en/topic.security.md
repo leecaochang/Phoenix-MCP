@@ -87,7 +87,7 @@ To keep everything at home, use a local model on Ollama and no decision provider
 
 An Ollama server signed in to ollama.com can also run cloud models, whose names end in `cloud`. Their requests leave your home. Phoenix never switches a local account to one by itself, but uses one you pick. Set `OLLAMA_NO_CLOUD=1` on the server to turn them off.
 
-Phoenix reaches a local Ollama server over plain HTTP, without a password. Anyone on your network who can intercept that traffic can read the home data and write the model's replies. On a network you don't fully trust, put Ollama behind a reverse proxy with HTTPS and use its `https://` address.
+Phoenix reaches a local Ollama server over plain HTTP, without a password. Anyone on your network who can intercept that traffic can read the home data and write the model's replies.
 
 Related: [{{label:workspace.aiProviders}}](guide:window.settingsProviders)
 
@@ -111,7 +111,7 @@ If an agent misbehaves, turn on the [{{label:settings.killSwitchCard}}](guide:to
 
 ## Removing Phoenix completely {#removing}
 
-Deleting the integration revokes the keys but keeps settings, logs and archived keys. To remove Phoenix's data too, use **{{label:settings.wipeCoreLabel}}** first.
+Deleting the integration revokes the keys but keeps settings, logs and archived keys. It puts back any log level an agent raised for a set time straight away, and deletes the file that tracks them. To remove Phoenix's data too, use **{{label:settings.wipeCoreLabel}}** first.
 
 That leaves safety copies, the calendar change journal, dashboard resource records and, unless you choose [{{label:settings.wipeMesaLabel}}](guide:window.settingsSafety#wipe-mesa), MESA profiles. After you delete the integration, delete any remaining files that start with `phoenix_mcp` in the `.storage` folder.
 

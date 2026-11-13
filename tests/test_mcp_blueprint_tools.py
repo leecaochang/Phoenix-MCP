@@ -17,6 +17,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import utcnow
 
+from custom_components.phoenix_mcp import template_render
 from custom_components.phoenix_mcp.tools import restore as restore_tools
 from custom_components.phoenix_mcp.tools import blueprint as blueprint_tools
 from custom_components.phoenix_mcp.data import PhoenixData
@@ -53,6 +54,30 @@ async def test_unsafe_yaml_never_reaches_blueprint_approval(hass, bp_env, tool, 
         result, outcome, _ = await _call(tool, args, _access_key(cap_blueprint_write="confirm"), hass)
     assert outcome == "invalid_request"
     assert "YAML" in _text(result)
+    gate.assert_not_awaited()
+
+
+@pytest.mark.parametrize("tool", ["create_blueprint", "edit_blueprint"])
+@pytest.mark.parametrize("worker,expected", [
+    (None, "lone surrogate"),
+    ((1, b""), "exited unexpectedly"),
+])
+async def test_a_blueprint_template_the_worker_refuses_never_reaches_approval(hass, bp_env, tool, worker, expected):
+    """Validating an automation built on the blueprint compiles its templates in Home Assistant."""
+    if tool == "edit_blueprint":
+        _write_existing(bp_env, rel="author/templated.yaml")
+    template = "{{ as_timestamp('\\\\ud800', 0) }}" if worker is None else "{{ now() }}"
+    body = VALID + f"variables:\n  when: \"{template}\"\n"
+
+    async def failing(payload, hass, data):
+        return worker
+
+    with patch.object(blueprint_tools, "_gate", new_callable=AsyncMock) as gate, \
+            patch.object(template_render, "_run_worker", failing if worker else template_render._run_worker):
+        result, outcome, _ = await _call(tool, {"domain": "automation", "path": "author/templated.yaml",
+                                                "content": body}, _access_key(), hass)
+    assert outcome == "invalid_request", result
+    assert "Templates refused" in _text(result) and expected in _text(result), _text(result)
     gate.assert_not_awaited()
 
 

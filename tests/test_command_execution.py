@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.runtime_fixtures import patch_readers
+from tests.runtime_fixtures import decision_write_reply, patch_readers
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
@@ -66,8 +66,9 @@ async def test_local_voice_dispatches_exactly_once_without_model(hass, local_hom
     with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, build, provider = await run_voice(hass, data, sentence, language="en")
-    assert answer == ("Home Assistant reports the requested state." if service == "turn_off" else
-                      "Command sent. Home Assistant has not yet confirmed the requested state.")
+    # A locally recognised write names its operation, as a decision-chosen one does.
+    assert answer == await decision_write_reply(hass, "light", service, matched=service == "turn_off")
+    assert answer.startswith(("Action: ", "Action sent: "))
     call.assert_awaited_once_with("light", service, {"entity_id": [entity_id], **extra}, blocking=True, return_response=False)
     build.assert_not_called()
     provider.assert_not_called()
@@ -313,19 +314,20 @@ async def test_approval_rechecks_current_mesa_restrictions(hass, local_home):
     call.assert_not_called()
 
 
-@pytest.mark.parametrize("language,selection,alias,sentence,reply", [
-    ("zh-Hans", "zh-Hans", "台灯", "打开台灯", "命令已发送。Home Assistant 尚未确认请求的状态。"),
-    ("zh-CN", "zh-Hans", "台灯", "打开台灯", "命令已发送。Home Assistant 尚未确认请求的状态。"),
-    ("es-ES", "es", "Lámpara", "enciende la lámpara", "Comando enviado. Home Assistant aún no ha confirmado el estado solicitado."),
+@pytest.mark.parametrize("language,selection,alias,sentence", [
+    ("zh-Hans", "zh-Hans", "台灯", "打开台灯"),
+    ("zh-CN", "zh-Hans", "台灯", "打开台灯"),
+    ("es-ES", "es", "Lámpara", "enciende la lámpara"),
 ])
-async def test_enabled_language_runs_real_local_voice_once(hass, local_home, language, selection, alias, sentence, reply):
+async def test_enabled_language_runs_real_local_voice_once(hass, local_home, language, selection, alias, sentence):
     data, _, entity_id = local_home
     await data.store.async_patch_settings(command_routing_languages=[selection])
     er.async_get(hass).async_update_entity(entity_id, aliases={alias})
     with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, build, provider = await run_voice(hass, data, sentence, language=language)
-    assert answer == reply
+    # The reply names the operation in the conversation language, from HA's own service name.
+    assert answer == await decision_write_reply(hass, "light", "turn_on", matched=False, language=selection)
     call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id]}, blocking=True, return_response=False)
     build.assert_not_called()
     provider.assert_not_called()
@@ -400,7 +402,7 @@ async def test_success_reply_observes_actual_report_without_resending(hass, loca
         with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
               patch.object(type(hass.services), 'async_call', AsyncMock(side_effect=dispatched)) as call):
             answer, _, provider = await run_voice(hass, data, 'set the desk lamp brightness to 37 percent', language='en')
-        assert answer == 'Home Assistant reports the requested state.'
+        assert answer == await decision_write_reply(hass, 'light', 'turn_on', matched=True)
         call.assert_awaited_once()
         provider.assert_not_called()
         assert data.agent_recovery.records(access_key.id) == []

@@ -87,7 +87,7 @@ Phoenix 在 Home Assistant 內執行，但你的 AI 模型不一定如此。Phoe
 
 登入 ollama.com 的 Ollama 伺服器還能執行雲端模型，它們的名稱以 `cloud` 結尾。這些模型的請求會離開你的家。Phoenix 不會自行把本機帳戶切換到雲端模型，但會使用你選擇的雲端模型。在伺服器上設定 `OLLAMA_NO_CLOUD=1` 可關閉它們。
 
-Phoenix 透過不加密、無需密碼的一般 HTTP 存取本機 Ollama 伺服器。網路中任何能攔截這些流量的人都能讀取家庭資料並偽造模型的回覆。在你不完全信任的網路中，請把 Ollama 放在啟用 HTTPS 的反向代理後面，並使用它的 `https://` 位址。
+Phoenix 透過不加密、無需密碼的一般 HTTP 存取本機 Ollama 伺服器。網路中任何能攔截這些流量的人都能讀取家庭資料並偽造模型的回覆。
 
 相關：[{{label:workspace.aiProviders}}](guide:window.settingsProviders)
 
@@ -111,7 +111,7 @@ Phoenix 透過不加密、無需密碼的一般 HTTP 存取本機 Ollama 伺服�
 
 ## 完全移除 Phoenix {#removing}
 
-刪除整合會撤銷金鑰，但保留設定、日誌和已歸檔的金鑰。要同時移除 Phoenix 的資料，請先使用 **{{label:settings.wipeCoreLabel}}**。
+刪除整合會撤銷金鑰，但保留設定、日誌和已歸檔的金鑰。它會立即恢復智慧體限時調高的日誌層級，並刪除記錄這些層級的檔案。要同時移除 Phoenix 的資料，請先使用 **{{label:settings.wipeCoreLabel}}**。
 
 這樣仍會留下安全副本、行事曆變更記錄、儀表板資源記錄，以及 MESA 策略（除非你選擇了[{{label:settings.wipeMesaLabel}}](guide:window.settingsSafety#wipe-mesa)）。刪除整合後，請刪除 `.storage` 資料夾中所有以 `phoenix_mcp` 開頭的剩餘檔案。
 

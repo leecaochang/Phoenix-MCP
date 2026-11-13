@@ -18,6 +18,7 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
+from custom_components.phoenix_mcp.mesa import async_apply_mesa_to_call
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
@@ -397,12 +398,15 @@ class TestDryRunService:
         hass.states.async_set(e.entity_id, "off", {})
         called = []
         hass.services.async_register("light", "turn_on", lambda c: called.append(c))
+        data = _data()
+        data.store.get_settings.return_value = SimpleNamespace(mesa_mode="off")
         content, outcome, _ = await _call(
-            "dry_run_service", {"domain": "light", "service": "turn_on", "entity_id": "light.kitchen"}, _access_key(), hass)
+            "dry_run_service", {"domain": "light", "service": "turn_on", "entity_id": "light.kitchen"},
+            _access_key(), hass, data)
         assert outcome == "allowed"
         body = _json(content)
         assert body["resolved_entities"] == ["light.kitchen"]
-        assert body["mesa"] is None  # no mesa runtime in this data mock
+        assert body["mesa"] is None  # MESA is off
         assert body["predicted_outcome"] == "allowed"
         assert called == []  # nothing executed
 
@@ -460,6 +464,30 @@ class TestDryRunService:
                 {"domain": "light", "service": "turn_on", "entity_id": "light.den"}, _access_key(), hass, data)
         body = _json(content)
         assert body["predicted_outcome"] == "pending_approval"
+
+
+    @pytest.mark.parametrize("mode", ["enforced", "advisory"])
+    async def test_mesa_without_a_runtime_predicts_the_refusal_the_call_gives(self, hass, mode):
+        """A configured MESA whose runtime failed refuses the call, so the preview must not say allowed."""
+        entry = MockConfigEntry(domain="test_integration", entry_id="e_dry3")
+        entry.add_to_hass(hass)
+        e = er.async_get(hass).async_get_or_create(
+            "light", "test_integration", "uid_dry3", config_entry=entry, suggested_object_id="hall")
+        hass.states.async_set(e.entity_id, "off", {})
+        data = _data(mesa=None)
+        data.store.get_settings.return_value = SimpleNamespace(mesa_mode=mode)
+        content, _, _ = await _call(
+            "dry_run_service", {"domain": "light", "service": "turn_on", "entity_id": "light.hall"},
+            _access_key(), hass, data)
+        body = _json(content)
+        assert body["predicted_outcome"] == "denied"
+        assert [b["rule"] for b in body["mesa"]["blocked"]] == ["mesa:runtime_unavailable"]
+        assert body["mesa"]["blocked"][0]["entity_id"] == "light.hall"
+        # The call it predicts is refused at the same gate.
+        outcome = await async_apply_mesa_to_call(
+            hass, data, _access_key(), domain="light", service="turn_on", service_data={},
+            entities=["light.hall"], request_id="r", client_ip=None, session_id="s")
+        assert outcome.decision == "deny"
 
 
 # --- validate_config ---

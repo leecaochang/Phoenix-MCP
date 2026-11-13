@@ -1,9 +1,10 @@
 """Test an automation trigger or condition against the live home before it is saved.
 
 test_trigger registers trigger definitions with Home Assistant's own trigger helpers for a short,
-bounded wait and reports the first firing; test_condition evaluates one condition now. Neither lets
-Home Assistant compile or render a caller template: test_trigger refuses templates, which would run
-on every state change, and test_condition renders each one in the disposable template worker over
+bounded wait and reports the first firing; test_condition evaluates one condition now. test_trigger
+admits templates only for a key whose cap_automation_write is not denied, after the template worker
+has compiled and trial-rendered them, as authoring does, since such a key could save the same
+template in an automation; test_condition renders each one in the disposable template worker over
 the key's scrubbed states and hands Home Assistant only a reference to the result. Both read
 only what the key may read: every entity a definition names, by ID, registry ID or literal template
 lookup, every entity a target expands to and every entity of a device trigger's device needs Read,
@@ -33,6 +34,7 @@ from homeassistant.helpers.template import Template
 from homeassistant.loader import async_get_integration
 
 from ..access_key_store import AccessKeyRecord
+from ..authoring_validation import async_template_refusal
 from ..capability import effective_cap
 from ..const import (
     AUTOMATION_TEST_CONDITIONS, AUTOMATION_TEST_MAX_TRIGGERS, AUTOMATION_TEST_TRIGGERS,
@@ -67,8 +69,9 @@ _UNSCOPED = (
 )
 _MAX_RESULT_DEPTH = 12
 _TRIGGER_TEMPLATES = (
-    "Templates cannot be tested with test_trigger: Home Assistant would run them on every state "
-    "change. Check a template's current value with test_condition, as a template condition."
+    "Templates cannot be tested with test_trigger by this access key: it may not write automations, "
+    "and Home Assistant would run them on every state change. Check a template's current value "
+    "with test_condition, as a template condition."
 )
 # Caller variable names start with a letter, so these never collide with one.
 _RESULT_VARIABLE = "_phoenix_template_{}"
@@ -239,7 +242,7 @@ def _trigger_kinds(triggers: list) -> list[str]:
         if "." not in kind and kind not in AUTOMATION_TEST_TRIGGERS:
             raise _Refused(
                 f"The {kind} trigger cannot be tested here. Supported: "
-                f"{', '.join(sorted(AUTOMATION_TEST_TRIGGERS - {'template'}))}, and entity triggers such as "
+                f"{', '.join(sorted(AUTOMATION_TEST_TRIGGERS))}, and entity triggers such as "
                 "light.turned_on with an entity_id target."
             )
         kinds.append(kind)
@@ -362,9 +365,13 @@ def _timeout(value: Any) -> int:
 
 
 async def _tool_test_trigger(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: wait a bounded time for trigger definitions to fire, and report the first firing."""
+    """MCP tool: wait a bounded time for trigger definitions to fire, and report the first firing.
+
+    Templates need cap_automation_write not denied and pass the template worker check before
+    Home Assistant validates them.
+    """
     if effective_cap(access_key, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "test_trigger"
     raw = args.get("trigger")
@@ -374,8 +381,9 @@ async def _tool_test_trigger(
             f"trigger must be one trigger object or a list of 1 to {AUTOMATION_TEST_MAX_TRIGGERS}."
         ), "invalid_request", "test_trigger"
     scope = _Scope()
+    templated = bool(caller_template_strings(triggers))
     try:
-        if caller_template_strings(triggers):
+        if templated and effective_cap(access_key, "cap_automation_write") == CAP_DENY:
             raise _Refused(_TRIGGER_TEMPLATES)
         variables = _variables(args)
         kinds = _trigger_kinds(triggers)
@@ -385,6 +393,8 @@ async def _tool_test_trigger(
             return _tool_error(refusal), "not_found" if refusal is _NOT_FOUND else "denied", "test_trigger"
     except _Refused as err:
         return _tool_error(str(err)), "invalid_request", "test_trigger"
+    if templated and (refusal := await async_template_refusal(triggers, hass, data)):
+        return _tool_error(refusal), "invalid_request", "test_trigger"
     try:
         validated = await ha_trigger.async_validate_trigger_config(hass, cv.TRIGGER_SCHEMA(triggers))
     except (vol.Invalid, HomeAssistantError) as err:

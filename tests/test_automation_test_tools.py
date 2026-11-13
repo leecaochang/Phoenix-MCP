@@ -17,6 +17,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
+from custom_components.phoenix_mcp import template_render
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 from custom_components.phoenix_mcp.tools import automation_test
@@ -402,6 +403,51 @@ async def test_a_trigger_template_is_refused_before_home_assistant_sees_it(home,
         content, outcome = await _call("test_trigger", {"trigger": trigger, "timeout": 1}, _key(), home)
     assert outcome == "invalid_request", content
     assert "Templates cannot be tested with test_trigger" in _text(content)
+    assert "test_condition" in _text(content)
+    validate.assert_not_called()
+
+
+async def test_a_key_that_may_write_automations_tests_a_template_trigger(home):
+    key = _key(cap_automation_write="confirm")
+    content, outcome = await _fire_after_registration(
+        home, {"trigger": {"trigger": "template", "value_template": "{{ is_state('light.lamp', 'on') }}"}, "timeout": 5},
+        key, lambda: home.states.async_set(LAMP, "on", {"brightness": 10, "access_token": "abc"}))
+    assert outcome == "allowed", content
+    body = _body(content)
+    assert body["fired"] is True
+    assert body["trigger"]["entity_id"] == LAMP
+    assert "access_token" not in json.dumps(body)
+
+
+async def test_a_template_trigger_still_needs_read_on_every_entity_it_looks_up(home):
+    key = _key(cap_automation_write="allow")
+    for target in (HIDDEN, MISSING):
+        with patch.object(automation_test.ha_trigger, "async_validate_trigger_config") as validate:
+            content, outcome = await _call("test_trigger", {"trigger": {
+                "trigger": "template", "value_template": f"{{{{ is_state('{target}', 'on') }}}}"}, "timeout": 1}, key, home)
+        assert outcome == "not_found", content
+        validate.assert_not_called()
+    content, outcome = await _call("test_trigger", {"trigger": {
+        "trigger": "template", "value_template": "{{ states('light.' ~ 'vault') == 'on' }}"}, "timeout": 1}, key, home)
+    assert outcome == "invalid_request" and "computed" in _text(content), content
+
+
+@pytest.mark.parametrize("worker,trigger,expected", [
+    (None, {"trigger": "template", "value_template": "{{ as_timestamp('\\ud800', 0) }}"}, "lone surrogate"),
+    ((1, b""), {"trigger": "template", "value_template": "{{ is_state('light.lamp', 'on') }}"}, "exited unexpectedly"),
+    ((0, b'{"compile_seconds": 9}'), {"trigger": "state", "entity_id": LAMP, "for": "{{ '00:00:01' }}"}, "too long to compile"),
+])
+async def test_a_trigger_template_the_worker_refuses_never_reaches_home_assistant(home, worker, trigger, expected):
+    async def failing(payload, hass, data):
+        return worker
+
+    with patch.object(automation_test.ha_trigger, "async_validate_trigger_config") as validate, \
+            patch.object(template_render, "_run_worker", failing if worker else template_render._run_worker):
+        content, outcome = await _call("test_trigger", {"trigger": trigger, "timeout": 1},
+                                       _key(cap_automation_write="allow"), home)
+    assert outcome == "invalid_request", content
+    assert "Templates refused before Home Assistant validated them" in _text(content)
+    assert expected in _text(content), content
     validate.assert_not_called()
 
 

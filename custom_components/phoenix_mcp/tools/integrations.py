@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from ..access_key_store import AccessKeyRecord
+from ..authoring_validation import async_template_refusal
 from ..config_recovery import ConfigurationRecoveryError
 from ..const import (
     CAP_DENY, DOMAIN, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, MESA_MODE_OFF,
@@ -759,6 +760,10 @@ async def _tool_reconfigure_integration(
             "invalid_request",
             entry_id,
         )
+    # Template fields of the flow's form compile on the event loop, with no approval in Allow
+    # mode: the worker checks them first.
+    if refusal := await async_template_refusal(args["config"], hass, data):
+        return _tool_error(refusal), "invalid_request", entry_id
     blocked = await _integration_gate(
         tool_name="reconfigure_integration",
         args=args,

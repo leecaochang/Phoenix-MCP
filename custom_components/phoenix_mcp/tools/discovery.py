@@ -62,7 +62,10 @@ from ..device_semantics import (
 from ..routing.intent_recognition import RecognitionUnavailable, async_recognize
 from ..service_targets import call_reach, CallReach, dedicated_tool_refusal, gate_entity_ids, merge_speech_players, named_script_refusal, required_secondary_targets, script_input_selector_error, script_input_selectors, secondary_target_error, speech_target_refusal, unreadable_group_error, unregistered_target_error, template_fields, template_fields_error, unbound_service_targets, unbound_target_error, unsupported_secondary_targets, visible_reach, visible_reach_warnings
 from ..tool_contracts import normalize_tool_args, state_projection
-from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_call
+from ..mesa import (
+    MESA_UNAVAILABLE_REASON, MESA_UNAVAILABLE_RULE, async_semantic_moments, build_expand_target,
+    entity_control_mode, evaluate_service_call,
+)
 from ..mesa_core.trigger_validator import entities_by_role
 from ..mesa_tools import MESA_TOOLS_CAP, authored_restrictions
 from ..helpers import parse_time_param as _parse_time_param
@@ -2030,7 +2033,7 @@ async def _tool_find_available_actions(
     # An ESPHome device's user-defined actions live in the esphome domain, not the
     # entity's own, so the loop above cannot surface them. They are authorized by
     # the device's write scope, matching _execute_call_service.
-    actions.extend(_esphome_actions_for_entity(hass, access_key, entity_id, writable))
+    actions.extend(_esphome_actions_for_entity(hass, access_key, entity_id))
 
     body: dict = {
         "entity_id": entity_id,
@@ -3255,6 +3258,16 @@ def _cap_outcome(mode: str) -> str:
     return "allowed"
 
 
+def _mesa_unavailable_preview(visible: list[str]) -> dict:
+    """The MESA part of a dry run while MESA is configured without a runtime: every visible target blocked."""
+    return {
+        "allowed": [], "confirm": [],
+        "blocked": [{"entity_id": e, "rule": MESA_UNAVAILABLE_RULE, "reason": MESA_UNAVAILABLE_REASON}
+                    for e in visible],
+        "warnings": [],
+    }
+
+
 async def _tool_dry_run_service(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -3368,6 +3381,12 @@ async def _tool_dry_run_service(
                     predicted_action = "denied"
                 elif predicted_action == "allowed" and device_verdict.confirm:
                     predicted_action = "pending_approval"
+            elif writable and device_settings.mesa_mode != MESA_MODE_OFF:
+                # The call refuses every target while MESA has no runtime, so the preview does too.
+                device = CallReach(service_gate_targets(domain=domain, service=service, access_key=access_key, hass=hass))
+                device_mesa = _mesa_unavailable_preview(visible_reach(device.entities, access_key, hass))
+                if predicted_action == "allowed":
+                    predicted_action = "denied"
             allowed = predicted_action == "allowed"
             signature = _esphome_action_signature(esphome_entry, service)
             declared = {a["name"] for a in signature}
@@ -3465,6 +3484,11 @@ async def _tool_dry_run_service(
                 predicted = "pending_approval"
             elif not verdict.allowed:
                 predicted = "denied"
+    elif settings.mesa_mode != MESA_MODE_OFF and permitted:
+        # The call refuses every target while MESA has no runtime, so the preview does too.
+        mesa = _mesa_unavailable_preview(visible_reach(reach.entities, access_key, hass))
+        if predicted == "allowed":
+            predicted = "denied"
 
     body = {
         "domain": domain,

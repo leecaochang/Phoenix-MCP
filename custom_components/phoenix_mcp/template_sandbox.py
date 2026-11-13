@@ -94,6 +94,16 @@ class ScrubbedState:
             return str(friendly)
         return self.object_id.replace("_", " ").title()
 
+    @property
+    def state_with_unit(self) -> str:
+        """The state, a space and its unit_of_measurement attribute when it has one, else the state.
+
+        An approximation of Core's: a sensor's display precision is not applied, because the
+        worker has no entity registry to read it from.
+        """
+        unit = self.attributes.get("unit_of_measurement")
+        return f"{self.state} {unit}" if unit else self.state
+
     @classmethod
     def from_dict(cls, row: dict) -> ScrubbedState:
         """Restore the template facade without HA constructor timestamp defaults."""

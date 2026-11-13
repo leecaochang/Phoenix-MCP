@@ -46,6 +46,7 @@ from custom_components.phoenix_mcp.const import (
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.durable_storage import DurableStorageError, DurableStore
 from custom_components.phoenix_mcp.mcp_transport import ALL_MCP_VIEWS
+from custom_components.phoenix_mcp.mesa import async_create_mesa_approval
 from custom_components.phoenix_mcp.oauth_client_metadata import check_document
 from custom_components.phoenix_mcp.oauth_flow import ClientVerdict, pkce_matches, redirect_matches
 from custom_components.phoenix_mcp.oauth_grants import GrantLimitError, OAuthGrantStore, secret_hash
@@ -88,7 +89,9 @@ async def oauth(hass, hass_client, hass_client_no_auth):
     store = await AccessKeyStore.async_create(hass)
     data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
-    for view_cls in (*ALL_MCP_VIEWS, *ALL_OAUTH_VIEWS, *_ADMIN_VIEWS):
+    # Every view before the clients start: older Home Assistant freezes the router then.
+    for view_cls in (*ALL_MCP_VIEWS, *ALL_OAUTH_VIEWS, *_ADMIN_VIEWS, PhoenixAdminAccessKeyRotateView,
+                     PhoenixAdminApprovalApproveView, PhoenixAdminApprovalsView):
         view = view_cls()
         view.hass = hass
         hass.http.register_view(view)
@@ -654,12 +657,8 @@ async def _call_restart(app, token) -> dict:
 
 @pytest.fixture
 async def queued(hass, oauth):
-    """A key with restart on Confirm, signed in once, and the approval views registered."""
+    """A key with restart on Confirm, signed in once."""
     app, admin, data, _fetch = oauth
-    for view_cls in (PhoenixAdminAccessKeyRotateView, PhoenixAdminApprovalApproveView, PhoenixAdminApprovalsView):
-        view = view_cls()
-        view.hass = hass
-        hass.http.register_view(view)
     data.store.get_settings().mesa_mode = "off"
     access_key, _raw = await _key(data, "household-claude")
     await _key(data, "other-key")  # keeps sign-in offered after a switch-off
@@ -695,6 +694,22 @@ async def test_an_approval_records_the_sign_in_that_queued_it(queued):
     # The panel sees the app, never the sign-in id or the credential fingerprint.
     assert listed["oauth_app"] == APP_LABEL
     assert "sign_in_id" not in listed and "credential_generation" not in listed
+
+
+async def test_a_mesa_confirm_records_the_sign_in_and_the_secret_that_queued_it(hass, queued):
+    """The MESA confirm path binds its approval to the credential, as the capability path does."""
+    _app, _admin, data, access_key, _tokens, sign_in = queued
+    token = request_authority.set(
+        RequestAuthority(hass, data, access_key.id, access_key.access_key_hash, sign_in.id))
+    try:
+        approval = await async_create_mesa_approval(
+            hass, data, access_key, args={"domain": "light", "service": "turn_on"}, diff={},
+            request_id="mesa", client_ip=None)
+    finally:
+        request_authority.reset(token)
+    stored = next(row for row in data.store.get_pending_approvals() if row["id"] == approval.id)
+    assert stored["sign_in_id"] == sign_in.id and stored["oauth_app"] == APP_LABEL
+    assert stored["credential_generation"] == credential_generation(access_key)
 
 
 @pytest.mark.parametrize(("event", "reason"), [
@@ -735,7 +750,7 @@ async def test_rotation_cancels_a_raw_key_request_and_oauth_off_keeps_it(queued)
     ("sign_in", "oauth_sign_in_ended"), ("secret", "access_key_rotated"),
 ])
 async def test_approve_rechecks_the_credential_that_queued_the_request(queued, end, reason):
-    """An ending that bypassed the cancellation (a refresh-token reuse, say) is caught at approve."""
+    """An ending that bypassed the cancellation (a failed cancel, say) is caught at approve."""
     app, admin, data, access_key, tokens, sign_in = queued
     await _call_restart(app, tokens["access_token"])
     (stored,) = _pending(data)
@@ -816,6 +831,65 @@ async def test_removing_the_sign_in_during_an_inline_wait_cancels_the_action(has
     executor.assert_not_awaited()
     assert (await approved.json())["status"] == "cancelled"
     assert get_approval(data.store, stored["id"]).closure_reason == "oauth_sign_in_removed"
+    assert "applied" not in json.dumps(answer)
+
+
+async def _reuse_ends_sign_in(app, admin, data, access_key, how) -> tuple[str, object]:
+    """Sign in afresh and return its access token plus an ending: reuse of a secret, or the app revoking it."""
+    data.oauth.open_window(access_key.id)
+    verifier, challenge = _pkce()
+    code = await _approve(app, admin, challenge, access_key.id)
+    form = dict(grant_type="authorization_code", code=code, code_verifier=verifier,
+                client_id=CLIENT_ID, redirect_uri=REDIRECT)
+    tokens = await (await _token(app, **form)).json()
+
+    async def end() -> None:
+        if how == "code":
+            assert (await _token(app, **form)).status == 400
+            return
+        if how == "revoke":
+            revoked = await app.post("/api/phoenix-mcp/oauth/revoke",
+                                     data={"token": tokens["refresh_token"], "client_id": CLIENT_ID}, headers=HOST)
+            assert revoked.status == 200
+            return
+        refresh = tokens["refresh_token"]
+        await _refresh(app, refresh)                                   # the app rotates
+        await _refresh(app, refresh)                                   # one sibling in the grace
+        assert (await _refresh(app, refresh))[0] == 400                # reuse ends the sign-in
+
+    return tokens["access_token"], end
+
+
+@pytest.mark.parametrize("how", ["refresh", "code", "revoke"])
+async def test_reuse_cancels_what_the_sign_in_queued_at_once(queued, how):
+    app, admin, data, access_key, _tokens, _sign_in_record = queued
+    access_token, end = await _reuse_ends_sign_in(app, admin, data, access_key, how)
+    await _call_restart(app, access_token)
+    (stored,) = _pending(data)
+    await end()
+    closed = get_approval(data.store, stored["id"])
+    assert (closed.status, closed.closure_reason) == ("cancelled", "oauth_sign_in_ended")
+    (row,) = [e for e in data.audit.query(access_key_id=access_key.id) or [] if e.method == "approval/cancelled"]
+    assert json.loads(row.payload) == {"approval_id": stored["id"], "reason": "oauth_sign_in_ended"}
+    # The fixture's own sign-in is still live, and nothing it queued would have been touched.
+    assert len(data.oauth_grants.list_for_key(access_key.id)) == 1
+
+
+async def test_reuse_during_an_inline_wait_cancels_the_action(hass, queued):
+    app, admin, data, access_key, _tokens, _sign_in_record = queued
+    await data.store.async_patch_access_key(access_key.id, confirm_inline_wait_seconds=30)
+    access_token, end = await _reuse_ends_sign_in(app, admin, data, access_key, "refresh")
+    with patch(_EXECUTOR, AsyncMock(return_value=_OK)) as executor:
+        call = hass.async_create_task(_call_restart(app, access_token))
+        async with asyncio.timeout(10):
+            while not _pending(data):
+                await asyncio.sleep(0.01)
+        (stored,) = _pending(data)
+        await end()
+        async with asyncio.timeout(10):
+            answer = await call
+    executor.assert_not_awaited()
+    assert get_approval(data.store, stored["id"]).closure_reason == "oauth_sign_in_ended"
     assert "applied" not in json.dumps(answer)
 
 

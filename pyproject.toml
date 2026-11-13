@@ -23,7 +23,7 @@ omit = ["custom_components/phoenix_mcp/mesa_core/*"]
 # is a floor, not a claim that every covered branch is qualified. Killed workers
 # cannot flush coverage data. Keep it just below the measured figure and never
 # lower it to pass; subprocess instrumentation also runs in Linux CI.
-fail_under = 88
+fail_under = 89
 
 [tool.phoenix-coverage-floors]
 # Per-module floors over statements and branches, checked in CI by
@@ -31,21 +31,21 @@ fail_under = 88
 # hold the authority, authentication, transport, approval and restore decisions,
 # so a drop in one must not be averaged away. Keep each just below its measured
 # figure and never lower one to pass.
-"access_key_auth.py" = 89
+"access_key_auth.py" = 90
 "access_key_store.py" = 94
-"admin/oauth.py" = 83
+"admin/oauth.py" = 84
 "approvals.py" = 96
 "helpers.py" = 89
-"mcp_transport.py" = 96
+"mcp_transport.py" = 97
 "mesa.py" = 93
-"net_guard.py" = 98
-"oauth_client_metadata.py" = 47
-"oauth_flow.py" = 83
-"oauth_grants.py" = 77
-"oauth_views.py" = 74
+"net_guard.py" = 99
+"oauth_client_metadata.py" = 88
+"oauth_flow.py" = 87
+"oauth_grants.py" = 91
+"oauth_views.py" = 92
 "policy_engine.py" = 94
 "request_authority.py" = 99
-"skill_view.py" = 98
+"skill_view.py" = 99
 "tools/recovery.py" = 70
 
 [tool.mypy]

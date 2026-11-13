@@ -5,7 +5,7 @@ import { ArchivedAccessKeyTable } from "../components/ArchivedAccessKeyTable";
 import { api } from "../api";
 import { Loading, ErrorMsg, ResultCount } from "../components/common";
 import { formatDate, accessKeyStatus, accessKeyStatusLabel } from "../utils";
-import { localeDateTime, t, tn } from "../i18n";
+import { foldForSearch, localeDateTime, t, tn } from "../i18n";
 import { useToolbarTools, type ToolGroup } from "../shell/tools";
 import { InlineTools } from "../shell/windowTools";
 import { useWindowVisible } from "../shell/visibility";
@@ -148,11 +148,11 @@ export function AccessKeyListView({
   const oauth = useOAuthSummary(accessKeys);
 
   const filtered = accessKeys.filter((k) => {
-    const q = filter.toLowerCase();
+    const q = foldForSearch(filter);
     if (!q) return true;
     const status = accessKeyStatus(k);
     return [k.name, status, accessKeyStatusLabel(status)]
-      .some((value) => value.toLowerCase().includes(q));
+      .some((value) => foldForSearch(value).includes(q));
   });
 
   // The list as a configurable table like the other workspaces' lists.

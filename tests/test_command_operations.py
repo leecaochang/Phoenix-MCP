@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.runtime_fixtures import patch_readers
+from tests.runtime_fixtures import decision_write_reply, patch_readers
 from homeassistant.components.cover import CoverEntityFeature
 from homeassistant.components.media_player import MediaPlayerEntityFeature
 from homeassistant.helpers import area_registry as ar, entity_registry as er
@@ -100,12 +100,12 @@ async def test_exact_values_reach_existing_service_without_either_model(hass, nu
         {"entity_id": [home.entity_id], home.service_field: expected_value}, blocking=True, return_response=False)
     voice.assert_not_called()
     provider.stream_turn.assert_not_called()
+    reply = await decision_write_reply(hass, home.domain, home.service, matched=False)
     if ingress == "voice":
-        assert result == "Command sent. Home Assistant has not yet confirmed the requested state."
+        assert result == reply
     else:
         assert result[0] == {"role": "user", "content": home.sentence.format(value=value)}
-        assert result[-1] == {"role": "assistant", "content":
-                             "Command sent. Home Assistant has not yet confirmed the requested state."}
+        assert result[-1] == {"role": "assistant", "content": reply}
     assert not home.data.agent_recovery.records(home.access_key.id)
 
 
@@ -133,7 +133,7 @@ async def test_numeric_chat_sequence_preserves_values_history_and_fresh_capabili
                 hass, home, home.sentence.format(value=value), "chat", history)
             provider.stream_turn.assert_not_called()
             assert history[:-2] == previous
-            assert history[-1]["content"] == "Home Assistant reports the requested state."
+            assert history[-1]["content"] == await decision_write_reply(hass, home.domain, home.service, matched=True)
             assert call.await_args.args[2][home.service_field] == (value / 100 if home.domain == "media_player" else value)
         assert call.await_count == 3
         # A known conversation cannot authorize a target that lost its support.

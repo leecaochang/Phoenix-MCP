@@ -849,7 +849,7 @@ def qualify_test_decision_model(monkeypatch) -> None:
 
 
 async def decision_write_reply(hass, domain: str, service: str, *, matched: bool, language: str = "en") -> str:
-    """The reply after a decision-chosen write: HA's own translated name of the service that ran."""
+    """The reply after a routed write, local or decision-chosen: HA's translated name of the service that ran."""
     labels = await translation.async_get_translations(hass, language, "services", {domain})
     operation = labels[f"component.{domain}.services.{service}.name"]
     return voice_text(language, "local_operation_matched" if matched else "local_operation_unconfirmed",

@@ -136,18 +136,16 @@ def placeholder_for(path: str) -> str:
     return f"{_PLACEHOLDER_PREFIX}{path}{_PLACEHOLDER_SUFFIX}"
 
 
-_PRINTABLE_ASCII_RE = re.compile(r"[\x20-\x7e]+")
-
-
 def folded_path_parts(rel: str) -> list[str] | None:
     """A relative path's components as the structural path rules compare them, or None.
 
     A case-insensitive filesystem opens ſecrets.yaml as secrets.yaml, and str.lower() keeps the
-    long s, so a component that is not printable ASCII is refused and the rest are compared after
-    NFKC normalization and casefold().
+    long s, so components are compared after NFKC normalization and casefold(). A component
+    holding a control, format (zero-width, bidi), unassigned or other unprintable character is
+    refused, as it can hide a name from that comparison.
     """
     parts = [p for p in rel.replace("\\", "/").split("/") if p not in ("", ".")]
-    if any(_PRINTABLE_ASCII_RE.fullmatch(part) is None for part in parts):
+    if any(not part.isprintable() for part in parts):
         return None
     return [unicodedata.normalize("NFKC", part).casefold() for part in parts]
 

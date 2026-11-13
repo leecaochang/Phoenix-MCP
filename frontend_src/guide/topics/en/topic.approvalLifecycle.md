@@ -54,7 +54,7 @@ The agent receives your reason, or is told to ask you if you gave none. A reject
 
 Restarting Home Assistant cancels every pending request. Reloading Phoenix doesn't, and an approved action that's already running carries on. Revoking the access key, the key expiring and deleting core data cancel its requests too. Rotating the key cancels all of its requests.
 
-Removing an app's sign-in, or turning off OAuth sign-in for the key, cancels the requests that app asked for, including one the app is still waiting on. Requests sent with the access key itself stay.
+Removing an app's sign-in, or turning off OAuth sign-in for the key, cancels the requests that app asked for, including one the app is still waiting on. So does a sign-in that ends because the app signed out or a token was used twice. Requests sent with the access key itself stay.
 
 Approving while the kill switch is on cancels the request instead, except for a configuration recovery review.
 

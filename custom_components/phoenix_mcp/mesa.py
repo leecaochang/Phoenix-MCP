@@ -83,6 +83,12 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# What every gate, and every preview of one, says when MESA is configured but has no runtime.
+MESA_UNAVAILABLE_RULE = "mesa:runtime_unavailable"
+MESA_UNAVAILABLE_REASON = (
+    "MESA is configured but unavailable. Reload Phoenix MCP after checking Needs Attention in the Phoenix panel."
+)
+
 # MESA's rule name for a call whose parameters name a target other than the
 # entity the decision was made for. A caller can still reach it with a field
 # that is a target selector to MESA but plain data to Home Assistant, such as
@@ -1108,8 +1114,8 @@ def evaluate_registry_action(
     if runtime is None:
         return RegistryMesaDecision(
             decision="deny",
-            rule="mesa:runtime_unavailable",
-            reason="MESA is configured but unavailable. Reload Phoenix MCP after checking Needs Attention in the Phoenix panel.",
+            rule=MESA_UNAVAILABLE_RULE,
+            reason=MESA_UNAVAILABLE_REASON,
         )
 
     with mesa_audit.request_context(
@@ -1709,10 +1715,9 @@ async def async_apply_mesa_to_call(
     if settings.mesa_mode == MESA_MODE_OFF:
         return MesaGateOutcome(decision="allow", entities=list(entities))
     if runtime is None:
-        reason = "MESA is configured but unavailable. Reload Phoenix MCP after checking Needs Attention in the Phoenix panel."
         return MesaGateOutcome(
             decision="deny",
-            blocked=[(entity_id, "mesa:runtime_unavailable", reason) for entity_id in entities],
+            blocked=[(entity_id, MESA_UNAVAILABLE_RULE, MESA_UNAVAILABLE_REASON) for entity_id in entities],
         )
 
     # Only this path sets the audit context: the same enforcer runs from

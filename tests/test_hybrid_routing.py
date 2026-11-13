@@ -138,7 +138,7 @@ async def test_exact_local_match_spends_no_decision_request(hass, hybrid_home):
     with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, sentence="turn on the desk lamp")
-    assert answer == "Command sent. Home Assistant has not yet confirmed the requested state."
+    assert answer == await decision_write_reply(hass, "light", "turn_on", matched=False)
     call.assert_awaited_once()
     remote.assert_not_called()
     provider.assert_not_called()
@@ -465,8 +465,7 @@ async def test_recognized_numeric_voice_uses_ha_value_without_either_provider(ha
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home,
             sentence=f"set the desk lamp brightness to {percent} percent")
-    assert answer == ("Home Assistant reports the requested state." if percent == 0 else
-                      "Command sent. Home Assistant has not yet confirmed the requested state.")
+    assert answer == await decision_write_reply(hass, "light", "turn_on", matched=percent == 0)
     call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id], "brightness_pct": percent},
                                 blocking=True, return_response=False)
     remote.assert_not_called()

@@ -25,6 +25,8 @@ Related: [What a restore can put back](guide:topic.configurationHistory#restore)
 
 Choosing a side asks you to confirm in place. Select **{{label:changes.confirmRestoreButton}}**, or **{{label:changes.cancelRestore}}** to back out.
 
+If restoring a dashboard brings back a template, a custom card that runs code, or a picture or link from another site, the confirmation lists them. Your confirmation is the review, so check them first.
+
 If the item has a newer change by the time you confirm, Phoenix restores nothing and tells you, so check the newer change first. The server checks this too, so a change that lands at the last moment is caught as well.
 
 ### After a restore {#after-restore}

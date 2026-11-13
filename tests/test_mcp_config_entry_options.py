@@ -225,6 +225,21 @@ class TestRead:
 
 
 class TestWrite:
+    async def test_templates_of_any_helper_are_checked_in_the_worker_first(self, hass, helper_entry, as_helper):
+        """A History stats settings form compiles templates too, not only a Template helper's."""
+        init, configure, created = _flow(hass)
+        with init, configure:
+            content, outcome, _ = await _call(
+                "set_config_entry_options",
+                {"entry_id": "helper1", "settings": {"entity_id": "sensor.other",
+                                                     "hysteresis": "{{ as_timestamp('\\ud800', 0) }}"}},
+                _access_key(), hass)
+        assert outcome == "invalid_request", content
+        assert "Templates refused" in content["content"][0]["text"]
+        assert "lone surrogate" in content["content"][0]["text"]
+        assert created == {}
+        assert helper_entry.options["entity_id"] == "sensor.kitchen"
+
     async def test_partial_options_update_preserves_untouched_current_fields(
         self, hass, helper_entry, as_helper,
     ):

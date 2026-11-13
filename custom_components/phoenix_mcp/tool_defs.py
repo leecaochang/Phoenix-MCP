@@ -3203,9 +3203,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Supports state, numeric_state, time, time_pattern, sun, homeassistant, zone and device "
             "triggers, and entity triggers such as light.turned_on with a target. Every entity it "
             "names or reaches (in any field, through a target's devices, areas, floors or labels, or a "
-            "device trigger's device) must be readable by this key. Templates are refused, template "
-            "triggers included: check a template's current value with test_condition. Event, MQTT, "
-            "webhook and conversation triggers are refused."
+            "device trigger's device) must be readable by this key. Templates, template triggers "
+            "included, need automation write access and only literal entity lookups; without it, check "
+            "a template's current value with test_condition. Event, MQTT, webhook and conversation "
+            "triggers are refused."
         ),
         "cap": "cap_config_read",
         "inputSchema": {

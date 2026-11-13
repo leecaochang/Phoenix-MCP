@@ -243,11 +243,14 @@ function RestoreMenu({ c }: { c: ChangesState }) {
 function RestoreConfirmation({ c }: { c: ChangesState }) {
   const record = c.record!;
   const side = t(c.confirm!.side === "before" ? "common.before" : "common.after");
+  // Templates, code cards and external URLs the layout no longer has: the administrator reviews them here.
+  const active = record.restore_active_content?.[c.confirm!.side] ?? [];
   return (
     <div data-guide="window.comparison#confirm">
     <InlineConfirm label={t("changes.restore")} title={t("changes.confirmRestoreQuestion", { name: changeLabel(record), side, time: formatDateTime(record.timestamp) })} confirmLabel={t("changes.confirmRestoreButton")} confirmClassName="btn btn-sm phx-decision-approve"
       cancelLabel={t("changes.cancelRestore")} help={t("help.confirmRestore")} busy={c.restoring} onConfirm={() => { void c.restore(); }} onCancel={c.cancelRestore}>
       <p>{t("changes.restoreReplaces")}</p>
+      {active.length > 0 && <p>{t("approvals.reviewedActions", { actions: active.join(t("common.listSeparator")) })}</p>}
     </InlineConfirm>
     </div>
   );

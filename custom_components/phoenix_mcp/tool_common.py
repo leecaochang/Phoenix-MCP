@@ -565,6 +565,11 @@ async def _await_inline_confirm(
             future.set_result(True)
 
     unsub = hass.bus.async_listen(f"{DOMAIN}_approval_resolved", _on_resolved)
+    # A decision made before the listener existed fired no event this wait can see,
+    # so the record is read once now.
+    current = get_approval(data.store, approval_id)
+    if current is not None and current.status != STATUS_PENDING:
+        future.set_result(True)
     # This is the longest hold in the whole surface. On an SSE-framed request the
     # keepalive ticks carry the reason, so the client shows "waiting for the
     # operator" instead of an unexplained silence.

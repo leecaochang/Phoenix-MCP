@@ -109,6 +109,18 @@ describe("localized access key statuses", () => {
     expect(screen.queryByText("Old agent")).not.toBeInTheDocument();
   });
 
+  it("finds a key name with accents from a search typed without them", () => {
+    renderList([
+      accessKey({ id: "kitchen", name: "Küche agent" }),
+      accessKey({ id: "hall", name: "Hall agent" }),
+    ]);
+    fireEvent.change(screen.getByRole("searchbox", { name: de.panel.accessKeys.filterAria }), {
+      target: { value: "KUCHE" },
+    });
+    expect(screen.getByText("Küche agent")).toBeInTheDocument();
+    expect(screen.queryByText("Hall agent")).not.toBeInTheDocument();
+  });
+
   it("sorts status rows by their localized display labels", () => {
     renderList([
       accessKey({ id: "active", name: "Active row" }),

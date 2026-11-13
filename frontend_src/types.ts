@@ -846,6 +846,8 @@ export interface VersionRecord {
   summary_params?: Record<string, string | number> | null;
   /** Per side, why Restore would be refused whatever the item holds now (a reason slug), or null. */
   restore_refusals?: { before?: string | null; after?: string | null };
+  /** Dashboards only: per side, the active content (templates, code cards, external URLs) Restore would add back. */
+  restore_active_content?: { before?: string[]; after?: string[] };
 }
 
 export interface VersionListResponse {
