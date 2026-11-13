@@ -1,8 +1,10 @@
 """Authoring tools: automation, script and scene CRUD over the YAML config store.
 
 Each domain stores configs in a top-level YAML file a human may also edit, written under its own
-asyncio.Lock. An edit may carry an expected_hash, checked before gating and at apply time; a delete
-compares the reviewed entry's hash under that lock. `yaml_includes` reads through every !include but
+asyncio.Lock that is released only once the worker writing the file has finished, even when the
+request is cancelled. An edit may carry an expected_hash, checked before gating and again in the
+worker job that writes; an edit or delete also binds the hash of the entry its review showed, and
+that job refuses it once the entry has changed. `yaml_includes` reads through every !include but
 writes only HA's own editor file, refusing hand-written entries before any approval exists. A scene
 naming an entity the key cannot write is refused, or a key could snapshot and restore entities
 outside its scope. This module never imports the dispatcher.
@@ -13,13 +15,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import re
 import uuid
 from functools import partial
 from collections.abc import Awaitable, Callable
 from traceback import format_exc, format_tb
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 import voluptuous as vol
 
@@ -27,14 +28,14 @@ from homeassistant.components.automation.config import async_validate_config_ite
 from homeassistant.components.homeassistant.scene import PLATFORM_SCHEMA as _SCENE_PLATFORM_SCHEMA
 from homeassistant.components.script.config import async_validate_config_item as _validate_script_config
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.util.file import write_utf8_file_atomic as _write_utf8_file_atomic
-from homeassistant.util.yaml import dump as _yaml_dump, load_yaml as _load_yaml
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 from homeassistant.core import Context, State
 
-from ..authoring_validation import async_validation_message, authoring_input_error, validation_message
-from ..const import CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
+from ..authoring_validation import (
+    async_template_refusal, async_validation_message, authoring_input_error, validation_message,
+)
+from ..const import APPROVAL_REVIEWED_HASH_KEY, CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
 from ..helpers import content_hash
@@ -42,14 +43,15 @@ from ..tool_input import dict_arg, str_arg, str_list_arg
 from ..catalog_text import diff_summary_fields as _summary
 from ..capability import effective_cap, reviewed_actions, strictest_capability
 from ..log_read import _strict_phoenix_log_text
-from ..redaction import redact_inaccessible_entity_ids_in_text
+from ..redaction import instance_entity_domains, redact_inaccessible_entity_ids_in_text, service_not_entity
 from ..tool_common import (
-    _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _noting_reviewed_actions, _record_version, _tool_error, _tool_refused_before_write, _tool_uncertain,
-    _tool_success, _truncate, fitted_list, longest_fitting,
+    _CAP_FORBIDDEN_MESSAGE, _bind_reviewed, _cas_conflict, _gate, _noting_reviewed_actions, _record_version,
+    _reviewed_conflict, _tool_error, _tool_refused_before_write, _tool_uncertain, _tool_success, _truncate,
+    fitted_list, longest_fitting,
 )
 from ..policy_engine import (
     Permission, filter_entities_for_access_key, group_member_denied, group_member_ids, resolve, resolve_read,
-    is_sensitive_key, physical_gate_applies, scrub_sensitive_attributes,
+    is_credential_key, physical_gate_applies, scrub_sensitive_attributes,
 )
 from ..request_authority import AuthorityChangedError, check_request_authority, write_boundary
 from ..access_key_store import AccessKeyRecord
@@ -59,9 +61,7 @@ from .discovery import _registry_relationship_preview, async_config_warnings
 _LOGGER = logging.getLogger(__name__)
 
 
-_AUTOMATION_YAML = "automations.yaml"
 _AUTOMATION_LOCK_KEY = f"{DOMAIN}_automation_lock"
-_SCRIPT_CONFIG_PATH = "scripts.yaml"
 _SCRIPT_LOCK_KEY = f"{DOMAIN}_script_lock"
 
 
@@ -139,64 +139,37 @@ def _get_automation_lock(hass: HomeAssistant) -> asyncio.Lock:
     return hass.data[_AUTOMATION_LOCK_KEY]
 
 
-def _read_automations_yaml(path: str) -> list:
-    if not os.path.isfile(path):
-        return []
-    if yaml_includes.is_secrets_file(path):
-        raise yaml_includes.SecretsFileError("secrets.yaml is never read.")
-    data = _load_yaml(path)
-    return data if isinstance(data, list) else []
-
-
-def _write_automations_yaml(path: str, data: list) -> None:
-    contents = _yaml_dump(data)
-    _write_utf8_file_atomic(path, yaml_includes.in_existing_line_ending(path, contents))
-
-
 def _get_script_lock(hass: HomeAssistant) -> asyncio.Lock:
     if _SCRIPT_LOCK_KEY not in hass.data:
         hass.data[_SCRIPT_LOCK_KEY] = asyncio.Lock()
     return hass.data[_SCRIPT_LOCK_KEY]
 
 
-def _read_scripts_yaml(path: str) -> dict:
-    if not os.path.isfile(path):
-        return {}
-    if yaml_includes.is_secrets_file(path):
-        raise yaml_includes.SecretsFileError("secrets.yaml is never read.")
-    data = _load_yaml(path)
-    return data if isinstance(data, dict) else {}
-
-
-def _write_scripts_yaml(path: str, data: dict) -> None:
-    contents = _yaml_dump(data)
-    _write_utf8_file_atomic(path, yaml_includes.in_existing_line_ending(path, contents))
-
-
-def _yaml_file_has_includes(path: str) -> bool:
-    """Return True if the file exists and contains YAML !include directives."""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return "!include" in f.read()
-    except OSError:
-        return False
-
-
-_SCENE_CONFIG_PATH = "scenes.yaml"
 _SCENE_LOCK_KEY = f"{DOMAIN}_scene_yaml_lock"
 
 
-def _read_scenes_yaml(path: str) -> list:
-    if not os.path.isfile(path):
-        return []
-    if yaml_includes.is_secrets_file(path):
-        raise yaml_includes.SecretsFileError("secrets.yaml is never read.")
-    data = _load_yaml(path)
-    return data if isinstance(data, list) else []
+_T = TypeVar("_T")
 
 
-def _write_scenes_yaml(path: str, data: list) -> None:
-    _write_utf8_file_atomic(path, yaml_includes.in_existing_line_ending(path, _yaml_dump(data)))
+async def _locked_write(lock: asyncio.Lock, work: Callable[[], Awaitable[_T]]) -> _T:
+    """Run work under lock to its end, even when the caller is cancelled meanwhile.
+
+    The lock is released only after work finishes, so a cancelled request never leaves its worker
+    writing beside the next writer; the cancellation is raised once work has finished.
+    """
+    async with lock:
+        task = asyncio.ensure_future(work())
+        cancelled = False
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                cancelled = True
+        if cancelled:
+            if not task.cancelled() and task.exception() is not None:
+                _LOGGER.debug("A write finished with an error after its request was cancelled", exc_info=task.exception())
+            raise asyncio.CancelledError
+        return task.result()
 
 
 def _get_scene_lock(hass: HomeAssistant) -> asyncio.Lock:
@@ -219,12 +192,16 @@ async def _read_config_entry(hass: HomeAssistant, domain: str, entry_id: str) ->
     )
 
 
-async def _added_reviewed_actions(hass: HomeAssistant, domain: str, entry_id: str | None, config: Any) -> list[str]:
+async def _added_reviewed_actions(
+    hass: HomeAssistant, domain: str, entry_id: str | None, config: Any, *, current: Any = _ENTRY_NOT_CAPTURED,
+) -> list[str]:
     """What this save adds that needs a person's review, whatever the capability's mode.
 
     What an entry already calls gives no new reach, so a small edit of it stays unreviewed. An
-    entry that cannot be read counts as calling nothing.
+    entry that cannot be read counts as calling nothing; a passed current skips the read.
     """
+    if current is not _ENTRY_NOT_CAPTURED:
+        return sorted(reviewed_actions(config) - reviewed_actions(current))
     current = None
     if entry_id:
         try:
@@ -296,6 +273,34 @@ async def _bind_delete_args(
     if current is not None:
         bound[_DELETE_EXPECTED_HASH] = content_hash(current)
     return bound, current
+
+
+async def _bind_edit_args(args: dict, hass: HomeAssistant, domain: str, entry_id: str) -> tuple[dict, Any]:
+    """Bind an edit request to the exact entry shown as its approval diff's before side."""
+    current = await _read_config_entry(hass, domain, entry_id) if entry_id else None
+    return _bind_reviewed(args, current), current
+
+
+def _review_checks(args: dict, tool_name: str) -> tuple[tuple[yaml_includes.HashCheck, ...], tuple[dict, str, str] | None]:
+    """The hash checks an edit's write job compares, or the refusal of an approved edit left unbound.
+
+    A caller's expected_hash and the hash its review bound are both compared with the entry the
+    write job finds.
+    """
+    expected = args.get("expected_hash") or None
+    checks: list[yaml_includes.HashCheck] = [(expected, yaml_includes.MSG_EXPECTED_HASH_STALE)]
+    if APPROVAL_REVIEWED_HASH_KEY in args:
+        reviewed = args[APPROVAL_REVIEWED_HASH_KEY]
+        # A wrong-shaped binding can never match a hash, so it refuses.
+        checks.append((reviewed if isinstance(reviewed, str) else "", yaml_includes.MSG_CHANGED_SINCE_REVIEW))
+        return tuple(checks), None
+    return tuple(checks), _reviewed_conflict(args, None, tool_name)
+
+
+def _entry_op_error(op: yaml_includes.OpResult, tool_name: str) -> tuple[dict, str, str]:
+    """Map a script or scene write refusal to the tool envelope."""
+    outcome = "invalid_request" if op.error_kind in ("conflict", "io_error", "already_exists") else "denied"
+    return _op_refusal(op), outcome, tool_name
 
 
 def _delete_cas_conflict(
@@ -567,13 +572,15 @@ async def _editor_file_refusal(
 
 
 async def _automation_write_precheck(
-    args: dict, hass: HomeAssistant, tool_name: str, *, require_id: bool
+    args: dict, hass: HomeAssistant, tool_name: str, *, require_id: bool, data: PhoenixData,
 ) -> tuple[dict, str, str] | None:
     """Pre-gate validation for automation writes; None means OK to proceed.
 
-    Checks automation_id presence and config schema, so a doomed request gets no pending approval.
-    The executor re-validates at apply time.
+    Checks the config's templates in the template worker, then automation_id presence and config
+    schema, so a doomed request gets no pending approval. The executor re-validates at apply time.
     """
+    if refusal := await async_template_refusal(args.get("config"), hass, data):
+        return _tool_error(refusal), "invalid_request", tool_name
     error = _automation_argument_error(args, create=not require_id)
     if error:
         return _tool_error(error), "invalid_request", tool_name
@@ -607,7 +614,7 @@ async def _tool_create_automation(
     """MCP tool: create a new UI automation by appending to automations.yaml."""
     if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "create_automation"
-    pre = await _automation_write_precheck(args, hass, "create_automation", require_id=False)
+    pre = await _automation_write_precheck(args, hass, "create_automation", require_id=False, data=data)
     if pre is not None:
         return pre
     actions = await _added_reviewed_actions(hass, "automation", None, args["config"])
@@ -651,26 +658,29 @@ async def _execute_create_automation(
     if invalid is not None:
         return invalid
 
-    lock = _get_automation_lock(hass)
+    async def write() -> tuple[dict, str, str] | None:
+        check_request_authority()
+        op = await hass.async_add_executor_job(
+            yaml_includes.automation_write, hass.config.config_dir, automation_id,
+            config, True, args.get("expected_hash"), False, not bool(args.get("automation_id")),
+        )
+        if not op.ok:
+            return _automation_op_error(op, "create_automation")
+        await _record_version(
+            data, access_key, resource_type="automation", resource_id=automation_id,
+            action="create", before=None, after=config, alias=config.get("alias"),
+        )
+        return None
+
     try:
-        async with lock:
-            check_request_authority()
-            op = await hass.async_add_executor_job(
-                yaml_includes.automation_write, hass.config.config_dir, automation_id,
-                config, True, args.get("expected_hash"), False, not bool(args.get("automation_id")),
-            )
-            if not op.ok:
-                return _automation_op_error(op, "create_automation")
+        refused = await _locked_write(_get_automation_lock(hass), write)
     except AuthorityChangedError:
         raise
     except Exception:
         _LOGGER.exception("create_automation failed")
         return _tool_error("Failed to create automation. Check HA logs for details."), "invalid_request", "create_automation"
-
-    await _record_version(
-        data, access_key, resource_type="automation", resource_id=automation_id,
-        action="create", before=None, after=config, alias=config.get("alias"),
-    )
+    if refused is not None:
+        return refused
     return await _finish_entity_write(
         hass, access_key, domain="automation", storage_id=automation_id, config=config, tool_name="create_automation",
     )
@@ -688,14 +698,16 @@ async def _tool_edit_automation(
     args = _with_stored_id(hass, args, "automation")
     if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_automation"
-    pre = await _automation_write_precheck(args, hass, "edit_automation", require_id=True)
+    pre = await _automation_write_precheck(args, hass, "edit_automation", require_id=True, data=data)
     if pre is not None:
         return pre
-    actions = await _added_reviewed_actions(hass, "automation", str(args.get("automation_id") or "").strip(), args["config"])
+    args, current = await _bind_edit_args(args, hass, "automation", str(args.get("automation_id") or "").strip())
+    actions = await _added_reviewed_actions(hass, "automation", None, args["config"], current=current)
     blocked = await _gate(
         "cap_automation_write", access_key, hass, data,
         tool_name="edit_automation", args=args, request_id=request_id, client_ip=client_ip,
-        diff=_noting_reviewed_actions(lambda: _build_diff_edit_automation(args, access_key, hass), actions),
+        diff=_noting_reviewed_actions(
+            lambda: _build_diff_edit_automation(args, access_key, hass, reviewed=current), actions),
         review=bool(actions),
     )
     if blocked is not None:
@@ -721,6 +733,9 @@ async def _execute_edit_automation(
 
     config = {k: v for k, v in config.items() if k != "id"}
     config["id"] = automation_id
+    checks, unbound = _review_checks(args, "edit_automation")
+    if unbound is not None:
+        return unbound
 
     invalid = await _config_validation_error(
         _validate_automation_config, hass, automation_id, config,
@@ -729,27 +744,29 @@ async def _execute_edit_automation(
     if invalid is not None:
         return invalid
 
-    lock = _get_automation_lock(hass)
+    async def write() -> tuple[dict, str, str] | None:
+        check_request_authority()
+        op = await hass.async_add_executor_job(partial(
+            yaml_includes.automation_write, hass.config.config_dir, automation_id,
+            config, False, args.get("expected_hash"), reviewed_hash=checks[1][0] if len(checks) > 1 else None,
+        ))
+        if not op.ok:
+            return _automation_op_error(op, "edit_automation")
+        await _record_version(
+            data, access_key, resource_type="automation", resource_id=automation_id,
+            action="edit", before=op.before, after=config, alias=config.get("alias"),
+        )
+        return None
+
     try:
-        async with lock:
-            check_request_authority()
-            op = await hass.async_add_executor_job(
-                yaml_includes.automation_write, hass.config.config_dir, automation_id,
-                config, False, args.get("expected_hash"),
-            )
-            if not op.ok:
-                return _automation_op_error(op, "edit_automation")
-            before_cfg = op.before
+        refused = await _locked_write(_get_automation_lock(hass), write)
     except AuthorityChangedError:
         raise
     except Exception:
         _LOGGER.exception("edit_automation failed")
         return _tool_error("Failed to edit automation. Check HA logs for details."), "invalid_request", "edit_automation"
-
-    await _record_version(
-        data, access_key, resource_type="automation", resource_id=automation_id,
-        action="edit", before=before_cfg, after=config, alias=config.get("alias"),
-    )
+    if refused is not None:
+        return refused
     return await _finish_entity_write(
         hass, access_key, domain="automation", storage_id=automation_id, config=config, tool_name="edit_automation",
     )
@@ -837,6 +854,49 @@ async def _finish_entity_delete(
     return await _deletion_receipt(hass, domain, item_id, tool_name)
 
 
+async def _locked_delete(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData, *,
+    domain: Literal["automation", "scene", "script"], item_id: str, tool_name: str, label_key: str,
+    in_scope: Callable[[Any], bool] | None = None, missing: str = "",
+) -> tuple[dict, str, str] | None:
+    """Remove one reviewed entry under its domain lock and record the version; None when removed.
+
+    The entry must still hash to what the review bound, compared in the job that writes. in_scope
+    refuses an entry the key may not change with the missing answer.
+    """
+    lock = {"automation": _get_automation_lock, "script": _get_script_lock, "scene": _get_scene_lock}[domain](hass)
+
+    async def delete() -> tuple[dict, str, str] | None:
+        check_request_authority()
+        current = await _read_config_entry(hass, domain, item_id)
+        check_request_authority()
+        stale = _delete_cas_conflict(args, current, tool_name)
+        if stale is not None:
+            return stale
+        if in_scope is not None and not in_scope(current):
+            return _tool_error(missing), "denied", tool_name
+        op = await hass.async_add_executor_job(partial(
+            yaml_includes.write_entry, hass.config.config_dir, domain, item_id, mode="delete",
+            checks=((args[_DELETE_EXPECTED_HASH], yaml_includes.MSG_EXPECTED_HASH_STALE),),
+        ))
+        if not op.ok:
+            return _entry_op_error(op, tool_name)
+        await _record_version(
+            data, access_key, resource_type=domain, resource_id=item_id,
+            action="delete", before=op.before, after=None,
+            alias=op.before.get(label_key) if isinstance(op.before, dict) else None,
+        )
+        return None
+
+    try:
+        return await _locked_write(lock, delete)
+    except AuthorityChangedError:
+        raise
+    except Exception:
+        _LOGGER.exception("%s failed", tool_name)
+        return _tool_error(f"Failed to delete {domain}. Check HA logs for details."), "invalid_request", tool_name
+
+
 @write_boundary
 async def _execute_delete_automation(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
@@ -845,49 +905,10 @@ async def _execute_delete_automation(
     if not automation_id:
         return _tool_error("automation_id is required."), "invalid_request", "delete_automation"
 
-    path = os.path.join(hass.config.config_dir, _AUTOMATION_YAML)
-    lock = _get_automation_lock(hass)
-    try:
-        async with lock:
-            check_request_authority()
-            current = await _read_config_entry(hass, "automation", automation_id)
-            check_request_authority()
-            stale = _delete_cas_conflict(args, current, "delete_automation")
-            if stale is not None:
-                return stale
-            op = await hass.async_add_executor_job(
-                yaml_includes.perform_delete, hass.config.config_dir, "automation",
-                automation_id, args[_DELETE_EXPECTED_HASH],
-            )
-            if op.fallback:
-                if await hass.async_add_executor_job(_yaml_file_has_includes, path):
-                    return _tool_error("automations.yaml uses !include directives. Phoenix MCP cannot safely edit it without destroying the include structure."), "denied", "delete_automation"
-                items = await hass.async_add_executor_job(_read_automations_yaml, path)
-                removed = next((a for a in items if a.get("id") == automation_id), None)
-                check_request_authority()
-                stale = _delete_cas_conflict(args, removed, "delete_automation")
-                if stale is not None:
-                    return stale
-                filtered = [a for a in items if a.get("id") != automation_id]
-                if len(filtered) == len(items):
-                    return _tool_error(f"No automation found with id '{automation_id}'."), "denied", "delete_automation"
-                await hass.async_add_executor_job(_write_automations_yaml, path, filtered)
-            elif not op.ok:
-                outcome = "invalid_request" if op.error_kind == "conflict" else "denied"
-                return _op_refusal(op), outcome, "delete_automation"
-            else:
-                removed = op.before
-    except AuthorityChangedError:
-        raise
-    except Exception:
-        _LOGGER.exception("delete_automation failed")
-        return _tool_error("Failed to delete automation. Check HA logs for details."), "invalid_request", "delete_automation"
-
-    await _record_version(
-        data, access_key, resource_type="automation", resource_id=automation_id,
-        action="delete", before=removed, after=None,
-        alias=removed.get("alias") if isinstance(removed, dict) else None,
-    )
+    refused = await _locked_delete(args, access_key, hass, data, domain="automation", item_id=automation_id,
+                                   tool_name="delete_automation", label_key="alias")
+    if refused is not None:
+        return refused
     return await _finish_entity_delete(
         hass, access_key, domain="automation", item_id=automation_id, tool_name="delete_automation",
     )
@@ -947,12 +968,16 @@ def _script_argument_error(args: dict) -> str | None:
     return " ".join(findings) if findings else None
 
 
-async def _script_write_precheck(args: dict, hass: HomeAssistant, tool_name: str) -> tuple[dict, str, str] | None:
+async def _script_write_precheck(
+    args: dict, hass: HomeAssistant, tool_name: str, data: PhoenixData,
+) -> tuple[dict, str, str] | None:
     """Pre-gate validation for script writes; None means OK to proceed.
 
-    Checks script_id format and config schema, so a doomed request gets no pending approval. The
-    executor re-validates at apply time.
+    Checks the config's templates in the template worker, then script_id format and config
+    schema, so a doomed request gets no pending approval. The executor re-validates at apply time.
     """
+    if refusal := await async_template_refusal(args.get("config"), hass, data):
+        return _tool_error(refusal), "invalid_request", tool_name
     if error := _script_argument_error(args):
         return _tool_error(error), "invalid_request", tool_name
     script_id = args["script_id"].strip()
@@ -977,7 +1002,7 @@ async def _tool_create_script(
     """MCP tool: create a new script in scripts.yaml."""
     if effective_cap(access_key, "cap_script_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "create_script"
-    pre = await _script_write_precheck(args, hass, "create_script")
+    pre = await _script_write_precheck(args, hass, "create_script", data)
     if pre is not None:
         return pre
     actions = await _added_reviewed_actions(hass, "script", None, args["config"])
@@ -1008,36 +1033,28 @@ async def _execute_create_script(
     if invalid is not None:
         return invalid
 
-    path = hass.config.path(_SCRIPT_CONFIG_PATH)
-    lock = _get_script_lock(hass)
+    async def write() -> tuple[dict, str, str] | None:
+        check_request_authority()
+        op = await hass.async_add_executor_job(partial(
+            yaml_includes.write_entry, hass.config.config_dir, "script", script_id, mode="create", config=config,
+        ))
+        if not op.ok:
+            return _entry_op_error(op, "create_script")
+        await _record_version(
+            data, access_key, resource_type="script", resource_id=script_id,
+            action="create", before=None, after=config, alias=config.get("alias"),
+        )
+        return None
+
     try:
-        async with lock:
-            check_request_authority()
-            op = await hass.async_add_executor_job(
-                yaml_includes.perform_create, hass.config.config_dir, "script",
-                script_id, config,
-            )
-            if op.fallback:
-                if await hass.async_add_executor_job(_yaml_file_has_includes, path):
-                    return _tool_error("scripts.yaml uses !include directives. Phoenix MCP cannot safely edit it without destroying the include structure."), "denied", "create_script"
-                scripts = await hass.async_add_executor_job(_read_scripts_yaml, path)
-                if script_id in scripts:
-                    return _tool_error(f"A script with id '{script_id}' already exists. Use edit_script to update it."), "invalid_request", "create_script"
-                scripts[script_id] = config
-                await hass.async_add_executor_job(_write_scripts_yaml, path, scripts)
-            elif not op.ok:
-                outcome = "invalid_request" if op.error_kind == "already_exists" else "denied"
-                return _tool_error(op.error_text), outcome, "create_script"
-            await _record_version(
-                data, access_key, resource_type="script", resource_id=script_id,
-                action="create", before=None, after=config, alias=config.get("alias"),
-            )
+        refused = await _locked_write(_get_script_lock(hass), write)
     except AuthorityChangedError:
         raise
     except Exception:
         _LOGGER.exception("create_script failed")
         return _tool_error("Failed to create script. Check HA logs for details."), "invalid_request", "create_script"
-
+    if refused is not None:
+        return refused
     return await _finish_entity_write(
         hass, access_key, domain="script", storage_id=script_id, config=config, tool_name="create_script",
     )
@@ -1055,7 +1072,7 @@ async def _tool_edit_script(
     args = _with_stored_id(hass, args, "script")
     if effective_cap(access_key, "cap_script_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_script"
-    pre = await _script_write_precheck(args, hass, "edit_script")
+    pre = await _script_write_precheck(args, hass, "edit_script", data)
     if pre is not None:
         return pre
     stale = await _entry_cas_conflict(
@@ -1063,11 +1080,12 @@ async def _tool_edit_script(
     )
     if stale is not None:
         return stale
-    actions = await _added_reviewed_actions(hass, "script", str(args.get("script_id") or "").strip(), args["config"])
+    args, current = await _bind_edit_args(args, hass, "script", str(args.get("script_id") or "").strip())
+    actions = await _added_reviewed_actions(hass, "script", None, args["config"], current=current)
     blocked = await _gate(
         "cap_script_write", access_key, hass, data,
         tool_name="edit_script", args=args, request_id=request_id, client_ip=client_ip,
-        diff=_noting_reviewed_actions(lambda: _build_diff_edit_script(args, access_key, hass), actions),
+        diff=_noting_reviewed_actions(lambda: _build_diff_edit_script(args, access_key, hass, reviewed=current), actions),
         review=bool(actions),
     )
     if blocked is not None:
@@ -1083,12 +1101,11 @@ async def _execute_edit_script(
         return _tool_error(error), "invalid_request", "edit_script"
     script_id = args["script_id"].strip()
     config = args["config"]
-
-    # Re-checked here (not just pre-gate) so a change made during the approval
-    # window is caught before the write lands.
-    stale = await _entry_cas_conflict(args, hass, "script", script_id, "edit_script")
-    if stale is not None:
-        return stale
+    # Both hashes are compared in the job that writes, so a change made during the approval
+    # window or by a concurrent writer is caught before the write lands.
+    checks, unbound = _review_checks(args, "edit_script")
+    if unbound is not None:
+        return unbound
 
     invalid = await _config_validation_error(
         _validate_script_config, hass, script_id, config,
@@ -1097,38 +1114,29 @@ async def _execute_edit_script(
     if invalid is not None:
         return invalid
 
-    path = hass.config.path(_SCRIPT_CONFIG_PATH)
-    lock = _get_script_lock(hass)
+    async def write() -> tuple[dict, str, str] | None:
+        check_request_authority()
+        op = await hass.async_add_executor_job(partial(
+            yaml_includes.write_entry, hass.config.config_dir, "script", script_id,
+            mode="edit", config=config, checks=checks,
+        ))
+        if not op.ok:
+            return _entry_op_error(op, "edit_script")
+        await _record_version(
+            data, access_key, resource_type="script", resource_id=script_id,
+            action="edit", before=op.before, after=config, alias=config.get("alias"),
+        )
+        return None
+
     try:
-        async with lock:
-            check_request_authority()
-            op = await hass.async_add_executor_job(
-                yaml_includes.perform_edit, hass.config.config_dir, "script",
-                script_id, config,
-            )
-            if op.fallback:
-                if await hass.async_add_executor_job(_yaml_file_has_includes, path):
-                    return _tool_error("scripts.yaml uses !include directives. Phoenix MCP cannot safely edit it without destroying the include structure."), "denied", "edit_script"
-                scripts = await hass.async_add_executor_job(_read_scripts_yaml, path)
-                if script_id not in scripts:
-                    return _tool_error(f"No script found with id '{script_id}'."), "denied", "edit_script"
-                before_cfg = scripts[script_id]
-                scripts[script_id] = config
-                await hass.async_add_executor_job(_write_scripts_yaml, path, scripts)
-            elif not op.ok:
-                return _tool_error(op.error_text), "denied", "edit_script"
-            else:
-                before_cfg = op.before
-            await _record_version(
-                data, access_key, resource_type="script", resource_id=script_id,
-                action="edit", before=before_cfg, after=config, alias=config.get("alias"),
-            )
+        refused = await _locked_write(_get_script_lock(hass), write)
     except AuthorityChangedError:
         raise
     except Exception:
         _LOGGER.exception("edit_script failed")
         return _tool_error("Failed to edit script. Check HA logs for details."), "invalid_request", "edit_script"
-
+    if refused is not None:
+        return refused
     return await _finish_entity_write(
         hass, access_key, domain="script", storage_id=script_id, config=config, tool_name="edit_script",
     )
@@ -1178,49 +1186,10 @@ async def _execute_delete_script(
     if not _SCRIPT_ID_RE.match(script_id):
         return _tool_error("Invalid script ID format."), "invalid_request", "delete_script"
 
-    path = hass.config.path(_SCRIPT_CONFIG_PATH)
-    lock = _get_script_lock(hass)
-    try:
-        async with lock:
-            check_request_authority()
-            current = await _read_config_entry(hass, "script", script_id)
-            check_request_authority()
-            stale = _delete_cas_conflict(args, current, "delete_script")
-            if stale is not None:
-                return stale
-            op = await hass.async_add_executor_job(
-                yaml_includes.perform_delete, hass.config.config_dir, "script",
-                script_id, args[_DELETE_EXPECTED_HASH],
-            )
-            if op.fallback:
-                if await hass.async_add_executor_job(_yaml_file_has_includes, path):
-                    return _tool_error("scripts.yaml uses !include directives. Phoenix MCP cannot safely edit it without destroying the include structure."), "denied", "delete_script"
-                scripts = await hass.async_add_executor_job(_read_scripts_yaml, path)
-                if script_id not in scripts:
-                    return _tool_error(f"No script found with id '{script_id}'."), "denied", "delete_script"
-                before_cfg = scripts[script_id]
-                check_request_authority()
-                stale = _delete_cas_conflict(args, before_cfg, "delete_script")
-                if stale is not None:
-                    return stale
-                del scripts[script_id]
-                await hass.async_add_executor_job(_write_scripts_yaml, path, scripts)
-            elif not op.ok:
-                outcome = "invalid_request" if op.error_kind == "conflict" else "denied"
-                return _op_refusal(op), outcome, "delete_script"
-            else:
-                before_cfg = op.before
-    except AuthorityChangedError:
-        raise
-    except Exception:
-        _LOGGER.exception("delete_script failed")
-        return _tool_error("Failed to delete script. Check HA logs for details."), "invalid_request", "delete_script"
-
-    await _record_version(
-        data, access_key, resource_type="script", resource_id=script_id,
-        action="delete", before=before_cfg, after=None,
-        alias=before_cfg.get("alias") if isinstance(before_cfg, dict) else None,
-    )
+    refused = await _locked_delete(args, access_key, hass, data, domain="script", item_id=script_id,
+                                   tool_name="delete_script", label_key="alias")
+    if refused is not None:
+        return refused
     return await _finish_entity_delete(
         hass, access_key, domain="script", item_id=script_id, tool_name="delete_script",
     )
@@ -1273,7 +1242,7 @@ def _scope_trace(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant, d
     """Remove what a readable run recorded about entities this access key cannot read.
 
     A State-shaped value for an inaccessible entity is replaced whole; other inaccessible IDs are
-    redacted, entries keyed by them dropped, and sensitive keys keep no value.
+    redacted, entries keyed by them dropped, and credential keys (a webhook ID too) keep no value.
     """
 
 
@@ -1298,7 +1267,7 @@ def _scope_trace(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant, d
         for key, item in value.items():
             if isinstance(key, str) and _TRACE_ENTITY_ID_RE.fullmatch(key) and not readable(key):
                 continue
-            scoped[key] = "<redacted>" if is_sensitive_key(key) else _scope_trace(item, access_key, hass, depth + 1)
+            scoped[key] = "<redacted>" if is_credential_key(key) else _scope_trace(item, access_key, hass, depth + 1)
         return scoped
     if isinstance(value, (list, tuple, set, frozenset)):
         return [_scope_trace(item, access_key, hass, depth + 1) for item in value]
@@ -1308,6 +1277,99 @@ def _scope_trace(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant, d
     if _TRACE_ENTITY_ID_RE.fullmatch(text):
         return text if readable(text) else "<redacted>"
     return redact_inaccessible_entity_ids_in_text(text, access_key, hass)
+
+
+# Where a trace step path starts in the stored configuration, by the key's both spellings.
+_TRACE_ROOTS = {"trigger": ("triggers", "trigger"), "condition": ("conditions", "condition"),
+                "action": ("actions", "action"), "sequence": ("sequence",)}
+# A webhook trigger's request: what was posted to it, which the authoring capability guards.
+_WEBHOOK_REQUEST_KEYS = ("json", "query", "data", "headers")
+
+
+def _trace_step_node(config: Any, path: str) -> Any:
+    """The configuration a step path evaluated (condition/0/entity_id/0), or None when unmapped."""
+    segments = path.split("/")
+    if not isinstance(config, dict):
+        return None
+    node = next((config[key] for key in _TRACE_ROOTS.get(segments[0], ()) if key in config), None)
+    for segment in segments[1:]:
+        if node is None:
+            return None
+        if segment.isdecimal():
+            index = int(segment)
+            if isinstance(node, list):
+                node = node[index] if index < len(node) else None
+            elif not (isinstance(node, dict) and index == 0):
+                return None
+        elif isinstance(node, dict):
+            other = segment[:-1] if segment.endswith("s") else f"{segment}s"
+            node = node.get(segment, node.get(other))
+        else:
+            return None
+    return node
+
+
+def _names_hidden_entity(node: Any, access_key: AccessKeyRecord, hass: HomeAssistant, depth: int = 0) -> bool:
+    """Whether configuration names an entity this key cannot read, bare or in a template."""
+    if depth > TRACE_SCOPE_MAX_DEPTH:
+        return True
+    if isinstance(node, dict):
+        return any(_names_hidden_entity(key, access_key, hass, depth + 1)
+                   or _names_hidden_entity(item, access_key, hass, depth + 1) for key, item in node.items())
+    if isinstance(node, (list, tuple)):
+        return any(_names_hidden_entity(item, access_key, hass, depth + 1) for item in node)
+    if not isinstance(node, str):
+        return False
+    return redact_inaccessible_entity_ids_in_text(
+        node, access_key, hass, domains=instance_entity_domains(hass), keep=service_not_entity(hass)) != node
+
+
+def _scoped_run_detail(detail: dict, domain: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+    """A run's detail without what the key may not learn from it; _scope_trace still follows.
+
+    A step's result and changed variables go when the configuration it evaluated names an entity
+    the key cannot read, or when that configuration cannot be located and any of it does. The stored
+    configuration, blueprint inputs and a webhook trigger's request need the authoring capability.
+    """
+    nested = detail.get("extended_dict")
+    extended: dict = nested if isinstance(nested, dict) else detail
+    config, inputs = extended.get("config"), extended.get("blueprint_inputs")
+    whole_hidden: bool | None = None
+    trace: dict[str, Any] = {}
+    for path, steps in (extended.get("trace") or {}).items():
+        node = _trace_step_node(config, str(path))
+        if node is None:
+            if whole_hidden is None:
+                whole_hidden = _names_hidden_entity([config, inputs], access_key, hass)
+            hidden = whole_hidden
+        else:
+            hidden = _names_hidden_entity(node, access_key, hass)
+        trace[path] = [
+            {**step, **{key: "<redacted>" for key in ("result", "changed_variables") if key in step}}
+            if hidden and isinstance(step, dict) else step
+            for step in (steps if isinstance(steps, list) else [])
+        ]
+    scoped = {**extended, "trace": trace}
+    capability = "cap_automation_write" if domain == "automation" else "cap_script_write"
+    if effective_cap(access_key, capability) == CAP_DENY:
+        scoped.pop("config", None)
+        scoped.pop("blueprint_inputs", None)
+        for path, steps in trace.items():
+            trace[path] = [_without_webhook_request(step) for step in steps]
+        scoped["withheld"] = [f"The configuration and a webhook trigger's request need {capability}."]
+    return {**detail, "extended_dict": scoped} if extended is not detail else scoped
+
+
+def _without_webhook_request(step: Any) -> Any:
+    """A trace step whose webhook trigger variables keep no request body, query or headers."""
+    variables = step.get("changed_variables") if isinstance(step, dict) else None
+    if not isinstance(variables, dict):
+        return step
+    trigger = variables.get("trigger")
+    if not (isinstance(trigger, dict) and trigger.get("platform") == "webhook"):
+        return step
+    trigger = {key: item for key, item in trigger.items() if key not in _WEBHOOK_REQUEST_KEYS}
+    return {**step, "changed_variables": {**variables, "trigger": trigger}}
 
 
 def _resolve_trace_target(raw: str, hass: HomeAssistant) -> tuple[str | None, str | None]:
@@ -1477,7 +1539,8 @@ async def _tool_get_automation_traces(
         trace = _trace_by_run_id(runs, run_id)
         if trace is None:
             return _tool_error("Trace run not found."), "not_found", raw
-        run_body = _trace_summary(trace.as_short_dict()) if summary else trace.as_dict()
+        run_body = (_trace_summary(trace.as_short_dict()) if summary
+                    else _scoped_run_detail(trace.as_dict(), trace_key.split(".", 1)[0], access_key, hass))
         return _tool_success(json.dumps(_scope_trace(run_body, access_key, hass), default=str)), "allowed", entity_id
 
     items = sorted(
@@ -1617,9 +1680,14 @@ async def _tool_get_scene(
 
 
 async def _scene_write(
-    config: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData, *, tool_name: str, scene_id: str, replace: bool
+    config: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData, *, tool_name: str, scene_id: str,
+    replace: bool, checks: tuple[yaml_includes.HashCheck, ...] = (),
 ) -> tuple[dict, str, str]:
-    """Shared create/edit body: validate, scope-check members, write scenes.yaml, reload."""
+    """Shared create/edit body: validate, scope-check members, write scenes.yaml, reload.
+
+    An edit scope-checks the scene's current members and writes only while the scene still
+    hashes to what was checked and to every hash in checks.
+    """
     if not _valid_scene_config(config):
         return _tool_error("config must include a non-empty 'name' and a non-empty 'entities' map."), "invalid_request", tool_name
     if yaml_includes.contains_tag_strings(config):
@@ -1634,68 +1702,39 @@ async def _scene_write(
 
     config = {k: v for k, v in config.items() if k != "id"}
     config["id"] = scene_id
-    path = hass.config.path(_SCENE_CONFIG_PATH)
-    lock = _get_scene_lock(hass)
+
+    async def write() -> tuple[dict, str, str] | None:
+        check_request_authority()
+        write_checks = checks
+        if replace:
+            # The key must already own the scene it replaces: every CURRENT member writable. A
+            # missing scene and an out-of-scope one answer alike, so the id is no existence oracle.
+            current = await _read_config_entry(hass, "scene", scene_id)
+            if current is None or _unwritable_scene_members(current, access_key, hass):
+                return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", tool_name
+            write_checks = (*checks, (content_hash(current), yaml_includes.MSG_CHANGED_WHILE_WRITING))
+        op = await hass.async_add_executor_job(partial(
+            yaml_includes.write_entry, hass.config.config_dir, "scene", scene_id,
+            mode="edit" if replace else "create", config=config, checks=write_checks,
+        ))
+        if not op.ok:
+            return _entry_op_error(op, tool_name)
+        await _record_version(
+            data, access_key, resource_type="scene", resource_id=scene_id,
+            action="edit" if replace else "create",
+            before=op.before if replace else None, after=config, alias=config.get("name"),
+        )
+        return None
+
     try:
-        async with lock:
-            check_request_authority()
-            layout = await hass.async_add_executor_job(
-                yaml_includes.resolve_domain_layout, hass.config.config_dir, "scene",
-            )
-            if layout is None:
-                # configuration.yaml missing or unparseable: legacy hardcoded-file path.
-                if await hass.async_add_executor_job(_yaml_file_has_includes, path):
-                    return _tool_error("scenes.yaml uses !include directives. Phoenix MCP cannot safely edit it without destroying the include structure."), "denied", tool_name
-                items = await hass.async_add_executor_job(_read_scenes_yaml, path)
-                if replace:
-                    idx = next((i for i, s in enumerate(items) if isinstance(s, dict) and str(s.get("id")) == scene_id), None)
-                    # The access key must already own the scene it is replacing: it can only
-                    # edit a scene whose CURRENT members are all WRITE-accessible. A
-                    # missing scene and an out-of-scope one return the same error so the
-                    # id is not an existence oracle.
-                    if idx is None or _unwritable_scene_members(items[idx], access_key, hass):
-                        return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", tool_name
-                    before_cfg = items[idx]
-                    items[idx] = config
-                else:
-                    before_cfg = None
-                    items.append(config)
-                await hass.async_add_executor_job(_write_scenes_yaml, path, items)
-            elif layout.error:
-                return _tool_error(layout.error), "denied", tool_name
-            elif replace:
-                # Routed edit: same oracle rule as the legacy path, checked on the
-                # scene's CURRENT members before anything is written.
-                current = await hass.async_add_executor_job(
-                    yaml_includes.read_entry, hass.config.config_dir, "scene", scene_id,
-                )
-                if current is None or _unwritable_scene_members(current, access_key, hass):
-                    return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", tool_name
-                op = await hass.async_add_executor_job(
-                    yaml_includes.perform_edit, hass.config.config_dir, "scene",
-                    scene_id, config,
-                )
-                if not op.ok:
-                    return _tool_error(op.error_text), "denied", tool_name
-                before_cfg = op.before
-            else:
-                before_cfg = None
-                op = await hass.async_add_executor_job(
-                    yaml_includes.perform_create, hass.config.config_dir, "scene",
-                    scene_id, config,
-                )
-                if not op.ok:
-                    return _tool_error(op.error_text), "denied", tool_name
-            await _record_version(
-                data, access_key, resource_type="scene", resource_id=scene_id,
-                action="edit" if replace else "create",
-                before=before_cfg, after=config, alias=config.get("name"),
-            )
+        refused = await _locked_write(_get_scene_lock(hass), write)
     except AuthorityChangedError:
         raise
     except Exception:
         _LOGGER.exception("%s failed", tool_name)
         return _tool_error(f"Failed to {tool_name.replace('_', ' ')}. Check HA logs for details."), "invalid_request", tool_name
+    if refused is not None:
+        return refused
     return await _finish_entity_write(
         hass, access_key, domain="scene", storage_id=scene_id, config=config, tool_name=tool_name,
     )
@@ -1784,15 +1823,14 @@ async def _tool_edit_scene(
         refused = await _editor_file_refusal(hass, "scene", scene_id, "edit_scene", create=False)
         if refused is not None:
             return refused
-    stale = await _entry_cas_conflict(
-        args, hass, "scene", str(args.get("scene_id") or "").strip(), "edit_scene",
-    )
+    stale = _cas_conflict(args.get("expected_hash"), current, "edit_scene")
     if stale is not None:
         return stale
+    args = _bind_reviewed(args, current)
     blocked = await _gate(
         gate_cap, access_key, hass, data,
         tool_name="edit_scene", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_edit_scene(args, access_key, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_edit_scene(args, access_key, hass, reviewed=current),
     )
     if blocked is not None:
         return blocked
@@ -1809,12 +1847,13 @@ async def _execute_edit_scene(
         return _tool_error("scene_id is required."), "invalid_request", "edit_scene"
     if not isinstance(config, dict):
         return _tool_error("config must be an object."), "invalid_request", "edit_scene"
-    # Re-checked here (not just pre-gate) so a change made during the approval
-    # window is caught before the write lands.
-    stale = await _entry_cas_conflict(args, hass, "scene", scene_id, "edit_scene")
-    if stale is not None:
-        return stale
-    return await _scene_write(config, access_key, hass, data, tool_name="edit_scene", scene_id=scene_id, replace=True)
+    # Compared in the job that writes, so a change made during the approval window or by a
+    # concurrent writer is caught before the write lands.
+    checks, unbound = _review_checks(args, "edit_scene")
+    if unbound is not None:
+        return unbound
+    return await _scene_write(config, access_key, hass, data, tool_name="edit_scene", scene_id=scene_id,
+                              replace=True, checks=checks)
 
 
 async def _tool_delete_scene(
@@ -1851,61 +1890,15 @@ async def _execute_delete_scene(
     scene_id = str(args.get("scene_id") or "").strip()
     if not scene_id:
         return _tool_error("scene_id is required."), "invalid_request", "delete_scene"
-    path = hass.config.path(_SCENE_CONFIG_PATH)
-    lock = _get_scene_lock(hass)
-    try:
-        async with lock:
-            check_request_authority()
-            current = await _read_config_entry(hass, "scene", scene_id)
-            check_request_authority()
-            stale = _delete_cas_conflict(args, current, "delete_scene")
-            if stale is not None:
-                return stale
-            layout = await hass.async_add_executor_job(
-                yaml_includes.resolve_domain_layout, hass.config.config_dir, "scene",
-            )
-            if layout is None:
-                if await hass.async_add_executor_job(_yaml_file_has_includes, path):
-                    return _tool_error("scenes.yaml uses !include directives. Phoenix MCP cannot safely edit it without destroying the include structure."), "denied", "delete_scene"
-                items = await hass.async_add_executor_job(_read_scenes_yaml, path)
-                existing = next((s for s in items if isinstance(s, dict) and str(s.get("id")) == scene_id), None)
-                # The access key may only delete a scene whose current members are all
-                # WRITE-accessible. Missing and out-of-scope return the same error.
-                if existing is None or _unwritable_scene_members(existing, access_key, hass):
-                    return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", "delete_scene"
-                stale = _delete_cas_conflict(args, existing, "delete_scene")
-                if stale is not None:
-                    return stale
-                check_request_authority()
-                filtered = [s for s in items if not (isinstance(s, dict) and str(s.get("id")) == scene_id)]
-                await hass.async_add_executor_job(_write_scenes_yaml, path, filtered)
-            elif layout.error:
-                return _tool_error(layout.error), "denied", "delete_scene"
-            else:
-                existing = await hass.async_add_executor_job(
-                    yaml_includes.read_entry, hass.config.config_dir, "scene", scene_id,
-                )
-                if existing is None or _unwritable_scene_members(existing, access_key, hass):
-                    return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", "delete_scene"
-                check_request_authority()
-                op = await hass.async_add_executor_job(
-                    yaml_includes.perform_delete, hass.config.config_dir, "scene",
-                    scene_id, args[_DELETE_EXPECTED_HASH],
-                )
-                if not op.ok:
-                    outcome = "invalid_request" if op.error_kind == "conflict" else "denied"
-                    return _op_refusal(op), outcome, "delete_scene"
-                existing = op.before
-    except AuthorityChangedError:
-        raise
-    except Exception:
-        _LOGGER.exception("delete_scene failed")
-        return _tool_error("Failed to delete scene. Check HA logs for details."), "invalid_request", "delete_scene"
-    await _record_version(
-        data, access_key, resource_type="scene", resource_id=scene_id,
-        action="delete", before=existing, after=None,
-        alias=existing.get("name") if isinstance(existing, dict) else None,
+    # The access key may only delete a scene whose current members are all WRITE-accessible.
+    # Missing and out-of-scope return the same error.
+    refused = await _locked_delete(
+        args, access_key, hass, data, domain="scene", item_id=scene_id, tool_name="delete_scene", label_key="name",
+        in_scope=lambda current: current is not None and not _unwritable_scene_members(current, access_key, hass),
+        missing=f"No scene found with id '{scene_id}', or it controls entities outside your write scope.",
     )
+    if refused is not None:
+        return refused
     return await _finish_entity_delete(
         hass, access_key, domain="scene", item_id=scene_id, tool_name="delete_scene",
     )
@@ -1988,10 +1981,12 @@ def _authoring_entry_label(
     return None
 
 
-async def _build_diff_edit_automation(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_edit_automation(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, reviewed: Any = _ENTRY_NOT_CAPTURED
+) -> dict:
     automation_id = (args.get("automation_id") or "").strip()
     config = dict_arg(args.get("config"))
-    before = await _entry_before_json(hass, "automation", automation_id)
+    before = await _entry_before_json(hass, "automation", automation_id, current=reviewed)
     return {
         "kind": "yaml_diff",
         **_summary("edit_automation", automation_id=automation_id),
@@ -2085,10 +2080,12 @@ def _build_diff_create_scene(args: dict, access_key: AccessKeyRecord, hass: Home
     }
 
 
-async def _build_diff_edit_scene(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_edit_scene(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, reviewed: Any = _ENTRY_NOT_CAPTURED
+) -> dict:
     scene_id = str(args.get("scene_id") or "").strip()
     config = dict_arg(args.get("config"))
-    before = await _entry_before_json(hass, "scene", scene_id)
+    before = await _entry_before_json(hass, "scene", scene_id, current=reviewed)
     return {
         "kind": "yaml_diff",
         **_summary("edit_scene", scene_id=scene_id),
@@ -2132,10 +2129,12 @@ def _build_diff_create_script(args: dict, access_key: AccessKeyRecord, hass: Hom
     }
 
 
-async def _build_diff_edit_script(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_edit_script(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, reviewed: Any = _ENTRY_NOT_CAPTURED
+) -> dict:
     script_id = (args.get("script_id") or "").strip()
     config = dict_arg(args.get("config"))
-    before = await _entry_before_json(hass, "script", script_id, wrap_key=script_id)
+    before = await _entry_before_json(hass, "script", script_id, wrap_key=script_id, current=reviewed)
     return {
         "kind": "yaml_diff",
         **_summary("edit_script", script_id=script_id),

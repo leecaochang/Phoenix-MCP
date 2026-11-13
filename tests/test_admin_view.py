@@ -705,6 +705,9 @@ async def test_delete_access_key_cancels_pending_approvals():
     ]
     assert [p["approval_id"] for p in resolved] == ["appr_mine"]
     assert resolved[0]["closure_reason"] == "access_key_revoked"
+    rows = [c.kwargs for c in data.audit.record.call_args_list if c.kwargs.get("method") == "approval/cancelled"]
+    assert [(r["method"], r["request_id"], r["payload"]) for r in rows] == [
+        ("approval/cancelled", "r", {"approval_id": "appr_mine", "reason": "access_key_revoked"})]
 
 
 @pytest.mark.asyncio

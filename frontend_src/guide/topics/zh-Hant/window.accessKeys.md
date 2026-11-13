@@ -63,6 +63,8 @@ Phoenix 會詢問你將如何使用新金鑰：
 
 為金鑰提供新的機密值並顯示它。其他所有內容保持不變，包括其權限和歷史。舊值會立即失效，因此請更新使用它的每個應用程式。同一對話方塊中的 **{{label:accessKeys.helpConnect}}** 會顯示每個應用程式使用新值的設定。
 
+輪換會取消該金鑰等待中的核准，因為持有舊值的人可能發出了這些請求。
+
 ### {{label:accessKeys.enablePtLabel}} {#enable-pass-through}
 
 讓金鑰略過權限樹。權限樹會被保留：在 {{label:accessKeys.permissionsTree}} 視窗中選擇 **{{label:accessKeys.switchToScoped}}** 可重新啟用它。Home Companion 金鑰不能使用直通模式。

@@ -17,7 +17,9 @@ If something is wrong with an account, such as a model the provider no longer of
 
 Choose from the models the provider offers. Models that can't use tools are greyed out, because Phoenix needs tools to act.
 
-**{{label:settings.agentcliModelAuto}}** uses a current model suited to agent work, skipping previews and models announced for retirement. If you pick a model yourself, Phoenix keeps it until the provider retires it, then switches to the successor the provider names, or else the newest of its family. A model whose name ends in `:free` switches only to another free model.
+**{{label:settings.agentcliModelAuto}}** uses a current model suited to agent work, skipping previews and models announced for retirement. If you pick a model yourself, Phoenix keeps it until the provider retires it. After that, Phoenix uses the successor the provider names, or else the newest model of the same family, or else of the same tier, such as another Haiku model.
+
+If there's none, Phoenix keeps the retired model and shows a warning, so choose another. A model whose name ends in `:free` switches only to another free model. On a local Ollama server, Phoenix switches only within the family, and **{{label:settings.agentcliModelAuto}}** never chooses a cloud model.
 
 When **{{label:settings.agentcliVerifyOptions}}** is on, saving also checks which options the model supports. This uses a little API credit.
 
@@ -72,7 +74,7 @@ Most providers need only an API key. Some also need to know where your account i
 - OpenCode: the Zen or Console route. You can add a key on one route only.
 - Z.ai: Standard API, Coding Plan or China. You can save the same key once for each plan.
 - Qwen: your workspace's base URL, a public HTTPS address, as well as the API key.
-- Ollama (local): your Ollama server's address. Home Assistant connects to it, so use an address the Home Assistant host can reach.
+- Ollama (local): your Ollama server's address. Home Assistant connects to it, so use an address the Home Assistant host can reach. Plain `http://` traffic isn't encrypted; see [What leaves your home](guide:topic.security#leaves-home).
 
 Some plans are for coding tools only: Z.ai's Coding Plan, Xiaomi MiMo's Token Plan, and Alibaba Cloud's Coding Plan and Token Plan. Their terms forbid use from an app such as Home Assistant, and the provider may throttle or block the key. Phoenix warns when you choose one. For Voice, AI Task and Agent Chat, use the provider's pay-as-you-go API.
 

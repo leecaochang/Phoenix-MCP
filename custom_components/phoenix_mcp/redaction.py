@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable, Callable
+from collections.abc import Collection, Iterable, Iterator, Callable
 from functools import lru_cache
 import ipaddress
 import logging
 import re
 from typing import Any, TYPE_CHECKING
 
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, async_get_hass_or_none
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.network import get_url
 import yarl
 
 from .const import DOMAIN
-from .policy_engine import Permission, get_effective_hint, is_sensitive_key, resolve
+from .policy_engine import Permission, get_effective_hint, is_credential_key, is_sensitive_key, resolve
 
 if TYPE_CHECKING:
     from .access_key_store import AccessKeyRecord
@@ -38,7 +39,7 @@ _JWT_SCRUB_RE = re.compile(
 # Credentials embedded in URLs/log text: query params (token=..., api_password=...)
 # and userinfo (https://user:pass@host). Over-redaction in logs is acceptable.
 _URL_CRED_QUERY_RE = re.compile(
-    r"(?i)(access_key|accesskey|access_token|refresh_token|api_password|password|api_key|apikey|client_secret|secret|token|auth)=[^\s&\"';]+"
+    r"(?i)(access_key|accesskey|access_token|refresh_token|api_password|password|api_key|apikey|client_secret|secret|token|auth)=(?![{\[(])[^\s&\"';]+"
 )
 
 _URL_CRED_USERINFO_RE = re.compile(r"://[^/\s:@]+:[^/\s:@]+@")
@@ -52,30 +53,88 @@ _PROVIDER_KEY_RE = re.compile(
     r"AIza[A-Za-z0-9_-]{30,}|(?:gsk_|xai-|nvapi-)[A-Za-z0-9_-]{20,})\b"
 )
 
-# A key and its value in the forms an integration logs: a Python dict or JSON
-# ('password': 'x', "token": "x"), keyword arguments (password='x') and plain text
-# (Password: x). Group 2 is the key, checked with is_sensitive_key, and group 4 the
-# value. The key is bounded and possessive, and a start inside a word is refused,
-# so a long word costs one attempt. An unclosed quote runs to the end of the line.
-_KEYED_VALUE_RE = re.compile(
-    r"(?<![\w-])([\"']?)([A-Za-z_][\w-]{0,63}+)\1(\s*[:=]\s*)"
-    r"(\"[^\"\n]*\"?|'[^'\n]*'?|[^\s,;}\])]+)"
+# Credentials that are a URL's path: a Telegram bot token, Slack and Discord webhook paths and
+# a Home Assistant webhook ID, which needs no other authentication. Group 1 is what stays.
+_SERVICE_URL_TOKEN_RE = re.compile(
+    r"(?i)(/bot)\d{5,12}+:[A-Za-z0-9_-]{20,}+"
+    r"|(hooks\.slack\.com/(?:services|workflows|triggers)/|discord(?:app)?\.com/api/webhooks/"
+    r"|/api/webhook/)[^\s?#\"'<>]++"
+)
+# The same services' tokens with no URL around them: Slack xox and xapp tokens, a bot token.
+_BARE_SERVICE_TOKEN_RE = re.compile(
+    r"(?<![\w-])(?:xox[abposre]-[A-Za-z0-9-]{10,}+|xapp-[A-Za-z0-9-]{10,}+|\d{6,12}+:AA[A-Za-z0-9_-]{30,}+)"
 )
 
+# A key and its value in the forms an integration logs: a Python dict or JSON
+# ('password': 'x', "token": "x"), keyword arguments (password='x') and plain text
+# (Password: x). Group 2 is the key, checked with is_credential_key, and group 4 the
+# value. The key is bounded and possessive, and a start inside a word is refused,
+# so a long word costs one attempt. An unclosed quote runs to the end of the line.
+# The value is only looked at, never consumed, so a key inside the value of a harmless
+# key (payload={'password': 'x'}, msg=password=x) is still found; an unquoted value is
+# bounded, so overlapping attempts stay linear, and is completed once judged sensitive.
+_KEYED_VALUE_RE = re.compile(
+    r"(?<![\w-])([\"']?)([A-Za-z_][\w-]{0,63}+)\1(\s*[:=]\s*)"
+    r"(?=(\"[^\"\n]*\"?|'[^'\n]*'?|[{\[(]|[^\s,;}\])({\[\"'][^\s,;}\])]{0,255}))"
+)
+_UNQUOTED_REST_RE = re.compile(r"[^\s,;}\])]*")
+# Header values whose every word is the credential (Authorization: Token x, Cookie: a=b; c=d).
+_WHOLE_VALUE_KEYS = frozenset({"authorization", "proxy_authorization", "cookie", "set_cookie"})
+_HEADER_REST_RE = re.compile(r"[^\n\"']*")
+_OPENERS = {"{": "}", "[": "]", "(": ")"}
+# A value an earlier pattern already replaced, so the text after it stays.
+_SCRUBBED_MARKS = ("<redacted>", "<token>", "<phoenix-access-key>")
 
-def _redact_keyed_value(match: re.Match[str]) -> str:
-    # A !secret or !env_var reference names where the value lives, not the value itself.
-    if not is_sensitive_key(match[2]) or match[4] in ("!secret", "!env_var"):
-        return match[0]
-    return match[0][: match.start(4) - match.start(0)] + "<redacted>"
+
+def _container_end(text: str, start: int) -> int:
+    """End of the bracketed value opening at `start`: its closing bracket, else the line's end."""
+    depth = 0
+    for index in range(start, len(text)):
+        char = text[index]
+        if char == "\n":
+            return index
+        if char in _OPENERS:
+            depth += 1
+        elif char in "}])":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+    return len(text)
+
+
+def _redact_keyed_values(text: str) -> str:
+    """Replace the value of every sensitively named key, a bracketed value whole."""
+    parts: list[str] = []
+    cursor = 0
+    for match in _KEYED_VALUE_RE.finditer(text):
+        value = match[4]
+        # A !secret or !env_var reference names where the value lives, not the value itself.
+        if (match.start() < cursor or not is_credential_key(match[2]) or value in ("!secret", "!env_var")
+                or value.startswith(_SCRUBBED_MARKS)):
+            continue
+        start = match.start(4)
+        key = match[2].lower().replace("-", "_")
+        if value in _OPENERS:
+            end = _container_end(text, start)
+        elif value[0] in "\"'":
+            end = match.end(4)
+        elif key in _WHOLE_VALUE_KEYS or key.endswith("authorization"):
+            end = _HEADER_REST_RE.match(text, start).end()  # type: ignore[union-attr]
+        else:
+            end = _UNQUOTED_REST_RE.match(text, start).end()  # type: ignore[union-attr]
+        parts += [text[cursor:start], "<redacted>"]
+        cursor = end
+    parts.append(text[cursor:])
+    return "".join(parts)
 
 
 def _scrub_log_text(text: str) -> str:
     """Redact access keys, tokens and credentials from a log line.
 
     Covers Phoenix MCP access keys, JWTs and long-lived access tokens, URL
-    credentials, authorization headers, provider API keys, and the value of any
-    sensitively named key in dict, JSON, keyword or plain-text form. Over-redaction
+    credentials, authorization headers, provider API keys, webhook and bot URLs, and
+    the value of any sensitively named key in dict, JSON, keyword or plain-text form,
+    wherever it sits in the line. Over-redaction
     is the accepted failure mode, since another integration's log line can hold
     anything.
     """
@@ -85,7 +144,9 @@ def _scrub_log_text(text: str) -> str:
     text = _URL_CRED_USERINFO_RE.sub("://<redacted>@", text)
     text = _AUTH_SCHEME_RE.sub(r"\1<redacted>", text)
     text = _PROVIDER_KEY_RE.sub("<redacted>", text)
-    return _KEYED_VALUE_RE.sub(_redact_keyed_value, text)
+    text = _SERVICE_URL_TOKEN_RE.sub(lambda match: f"{match[1] or match[2]}<redacted>", text)
+    text = _BARE_SERVICE_TOKEN_RE.sub("<redacted>", text)
+    return _redact_keyed_values(text)
 
 
 # A "key: value" or "key = value" line in a YAML/config diff, capturing the
@@ -139,7 +200,7 @@ def redact_secrets_in_text(text: str | None) -> str | None:
             out.append(line)
             continue
         m = _CONFIG_SECRET_LINE_RE.match(line)
-        if (m is not None and is_sensitive_key(m.group(2))
+        if (m is not None and is_credential_key(m.group(2))
                 and not _SECRET_REFERENCE_RE.fullmatch(m.group(4))):
             out.append(_scrub_log_text(f"{m.group(1)}{m.group(2)}{m.group(3)}<redacted>"))
         else:
@@ -323,7 +384,7 @@ def redact_diagnostics(obj: Any, _depth: int = 0, _identifiers: _IdentifierPatte
     if isinstance(obj, dict):
         return {
             (_scrub_diagnostic_str(k, _identifiers) if isinstance(k, str) else k):
-                "<redacted>" if is_sensitive_key(k) else redact_diagnostics(v, _depth + 1, _identifiers)
+                "<redacted>" if is_credential_key(k) else redact_diagnostics(v, _depth + 1, _identifiers)
             for k, v in obj.items()
         }
     if isinstance(obj, list):
@@ -363,6 +424,46 @@ def build_safe_config(hass: HomeAssistant) -> dict:
 
 _ENTITY_ID_TEXT_RE = re.compile(r"(?<![\w.])([a-z0-9_]+\.[a-z0-9_]+)(?!\w|\.\w)")
 
+# A whole dotted chain (states.lock.door.state, lock.door.attributes.battery,
+# homeassistant.components.automation.morning). A two-part chain is a bare ID; a longer
+# one is searched window by window in _chain_windows.
+_DOTTED_CHAIN_RE = re.compile(r"(?<![\w.])\w++(?:\.\w++)++")
+_ID_PART_RE = re.compile(r"[a-z0-9_]+")
+_ENTITY_PLATFORMS = frozenset(platform.value for platform in Platform)
+
+
+def _entity_domain(hass: HomeAssistant, domain: str) -> bool:
+    """Whether a domain holds entities here; a static platform list keeps it from being an oracle."""
+    return domain in _ENTITY_PLATFORMS or hass.states.async_entity_ids_count(domain) > 0
+
+
+def entity_exists(hass: HomeAssistant, entity_id: str) -> bool:
+    """Whether an entity has a state or a registry entry."""
+    return hass.states.get(entity_id) is not None or er.async_get(hass).async_get(entity_id) is not None
+
+
+def _chain_windows(parts: list[str], hass: HomeAssistant) -> Iterator[int]:
+    """Start indexes of the two-part windows of a longer chain that may name an entity.
+
+    The window after a `states` part is always one (template access), the leading
+    window is one when its domain holds entities, and any other window when that entity
+    exists, as in a logger named after an automation. Windows never overlap.
+    """
+    index = 0
+    while index < len(parts) - 1:
+        domain, object_id = parts[index], parts[index + 1]
+        candidate = (
+            _ID_PART_RE.fullmatch(domain) is not None and _ID_PART_RE.fullmatch(object_id) is not None
+            and not (domain.isdecimal() and object_id.isdecimal())
+            and ((index > 0 and parts[index - 1] == "states")
+                 or (index == 0 and _entity_domain(hass, domain))
+                 or entity_exists(hass, f"{domain}.{object_id}")))
+        if candidate:
+            yield index
+            index += 2
+        else:
+            index += 1
+
 
 def visible_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> frozenset[str]:
     """Return every live or registered entity ID this key may read. Event loop only."""
@@ -373,21 +474,35 @@ def visible_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> froz
 
 
 def _redact_entity_ids(text: str, hass: HomeAssistant, is_visible: Callable[[str], bool], sentinel: str) -> str:
-    """Replace each entity ID that `is_visible` rejects; decimal literals are not entity IDs."""
+    """Replace each entity ID that `is_visible` rejects, bare or inside a dotted chain.
+
+    Decimal literals are not entity IDs. A chain that cannot be judged goes whole.
+    """
+    def _bare(entity_id: str) -> str:
+        if _ID_PART_RE.fullmatch(entity_id.replace(".", "_", 1)) is None:
+            return entity_id
+        # Decimal literals are not entity references. Keep actual or registered
+        # numeric-looking IDs under the normal scope check, including disabled ones.
+        if all(part.isdecimal() for part in entity_id.split(".")) and not entity_exists(hass, entity_id):
+            return entity_id
+        return entity_id if is_visible(entity_id) else sentinel
+
     def _replacement(match: re.Match[str]) -> str:
+        chain = match.group(0)
         try:
-            entity_id = match.group(1)
-            # Decimal literals are not entity references. Keep actual or registered
-            # numeric-looking IDs under the normal scope check, including disabled ones.
-            if (all(part.isdecimal() for part in entity_id.split("."))
-                    and hass.states.get(entity_id) is None
-                    and er.async_get(hass).async_get(entity_id) is None):
-                return entity_id
-            return entity_id if is_visible(entity_id) else sentinel
+            parts = chain.split(".")
+            if len(parts) == 2:
+                return _bare(chain)
+            out = list(parts)
+            for index in reversed(list(_chain_windows(parts, hass))):
+                entity_id = f"{parts[index]}.{parts[index + 1]}"
+                if not is_visible(entity_id):
+                    out[index:index + 2] = [sentinel]
+            return ".".join(out)
         except Exception:
             return sentinel
 
-    return _ENTITY_ID_TEXT_RE.sub(_replacement, text)
+    return _DOTTED_CHAIN_RE.sub(_replacement, text)
 
 
 def redact_inaccessible_entity_ids_in_text(
@@ -397,17 +512,27 @@ def redact_inaccessible_entity_ids_in_text(
     *,
     sentinel: str = "<redacted-entity>",
     domains: Collection[str] | None = None,
+    keep: Callable[[str], bool] | None = None,
 ) -> str:
     """Redact inaccessible entity IDs embedded in otherwise free-form text. Event loop only.
 
     With `domains`, a token outside them is not an entity ID and stays, so
-    template property access such as entity.state survives.
+    template property access such as entity.state survives; so does one `keep` admits.
     """
     return _redact_entity_ids(
         text, hass,
         lambda eid: (domains is not None and eid.split(".", 1)[0] not in domains)
+        or (keep is not None and keep(eid))
         or resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE),
         sentinel)
+
+
+def service_not_entity(hass: HomeAssistant) -> Callable[[str], bool]:
+    """A `keep` test admitting a registered service name that is no entity (light.turn_on)."""
+    def keep(token: str) -> bool:
+        domain, _, service = token.partition(".")
+        return hass.services.has_service(domain, service) and not entity_exists(hass, token)
+    return keep
 
 
 ACCESS_KEY_NOTES_FRAMING = (

@@ -12,8 +12,6 @@ its translation did not, the shortcut that marks a stale translation as
 reviewed. An English-only edit that genuinely needs no new translation (a typo
 fix) passes with --allow-unchanged, and still shows up as a line in the diff.
 Only fingerprints are stored; the texts are in the catalogs' git history.
-scripts/i18n_merge_locale.py stamps the keys it merges, so a locale written the
-normal way needs nothing here.
 
 Run: python scripts/i18n_source_stamp.py zh-Hans
      python scripts/i18n_source_stamp.py --all

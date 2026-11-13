@@ -4,7 +4,7 @@ Third-party components shipped with the Phoenix MCP panel
    https://github.com/rsms/inter
    Licensed under the SIL Open Font License, Version 1.1; full text in fonts/OFL-Inter.txt.
 
-2. Lucide icons (lucide-react 1.52.0), bundled into the panel scripts
+2. Lucide icons (lucide-react 1.68.0), bundled into the panel scripts
    https://lucide.dev
 
    ISC License

@@ -20,11 +20,11 @@ from homeassistant.util.dt import utcnow
 from homeassistant.config_entries import ConfigEntryState
 
 from .const import (
-    BLOCKED_DOMAINS, DOMAIN, DUAL_GATE_SERVICES, MUSIC_ASSISTANT_DOMAIN,
+    BLOCKED_DOMAINS, DEVICE_ACTUATOR_DOMAINS, DOMAIN, DUAL_GATE_SERVICES, MUSIC_ASSISTANT_DOMAIN,
     MUSIC_ASSISTANT_LIBRARY_SERVICES, NON_ACTUATING_SERVICES, NO_TARGET_SERVICES,
     PHYSICAL_COMMAND_SERVICES, PHYSICAL_GATE_DOMAINS, PRIMARY_ENTITY_DOMAINS, SCRIPT_ENTITY_SERVICES,
     SENSITIVE_ATTRIBUTES, APPROVAL_TARGET_DEPTH, APPROVAL_TARGET_LIMIT, SENSITIVE_KEY_FINAL_WORDS,
-    SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES, PERSONA_HOME_COMPANION,
+    SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES, PERSONA_HOME_COMPANION, READER_CREDENTIAL_KEYS,
     HOME_COMPANION_SENSOR_CLASSES, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS,
     UPDATE_INSTALL_SERVICE,
 )
@@ -563,6 +563,12 @@ def is_sensitive_key(key: Any) -> bool:
             or re.split(r"[^a-z0-9]+", lowered)[-1] in SENSITIVE_KEY_FINAL_WORDS)
 
 
+def is_credential_key(key: Any) -> bool:
+    """is_sensitive_key, plus the keys a reader masks although authoring keeps them (webhook_id)."""
+    return is_sensitive_key(key) or (
+        isinstance(key, str) and key.lower().replace("-", "_").replace(" ", "_").endswith(READER_CREDENTIAL_KEYS))
+
+
 def scrub_attributes(
     attributes: Mapping[str, Any], access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> dict[str, Any]:
@@ -1035,10 +1041,7 @@ def service_gate_targets(
     if f"{domain}/{service}" in DUAL_GATE_SERVICES | NO_TARGET_SERVICES | MUSIC_ASSISTANT_LIBRARY_SERVICES:
         return []
     if domain == ESPHOME_DOMAIN and (entry := resolve_esphome_user_service(hass, service)) is not None:
-        return [
-            reg_entry.entity_id
-            for reg_entry in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-        ]
+        return esphome_entry_entities(hass, entry)
     targets, _ = resolve_service_targets(
         entity_id=entity_id, device_id=device_id, area_id=area_id,
         service_domain=domain, access_key=access_key, hass=hass,
@@ -1456,8 +1459,8 @@ def resolve_intent_entities(
 #
 # Firmware-declared actions are esphome.<device_name_with_underscores>_<action_name>. Their
 # schema holds only declared arguments, so they take no entity target and miss the
-# target-flattening path. Authorization is the owning device's write scope: an action can
-# act on nothing else.
+# target-flattening path. Authorization is write scope over the owning device, and MESA judges
+# every entity of it: an action can drive anything there and act on nothing else.
 # ---------------------------------------------------------------------------
 
 
@@ -1506,12 +1509,27 @@ def resolve_esphome_user_service(hass: HomeAssistant, service: str) -> Any | Non
     return best
 
 
+def esphome_entry_entities(hass: HomeAssistant, entry: Any) -> list[str]:
+    """Return every registry entity of an ESPHome entry, disabled ones too: what its actions reach."""
+    return [
+        reg_entry.entity_id
+        for reg_entry in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    ]
+
+
 def esphome_entry_writable(hass: HomeAssistant, entry: Any, access_key: AccessKeyRecord) -> bool:
-    """True when the access key holds WRITE on at least one of the entry's entities."""
-    registry = er.async_get(hass)
-    return any(
-        resolve(reg_entry.entity_id, access_key, hass) is Permission.WRITE
-        for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
+    """True when the key holds WRITE on an entity of the entry and on each one it can operate.
+
+    The firmware's action can drive anything on the device, as a raw command can, so a RED or
+    ungranted actuator refuses it.
+    """
+    permissions = {
+        entity_id: resolve(entity_id, access_key, hass) for entity_id in esphome_entry_entities(hass, entry)
+    }
+    return any(permission is Permission.WRITE for permission in permissions.values()) and all(
+        permission is Permission.WRITE
+        for entity_id, permission in permissions.items()
+        if entity_id.split(".", 1)[0] in DEVICE_ACTUATOR_DOMAINS
     )
 
 

@@ -15,7 +15,8 @@ from ..access_key_store import (
     normalize_notes,
 )
 from ..approvals import (
-    REASON_REVOKED, async_cancel_approvals_for_access_key, dismiss_approval_notification,
+    REASON_ACCESS_KEY_ROTATED, REASON_OAUTH_TURNED_OFF, REASON_REVOKED,
+    async_cancel_approvals_for_access_key, audit_closed_approvals, dismiss_approval_notification,
     fire_approval_resolved_event,
 )
 from ..const import (
@@ -498,7 +499,7 @@ class PhoenixAdminAccessKeyView(PhoenixView):
         if updated.oauth_enabled and not oauth_was_enabled:
             data.oauth.open_window(access_key_id)
         elif oauth_was_enabled and not updated.oauth_enabled:
-            await async_end_sign_ins(data, access_key_id)
+            await async_end_sign_ins(data, access_key_id, REASON_OAUTH_TURNED_OFF)
 
         return _ok(updated.to_dict(), request_id=rid)
 
@@ -551,6 +552,7 @@ class PhoenixAdminAccessKeyView(PhoenixView):
         for approval in changed_approvals:
             dismiss_approval_notification(hass, approval.id)
             fire_approval_resolved_event(hass, approval)
+        audit_closed_approvals(data.audit, data.store.get_settings(), changed_approvals)
 
         # Advisory leases the access key still held. Outside the store lock: they are
         # in-memory and unrelated to stored state.
@@ -875,11 +877,20 @@ class PhoenixAdminAccessKeyRotateView(PhoenixView):
 
         async with data.store.async_lock:
             result = await data.store.async_rotate_access_key(access_key_id)
+            # Whoever held the old secret may have queued these, so none survive it.
+            changed_approvals = [] if result is None else await async_cancel_approvals_for_access_key(
+                data.store, access_key_id, REASON_ACCESS_KEY_ROTATED,
+                skip_ids=data.approvals_in_progress,
+            )
 
         if result is None:
             return _err("not_found", "Access key not found.", 404, rid, key="accessKeyNotFound")
 
         access_key, raw_access_key = result
+        for approval in changed_approvals:
+            dismiss_approval_notification(hass, approval.id)
+            fire_approval_resolved_event(hass, approval)
+        audit_closed_approvals(data.audit, data.store.get_settings(), changed_approvals)
         await async_end_sign_ins(data, access_key.id)
 
         hass.bus.async_fire("phoenix_mcp_access_key_rotated", {

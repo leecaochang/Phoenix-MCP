@@ -214,6 +214,7 @@
       "aiTaskNotConfigured": "Määritä ensin Phoenix MCP AI Task käyttöavaimella, palveluntarjoajalla ja mallilla ja ota se käyttöön.",
       "aiTaskPreferencesUnavailable": "Tekoälytehtävien asetukset eivät ole käytettävissä tässä Home Assistantissa.",
       "approvalAccessKeyInactive": "Käyttöavain ei ole enää aktiivinen, joten tätä pyyntöä ei voi suorittaa. Mitään ei suoritettu.",
+      "approvalCredentialEnded": "Käyttöavain kierrätettiin tai sovelluksen kirjautuminen päättyi, joten tätä pyyntöä ei voi suorittaa. Mitään ei suoritettu.",
       "approvalAlreadyResolved": "Hyväksyntä on jo ratkaistu.",
       "approvalExpired": "Tämä pyyntö vanheni ennen kuin hyväksyit sen, joten mitään ei suoritettu.",
       "approvalBatchMaximum": "Erä voi sisältää enintään {max} hyväksyntää.",
@@ -867,8 +868,8 @@
       "dashboard_resource.create.title": "Lisää kojelaudan resurssi {url}",
       "dashboard_resource.update.title": "Muuta kojelaudan resurssia {url}",
       "dashboard_resource.delete.title": "Poista kojelaudan resurssi {url}",
-      "dashboard_resource.create.body": "Jokainen selain, joka avaa kojelaudan, lataa tiedoston {url}. JavaScript-tiedosto suoritetaan kyseisen henkilön Home Assistant -käyttöoikeuksilla, joten hyväksy vain tiedosto, johon luotat.",
-      "dashboard_resource.update.body": "Tämä muuttaa tiedostoa, jonka jokainen selain lataa avatessaan kojelaudan. Vertaa nykyistä ja ehdotettua tiedostoa alla.",
+      "dashboard_resource.create.body": "Jokainen selain, joka avaa kojelaudan, lataa tiedoston {url}, ja niin tekee myös ylläpitäjän selain, joka avaa Phoenix MCP -paneelin. JavaScript-tiedosto suoritetaan kyseisen henkilön Home Assistant -käyttöoikeuksilla, joten hyväksy vain tiedosto, johon luotat.",
+      "dashboard_resource.update.body": "Tämä muuttaa tiedostoa, jonka jokainen selain lataa avatessaan kojelaudan ja ylläpitäjän selain avatessaan Phoenix MCP -paneelin. Vertaa nykyistä ja ehdotettua tiedostoa alla.",
       "dashboard_resource.delete.body": "Kojelaudat lakkaavat lataamasta tiedostoa {url}. Siitä peräisin olevat kortit näyttävät virheen, kunnes se lisätään takaisin.",
       "edit_energy_config.fallback.body": "Tämä päivittää Home Assistantin kojelaudan kokoonpanon.",
       "edit_energy_config.fallback.title": "Muuta energiakojelaudan kokoonpanoa",
@@ -997,7 +998,11 @@
         "kill_switch": "Hätäkatkaisu aktivoitu",
         "rate_limited_at_execution": "Pyyntöraja ylittyi suoritushetkellä",
         "target_missing": "Kohde ei ole enää olemassa",
-        "target_out_of_scope": "Kohde on rajauksen ulkopuolella"
+        "target_out_of_scope": "Kohde on rajauksen ulkopuolella",
+        "access_key_rotated": "Peruutettu, kun käyttöavain kierrätettiin",
+        "oauth_sign_in_removed": "Peruutettu, kun sovelluksen kirjautuminen poistettiin",
+        "oauth_turned_off": "Peruutettu, kun OAuth-kirjautuminen poistettiin käytöstä",
+        "oauth_sign_in_ended": "Peruutettu, koska sovelluksen kirjautuminen oli päättynyt"
       },
       "reasonExecutionFailedDetail": "Suoritus epäonnistui: {detail}",
       "reject": "Hylkää",
@@ -1347,8 +1352,8 @@
       "energyDashboard": "Energiakojelauta",
       "cardNoun": "kortti",
       "previewErrorHead": {
-        "one": "Tämän esikatselun kortti ilmoitti kokoonpanovirheestä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortin.",
-        "other": "Tämän esikatselun kortit ilmoittivat kokoonpanovirheistä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortit."
+        "one": "Tämän esikatselun {count} kortti ilmoitti kokoonpanovirheestä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortin.",
+        "other": "Tämän esikatselun {count} korttia ilmoitti kokoonpanovirheistä. Kopioi tarvittaessa alla oleva viesti ja liitä se agentille, jotta se voi korjata kortit."
       },
       "previewTextAlternative": "Esikatselu näyttää kortit kuvina. Valitse {diff}, niin voit lukea muutoksen tekstinä.",
       "byAdmin": "Ylläpitäjä"
@@ -1996,7 +2001,8 @@
       "importReplaceHelp": "Lisää tiedoston profiilit ja korvaa samojen kohteiden olemassa olevat profiilit. Tätä ei voi kumota.",
       "viewAutomationsHelp": "Näytä tai piilota automaatiot, jotka MESA pystyi tarkistamaan vain osittain, koska ne käyttävät malleja tai mallipohjia.",
       "openOrphanHelp": "Avaa tämä profiili Profiilieditori-ikkunassa, jossa voit poistaa sen. Sen kattamaa kohdetta ei ole enää olemassa.",
-      "dismissNoticeHelp": "Piilota tämä ilmoitus tässä selaimessa. Palauta sivuutetut ilmoitukset tuo sen takaisin."
+      "dismissNoticeHelp": "Piilota tämä ilmoitus tässä selaimessa. Palauta sivuutetut ilmoitukset tuo sen takaisin.",
+      "comboMatchCount": "Osumat: {count}"
     },
     "mesaSuggestion": {
       "baseline_note": " Estetty vastaa tämän verkkotunnuksen sisäänrakennettua turvatasoa, joten profiili tekee tarkoituksesta eksplisiittisen. Jos haluat sen sijaan sallia agentin ohjauksen ylläpitäjän hyväksynnän takana, valitse Profiilieditorissa Vahvista ennen tallentamista; hyväksyntä on käytössä, kun MESA on pakotettu.",
@@ -3164,11 +3170,13 @@
       "chooseKeyHelp": "Valitse käyttöavain, jonka käyttöoikeudet tämä sovellus saa.",
       "keyAtCap": "{name}, jolla on jo enimmäismäärä kirjautumisia",
       "requestExpires": "Tämä pyyntö päättyy {time} kuluttua",
+      "requestEndsAt": "Tämä pyyntö päättyy klo {time}.",
+      "requestEndingSoon": "Tämän pyynnön hyväksymiseen on alle minuutti aikaa.",
       "requestExpired": "Tämä kirjautumispyyntö on päättynyt. Aloita uudelleen sovelluksesta.",
       "approve": "Hyväksy",
       "approveHelp": "Anna tämän sovelluksen käyttää valittua käyttöavainta ja palauta se sovellukseen.",
       "deny": "Kiellä",
-      "denyHelp": "Torju tämä kirjautuminen ja ilmoita siitä sovellukselle.",
+      "denyHelp": "Torju tämä kirjautuminen ja ilmoita siitä sovellukselle, jos sen osoite on vahvistettu.",
       "close": "Sulje",
       "approvedLeaving": "Hyväksytty. Palataan sovellukseen...",
       "deniedLeaving": "Kielletty. Palataan sovellukseen...",
@@ -3251,6 +3259,9 @@
     "local_state_matched": "Home Assistant ilmoittaa pyydetyn tilan.",
     "local_state_unavailable": "Ei saatavissa",
     "local_state_unconfirmed": "Komento lähetetty. Home Assistant ei ole vielä vahvistanut pyydettyä tilaa.",
+    "local_operation_matched": "Toiminto: {operation}. Home Assistant ilmoittaa pyydetyn tilan.",
+    "local_operation_unconfirmed": "Toiminto lähetetty: {operation}. Home Assistant ei ole vielä vahvistanut pyydettyä tilaa.",
+    "decision_operation_unconfirmed": "En suorittanut komentoa, koska en voinut vahvistaa toimintoa. Sano se uudelleen selkeästi ja mainitse toiminto ja laite.",
     "local_state_unknown": "Tuntematon",
     "local_summary_breakdown": "Assistille paljastetut entiteetit, joihin pääsen käsiksi: {total}. {summary}.",
     "local_summary_count": "Assistille paljastetut entiteetit, joihin pääsen käsiksi, tilassa {state}: {matched}, yhteensä {total}. Tuntematon tai ei saatavilla: {unknown}.",

@@ -27,6 +27,9 @@
     "local_unauthorized": "Ten klucz dostępu nie jest już autoryzowany.",
     "local_state_matched": "Home Assistant zgłasza żądany stan.",
     "local_state_unconfirmed": "Polecenie wysłane. Home Assistant nie potwierdził jeszcze żądanego stanu.",
+    "local_operation_matched": "Akcja: {operation}. Home Assistant zgłasza żądany stan.",
+    "local_operation_unconfirmed": "Akcja wysłana: {operation}. Home Assistant nie potwierdził jeszcze żądanego stanu.",
+    "decision_operation_unconfirmed": "Nie wykonałem tego polecenia, ponieważ nie mogłem potwierdzić akcji. Powiedz je ponownie wyraźnie, podając akcję i urządzenie.",
     "local_summary_count": "Encje udostępnione Assist, do których mam dostęp, ze stanem {state}: {matched} z {total}. Nieznane lub niedostępne: {unknown}.",
     "local_summary_total": "Encje udostępnione Assist, do których mam dostęp: {total}. Nieznane lub niedostępne: {unknown}.",
     "local_summary_breakdown": "Encje udostępnione Assist, do których mam dostęp: {total}. {summary}.",
@@ -364,10 +367,10 @@
       "energyDashboard": "Panel energii",
       "cardNoun": "kartę",
       "previewErrorHead": {
-        "one": "Karta w tym podglądzie zgłosiła błąd konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić kartę.",
-        "other": "Karty w tym podglądzie zgłosiły błędy konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić karty.",
-        "few": "Karty w tym podglądzie zgłosiły błędy konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić karty.",
-        "many": "Karty w tym podglądzie zgłosiły błędy konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić karty."
+        "one": "{count} karta w tym podglądzie zgłosiła błąd konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić kartę.",
+        "other": "{count} karty w tym podglądzie zgłosiły błędy konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić karty.",
+        "few": "{count} karty w tym podglądzie zgłosiły błędy konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić karty.",
+        "many": "{count} kart w tym podglądzie zgłosiło błędy konfiguracji. W razie potrzeby skopiuj poniższy komunikat i wklej go agentowi, aby mógł naprawić karty."
       },
       "previewTextAlternative": "Podgląd pokazuje karty jako obrazy. Wybierz {diff}, aby przeczytać zmianę jako tekst.",
       "byAdmin": "Administrator"
@@ -845,7 +848,11 @@
         "target_out_of_scope": "Cel poza zakresem",
         "access_key_expired": "Klucz dostępu wygasł",
         "access_key_inactive": "Klucz dostępu był nieaktywny",
-        "access_key_revoked": "Klucz dostępu unieważniony"
+        "access_key_revoked": "Klucz dostępu unieważniony",
+        "access_key_rotated": "Anulowano przy rotacji klucza dostępu",
+        "oauth_sign_in_removed": "Anulowano przy usuwaniu logowania aplikacji",
+        "oauth_turned_off": "Anulowano przy wyłączaniu logowania OAuth",
+        "oauth_sign_in_ended": "Anulowano, ponieważ logowanie aplikacji się zakończyło"
       },
       "reasonExecutionFailedDetail": "Wykonanie nie powiodło się: {detail}",
       "reject": "Odrzuć",
@@ -1102,6 +1109,7 @@
       "approvalReasonString": "reason musi być ciągiem znaków.",
       "approvalRecordFailed": "Nie można było zapisać tego zatwierdzenia przed jego uruchomieniem. Nic nie zostało uruchomione; spróbuj ponownie.",
       "approvalAccessKeyInactive": "Klucz dostępu nie jest już aktywny, więc tego żądania nie można wykonać. Nic nie zostało wykonane.",
+      "approvalCredentialEnded": "Klucz dostępu został zrotowany lub logowanie aplikacji się zakończyło, więc tego żądania nie można wykonać. Nic nie zostało wykonane.",
       "archivedAccessKeyNotFound": "Nie znaleziono zarchiwizowanego klucza dostępu.",
       "assistExposurePassThroughOnly": "use_assist_exposure jest ważne tylko dla kluczy dostępu pass_through.",
       "assistPipelineFailed": "Nie można było utworzyć potoku Assist.",
@@ -1969,7 +1977,8 @@
       "importReplaceHelp": "Dodaj profile z pliku, zastępując istniejące profile dla tych samych celów. Tego nie można cofnąć.",
       "viewAutomationsHelp": "Pokaż lub ukryj automatyzacje, które MESA mógł sprawdzić tylko częściowo, bo używają szablonów lub schematów.",
       "openOrphanHelp": "Otwórz ten profil w Edytorze profilu, gdzie możesz go usunąć. To, co obejmował, już nie istnieje.",
-      "dismissNoticeHelp": "Ukryj to powiadomienie w tej przeglądarce. Przywróć odrzucone powiadomienia je przywraca."
+      "dismissNoticeHelp": "Ukryj to powiadomienie w tej przeglądarce. Przywróć odrzucone powiadomienia je przywraca.",
+      "comboMatchCount": "Dopasowania: {count}"
     },
     "settings": {
       "addProviderFirst": "Najpierw dodaj konto dostawcy w Dostawcach AI.",
@@ -2571,8 +2580,8 @@
       "dashboard_resource.create.title": "Dodaj zasób panelu {url}",
       "dashboard_resource.update.title": "Zmień zasób panelu {url}",
       "dashboard_resource.delete.title": "Usuń zasób panelu {url}",
-      "dashboard_resource.create.body": "Każda przeglądarka, która otworzy panel, załaduje {url}. Plik JavaScript działa z dostępem do Home Assistant danej osoby, dlatego zatwierdzaj tylko pliki, którym ufasz.",
-      "dashboard_resource.update.body": "Spowoduje to zmianę pliku, który każda przeglądarka ładuje po otwarciu panelu. Porównaj poniżej obecny i proponowany plik.",
+      "dashboard_resource.create.body": "Każda przeglądarka, która otworzy panel, załaduje {url}, podobnie jak przeglądarka administratora, który otworzy panel Phoenix MCP. Plik JavaScript działa z dostępem do Home Assistant danej osoby, dlatego zatwierdzaj tylko pliki, którym ufasz.",
+      "dashboard_resource.update.body": "Spowoduje to zmianę pliku, który każda przeglądarka ładuje po otwarciu panelu, a przeglądarka administratora po otwarciu panelu Phoenix MCP. Porównaj poniżej obecny i proponowany plik.",
       "dashboard_resource.delete.body": "Panele przestaną ładować {url}. Karty pochodzące z tego pliku będą wyświetlać błąd, dopóki nie zostanie on ponownie dodany.",
       "edit_energy_config.fallback.body": "Spowoduje to zaktualizowanie konfiguracji panelu Home Assistant.",
       "edit_energy_config.fallback.title": "Zmień konfigurację panelu energii",
@@ -3307,11 +3316,13 @@
       "chooseKeyHelp": "Wybierz klucz dostępu, którego uprawnienia otrzyma ta aplikacja.",
       "keyAtCap": "{name}, który ma już maksymalną liczbę logowań",
       "requestExpires": "To żądanie kończy się za {time}",
+      "requestEndsAt": "To żądanie kończy się o {time}.",
+      "requestEndingSoon": "Na zatwierdzenie tego żądania została mniej niż minuta.",
       "requestExpired": "To żądanie logowania zakończyło się. Zacznij ponownie w aplikacji.",
       "approve": "Zatwierdź",
       "approveHelp": "Pozwól tej aplikacji używać wybranego klucza dostępu i odeślij logowanie do aplikacji.",
       "deny": "Odmów",
-      "denyHelp": "Odrzuć to logowanie i powiadom aplikację.",
+      "denyHelp": "Odrzuć to logowanie i powiadom aplikację, jeśli jej adres jest zweryfikowany.",
       "close": "Zamknij",
       "approvedLeaving": "Zatwierdzono. Powrót do aplikacji...",
       "deniedLeaving": "Odmówiono. Powrót do aplikacji...",

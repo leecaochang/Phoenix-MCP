@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from .const import (
     MAX_PENDING_APPROVALS_PER_ACCESS_KEY, APPROVAL_HISTORY_LIMIT, APPROVAL_HISTORY_DAYS,
     APPROVAL_PAYLOAD_RETENTION_SECONDS, CAP_ALLOW, CAP_CONFIRM, CAP_DENY,
 )
-from .request_authority import household_authority, check_request_authority
+from .request_authority import household_authority, check_request_authority, request_authority
 from .time_text import parse_datetime
 from collections.abc import Awaitable, Callable
 
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from .access_key_store import AccessKeyRecord, AccessKeyStore
+    from .audit import AuditLog
     from .data import PhoenixData
 
 _LOGGER = logging.getLogger(__name__)
@@ -69,6 +71,14 @@ REASON_RECOVERY_REVIEW_REPLACED = "recovery_review_replaced"
 # Home Assistant restarted while the request was still queued. Nothing ran, and
 # the conversation that asked for it ended with the previous run.
 REASON_RESTARTED = "phoenix_mcp_restarted"
+# The key was rotated while the request waited: whoever held the old secret asked for it.
+REASON_ACCESS_KEY_ROTATED = "access_key_rotated"
+# The OAuth sign-in that queued the request was removed by an administrator.
+REASON_OAUTH_SIGN_IN_REMOVED = "oauth_sign_in_removed"
+# OAuth was switched off for the key, which ends every sign-in that queued a request.
+REASON_OAUTH_TURNED_OFF = "oauth_turned_off"
+# The queuing sign-in ended some other way (refresh-token reuse, for one), found at approve time.
+REASON_OAUTH_SIGN_IN_ENDED = "oauth_sign_in_ended"
 # There is deliberately no constant for target_out_of_scope / target_missing /
 # rate_limited_at_execution. The approve path re-validates only the three things
 # it owns (access key active, capability permits, kill switch off); target scope and
@@ -113,13 +123,26 @@ class PendingApproval:
     execution_started_at: datetime | None = None
     household_request: bool = False
     ha_user_id: str | None = None
+    # The OAuth sign-in that queued the request and the app label its audit rows carry.
+    # None for a raw key, a household surface, or a record saved before these existed.
+    sign_in_id: str | None = None
+    oauth_app: dict[str, str] | None = None
+    # credential_generation() of the key when queued; None matches any generation.
+    credential_generation: str | None = None
 
     def to_dict(self, redact_args: bool = True) -> dict:
         """Serialize the approval, redacting args unless ``redact_args`` is False.
 
-        The persistence path alone keeps raw args, for the approved-action executor.
+        The persistence path alone keeps raw args, the sign-in id and the credential
+        generation, for the approved-action executor.
         """
+        stored = {} if redact_args else {
+            "sign_in_id": self.sign_in_id,
+            "credential_generation": self.credential_generation,
+        }
         return {
+            **stored,
+            "oauth_app": dict(self.oauth_app) if self.oauth_app else None,
             "id": self.id,
             "access_key_id": self.access_key_id,
             "access_key_name": self.access_key_name,
@@ -188,10 +211,40 @@ class PendingApproval:
                 parse_datetime(data["execution_started_at"])
                 if data.get("execution_started_at") else None
             ),
+            sign_in_id=data.get("sign_in_id") if isinstance(data.get("sign_in_id"), str) else None,
+            oauth_app=_stored_oauth_app(data.get("oauth_app")),
+            credential_generation=(
+                data.get("credential_generation")
+                if isinstance(data.get("credential_generation"), str) else None
+            ),
         )
 
     def is_terminal(self) -> bool:
         return self.status in TERMINAL_STATUSES
+
+
+def _stored_oauth_app(value: Any) -> dict[str, str] | None:
+    """A stored app label as {"name", "host"} strings, else None."""
+    if not isinstance(value, dict):
+        return None
+    name, host = value.get("name"), value.get("host")
+    if not isinstance(name, str) or not isinstance(host, str) or not host:
+        return None
+    return {"name": name, "host": host}
+
+
+def credential_generation(access_key: AccessKeyRecord) -> str:
+    """A short fingerprint of the key's current secret; only rotation changes it."""
+    return hashlib.sha256(f"phoenix-approval:{access_key.access_key_hash}".encode()).hexdigest()[:16]
+
+
+def _queuing_sign_in(access_key_id: str) -> tuple[str | None, dict[str, str] | None]:
+    """The OAuth sign-in this request was admitted with, and its app label, when it is this key's."""
+    authority = request_authority.get()
+    if authority is None or authority.oauth_grant_id is None or authority.access_key_id != access_key_id:
+        return None, None
+    grant = authority.data.oauth_grants.get(authority.oauth_grant_id)
+    return authority.oauth_grant_id, (None if grant is None else grant.audit_label())
 
 
 def _new_approval_id() -> str:
@@ -210,11 +263,13 @@ async def async_create_pending_approval(
     request_id: str,
     client_ip: str | None = None,
     ttl_seconds: int = APPROVAL_DEFAULT_TTL_SECONDS,
+    access_key: AccessKeyRecord | None = None,
 ) -> PendingApproval:
     """Add a new pending approval to storage and return the record.
 
-    Caller must hold store.async_lock if creating from a multi-step path.
-    Raises PendingApprovalCapacityError if the access key is at the per-access-key cap.
+    A key's request passes ``access_key``, whose secret the approval is bound to; the OAuth
+    sign-in comes from the request's authority. Caller must hold store.async_lock if creating
+    from a multi-step path. Raises PendingApprovalCapacityError at the per-access-key cap.
     """
     raw = store.get_pending_approvals()
     pending_for_access_key = sum(
@@ -227,6 +282,7 @@ async def async_create_pending_approval(
         )
 
     household = household_authority.get()
+    sign_in_id, oauth_app = _queuing_sign_in(access_key_id)
     now = utcnow()
     approval = PendingApproval(
         id=_new_approval_id(),
@@ -245,6 +301,9 @@ async def async_create_pending_approval(
         client_ip=client_ip,
         household_request=household is not None,
         ha_user_id=household.user_id if household else None,
+        sign_in_id=sign_in_id,
+        oauth_app=oauth_app,
+        credential_generation=None if access_key is None else credential_generation(access_key),
     )
     raw.append(approval.to_dict(redact_args=False))
     store.set_pending_approvals(raw)
@@ -436,11 +495,12 @@ async def async_cancel_approvals_for_access_key(
     reason: str,
     *,
     skip_ids: set[str] | frozenset[str] | None = None,
+    where: Callable[[dict], bool] | None = None,
 ) -> list[PendingApproval]:
-    """Close pending approvals for a revoked or expired key; return the changed records.
+    """Close a key's pending approvals (those ``where`` accepts); return the changed records.
 
     ``skip_ids`` protects a mid-execution approval; a stale marker resolves as failed. Caller
-    holds async_lock, then dismisses and fires phoenix_mcp_approval_resolved outside it.
+    holds async_lock, then dismisses, fires phoenix_mcp_approval_resolved and audits outside it.
     """
     skip_ids = skip_ids or frozenset()
     raw = store.get_pending_approvals()
@@ -452,6 +512,8 @@ async def async_cancel_approvals_for_access_key(
         if entry.get("status") != STATUS_PENDING:
             continue
         if entry.get("id") in skip_ids:
+            continue
+        if where is not None and not where(entry):
             continue
         interrupted = bool(entry.get("execution_started_at"))
         entry["status"] = STATUS_FAILED if interrupted else STATUS_CANCELLED
@@ -465,6 +527,36 @@ async def async_cancel_approvals_for_access_key(
     if changed:
         store.set_pending_approvals(raw)
         await store.async_save()
+    return changed
+
+
+async def async_cancel_sign_in_approvals(
+    hass: HomeAssistant | None, data: PhoenixData, access_key_id: str, reason: str,
+    *, sign_in_id: str | None = None,
+) -> list[PendingApproval]:
+    """Cancel the key's pending approvals queued by ``sign_in_id``, or by any sign-in no longer live.
+
+    Raw-key and household requests stay. Takes the store lock, so callers must not hold it,
+    then dismisses, announces and audits each closed request.
+    """
+    def queued_by_ended_sign_in(entry: dict) -> bool:
+        queued_by = entry.get("sign_in_id")
+        if not isinstance(queued_by, str):
+            return False
+        if sign_in_id is not None:
+            return queued_by == sign_in_id
+        return not data.oauth_grants.is_live(queued_by, data.store.get_access_key_by_id(access_key_id))
+
+    async with data.store.async_lock:
+        changed = await async_cancel_approvals_for_access_key(
+            data.store, access_key_id, reason,
+            skip_ids=data.approvals_in_progress, where=queued_by_ended_sign_in,
+        )
+    if hass is not None:
+        for approval in changed:
+            dismiss_approval_notification(hass, approval.id)
+            fire_approval_resolved_event(hass, approval)
+    audit_closed_approvals(data.audit, data.store.get_settings(), changed)
     return changed
 
 
@@ -555,6 +647,32 @@ async def async_expire_overdue_approval_records(
         store.set_pending_approvals(raw)
         await store.async_save()
     return expired
+
+
+def audit_closed_approvals(
+    audit: AuditLog | None, settings: Any, approvals: list[PendingApproval],
+) -> None:
+    """Write the approval/<status> row of each request closed without an administrator's decision.
+
+    Each row carries the queuing request's ID, key, household user and app label, with the
+    approval ID and reason in the payload, so it links to the request with entity names off.
+    """
+    if audit is None:
+        return
+    for approval in approvals:
+        audit.record(
+            request_id=approval.request_id or "",
+            access_key_id=approval.access_key_id,
+            access_key_name=approval.access_key_name,
+            method=f"approval/{approval.status}",
+            resource=f"approval:{approval.tool_name}:{approval.id}",
+            outcome="denied",
+            client_ip="",
+            settings=settings,
+            payload={"approval_id": approval.id, "reason": approval.closure_reason},
+            ha_user_id=approval.ha_user_id,
+            oauth_app=approval.oauth_app,
+        )
 
 
 def fire_approval_requested_event(hass: HomeAssistant, approval: PendingApproval) -> None:
@@ -786,6 +904,7 @@ async def async_evaluate_capability(
             diff=resolved_diff,
             request_id=request_id,
             client_ip=client_ip,
+            access_key=access_key,
         )
     create_approval_notification(hass, approval)
     fire_approval_requested_event(hass, approval)

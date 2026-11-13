@@ -121,7 +121,11 @@
         "phoenix_mcp_restarted": "Home Assistant の再起動時にキャンセルされました",
         "phoenix_mcp_data_wiped": "Phoenix MCP データの消去時にキャンセルされました",
         "integration_removed": "Phoenix MCP の削除時にキャンセルされました",
-        "recovery_review_replaced": "構成が変更されたため、新しい確認に置き換えられました"
+        "recovery_review_replaced": "構成が変更されたため、新しい確認に置き換えられました",
+        "access_key_rotated": "アクセスキーのローテーション時にキャンセルされました",
+        "oauth_sign_in_removed": "アプリのログインの削除時にキャンセルされました",
+        "oauth_turned_off": "OAuth ログインをオフにした時にキャンセルされました",
+        "oauth_sign_in_ended": "アプリのログインが終了していたためキャンセルされました"
       },
       "reasonExecutionFailedDetail": "実行に失敗しました: {detail}",
       "reject": "拒否",
@@ -539,8 +543,8 @@
       "energyDashboard": "エネルギーダッシュボード",
       "cardNoun": "カード",
       "previewErrorHead": {
-        "one": "このプレビューのカードで設定エラーが報告されました。必要に応じて下のメッセージをコピーし、エージェントに貼り付けてカードを修正させてください。",
-        "other": "このプレビューの複数のカードで設定エラーが報告されました。必要に応じて下のメッセージをコピーし、エージェントに貼り付けてカードを修正させてください。"
+        "one": "このプレビューの {count} 枚のカードで設定エラーが報告されました。必要に応じて下のメッセージをコピーし、エージェントに貼り付けてカードを修正させてください。",
+        "other": "このプレビューの {count} 枚のカードで設定エラーが報告されました。必要に応じて下のメッセージをコピーし、エージェントに貼り付けてカードを修正させてください。"
       },
       "previewTextAlternative": "プレビューではカードを画像として表示します。変更をテキストで読むには {diff} を選んでください。",
       "byAdmin": "管理者"
@@ -1058,6 +1062,7 @@
       "approvalReasonString": "reason は文字列にしてください。",
       "approvalRecordFailed": "実行前にこの承認を記録できませんでした。何も実行されていません。もう一度お試しください。",
       "approvalAccessKeyInactive": "アクセスキーが無効になったため、このリクエストは実行できません。何も実行されていません。",
+      "approvalCredentialEnded": "アクセスキーがローテーションされたか、アプリのログインが終了したため、このリクエストは実行できません。何も実行されていません。",
       "assistExposurePassThroughOnly": "use_assist_exposure は pass_through アクセスキーでのみ有効です。",
       "assistPipelineFailed": "Assist パイプラインを作成できませんでした。",
       "assistPipelineUnavailable": "この Home Assistant では Assist パイプラインを利用できません。",
@@ -2177,7 +2182,8 @@
       "importReplaceHelp": "ファイルのプロファイルを追加し、同じ対象の既存のプロファイルを置き換えます。元に戻せません。",
       "viewAutomationsHelp": "テンプレートやブループリントを使うため、MESA が一部しか確認できなかったオートメーションを表示または非表示にします。",
       "openOrphanHelp": "このプロファイルをプロファイルエディターで開き、削除できるようにします。対象だったものはもう存在しません。",
-      "dismissNoticeHelp": "このブラウザーでこの通知を非表示にします。「非表示にした通知を戻す」で再び表示できます。"
+      "dismissNoticeHelp": "このブラウザーでこの通知を非表示にします。「非表示にした通知を戻す」で再び表示できます。",
+      "comboMatchCount": "一致: {count}"
     },
     "approvalSummary": {
       "action.optionalReason": "任意の理由",
@@ -2436,8 +2442,8 @@
       "dashboard_resource.create.title": "ダッシュボードリソース {url} を追加",
       "dashboard_resource.update.title": "ダッシュボードリソース {url} を変更",
       "dashboard_resource.delete.title": "ダッシュボードリソース {url} を削除",
-      "dashboard_resource.create.body": "ダッシュボードを開くすべてのブラウザーが {url} を読み込みます。JavaScript ファイルはその人の Home Assistant のアクセス権で実行されるため、信頼できるファイルのみ承認してください。",
-      "dashboard_resource.update.body": "ダッシュボードを開くときにすべてのブラウザーが読み込むファイルを変更します。以下で現在のファイルと提案されたファイルを比較してください。",
+      "dashboard_resource.create.body": "ダッシュボードを開くすべてのブラウザーと、Phoenix MCP パネルを開く管理者のブラウザーが {url} を読み込みます。JavaScript ファイルはその人の Home Assistant のアクセス権で実行されるため、信頼できるファイルのみ承認してください。",
+      "dashboard_resource.update.body": "ダッシュボードを開くときにすべてのブラウザーが、Phoenix MCP パネルを開くときに管理者のブラウザーが読み込むファイルを変更します。以下で現在のファイルと提案されたファイルを比較してください。",
       "dashboard_resource.delete.body": "ダッシュボードは {url} を読み込まなくなります。このファイルに由来するカードは、再度追加されるまでエラーを表示します。",
       "edit_energy_config.fallback.body": "Home Assistantのダッシュボード設定を更新します。",
       "edit_energy_config.fallback.title": "エネルギーダッシュボードの設定を変更",
@@ -3158,11 +3164,13 @@
       "chooseKeyHelp": "このアプリに与える権限を持つアクセスキーを選びます。",
       "keyAtCap": "{name} (ログイン数が上限に達しています)",
       "requestExpires": "このリクエストは {time} 後に終了します",
+      "requestEndsAt": "このリクエストは {time} に終了します。",
+      "requestEndingSoon": "まもなくこのリクエストを承認できなくなります。",
       "requestExpired": "このログインリクエストは終了しました。アプリでもう一度やり直してください。",
       "approve": "承認",
       "approveHelp": "選んだアクセスキーをこのアプリに使わせ、アプリに戻します。",
       "deny": "アクセス拒否",
-      "denyHelp": "このログインを拒否し、アプリに通知します。",
+      "denyHelp": "このログインを拒否し、アドレスが確認済みのアプリには通知します。",
       "close": "閉じる",
       "approvedLeaving": "承認しました。アプリに戻ります...",
       "deniedLeaving": "アクセスを拒否しました。アプリに戻ります...",
@@ -3213,6 +3221,9 @@
     "local_unauthorized": "このアクセスキーは認可されなくなりました。",
     "local_state_matched": "Home Assistant は要求された状態を報告しています。",
     "local_state_unconfirmed": "コマンドを送信しました。Home Assistant は要求された状態をまだ確認していません。",
+    "local_operation_matched": "操作: {operation}。Home Assistant は要求された状態を報告しています。",
+    "local_operation_unconfirmed": "操作を送信しました: {operation}。Home Assistant は要求された状態をまだ確認していません。",
+    "decision_operation_unconfirmed": "操作を確認できなかったため、このコマンドは実行しませんでした。操作とデバイスを明確にして、もう一度言ってください。",
     "local_summary_count": "アクセス可能で Assist に公開されているエンティティのうち、状態が {state} のものは {total} 件中 {matched} 件です。不明または利用できないものは {unknown} 件です。",
     "local_summary_total": "アクセス可能で Assist に公開されているエンティティは {total} 件です。不明または利用できないものは {unknown} 件です。",
     "local_summary_breakdown": "アクセス可能で Assist に公開されているエンティティは {total} 件です。{summary}。",

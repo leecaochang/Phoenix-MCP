@@ -2423,8 +2423,8 @@ async def test_run_agent_turn_repeated_rejections_stay_iteration_friendly(hass):
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         ))
-        for _ in range(2):
-            await asyncio.sleep(0.05)
+        for index in range(2):
+            await _until(lambda: _announced(events) > index)
             hass.bus.async_fire("phoenix_mcp_approval_resolved", {"approval_id": "ap1"})
         messages = await task
 
@@ -2487,6 +2487,57 @@ async def test_run_agent_turn_emits_turn_cumulative_usage(hass):
 
 
 @pytest.mark.asyncio
+def _announced(events: list) -> int:
+    """How many approvals the turn has announced to the chat so far."""
+    return sum(1 for name, _ in events if name == "approval_required")
+
+
+async def _until(condition, timeout: float = 5.0) -> None:
+    """Yield to the event loop until ``condition()`` holds, instead of guessing a delay."""
+    async with asyncio.timeout(timeout):
+        while not condition():
+            await asyncio.sleep(0)
+
+
+async def test_a_decision_made_while_the_turn_announces_it_is_not_missed(hass):
+    """The resolution fires during emit("approval_required"), before the wait listens."""
+    provider = _ScriptedProvider([
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "call_service", "input": {}}, _done("tool_use")],
+        [{"type": llm_base.EV_TEXT, "text": "Done."}, _done("end_turn")],
+    ])
+    data = _loop_data()
+    pending_result = {"content": [{"type": "text", "text": json.dumps(
+        {"status": "pending_approval", "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1"})}]}
+    fake_dispatch = AsyncMock(return_value=({"result": pending_result}, "m", "r", "pending_approval"))
+    record = MagicMock(status=STATUS_APPROVED, diff=None,
+                       result={"tool_result": {"content": [{"type": "text", "text": "applied"}], "isError": False}})
+    events: list = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+        if name == "approval_required":
+            hass.bus.async_fire("phoenix_mcp_approval_resolved", {"approval_id": "ap1"})
+            await asyncio.sleep(0)
+
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+        patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agent_turn.AGENT_CHAT_APPROVAL_WAIT_SECONDS", 3600), \
+        patch("custom_components.phoenix_mcp.agent_turn._parse_pending", return_value={
+            "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1", "expires_at": None, "record": record,
+        }), \
+        patch_readers("custom_components.phoenix_mcp.approvals.get_approval", return_value=record):
+        async with asyncio.timeout(5):
+            await async_run_agent_turn(
+                hass=hass, data=data, access_key=MagicMock(), provider=provider,
+                session=MagicMock(), messages=[], options={}, client_ip="agentcli",
+                base_url="http://h", emit=emit, cancel=asyncio.Event(),
+            )
+
+    resolved = next(p for n, p in events if n == "approval_resolved")
+    assert resolved["status"] == STATUS_APPROVED
+
+
 @pytest.mark.parametrize("approval_status", [STATUS_APPROVED, STATUS_FAILED])
 async def test_run_agent_turn_inline_approval_resume(hass, approval_status):
     provider = _ScriptedProvider([
@@ -2521,8 +2572,8 @@ async def test_run_agent_turn_inline_approval_resume(hass, approval_status):
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         ))
-        # Let the loop reach the approval wait, then fire the resolution event.
-        await asyncio.sleep(0.05)
+        # Once the turn announces the approval, fire the resolution event.
+        await _until(lambda: _announced(events))
         hass.bus.async_fire("phoenix_mcp_approval_resolved", {"approval_id": "ap1"})
         await task
 
@@ -2718,7 +2769,7 @@ async def test_an_approved_run_refused_before_writing_returns_to_the_model(hass,
             session=MagicMock(), messages=[{"role": "user", "content": "go"}], options={},
             client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event(),
         ))
-        await asyncio.sleep(0.05)
+        await _until(lambda: _announced(events))
         hass.bus.async_fire("phoenix_mcp_approval_resolved", {"approval_id": "ap1"})
         await task
 
@@ -2775,8 +2826,8 @@ async def test_cancel_mid_approval_wait_skips_remaining_batch_calls(hass):
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=cancel,
         ))
-        # Let the loop reach the approval wait, then cancel instead of resolving.
-        await asyncio.sleep(0.05)
+        # Once the turn announces the approval, cancel instead of resolving.
+        await _until(lambda: _announced(events))
         cancel.set()
         msgs = await task
 
@@ -2972,6 +3023,18 @@ async def test_claude_requests_disable_redirects():
     await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
     assert {method for method, _ in session.calls} == {"GET", "POST"}
     assert all(call["allow_redirects"] is False for _, call in session.calls)
+
+
+@pytest.mark.asyncio
+async def test_responses_chat_stream_disables_redirects():
+    # The OpenAI Responses stream carries the account's API key, as the others do.
+    provider = llm_provider_responses.OpenAIResponsesProvider(ProviderConfig(
+        kind="chatgpt", model="gpt-6-astra", base_url="https://api.openai.com/v1", api_key="k"))
+    session = _FakeSession(_FakeResp(200, _sse(
+        'data: {"type":"response.completed","response":{"status":"completed","usage":null}}')))
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
+    assert [method for method, _ in session.calls] == ["POST"]
+    assert session.calls[0][1]["allow_redirects"] is False
 
 
 def _make_chat_request(body: bytes):
@@ -3177,6 +3240,9 @@ async def test_await_agent_approval_cancels_orphaned_approval(hass):
         def set_pending_approvals(self, v):
             self._a = v
 
+        def get_settings(self):
+            return MagicMock()
+
     store = _Store()
     data = MagicMock(store=store)
     cancel = asyncio.Event()
@@ -3230,6 +3296,9 @@ async def test_await_agent_approval_names_why_it_stopped_waiting(hass, cancelled
         def set_pending_approvals(self, v):
             self._a = v
 
+        def get_settings(self):
+            return MagicMock()
+
     store = _Store()
     data = MagicMock(store=store, approvals_in_progress=set())
     cancel = asyncio.Event()
@@ -3241,6 +3310,10 @@ async def test_await_agent_approval_names_why_it_stopped_waiting(hass, cancelled
         await _await_agent_approval(hass, data, "a1", cancel, timeout=0.01)
 
     assert get_approval(store, "a1").closure_reason == reason
+    # The withdrawal is in the audit log, under the queuing request.
+    row = data.audit.record.call_args.kwargs
+    assert (row["method"], row["request_id"], row["access_key_id"]) == ("approval/cancelled", "r", "t")
+    assert row["payload"] == {"approval_id": "a1", "reason": reason}
 
 
 @pytest.mark.parametrize(("reason", "kill_switch", "code"), [
@@ -3296,6 +3369,9 @@ async def test_await_agent_approval_does_not_cancel_an_in_progress_approval(hass
 
         def set_pending_approvals(self, v):
             self._a = v
+
+        def get_settings(self):
+            return MagicMock()
 
     store = _Store()
     data = MagicMock(store=store)
@@ -3392,7 +3468,8 @@ async def test_run_agent_turn_stops_when_access_key_revoked_midturn(hass):
     with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", fake_dispatch), \
-         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=None):
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key",
+                       side_effect=[access_key] + [None] * 10):
         msgs = await async_run_agent_turn(
             hass=hass, data=data, access_key=access_key, provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3424,7 +3501,8 @@ async def test_run_agent_turn_names_the_kill_switch_when_it_stops_a_turn(hass):
     access_key.id = "tid"
     with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
-         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=None):
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key",
+                       side_effect=[access_key] + [None] * 10):
         msgs = await async_run_agent_turn(
             hass=hass, data=data, access_key=access_key, provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -3472,7 +3550,7 @@ async def test_run_agent_turn_rejection_reason_reaches_agent(hass):
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         ))
-        await asyncio.sleep(0.05)
+        await _until(lambda: _announced(events))
         hass.bus.async_fire("phoenix_mcp_approval_resolved", {"approval_id": "ap1"})
         await task
 
@@ -5820,7 +5898,7 @@ async def test_headless_hands_malformed_tool_json_back_within_its_rounds(hass):
 # Tools-array cap
 # --------------------------------------------------------------------------- #
 
-# OpenAI's Responses API took 175 tools in a live turn and documents no cap.
+# OpenAI documents no tool cap for its Responses API.
 @pytest.mark.parametrize(("kind", "capped"), [("chatgpt", False), ("groq", True), ("mistral", True), ("zai", True),
                                               ("gemini", True), ("kimi", True), ("openrouter", True),
                                               ("deepseek", False), ("claude", False)])

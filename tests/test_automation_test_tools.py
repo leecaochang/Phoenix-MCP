@@ -109,7 +109,6 @@ async def test_the_trigger_is_removed_after_the_test(home):
     ("test_trigger", {"trigger": {"trigger": "state", "entity_id": "{target}"}}),
     ("test_trigger", {"trigger": {"trigger": "state", "entity_id": f"{LAMP}, {{target}}"}}),
     ("test_trigger", {"trigger": {"trigger": "numeric_state", "entity_id": SENSOR, "above": "{target}"}}),
-    ("test_trigger", {"trigger": {"trigger": "template", "value_template": "{{{{ is_state('{target}', 'on') }}}}"}}),
     ("test_condition", {"condition": {"condition": "state", "entity_id": "{target}", "state": "on"}}),
     ("test_condition", {"condition": "{{{{ states.{target}.state == 'on' }}}}"}),
     ("test_condition", {"condition": {"or": [{"condition": "state", "entity_id": LAMP, "state": "on"},
@@ -177,9 +176,30 @@ def _targeted(field: str, value: str) -> dict:
     return {"condition": {"condition": "light.is_on", "target": {field: value}}}
 
 
+async def _core_entity_class(home, platform: str, key: str) -> bool:
+    """Whether the installed Core registers ``key`` as an entity trigger or condition.
+
+    Judged by the class's own hierarchy names, not by where Core keeps the base class, which
+    moved between releases.
+    """
+    from homeassistant.helpers import condition as ha_condition, trigger as ha_trigger
+    from homeassistant.loader import async_get_integration
+
+    helpers = ha_trigger if platform == "trigger" else ha_condition
+    domain = key.split(".", 1)[0]
+    try:
+        module = await (await async_get_integration(home, domain)).async_get_platform(platform)
+        getter = module.async_get_triggers if platform == "trigger" else module.async_get_conditions
+        found = (await getter(home)).get(helpers.get_relative_description_key(domain, key))
+    except Exception:
+        return False
+    base = "EntityTriggerBase" if platform == "trigger" else "EntityConditionBase"
+    return isinstance(found, type) and any(cls.__name__ == base for cls in found.__mro__)
+
+
 async def _entity_conditions(home) -> bool:
     assert await async_setup_component(home, "light", {})
-    return _has_entity_triggers()
+    return await _core_entity_class(home, "condition", "light.is_on")
 
 
 @pytest.mark.parametrize(("field", "readable", "hidden"), [
@@ -242,9 +262,9 @@ async def test_a_device_trigger_needs_read_on_every_entity_of_its_device(home, r
 
 
 async def test_an_area_is_expanded_again_after_the_wait(home, rooms):
-    if not _has_entity_triggers():
-        pytest.skip("this Home Assistant release has no entity triggers")
     assert await async_setup_component(home, "light", {})
+    if not await _core_entity_class(home, "trigger", "light.turned_on"):
+        pytest.skip("this Home Assistant release has no light.turned_on entity trigger")
     ready = asyncio.Event()
     real = automation_test.ha_trigger.async_initialize_triggers
 
@@ -352,24 +372,16 @@ async def test_scope_is_checked_again_after_the_wait(home):
     assert "on" not in _body_or_text(content)
 
 
-def _has_entity_triggers() -> bool:
-    import importlib.util
-    try:
-        return importlib.util.find_spec("homeassistant.helpers.trigger.entity_trigger") is not None
-    except ModuleNotFoundError:
-        return False
-
-
 def _body_or_text(content: dict) -> str:
     text = _text(content)
     return "" if text.startswith("Not found") else text
 
 
 async def test_an_entity_trigger_with_an_entity_target_runs(home):
-    """On a release without Core's entity triggers the same definition is refused, not guessed at."""
+    """On a release whose light integration has no such entity trigger it is refused, not guessed at."""
     assert await async_setup_component(home, "light", {})
     trigger = {"trigger": "light.turned_on", "target": {"entity_id": LAMP}}
-    if not _has_entity_triggers():
+    if not await _core_entity_class(home, "trigger", "light.turned_on"):
         content, outcome = await _call("test_trigger", {"trigger": trigger, "timeout": 1}, _key(), home)
         assert outcome == "invalid_request" and "only Core's entity" in _text(content), content
         return
@@ -378,3 +390,140 @@ async def test_an_entity_trigger_with_an_entity_target_runs(home):
         lambda: home.states.async_set(LAMP, "on", {"brightness": 10}))
     assert outcome == "allowed", content
     assert _body(content)["fired"] is True
+
+
+@pytest.mark.parametrize("trigger", [
+    {"trigger": "template", "value_template": "{{ is_state('light.lamp', 'on') }}"},
+    {"trigger": "numeric_state", "entity_id": SENSOR, "above": 1, "value_template": "{{ 5 }}"},
+    {"trigger": "state", "entity_id": LAMP, "for": "{{ '00:00:01' }}"},
+])
+async def test_a_trigger_template_is_refused_before_home_assistant_sees_it(home, trigger):
+    with patch.object(automation_test.ha_trigger, "async_validate_trigger_config") as validate:
+        content, outcome = await _call("test_trigger", {"trigger": trigger, "timeout": 1}, _key(), home)
+    assert outcome == "invalid_request", content
+    assert "Templates cannot be tested with test_trigger" in _text(content)
+    validate.assert_not_called()
+
+
+async def _validated_conditions(home, args: dict, key: AccessKeyRecord) -> tuple[dict, str, list]:
+    """Run test_condition and record every config handed to Home Assistant's validator."""
+    seen: list = []
+    real = automation_test.ha_condition.async_validate_condition_config
+
+    async def validate(hass, config):
+        seen.append(json.dumps(config, default=str))
+        return await real(hass, config)
+
+    with patch.object(automation_test.ha_condition, "async_validate_condition_config", validate):
+        content, outcome = await _call("test_condition", args, key, home)
+    return content, outcome, seen
+
+
+@pytest.mark.parametrize(("definition", "expected"), [
+    ("{{ (states('sensor.temperature') | float) * 2 > 40 }}", True),
+    ({"and": [{"condition": "state", "entity_id": DESK, "state": "on"}, "{{ is_state('light.lamp', 'on') }}"]}, False),
+    ({"condition": "state", "entity_id": DESK, "state": "on", "for": "{{ '00:00:00' }}"}, True),
+])
+async def test_home_assistant_only_sees_references_to_worker_results(home, definition, expected):
+    content, outcome, seen = await _validated_conditions(home, {"condition": definition}, _key())
+    assert outcome == "allowed", content
+    assert _body(content)["result"] is expected
+    assert seen and all("states(" not in config and "is_state" not in config and "'00:00:00'" not in config
+                        for config in seen), seen
+    assert "_phoenix_template_0" in seen[0]
+
+
+async def test_a_failed_template_inside_or_still_lets_another_branch_pass(home):
+    definition = {"or": ["{{ (states('sensor.temperature') | float) / 0 > 1 }}",
+                         {"condition": "state", "entity_id": DESK, "state": "on"}]}
+    content, outcome = await _call("test_condition", {"condition": definition}, _key(), home)
+    assert outcome == "allowed", content
+    assert _body(content)["result"] is True
+    alone = await _call("test_condition", {"condition": definition["or"][0]}, _key(), home)
+    assert alone[1] == "invalid_request", alone
+    assert "could not be evaluated" in _text(alone[0])
+
+
+async def test_a_numeric_state_value_template_reads_the_scrubbed_entity_as_state(home):
+    """Core binds state to the entity; a caller variable of that name never reaches its secrets."""
+    leak = {"condition": "numeric_state", "entity_id": LAMP, "above": 0.5,
+            "value_template": "{{ 1 if state.attributes.access_token is defined else 0 }}"}
+    content, outcome = await _call("test_condition", {"condition": leak, "variables": {"state": {}}}, _key(), home)
+    assert outcome == "allowed", content
+    assert _body(content)["result"] is False
+    doubled = {"condition": "numeric_state", "entity_id": SENSOR, "above": 40,
+               "value_template": "{{ state.state | float * 2 }}"}
+    content, outcome = await _call("test_condition", {"condition": doubled, "variables": {"state": {}}}, _key(), home)
+    assert outcome == "allowed", content
+    assert _body(content)["result"] is True
+
+
+async def test_undefined_names_are_reported_as_template_errors(home):
+    content, outcome = await _call("test_condition", {"condition": "{{ (trigger.to_state ~ '') == '' }}",
+                                                      "variables": {"trigger": {}}}, _key(), home)
+    assert outcome == "allowed", content
+    assert any("to_state" in error for error in _body(content)["template_errors"]), content
+
+
+async def test_a_lone_surrogate_escape_is_refused_without_the_worker(home):
+    from custom_components.phoenix_mcp import template_render
+
+    with patch.object(template_render, "_run_worker", side_effect=AssertionError("spawned")):
+        content, outcome = await _call(
+            "test_condition", {"condition": '{{ as_timestamp("\\ud800", 0) > 0 }}'}, _key(), home)
+    assert outcome == "invalid_request", content
+    assert "lone surrogate" in _text(content)
+
+
+async def test_a_worker_failure_refuses_before_home_assistant_validates(home):
+    from custom_components.phoenix_mcp import template_render
+
+    failure = template_render.TemplateRenderError("Template rendering exceeded its CPU budget. Reduce the template workload.")
+    with patch.object(template_render, "_run_worker", side_effect=failure), \
+            patch.object(automation_test.ha_condition, "async_validate_condition_config") as validate:
+        content, outcome = await _call("test_condition", {"condition": "{{ 2 ** 3 > 1 }}"}, _key(), home)
+    assert outcome == "invalid_request", content
+    assert "CPU budget" in _text(content)
+    validate.assert_not_called()
+
+
+async def test_scope_is_checked_again_after_the_condition_is_evaluated(home):
+    key = _key()
+    real = automation_test.ha_condition.async_from_config
+
+    async def narrowing(hass, config):
+        checker = await real(hass, config)
+        check = checker.async_check
+
+        def async_check(*args, **kwargs):
+            key.permissions = _key({LAMP: "RED", DESK: "GREEN"}).permissions
+            return check(*args, **kwargs)
+
+        checker.async_check = async_check
+        return checker
+
+    with patch.object(automation_test.ha_condition, "async_from_config", narrowing):
+        content, outcome = await _call("test_condition", {"condition": {
+            "condition": "state", "entity_id": LAMP, "state": "off"}}, key, home)
+    assert outcome == "not_found", content
+    assert "result" not in _text(content)
+
+
+@pytest.mark.parametrize("field", ["area_id", "label_id", "floor_id"])
+async def test_an_empty_selector_answers_like_a_missing_one(home, rooms, field):
+    if not await _entity_conditions(home):
+        pytest.skip("this Home Assistant release has no entity conditions")
+    from homeassistant.helpers import area_registry as ar, floor_registry as fr, label_registry as lr
+
+    empty = {
+        "area_id": lambda: ar.async_get(home).async_create("Outside").id,
+        "label_id": lambda: lr.async_get(home).async_create("Unused").label_id,
+        "floor_id": lambda: fr.async_get(home).async_create("Attic").floor_id,
+    }[field]()
+    found = await _call("test_condition", _targeted(field, empty), _key(), home)
+    missing = await _call("test_condition", _targeted(field, "no-such-id"), _key(), home)
+    assert found[1] == missing[1] == "not_found", (found, missing)
+    assert _text(found[0]) == _text(missing[0])
+    beside = await _call("test_condition", {"condition": {"condition": "light.is_on", "target": {
+        field: empty, "entity_id": LAMP}}}, _key(), home)
+    assert beside[1] == "not_found", beside

@@ -103,7 +103,7 @@
 
 控制锁、警报控制面板、卷帘和阀门，无论通过它们自身的操作，还是其他会作用到它们的操作。`zwave_js.set_value` 这类原始设备命令始终需要它，设备上有这些实体时，其 ESPHome 操作也需要。
 
-智能体还需要在{{label:accessKeys.permissionsTree}}中对它们有 W。更改 Zigbee 设备的无线电工具也需要它。
+智能体还需要在{{label:accessKeys.permissionsTree}}中对它们有 W。原始命令或 ESPHome 操作需要对其设备能操作的一切拥有 W，包括按钮。更改 Zigbee 设备的无线电工具也需要它。
 
 创建或编辑包含这些实体的场景也需要此能力。
 
@@ -130,6 +130,8 @@
 ### {{label:caps.cap_lovelace_write.label}} {#lovelace-write}
 
 读取和更改仪表盘。没有它，智能体也无法读取仪表盘。
+
+卡片会以打开仪表盘的人的权限运行。因此，添加模板、会运行代码的自定义卡片，或来自其他网站的图片或链接的更改，即使设为允许也会等待你的批准。普通卡片遵循你设置的模式。
 
 ### {{label:caps.cap_registry_write.label}} {#registry-write}
 
@@ -160,3 +162,5 @@
 ### {{label:caps.cap_dashboard_resources.label}} {#dashboard-resources}
 
 添加和更改仪表盘资源，即自定义卡片加载的 JavaScript 文件。每次更改都需要您审批，因此没有“允许”选项。文件必须来自 `/local/` 或 `/hacsfiles/`，Phoenix MCP 只更改它自己添加的资源。
+
+每个打开仪表盘的浏览器都会以该用户的 Home Assistant 访问权限运行这些文件。管理员的浏览器打开 Phoenix MCP 面板时也会运行它们，以读取它们添加的自定义卡片。

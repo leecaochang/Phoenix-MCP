@@ -88,6 +88,7 @@ from ..esphome_yaml import (
     declared_components,
     declared_device,
     esphome_rel_path_ok,
+    links_to_secrets_yaml,
     inline_secret_values,
     masked_unified_diff,
     redact_esphome_slice,
@@ -197,8 +198,8 @@ def _esphome_actions_for_entity(
 ) -> list[dict]:
     """The owning ESPHome device's user-defined actions, as find_available_actions rows.
 
-    Availability follows the device's write scope and the capability call_service asks for. `args` is included
-    because these schemas are device-defined.
+    Availability follows write scope over the whole device and the capability call_service asks for, not
+    ``writable``, the described entity's own. `args` is included because these schemas are device-defined.
     """
     entry = esphome_entry_for_entity(hass, entity_id)
     if entry is None:
@@ -209,7 +210,8 @@ def _esphome_actions_for_entity(
     if not name:
         return []
 
-    available = writable or esphome_entry_writable(hass, entry, access_key)
+    # Write on the described entity alone is not enough, as the call needs the whole device.
+    available = esphome_entry_writable(hass, entry, access_key)
     prefix = name.replace("-", "_")
     rows: list[dict] = []
     for svc in (getattr(runtime, "services", None) or {}).values():
@@ -464,7 +466,8 @@ def _resolve_esphome_path(hass: HomeAssistant, file_arg: Any) -> tuple[str, str]
     if not candidate.startswith(root + os.sep):
         return None
     rel = os.path.relpath(candidate, root)
-    if not esphome_rel_path_ok(rel):
+    if not esphome_rel_path_ok(rel) or (
+            os.path.isfile(candidate) and links_to_secrets_yaml(candidate, hass.config.config_dir)):
         return None
     return candidate, rel
 

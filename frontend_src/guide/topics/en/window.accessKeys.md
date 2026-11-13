@@ -63,6 +63,8 @@ Turns the key's name into a text box. Press Enter to save, or Esc to cancel. You
 
 Gives the key a new secret value and shows it. Everything else stays the same, including its permissions and history. The old value stops working straight away, so update every app that uses it. **{{label:accessKeys.helpConnect}}** in the same dialog shows each app's setup with the new value.
 
+Rotating cancels the key's waiting approvals, because whoever held the old value may have asked for them.
+
 ### {{label:accessKeys.enablePtLabel}} {#enable-pass-through}
 
 Makes the key skip the permissions tree. The tree is kept: **{{label:accessKeys.switchToScoped}}** in the {{label:accessKeys.permissionsTree}} window turns it back on. Home Companion keys can't use pass-through.

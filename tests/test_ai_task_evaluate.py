@@ -68,7 +68,7 @@ class Home:
 
     def one_row(self):
         """Assert the call left exactly one audit row, and return it."""
-        rows = list(self.data.audit._log)
+        rows = self.data.audit._rows()
         assert len(rows) == 1, rows
         return rows[0]
 
@@ -710,7 +710,7 @@ async def test_a_cancelled_call_is_recorded_once(home):
 async def test_the_operators_logging_choice_applies(home):
     await home.data.store.async_patch_settings(disable_all_logging=True)
     await home.ask()
-    assert list(home.data.audit._log) == []
+    assert home.data.audit._rows() == []
 
 
 async def test_the_conversation_log_names_the_key_and_model(home):

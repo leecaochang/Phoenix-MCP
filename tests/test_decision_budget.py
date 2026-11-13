@@ -171,3 +171,26 @@ async def test_an_unreadable_ledger_says_so_in_the_log(caplog):
     await budget.async_load()
     assert budget.summary(5)["available"] is False
     assert "ValueError" in caplog.text
+
+
+async def test_a_window_saved_under_a_future_clock_is_discarded_and_logged(caplog):
+    """A clock fixed after running far ahead reopens the allowance; a rollback within the hour does not."""
+    hour = 3600
+    now = 500_000 * hour + 10
+    store = MemoryStore()
+    store.value = {'window': now // hour + 87_600, 'used': 5}
+    budget = DecisionRequestBudget(store)
+    await budget.async_load()
+    with patch('custom_components.phoenix_mcp.routing.decision_budget.time', return_value=now):
+        summary = budget.summary(5)
+        assert (summary['used'], summary['reset_at']) == (0, (now // hour + 1) * hour)
+        await budget.reserve(5)
+    assert store.value == {'window': now // hour, 'used': 1}
+    assert 'more than an hour ahead' in caplog.text
+    store.value = {'window': now // hour + 1, 'used': 5}
+    held = DecisionRequestBudget(store)
+    await held.async_load()
+    with patch('custom_components.phoenix_mcp.routing.decision_budget.time', return_value=now):
+        assert held.summary(5)['used'] == 5
+        with pytest.raises(DecisionBudgetError, match='request_budget_exhausted'):
+            await held.reserve(5)

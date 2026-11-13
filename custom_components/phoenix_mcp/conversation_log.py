@@ -949,7 +949,11 @@ def recorded_exchange(run: Callable) -> Callable:
 
 
 def recorded_turn(source: str, prompt_key: str, *, transform: Callable | None = None) -> Callable:
-    """Capture owned ingress turns, reusing an outer scope for delegation."""
+    """Capture owned ingress turns, reusing an outer scope for delegation.
+
+    ``transform(response, arguments)`` turns the reply into what is recorded, given the call's
+    arguments by name (a voice reply needs its language).
+    """
     def decorate(run: Callable) -> Callable:
         @functools.wraps(run)
         async def wrapped(*args: Any, **kwargs: Any) -> Any:
@@ -967,7 +971,7 @@ def recorded_turn(source: str, prompt_key: str, *, transform: Callable | None = 
                             if e["kind"] in {"routing", "turn_outcome"} and isinstance(e["payload"], dict)
                             and "outcome" in e["payload"]] if entry else []
                 status = "failed" if outcomes and outcomes[-1] not in {"ok", "completed"} else "completed"
-                log.finish(handle, response=transform(response) if transform else response, status=status)
+                log.finish(handle, response=transform(response, values) if transform else response, status=status)
                 await log.async_save(coalesced=True)
                 return response
             except asyncio.CancelledError:

@@ -8,7 +8,7 @@ import logging
 from typing import Any
 import voluptuous as vol
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, SupportsResponse
 from homeassistant.exceptions import (
     HomeAssistantError, ServiceNotFound, ServiceValidationError, Unauthorized,
 )
@@ -32,7 +32,7 @@ from ..capability import effective_cap
 from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..policy_engine import (
-    call_needs_physical_gate, esphome_entry_writable, filter_service_response, group_member_ids,
+    call_needs_physical_gate, esphome_entry_entities, esphome_entry_writable, filter_service_response, group_member_ids,
     music_assistant_readable_entries, Permission, required_service_cap, resolve,
     resolve_esphome_user_service, resolve_service_targets, service_target_binding_valid,
     unreadable_group_targets, unregistered_targets,
@@ -131,8 +131,6 @@ async def _tool_call_service(
         return _tool_refused_before_write(TODO_PLACEHOLDER_REFUSAL), "invalid_request", "call_service"
     if refusal := await named_script_refusal(hass, domain, service):
         return _tool_refused_before_write(refusal), "invalid_request", "call_service"
-    if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), args.get("entity_id")):
-        return _tool_refused_before_write(script_input_selector_error(selecting)), "invalid_request", "call_service"
     if media := media_read_refusal(domain, args.get("service_data"), access_key, hass, data, request_id, client_ip):
         return _tool_refused_before_write(media[0]), media[1], "call_service"
 
@@ -155,6 +153,9 @@ async def _tool_call_service(
             entity_id=args.get("entity_id"), device_id=args.get("device_id"),
             area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
         )
+        # Read from the scripts the call runs, which a device or area target names too.
+        if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), targets):
+            return _tool_refused_before_write(script_input_selector_error(selecting)), "invalid_request", "call_service"
         if unbound := await unbound_service_targets(hass, targets, domain=domain, service=service):
             return _tool_refused_before_write(unbound_target_error(domain, service, unbound)), "denied", "call_service"
         if refusal := speech_target_refusal(domain, service, args.get("entity_id"), targets):
@@ -240,11 +241,12 @@ async def _dispatch_no_target_tool_call(
     resource: str,
     timeout_noun: str,
     surface_validation_errors: bool,
+    advisory: list[str] | None = None,
 ) -> tuple[dict, Outcome, str]:
     """Call a service that takes no entity target, and map the outcome; it authorizes nothing.
 
     Covers dual-gate services, the config-reload family and ESPHome user-defined actions. The caller
-    chooses whether validation detail is safe to surface.
+    chooses whether validation detail is safe to surface; ``advisory`` holds MESA warnings to report.
     """
     # Those have no entities in hass.states, reject an entity_id, or take only device-declared
     # arguments respectively. For NO_TARGET_SERVICES, detail is safe: it describes the caller's own
@@ -287,10 +289,13 @@ async def _dispatch_no_target_tool_call(
         failure = _service_failure(err, domain, service, access_key, hass, detail=surface_validation_errors)
         return failure, "invalid_request", resource
     # Nothing to read back: such an action changes no entity's state.
-    return _tool_success(json.dumps({
+    body: dict[str, Any] = {
         "success": True, "verified": None,
         "note": "Home Assistant accepted the action; an action without a target has no state to read back.",
-    })), "allowed", resource
+    }
+    if advisory:
+        _add_mesa_advisory(body, advisory)
+    return _tool_success(json.dumps(body)), "allowed", resource
 
 
 async def _execute_music_assistant_library_read(
@@ -400,8 +405,6 @@ async def _execute_call_service(
         return _tool_error(template_fields_error(templated)), "invalid_request", resource
     if refusal := await named_script_refusal(hass, domain, service):
         return _tool_refused_before_write(refusal), "invalid_request", resource
-    if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), args.get("entity_id")):
-        return _tool_refused_before_write(script_input_selector_error(selecting)), "invalid_request", resource
     # Rechecked for a saved approval: scope, capability and privacy may change while it waits.
     if media := media_read_refusal(domain, args.get("service_data"), access_key, hass, data, request_id, client_ip):
         return _tool_refused_before_write(media[0]), media[1], resource
@@ -455,25 +458,46 @@ async def _execute_call_service(
     # target: HA builds their schema from only the arguments the device declared,
     # so attaching the flattened entity_id list makes voluptuous reject the call
     # outright, and routing them through resolve_service_targets yields
-    # an empty list and a spurious 403. Authorization is the owning DEVICE's write
-    # scope: the action is defined by that device's own firmware and can only act on
-    # it, so an access key that may already actuate the device's entities is exactly
-    # the access key that may invoke its actions, with the capability checked above
-    # when the device has a physical entity. MESA does not apply (no entity target to
-    # govern). A service no LOADED entry
-    # claims falls through to the normal path and refuses uniformly, so a stale
-    # registration left behind by an unload reveals nothing.
+    # an empty list and a spurious 403. The action is the device's own firmware and
+    # can drive anything on it, so it needs write access to everything the device can
+    # operate, the capability checked above when the device has a physical entity, and
+    # MESA over every entity of the device, all or nothing, as a firmware install has.
+    # A service no LOADED entry claims falls through to the normal path and refuses
+    # uniformly, so a stale registration left behind by an unload reveals nothing.
     if domain == _ESPHOME_DOMAIN:
         esphome_entry = resolve_esphome_user_service(hass, service)
         if esphome_entry is not None:
             if not esphome_entry_writable(hass, esphome_entry, access_key):
                 return _tool_error("Forbidden."), "denied", resource
+            device_entities = esphome_entry_entities(hass, esphome_entry)
+            if APPROVAL_TARGETS_KEY in args and not targets_current(args, device_entities, hass):
+                return _tool_error(TARGETS_CHANGED), "denied", resource
+            device_constraints: dict[str, Any] = {
+                "approval_args": args, "approval_diff": lambda: _build_diff_call_service(args, access_key, hass),
+            }
+            if approve_as is not None:
+                device_constraints.update(approval_tool_name=approve_as[0], approval_args=approve_as[1])
+            device_outcome = await async_apply_mesa_to_call(
+                hass, data, access_key,
+                domain=domain, service=service, service_data=service_data, entities=device_entities,
+                request_id=request_id, client_ip=client_ip, session_id=request_id,
+                confirm_approved=mesa_approved or _approved_exec_ctx.get(), require_all=True,
+                **device_constraints,
+            )
+            if device_outcome.blocked:
+                fire_mesa_blocked_event(hass, access_key, device_outcome.blocked)
+            if device_outcome.decision == "pending":
+                return await _pending_or_inline(hass, data, access_key, device_outcome.approval)
+            if device_outcome.decision == "deny":
+                return _tool_refused_before_write(MESA_DENIED_MESSAGE), "denied", resource
+            check_request_authority()
             # A device-defined schema makes a wrong argument NAME the likeliest
             # failure, and the caller can fix it, so validation errors surface.
             return await _dispatch_no_target_tool_call(
                 hass, access_key, domain=domain, service=service, service_data=service_data,
                 resource=resource, timeout_noun="Action",
                 surface_validation_errors=True,
+                advisory=visible_reach_warnings(device_outcome.warnings, CallReach(device_entities), access_key, hass),
             )
 
     if not any((entity_id, device_id, area_id)):
@@ -497,8 +521,10 @@ async def _execute_call_service(
     if not permitted_entities or not service_target_binding_valid(domain, service, permitted_entities, hass):
         return _tool_error("Forbidden."), "denied", resource
 
-    # Re-run here for the same reason as the selector check: a service's
+    # Re-run here for the same reason as the secondary-target check: a service's
     # description can change while an approval is pending.
+    if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), permitted_entities):
+        return _tool_refused_before_write(script_input_selector_error(selecting)), "invalid_request", resource
     if unbound := await unbound_service_targets(hass, permitted_entities, domain=domain, service=service):
         return _tool_refused_before_write(unbound_target_error(domain, service, unbound)), "denied", resource
     if refusal := speech_target_refusal(domain, service, entity_id, permitted_entities):
@@ -571,12 +597,10 @@ async def _execute_call_service(
     use_return_response = False
     if effective_cap(access_key, "cap_service_response") != CAP_DENY:
         try:
-            # Local: inside a guard for releases that lack it.
-            from homeassistant.core import SupportsResponse as _SR
             handler = hass.services.async_services().get(domain, {}).get(service)
             use_return_response = (
                 handler is not None and
-                getattr(handler, "supports_response", None) not in (None, _SR.NONE)
+                getattr(handler, "supports_response", None) not in (None, SupportsResponse.NONE)
             )
         except Exception:
             _LOGGER.debug(

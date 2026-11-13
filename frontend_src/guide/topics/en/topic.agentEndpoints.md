@@ -68,11 +68,13 @@ POST   /api/phoenix-mcp/oauth/revoke
 - The issuer is your HTTPS address followed by `/api/phoenix-mcp/oauth`. Its document is also served at both OpenID discovery paths.
 - Apps name themselves with a Client ID Metadata Document: `client_id` is an https address. There's no dynamic registration.
 - Only S256 PKCE is accepted. `resource`, when sent, must be your address followed by `/api/phoenix-mcp`.
-- Authorize sends the browser to the Phoenix panel, where an administrator approves the sign-in for one key. Authorization responses carry `iss`.
-- Access tokens (`phxo_`) last one hour. Each refresh replaces the refresh token (`phxr_`). A replaced one still works for 60 seconds, then using it ends the sign-in.
+- Authorize sends the browser to the Phoenix panel, where an administrator approves the sign-in for one key. It answers the same way whether or not a sign-in window is open. Authorization responses carry `iss`.
+- A code works once, within 60 seconds. A wrong client, redirect, resource or PKCE verifier uses it up. Using a code again ends the sign-in it produced.
+- Access tokens (`phxo_`) last one hour. Each refresh replaces the refresh token (`phxr_`).
+- Within 60 seconds, an app may retry a replaced refresh token once, in case the answer got lost. Any other use of an old refresh token ends the sign-in.
 - Revoke takes either token and ends the whole sign-in.
 
-The routes answer `404` until a key allows OAuth sign-in, and to any request that didn't arrive over HTTPS. While the kill switch is on they answer `503`. Each address may make 30 requests a minute to them.
+The routes answer `404` until a key allows OAuth sign-in, and to any request that didn't arrive over HTTPS, even while the kill switch is on. Otherwise, while the kill switch is on they answer `503`. Each address may make 30 requests a minute to them, and IPv6 addresses count by their /64 block.
 
 Related: [Apps that sign in with OAuth](guide:topic.connecting#oauth), [OAuth sign-in endpoints](guide:topic.adminApiKeys#oauth)
 

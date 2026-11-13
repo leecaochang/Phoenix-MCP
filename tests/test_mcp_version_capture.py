@@ -23,6 +23,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import label_registry as lr
 from homeassistant.util.dt import utcnow
+from homeassistant.util.yaml import load_yaml
 from pytest_homeassistant.common import MockConfigEntry
 
 from tests.runtime_fixtures import mesa_off_store
@@ -31,7 +32,6 @@ from custom_components.phoenix_mcp.const import MAX_DIFF_INLINE_BYTES, MAX_REQUE
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool as _mcp_call_tool
 from custom_components.phoenix_mcp.tools.restore import async_restore_version
-from custom_components.phoenix_mcp.tools.authoring import _read_automations_yaml
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionRecord, VersionStore
 
@@ -44,6 +44,14 @@ _SEED_YAML = (
     "script: !include scripts.yaml\n"
     "scene: !include scenes.yaml\n"
 )
+
+
+def _read_automations_yaml(path: str) -> list:
+    """The stored list in an editor file, as Home Assistant loads it."""
+    if not os.path.isfile(path):
+        return []
+    data = load_yaml(path)
+    return data if isinstance(data, list) else []
 
 
 @pytest.fixture(autouse=True)

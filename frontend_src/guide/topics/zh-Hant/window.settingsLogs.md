@@ -25,6 +25,8 @@ Phoenix 的感測器會繼續計數，通知仍會到達。
 
 等待核准的請求、你的核准決定，以及在變更可能已執行時中斷的請求一律會被記錄。
 
+每把金鑰每分鐘的前 30 個被拒絕請求各有一筆條目。該分鐘內其餘的請求共用一筆條目，並在其負載中計數。
+
 ### {{label:settings.logRateLimitedLabel}} {#log-rate-limited}
 
 記錄因金鑰傳送過多而被拒絕的請求。預設為開啟。
@@ -38,6 +40,8 @@ Phoenix 的感測器會繼續計數，通知仍會到達。
 ### {{label:settings.maxLogEntriesLabel}} {#log-max-entries}
 
 稽核日誌保留多少筆條目：100、1,000、5,000 或 10,000（預設）。降低它會立即移除最舊的條目。磁碟上的副本會在下次儲存時縮小。
+
+核准和管理員條目分開保留，數量上限相同，因此其他請求不會將它們擠出。
 
 ## {{label:conversations.title}} {#conversation-log}
 

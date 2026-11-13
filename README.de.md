@@ -39,14 +39,14 @@ Das Bedienfeld unterstützt derzeit Englisch, Spanisch, Französisch, Italienisc
 
 ## Dokumentation
 
-Das Handbuch ist in das Bedienfeld integriert: Öffnen Sie das **Phoenix MCP**-Bedienfeld und wählen Sie im Menü **Hilfe** den Eintrag **Leitfaden**. Es erklärt jedes Fenster und jede Einstellung, was Agenten tun können, Berechtigungen, Fähigkeiten, MESA und Sicherheit. Es folgt Ihrer Auswahl, und Sie können es durchsuchen.
+Das Handbuch ist in das Bedienfeld integriert: Öffnen Sie das **Phoenix MCP**-Bedienfeld und wählen Sie im Menü **Hilfe** den Eintrag **Leitfaden**. Es erklärt jedes Fenster und jede Einstellung, was Agenten tun können, Berechtigungen, Fähigkeiten, MESA und Sicherheit. Es folgt Ihrer Auswahl, und Sie können es durchsuchen. Der Leitfaden ist auf Englisch, vereinfachtem Chinesisch und traditionellem Chinesisch verfasst. In den anderen Sprachen ist nur seine Willkommensseite übersetzt, die übrigen Seiten erscheinen auf Englisch.
 
 Zum ersten Mal hier? Öffnen Sie nach der unten beschriebenen Einrichtung das **Phoenix MCP**-Bedienfeld und wählen Sie **Agenten einrichten**. Ein Assistent führt Sie durch das Erstellen eines Zugriffsschlüssels, die Auswahl seiner Rechte und das Verbinden von Agent Chat oder Ihrer eigenen App.
 
 ## Voraussetzungen
 
 - Home Assistant 2026.7.0 oder neuer.
-- Eine Phoenix MCP-Instanz pro Home Assistant. Home Assistant installiert die Abhängigkeiten `Babel>=2.18.0` und `jsonschema>=4.26.0` für Sie.
+- Eine Phoenix MCP-Instanz pro Home Assistant. Home Assistant installiert die Abhängigkeiten `Babel>=2.18.0` und `jsonschema>=4.26.0` für Sie. Bei einer Home Assistant Core-Installation installiert es außerdem die Anforderungen der Integrationen, nach denen Phoenix MCP startet, etwa ZHA, Bluetooth und ESPHome, auch wenn Sie diese nicht nutzen.
 
 ## Installation über den Marketplace
 

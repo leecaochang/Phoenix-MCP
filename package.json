@@ -42,7 +42,7 @@
   },
   "overrides": {
     "@vitest/mocker": "5.0.3",
-    "dockview": "8.4.1",
-    "dockview-core": "8.4.1"
+    "dockview": "8.8.3",
+    "dockview-core": "8.8.3"
   }
 }

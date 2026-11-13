@@ -15,7 +15,7 @@ from .command_execution import LocalCommandReply, async_execute_chat_command, as
 from .command_routing import (
     RoutingAuthority, async_evaluate_command, effective_routing_mode, routing_language, routing_languages,
 )
-from .decision_shadow import async_preview_decision
+from .decision_shadow import async_preview_decision, operation_unconfirmed
 from .decision_context import async_prepare_chat_context, context_execution_eligible
 from .decision_history import context_history
 from ..catalog_text import voice_text
@@ -129,6 +129,8 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
                                                           base_url, client_ip, cancel, language=language)
             # Mixed history always needs review again; never establish a local-only chain.
             return await finish(context_reply, subject=decision["_plan"]["proposal"])
+        if operation_unconfirmed(decision):
+            return await finish(LocalCommandReply(voice_text(language, "decision_operation_unconfirmed")))
         return True
     if execute:
         if result["proposal"]:
@@ -150,6 +152,8 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
                 reply = await async_execute_chat_plan(hass, data, current, decision["_plan"], authority,
                                                       base_url, client_ip, cancel, language=language)
                 return await finish(reply, subject=decision["_plan"]["proposal"])
+            if operation_unconfirmed(decision):
+                return await finish(LocalCommandReply(voice_text(language, "decision_operation_unconfirmed")))
             return True
         if mode == "hybrid" and not followup and not result["proposal"]:
             decision = await async_preview_decision(hass, data, current, sentence, language,
@@ -162,6 +166,8 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
                 reply = await async_execute_chat_plan(hass, data, current, decision["_plan"], authority,
                                                       base_url, client_ip, cancel, language=language)
                 return await finish(reply, subject=decision["_plan"]["proposal"])
+            if operation_unconfirmed(decision):
+                return await finish(LocalCommandReply(voice_text(language, "decision_operation_unconfirmed")))
     elif (settings.decision_provider_id and result["reason"] in ("no_match", "unsupported", "no_target")):
         # Execution mode pauses observation without changing its stored preference.
         data.decision_shadow.start(hass, data, current, sentence, language,

@@ -19,8 +19,9 @@ class DecisionRequestBudget:
     """Persist reservations before dispatch; uncertain requests are never refunded.
 
     Only calls made while enabled consume the allowance. A fixed UTC hour makes
-    restart recovery deterministic. Clock rollback cannot open an earlier window.
-    The store is shared across accounts, previews, Voice, Chat and shadow jobs.
+    restart recovery deterministic. Clock rollback within an hour cannot open an earlier
+    window; a window saved more than an hour ahead is discarded. The store is shared
+    across accounts, previews, Voice, Chat and shadow jobs.
     """
 
     def __init__(self, store: Any = None) -> None:
@@ -66,7 +67,11 @@ class DecisionRequestBudget:
             if self._unavailable:
                 raise DecisionBudgetError('budget_unavailable')
             window = int(time()) // DECISION_BUDGET_WINDOW_SECONDS
-            if window > self._window:
+            if self._window > window + 1:
+                # Saved under a clock that was wrong; keeping it would hold the limit until that hour.
+                _LOGGER.warning("The decision request budget window was more than an hour ahead of the "
+                                "clock; the hourly count starts again")
+            if window > self._window or self._window > window + 1:
                 self._window, self._used = window, 0
             if self._used >= limit:
                 raise DecisionBudgetError('request_budget_exhausted')
@@ -102,7 +107,8 @@ class DecisionRequestBudget:
 
     def summary(self, limit: int) -> dict:
         current = int(time()) // DECISION_BUDGET_WINDOW_SECONDS
-        used = self._used if current <= self._window else 0
+        window = self._window if self._window <= current + 1 else current
+        used = self._used if current <= self._window <= current + 1 else 0
         return {'limit': limit, 'used': used, 'remaining': max(0, limit-used) if limit else None,
-                'reset_at': (max(current, self._window)+1)*DECISION_BUDGET_WINDOW_SECONDS,
+                'reset_at': (max(current, window)+1)*DECISION_BUDGET_WINDOW_SECONDS,
                 'available': not self._unavailable}

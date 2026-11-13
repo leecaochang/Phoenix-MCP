@@ -5,10 +5,11 @@
   "source_revision": "67413c166f30a8ae0896664f64eb723310eccfc7",
   "source_tag": "v1.5.0",
   "vendor_prefix": "custom_components.phoenix_mcp.mesa_core",
-  "tree_sha256": "31bf29e186a124564775eb190a2ac05c95b66a307bd30e0c61db42b3a970fc63",
+  "tree_sha256": "b1c76e0c113acc60cbc4b6270d315a0c21c30739e74fb488bf6c6f4bcd4ce59f",
   "files": {
     "LICENSE": "7cf21d31e8a3c5441dd2415b42fa3a0f81160c926d7cd6847f5bbd15f7b8331b",
     "MODIFICATIONS.txt": "e80edb08beca74a22953b30e796d0f612bdef11f285adc62c4a424965fcfe96a",
+    "PROVENANCE.json": "8424bfa2357a694a58755defd988e4e8cebfaa3e3ab97fc6075997b693a33225",
     "__init__.py": "86c79c23c8493aeecbc50f7b669b2338314cb9193636f391fb0090c3ad784048",
     "_async.py": "0ffc83d0e8cee513b927d05714b63094369ba5852e84c468879821d973eb50ad",
     "audit.py": "fe70419f6aaf3e66ad5c7fe43dce8eba570c7e52aaf3f08e5471a1eedb11ba35",

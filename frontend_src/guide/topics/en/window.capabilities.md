@@ -101,7 +101,9 @@ Creates, changes and deletes calendar events.
 
 ### {{label:caps.cap_physical_control.label}} {#physical-control}
 
-Controls locks, alarm panels, covers and valves, through their own actions or any other action that reaches them. Raw device commands such as `zwave_js.set_value` always need it, and so do ESPHome actions on a device with one of these. The agent also needs W on them in the {{label:accessKeys.permissionsTree}}. Radio tools that change Zigbee devices need it too.
+Controls locks, alarm panels, covers and valves, through their own actions or any other action that reaches them. Raw device commands such as `zwave_js.set_value` always need it, and so do ESPHome actions on a device with one of these.
+
+The agent also needs W on them in the {{label:accessKeys.permissionsTree}}. A raw command or an ESPHome action needs W on everything its device can operate, buttons included. Radio tools that change Zigbee devices need it too.
 
 Creating or editing a scene with one of these in it needs this capability as well.
 
@@ -128,6 +130,8 @@ Reconfigures an integration, adds or changes its subentries, such as an AI agent
 ### {{label:caps.cap_lovelace_write.label}} {#lovelace-write}
 
 Reads and changes dashboards. Without it, the agent can't read dashboards either.
+
+Cards run with the access of whoever opens the dashboard. So a change that adds a template, a custom card that runs code, or a picture or link from another site waits for your approval, even on Allow. Ordinary cards follow the mode you set.
 
 ### {{label:caps.cap_registry_write.label}} {#registry-write}
 
@@ -158,3 +162,5 @@ Lists and creates backups.
 ### {{label:caps.cap_dashboard_resources.label}} {#dashboard-resources}
 
 Adds and changes dashboard resources, the JavaScript files that custom cards load. Every change needs your approval, so Allow isn't available. Files must come from `/local/` or `/hacsfiles/`, and Phoenix MCP changes only the resources it added itself.
+
+Every browser that opens a dashboard runs these files with that person's Home Assistant access. An administrator's browser also runs them when it opens the Phoenix MCP panel, which reads the custom cards they add.

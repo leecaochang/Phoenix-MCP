@@ -26,12 +26,12 @@ The reason you're typing is shared with Agent Chat's Reject button.
 How the change is shown depends on what the request does:
 
 - Configuration and YAML: **{{label:common.before}}** and **{{label:common.after}}** side by side. Switch between **{{label:changes.lineViewShort}}** and **{{label:changes.codeEditorShort}}**, or stack the two sides.
-- Dashboards, cards and the Energy dashboard: **{{label:common.diff}}** or **{{label:common.preview}}**, which draws the result.
+- Dashboards, cards and the Energy dashboard: **{{label:common.diff}}** or **{{label:common.preview}}**, which draws the result. Each request opens on **{{label:common.diff}}**. The preview runs the cards with your access, so choose it only for a change you trust.
 - Actions on devices: the action, its targets, and what MESA allows, holds or blocks.
 - Deletes, renames, helpers, integrations and other system actions: why the request needs your approval, what happens, what uses the item and which Phoenix settings name it. Unfold **{{label:approvals.previewAllDetails}}** at the bottom to see everything.
 - Removing to-do items: each item with its status, and a warning that removal is permanent.
 
-These view choices are kept in this browser, and Changes uses them too.
+The other view choices are kept in this browser, and Changes uses them too.
 
 ## Stepping through requests {#step}
 

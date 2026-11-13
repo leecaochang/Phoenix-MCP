@@ -44,6 +44,14 @@ MESA 依欄位組合策略，而不是依策略整體組合。
 
 部署預設設定可以為沒有策略的實體替換內建基線。它們來自匯入的存檔；策略編輯器無法編輯它們。
 
+## 整合自帶的策略 {#integration-profiles}
+
+自訂整合可以在其資料夾中附帶自己的策略，即 `mesa_profile.json` 檔案。Phoenix MCP 每次啟動時都會把該檔案新增為這個整合的策略，不會先詢問你。
+
+這樣的策略可以放寬基線。如果某個整合把它的門鎖標記為自主，這些門鎖就會變為自主。在[生效值解析](guide:window.mesaEditor#effective-resolution)中，這些值的 **{{label:mesa.colOrigin}}** 顯示為 developer。
+
+若要覆寫它，請為該整合儲存你自己的策略。之後 Phoenix MCP 會保留你的策略，並略過該整合的檔案。
+
 ## 操作違反規則時會發生什麼 {#modes}
 
 MESA 的行為取決於[設定](guide:window.settingsSafety#mesa-mode)中的 **{{label:settings.mesaModeLabel}}**，以及策略自身的 **{{label:mesa.fieldEnforcement}}**。

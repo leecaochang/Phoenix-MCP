@@ -112,7 +112,7 @@ async def test_executor_rechecks_without_effects(hass, tool_name):
 async def test_diagnostics_internal_error_is_distinct_and_safe(hass, error):
     with patch.object(discovery, "_validate_script_config", AsyncMock(side_effect=error)):
         content, outcome, _ = await discovery._tool_validate_automation_or_script(
-            {"type": "script", "config": {"sequence": []}}, _key(cap_diagnostics="allow"), hass)
+            {"type": "script", "config": {"sequence": []}}, _key(cap_diagnostics="allow"), hass, MagicMock())
     text = content["content"][0]["text"]
     assert "secret" not in text and "light.hidden" not in text
     if isinstance(error, RuntimeError):
@@ -126,7 +126,7 @@ async def test_diagnostics_internal_error_is_distinct_and_safe(hass, error):
 async def test_valid_input_reaches_real_ha_validator_without_mutating(hass, domain):
     config = {"triggers": [], "actions": []} if domain == "automation" else {"sequence": []}
     result, outcome, _ = await discovery._tool_validate_automation_or_script(
-        {"type": domain, "config": config}, _key(cap_diagnostics="allow"), hass)
+        {"type": domain, "config": config}, _key(cap_diagnostics="allow"), hass, MagicMock())
     assert outcome == "allowed" and json.loads(result["content"][0]["text"])["valid"] is True
 
 
@@ -135,7 +135,7 @@ async def test_schema_drift_is_internal_and_does_not_log_exception_values(hass, 
     target = "PLATFORM_SCHEMA" if domain == "automation" else "SCRIPT_ENTITY_SCHEMA"
     with patch("custom_components.phoenix_mcp.authoring_validation." + target, side_effect=RuntimeError("token=secret light.hidden")):
         result, outcome, _ = await discovery._tool_validate_automation_or_script(
-            {"type": domain, "config": {}}, _key(cap_diagnostics="allow"), hass)
+            {"type": domain, "config": {}}, _key(cap_diagnostics="allow"), hass, MagicMock())
     assert outcome == "invalid_request" and result["isError"]
     assert "Internal error" in result["content"][0]["text"]
     assert "token=secret" not in caplog.text and "light.hidden" not in caplog.text
@@ -152,7 +152,7 @@ async def test_representative_correction_in_two_calls(hass, domain, broken, fixe
     key = _key(cap_diagnostics="allow")
     results = []
     for args in (broken, fixed):
-        result, _, _ = await discovery._tool_validate_automation_or_script({"type": domain, **args}, key, hass)
+        result, _, _ = await discovery._tool_validate_automation_or_script({"type": domain, **args}, key, hass, MagicMock())
         results.append(result)
     first = results[0]
     assert first.get("isError") or json.loads(first["content"][0]["text"])["valid"] is False
@@ -271,7 +271,7 @@ async def test_unknown_key_message_carries_no_validator_text_or_config_values(co
 
 async def test_unreadable_key_registry_degrades_to_plain_projection(core_keys):
     config = {"triggers": [{"trigger": "battery.low"}], "actions": []}
-    with patch("homeassistant.helpers.trigger.async_get_all_descriptions", AsyncMock(side_effect=RuntimeError("boom"))):
+    with patch("custom_components.phoenix_mcp.authoring_validation.async_get_all_trigger_descriptions", AsyncMock(side_effect=RuntimeError("boom"))):
         text, err = await _core_rejection(core_keys, "automation", config)
     assert text == validation_message("automation", err)
 

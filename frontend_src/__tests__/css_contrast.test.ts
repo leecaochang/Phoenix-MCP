@@ -69,6 +69,10 @@ it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as 
     expect(contrast(rgb(values["--phx-read"]), rgb(values[surface])), `read on ${surface}`).toBeGreaterThanOrEqual(4.5);
     expect(contrast(rgb(values["--phx-focus"]), rgb(values[surface])), `focus on ${surface}`).toBeGreaterThanOrEqual(3);
   }
+  // A selected row keeps its status word (Pending, Approved, Expired) in the signal color.
+  for (const signal of ["--phx-success", "--phx-error", "--phx-warning", "--phx-read"]) {
+    expect(contrast(rgb(values[signal]), rgb(values["--phx-selected"])), `${signal} on --phx-selected`).toBeGreaterThanOrEqual(4.5);
+  }
   for (const surface of ["--phx-surface", "--phx-raised"]) {
     expect(contrast(rgb(values["--phx-field-border"]), rgb(values[surface])), `field border on ${surface}`).toBeGreaterThanOrEqual(3);
   }
@@ -100,6 +104,20 @@ const everyTheme = [null, ...palettes].flatMap((name) => [[name, "light"], [name
 it.each(everyTheme)("shows keyboard focus on the toolbar in theme %s, %s", (name, mode) => {
   const value = themeValues(name, mode);
   expect(contrast(rgb(value("--phx-toolbar-focus")), rgb(value("--phx-toolbar-bg")))).toBeGreaterThanOrEqual(3);
+});
+
+it.each(everyTheme)("keeps toolbar labels legible on the hover and open-menu fills in theme %s, %s", (name, mode) => {
+  const value = themeValues(name, mode);
+  const toolbar = rgb(value("--phx-toolbar-bg"));
+  const fg = value("--phx-toolbar-btn-fg");
+  if (!value("--phx-toolbar-bg")?.startsWith("#") || !fg?.startsWith("#")) return;
+  for (const token of ["--phx-toolbar-btn-hover", "--phx-toolbar-btn-active"]) {
+    const fill = value(token);
+    if (!fill || !(fill.startsWith("#") || fill.startsWith("rgba"))) continue;
+    const tint = fill.startsWith("#") ? [...rgb(fill), 1] : rgb(fill);
+    const blended = toolbar.map((v, i) => tint[i] * tint[3] + v * (1 - tint[3]));
+    expect(contrast(rgb(fg), blended), token).toBeGreaterThanOrEqual(4.5);
+  }
 });
 
 it("draws the toolbar's focus ring in the toolbar's own token", () => {
@@ -152,11 +170,13 @@ it.each(palettes.flatMap((name) => [[name, "light"], [name, "dark"]]))("keeps th
       expect(contrast(rgb(values[text]), rgb(values[surface])), `${text} on ${surface}`).toBeGreaterThanOrEqual(4.5);
     }
   }
-  for (const surface of ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised"]) {
+  for (const surface of ["--phx-bg", "--phx-surface", "--phx-surface-2", "--phx-raised", "--phx-selected"]) {
     for (const signal of ["--phx-success", "--phx-error", "--phx-warning", "--phx-read"]) {
       expect(contrast(rgb(values[signal]), rgb(values[surface])), `${signal} on ${surface}`).toBeGreaterThanOrEqual(4.5);
     }
-    expect(contrast(rgb(values["--phx-focus"]), rgb(values[surface])), `focus on ${surface}`).toBeGreaterThanOrEqual(3);
+    if (surface !== "--phx-selected") {
+      expect(contrast(rgb(values["--phx-focus"]), rgb(values[surface])), `focus on ${surface}`).toBeGreaterThanOrEqual(3);
+    }
   }
   for (const surface of ["--phx-surface", "--phx-raised"]) {
     expect(contrast(rgb(values["--phx-field-border"]), rgb(values[surface])), `field border on ${surface}`).toBeGreaterThanOrEqual(3);

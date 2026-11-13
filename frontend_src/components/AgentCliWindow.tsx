@@ -690,6 +690,12 @@ function applyPopupTheme(popup: Window, hass: unknown): void {
 
 const RESIZE_MIN_W = 320, RESIZE_MIN_H = 280;
 const VIEWPORT_MARGIN = 8;
+
+/** The narrowest the window may be in a viewport this wide: its usual minimum, or
+ *  the whole viewport inside the margins when that is narrower (a 320 px phone). */
+export function windowMinWidth(vw: number): number {
+  return Math.min(RESIZE_MIN_W, vw - 2 * VIEWPORT_MARGIN);
+}
 // The desktop minimized titlebar footprint, used to keep its remembered
 // position within the viewport. Mobile uses the compact icon-only pill below.
 const PILL_SIZE = { w: 220, h: 44 };
@@ -744,22 +750,22 @@ export function snapResizeRect(
   dx: number, dy: number, vw: number, vh: number,
   topMargin = VIEWPORT_MARGIN,
 ): { x: number; y: number; w: number; h: number } {
-  const M = VIEWPORT_MARGIN, SNAP = 56;
+  const M = VIEWPORT_MARGIN, SNAP = 56, minW = windowMinWidth(vw);
   let w = o.w, h = o.h, x = o.x, y = o.y;
   const rightAnchor = o.x + o.w;   // fixed edge when dragging west
   const bottomAnchor = o.y + o.h;  // fixed edge when dragging north
   if (dir.includes("e")) {
-    w = Math.max(RESIZE_MIN_W, o.w + dx);
-    if (vw - (o.x + w) <= SNAP) w = Math.max(RESIZE_MIN_W, vw - M - o.x);
+    w = Math.max(minW, o.w + dx);
+    if (vw - (o.x + w) <= SNAP) w = Math.max(minW, vw - M - o.x);
   }
   if (dir.includes("s")) {
     h = Math.max(RESIZE_MIN_H, o.h + dy);
     if (vh - (o.y + h) <= SNAP) h = Math.max(RESIZE_MIN_H, vh - M - o.y);
   }
   if (dir.includes("w")) {
-    w = Math.max(RESIZE_MIN_W, o.w - dx);
+    w = Math.max(minW, o.w - dx);
     x = rightAnchor - w;
-    if (x <= SNAP) { w = Math.max(RESIZE_MIN_W, rightAnchor - M); x = rightAnchor - w; }
+    if (x <= SNAP) { w = Math.max(minW, rightAnchor - M); x = rightAnchor - w; }
   }
   if (dir.includes("n")) {
     h = Math.max(RESIZE_MIN_H, o.h - dy);
@@ -843,6 +849,8 @@ export function AgentCliWindow({
     if (saved.minimized) return "min";
     // No stored maximize preference: mobile defaults to full screen.
     if (saved.maximized ?? isNarrowViewport()) return "max";
+    // A viewport narrower than the smallest window plus its margins opens full screen.
+    if (window.innerWidth < RESIZE_MIN_W + 2 * VIEWPORT_MARGIN) return "max";
     return "normal";
   });
   const minimized = mode === "min";
@@ -2134,7 +2142,7 @@ export function AgentCliWindow({
         }
       } else if (mode === "normal") {
         const ns = {
-          w: Math.min(size.w, Math.max(RESIZE_MIN_W, vw - 2 * M)),
+          w: Math.min(size.w, Math.max(windowMinWidth(vw), vw - 2 * M)),
           h: Math.min(size.h, Math.max(RESIZE_MIN_H, vh - topMargin - M)),
         };
         const np = clampPosToViewport(pos, ns, vw, vh, topMargin);
@@ -2158,7 +2166,7 @@ export function AgentCliWindow({
     const vw = window.innerWidth, vh = window.innerHeight, M = VIEWPORT_MARGIN;
     const topMargin = agentCliTopMargin(rootRef.current);
     const ns = {
-      w: Math.min(size.w, Math.max(RESIZE_MIN_W, vw - 2 * M)),
+      w: Math.min(size.w, Math.max(windowMinWidth(vw), vw - 2 * M)),
       h: Math.min(size.h, Math.max(RESIZE_MIN_H, vh - topMargin - M)),
     };
     const np = clampPosToViewport(pos, ns, vw, vh, topMargin);

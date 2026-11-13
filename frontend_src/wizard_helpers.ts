@@ -259,7 +259,7 @@ export function buildOAuthTabs(url: string): AgentTab[] {
       // One tab for Claude: a connector added in Claude also reaches Claude Code on the same account.
       key: "claude",
       label: "Claude",
-      href: "https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp",
+      href: "https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp",
       blocks: [
         { steps: [t("wizard.oauthClaudeStep1"), t("wizard.oauthClaudeStep2"), t("wizard.oauthClaudeStep3"),
           t("wizard.oauthClaudeStep4"), approve] },
@@ -286,7 +286,7 @@ export function buildOAuthTabs(url: string): AgentTab[] {
     {
       key: "vscode",
       label: "VS Code",
-      href: "https://code.visualstudio.com/docs/copilot/chat/mcp-servers",
+      href: "https://code.visualstudio.com/docs/agent-customization/mcp-servers",
       blocks: [
         { steps: [t("wizard.oauthVscodeStep1"), t("wizard.oauthVscodeStep2"), approve] },
         { hint: t("wizard.oauthVscodeToolsNote") },

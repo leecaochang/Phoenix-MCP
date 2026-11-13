@@ -18,6 +18,8 @@ Every change adds an audit log entry with the request path. Export adds one too,
 
 MESA leases have no admin endpoints. Phoenix keeps them in memory, and agents request and release them with their own tools.
 
+These endpoints return profile text as you wrote it. An agent's own MESA tools show an entity its key can't read as `<redacted-entity>`.
+
 ## Entity profiles {#entity-profiles}
 
 ```

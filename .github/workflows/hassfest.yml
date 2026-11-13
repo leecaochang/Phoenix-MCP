@@ -9,8 +9,11 @@ on:
     - cron: "23 5 * * *"
   workflow_dispatch:
 
-# Least privilege: both the pinned gate and the scheduled compatibility canary
-# only read the checkout and report a result.
+# Least privilege: both the gate and the scheduled compatibility canary only
+# read the checkout and report a result. The gate pins the action's wrapper by
+# SHA, but that wrapper runs the untagged ghcr.io/home-assistant/hassfest image,
+# so both jobs run whatever that image holds on the day; the canary follows the
+# newest wrapper as well.
 permissions:
   contents: read
 
@@ -21,6 +24,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The jobs only read the checkout; keep the job token out of .git/config.
+          persist-credentials: false
       - name: Hassfest
         # Runs with no exclusions, which is also what hacs/default runs against a
         # submission (its own workflow clones the repo and runs the same image),
@@ -38,6 +44,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The jobs only read the checkout; keep the job token out of .git/config.
+          persist-credentials: false
       - name: Hassfest current rules
         # This isolated scheduled job intentionally follows upstream so a new
         # manifest rule is visible without making a mutable ref a merge gate.

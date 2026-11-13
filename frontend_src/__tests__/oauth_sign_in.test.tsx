@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 vi.mock("../api", () => ({
   api: {
     getAccessKeyOAuth: vi.fn(), patchAccessKey: vi.fn(), openOAuthWindow: vi.fn(), closeOAuthWindow: vi.fn(), removeOAuthSignIn: vi.fn(),
-    getOAuthRequest: vi.fn(), approveOAuthRequest: vi.fn(), denyOAuthRequest: vi.fn(),
+    getOAuthRequest: vi.fn(), approveOAuthRequest: vi.fn(), denyOAuthRequest: vi.fn(), getOAuthSummary: vi.fn(),
   },
 }));
 import { api } from "../api";
@@ -155,6 +155,45 @@ it("disables approval once the request has run out", async () => {
   await act(async () => { vi.advanceTimersByTime(1000); });
   expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
   expect(screen.getAllByText("This sign-in request has ended. Start again from the app.").length).toBeGreaterThan(0);
+});
+
+it("names the app by its full client address", async () => {
+  vi.mocked(api.getOAuthRequest).mockResolvedValue(REQUEST);
+  render(<OAuthRequestDialog link="r1" onClose={() => {}} />);
+  await settle();
+  expect(screen.getByText("https://app.example/c.json")).toBeInTheDocument();
+});
+
+it("tells a screen reader the end time once and warns once near the end", async () => {
+  vi.mocked(api.getOAuthRequest).mockResolvedValue({ ...REQUEST, expires_at: new Date(NOW + 62_000).toISOString() });
+  render(<OAuthRequestDialog link="r1" onClose={() => {}} />);
+  await settle();
+  expect(screen.getByText(/^This request ends at /)).toBeInTheDocument();
+  const status = screen.getAllByRole("status").find((el) => el.classList.contains("sr-only")) as HTMLElement;
+  expect(status).toHaveTextContent("");
+  await act(async () => { vi.advanceTimersByTime(3000); });
+  expect(status).toHaveTextContent("Less than a minute is left to approve this request.");
+  await act(async () => { vi.advanceTimersByTime(60_000); });
+  expect(status).toHaveTextContent("This sign-in request has ended. Start again from the app.");
+});
+
+it("says no window is open when the link names nothing and no key is open", async () => {
+  vi.mocked(api.getOAuthRequest).mockRejectedValue(Object.assign(new Error("gone"), { status: 404 }));
+  vi.mocked(api.getOAuthSummary).mockResolvedValue({ keys: { k1: { sign_ins: 0, window_open_until: null } }, kill_switch: false });
+  render(<OAuthRequestDialog link="abc" onClose={() => {}} />);
+  await settle();
+  await settle();
+  expect(screen.getByText(/accepts a new sign-in right now/)).toBeInTheDocument();
+});
+
+it("says the request ended when a window is open but the link names nothing", async () => {
+  vi.mocked(api.getOAuthRequest).mockRejectedValue(Object.assign(new Error("gone"), { status: 404 }));
+  vi.mocked(api.getOAuthSummary).mockResolvedValue({
+    keys: { k1: { sign_ins: 0, window_open_until: new Date(NOW + 600_000).toISOString() } }, kill_switch: false });
+  render(<OAuthRequestDialog link="abc" onClose={() => {}} />);
+  await settle();
+  await settle();
+  expect(screen.getByText("This sign-in request has ended. Start again from the app.")).toBeInTheDocument();
 });
 
 it("explains a closed window without asking the server", async () => {

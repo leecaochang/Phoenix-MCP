@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from jinja2 import Environment, TemplateSyntaxError, nodes
@@ -16,6 +17,14 @@ from .const import (
 )
 from .policy_engine import _ENTITY_ID_RE, is_sensitive_key
 from .schema_compat import schema_engine
+
+_TEMPLATE_MARKERS = ("{{", "{%", "{#")
+# A lone surrogate, as a character or as a Jinja string escape, ends Home Assistant in ciso8601
+# when a date parser receives it, even while a template is only being compiled.
+_LONE_SURROGATE = re.compile(r"[\ud800-\udfff]|\\u[dD][89a-fA-F][0-9a-fA-F]{2}|\\U0000[dD][89a-fA-F][0-9a-fA-F]{2}")
+LONE_SURROGATE_REFUSAL = (
+    "Templates cannot contain a lone surrogate character or an escape for one, such as \\ud800."
+)
 
 # Names a template may not assign, so a local can never stand in for a lookup or a checked function.
 _RESERVED_NAMES = HELPER_TEMPLATE_STATE_FUNCTIONS | HELPER_TEMPLATE_PURE_FUNCTIONS | {"states", "loop"}
@@ -43,6 +52,35 @@ def scope_refusal(construct: str) -> str:
         f"Date and time methods: {_names(HELPER_TEMPLATE_TIME_METHODS)}. "
         "Statements: if, set, and for over a checked expression."
     )
+
+
+def is_template(value: Any) -> bool:
+    """Whether a value is a string Home Assistant would treat as a template."""
+    return isinstance(value, str) and any(marker in value for marker in _TEMPLATE_MARKERS)
+
+
+def has_lone_surrogate(source: str) -> bool:
+    """Whether template source holds a lone surrogate or a Jinja escape that produces one."""
+    return _LONE_SURROGATE.search(source) is not None
+
+
+def caller_template_strings(value: Any, depth: int = 0) -> list[str]:
+    """Every template string in a caller's JSON value, keys included, in document order.
+
+    Depth is bounded by the tool argument limits; deeper values are walked no further.
+    """
+    if depth > 64:
+        return []
+    if isinstance(value, str):
+        return [value] if is_template(value) else []
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            found += caller_template_strings(key, depth + 1) + caller_template_strings(item, depth + 1)
+    elif isinstance(value, list):
+        for item in value:
+            found += caller_template_strings(item, depth + 1)
+    return found
 
 
 def template_entities(

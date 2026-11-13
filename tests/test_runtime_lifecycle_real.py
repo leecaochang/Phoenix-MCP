@@ -1,5 +1,6 @@
 """Real HA entry setup, reload, route ownership, unload and credential deletion."""
 
+from homeassistant.core import callback
 import asyncio
 import copy
 from datetime import timedelta
@@ -380,6 +381,28 @@ async def test_unload_cancels_inflight_mesa_priming(hass, enable_custom_integrat
         release.set()
 
 
+async def test_removal_records_each_cancelled_approval_in_the_audit_log(hass, enable_custom_integrations):
+    """Removing Phoenix keeps the audit log, so the requests it cancels are written there."""
+    from custom_components.phoenix_mcp import _DURABLE_STATE_KEY
+    from custom_components.phoenix_mcp.approvals import async_create_pending_approval, get_approval
+
+    entry, data = await _setup_runtime(hass)
+    access_key, _ = await data.store.async_create_access_key("removed", "admin")
+    async with data.store.async_lock:
+        approval = await async_create_pending_approval(
+            data.store, access_key_id=access_key.id, access_key_name=access_key.name,
+            tool_name="restart_ha", cap_name="cap_restart", args={}, diff={}, request_id="rid-removal",
+        )
+    state = hass.data[_DURABLE_STATE_KEY]
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert get_approval(state.store, approval.id).closure_reason == "integration_removed"
+    (row,) = [e for e in state.audit.query(limit=50) if e.method == "approval/cancelled"]
+    assert (row.request_id, row.access_key_id) == ("rid-removal", access_key.id)
+    assert '"integration_removed"' in row.payload
+
+
 async def test_sweep_records_an_expired_approval_in_the_audit_log(hass, enable_custom_integrations):
     """Expiry found by the sweep is audited like expiry found at approve time."""
     from pytest_homeassistant.common import async_fire_time_changed
@@ -535,7 +558,7 @@ async def test_unload_ends_leases_so_their_event_still_fires(hass, enable_custom
     """A reload replaces the lease manager, so a lease must end before it goes."""
     entry, data = await _setup_runtime(hass)
     ended = []
-    hass.bus.async_listen(f"{DOMAIN}_mesa_lease_expired", ended.append)
+    hass.bus.async_listen(f"{DOMAIN}_mesa_lease_expired", callback(lambda event: ended.append(event)))
     entity = "light.leased"
     hass.states.async_set(entity, "on")
     granted = data.mesa.lease_manager.request([entity], 30, session_id="key", caller_id="key")
@@ -560,14 +583,14 @@ async def test_reload_leaves_logger_handlers_where_it_found_them(hass, enable_cu
     entry, _ = await _setup_runtime(hass)
     try:
         assert [list(logger.handlers) for logger in loggers] == baseline
-        async_update_debug_capture(hass, "hue", "DEBUG")
+        async_update_debug_capture(hass, "hue", "DEBUG", "key")
         assert [len(logger.handlers) for logger in loggers] == [
             len(handlers) + (index >= 2) for index, handlers in enumerate(baseline)]
         for _cycle in range(2):
             assert await hass.config_entries.async_reload(entry.entry_id)
             await hass.async_block_till_done()
             assert [list(logger.handlers) for logger in loggers] == baseline
-        async_update_debug_capture(hass, "hue", "DEBUG")
+        async_update_debug_capture(hass, "hue", "DEBUG", "key")
         assert await hass.config_entries.async_unload(entry.entry_id)
         assert [list(logger.handlers) for logger in loggers] == baseline
     finally:
@@ -586,3 +609,175 @@ async def test_setup_refuses_a_home_assistant_older_than_the_minimum(hass, enabl
     assert entry.state is ConfigEntryState.SETUP_ERROR
     assert "needs Home Assistant 2026.7.0 or newer, and this is 2025.1.0" in caplog.text
     assert DOMAIN not in hass.data
+
+
+def _voice_agent(hass, entry):
+    from homeassistant.components.conversation.agent_manager import get_agent_manager
+
+    try:
+        return get_agent_manager(hass).async_get_agent(entry.entry_id)
+    except ValueError:
+        return None
+
+
+async def test_a_settings_change_finishing_on_a_retired_runtime_leaves_the_live_one_alone(
+        hass, enable_custom_integrations):
+    """A PATCH admitted before a reload runs its side effects after it, against the old runtime."""
+    from homeassistant.helpers import llm
+
+    from custom_components.phoenix_mcp.admin.settings import _apply_settings_side_effects
+
+    assert await async_setup_component(hass, "homeassistant", {})
+    assert await async_setup_component(hass, "conversation", {})
+    store = await AccessKeyStore.async_create(hass)
+    await store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id="k",
+                                     voice_agent_provider_id="p", voice_agent_model="m")
+    entry, old = await _setup_runtime(hass)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    new = hass.data[DOMAIN]
+    assert new is not old
+    assert _voice_agent(hass, entry)._data is new
+
+    settings = old.store.get_settings()
+    await _apply_settings_side_effects(
+        hass, old, {"kill_switch": False, "voice_agent_model": "m", "ai_task_access_key_id": None}, settings, True)
+
+    assert _voice_agent(hass, entry)._data is new
+    [api] = [api for api in llm.async_get_apis(hass) if api.id == DOMAIN]
+    assert api._data is new
+    assert old.assist_api_unregister is None
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert all(api.id != DOMAIN for api in llm.async_get_apis(hass))
+
+
+async def test_a_settings_change_finishing_between_unload_and_setup_registers_nothing(
+        hass, enable_custom_integrations, caplog):
+    from homeassistant.helpers import llm
+
+    from custom_components.phoenix_mcp.admin.settings import _apply_settings_side_effects
+
+    entry, old = await _setup_runtime(hass)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await _apply_settings_side_effects(hass, old, {"kill_switch": False}, old.store.get_settings(), True)
+    assert all(api.id != DOMAIN for api in llm.async_get_apis(hass))
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    new = hass.data[DOMAIN]
+    [api] = [api for api in llm.async_get_apis(hass) if api.id == DOMAIN]
+    assert api._data is new
+    assert "already registered" not in caplog.text
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert all(api.id != DOMAIN for api in llm.async_get_apis(hass))
+
+
+async def test_a_settings_change_on_the_live_runtime_still_resyncs_it(hass, enable_custom_integrations):
+    from homeassistant.helpers import llm
+
+    from custom_components.phoenix_mcp.admin.settings import _apply_settings_side_effects
+
+    assert await async_setup_component(hass, "homeassistant", {})
+    assert await async_setup_component(hass, "conversation", {})
+    entry, data = await _setup_runtime(hass)
+    assert _voice_agent(hass, entry) is None
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id="k",
+                                          voice_agent_provider_id="p", voice_agent_model="m")
+    await _apply_settings_side_effects(hass, data, {"voice_agent_model": "m"}, data.store.get_settings(), False)
+    assert _voice_agent(hass, entry)._data is data
+    assert any(api.id == DOMAIN for api in llm.async_get_apis(hass))
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+# --- removal and expiry clean-up --------------------------------------------------
+
+
+async def _timed_debug(hass, domain: str = "sun"):
+    from custom_components.phoenix_mcp.debug_capture import async_update_debug_capture
+    from custom_components.phoenix_mcp.logger_control import IntegrationOverride, async_get_logger_override_manager
+
+    manager = await async_get_logger_override_manager(hass)
+    prior = manager.adapter.get_override(domain)
+    await manager.async_set(domain=domain, desired=IntegrationOverride("DEBUG", "none"), prior=prior,
+                            loggers=await manager.adapter.declared_loggers(domain), owner_access_key_id="k",
+                            duration_minutes=5)
+    async_update_debug_capture(hass, domain, "DEBUG", "k")
+    return manager, prior
+
+
+async def test_removing_phoenix_ends_its_timed_log_levels_and_deletes_their_file(
+        hass, hass_storage, enable_custom_integrations, hass_admin_user):
+    from pytest_homeassistant.common import async_fire_time_changed
+
+    from custom_components.phoenix_mcp.logger_control import (
+        LOGGER_CONTROL_RUNTIME_KEY, LOGGER_CONTROL_STORAGE_KEY, IntegrationOverride,
+    )
+
+    assert await async_setup_component(hass, "logger", {})
+    entry, _data = await _setup_runtime(hass)
+    manager, prior = await _timed_debug(hass)
+    assert manager.adapter.get_override("sun") == IntegrationOverride("DEBUG", "none")
+    assert LOGGER_CONTROL_STORAGE_KEY in hass_storage
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert manager.adapter.get_override("sun") in (prior, IntegrationOverride("NOTSET", "none"))
+    assert LOGGER_CONTROL_STORAGE_KEY not in hass_storage
+    assert LOGGER_CONTROL_RUNTIME_KEY not in hass.data
+    assert manager.records == {} and manager._timers == {}
+    async_fire_time_changed(hass, utcnow() + timedelta(minutes=10))
+    await hass.async_block_till_done()
+    assert LOGGER_CONTROL_STORAGE_KEY not in hass_storage
+
+
+async def test_removing_phoenix_set_up_in_no_process_still_deletes_the_log_level_file(
+        hass, hass_storage, enable_custom_integrations):
+    from custom_components.phoenix_mcp.logger_control import LOGGER_CONTROL_STORAGE_KEY
+
+    hass_storage[LOGGER_CONTROL_STORAGE_KEY] = {"version": 1, "key": LOGGER_CONTROL_STORAGE_KEY,
+                                                "data": {"overrides": {}}}
+    assert await async_setup_component(hass, "homeassistant", {})
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, title="Phoenix MCP")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert LOGGER_CONTROL_STORAGE_KEY not in hass_storage
+
+
+async def test_a_timed_log_level_that_expires_ends_its_capture(hass, enable_custom_integrations, hass_admin_user):
+    from pytest_homeassistant.common import async_fire_time_changed
+
+    from custom_components.phoenix_mcp.debug_capture import DEBUG_CAPTURE_RUNTIME_KEY
+
+    assert await async_setup_component(hass, "logger", {})
+    entry, _data = await _setup_runtime(hass)
+    manager, _prior = await _timed_debug(hass)
+    assert "sun" in hass.data[DEBUG_CAPTURE_RUNTIME_KEY].domains
+    async_fire_time_changed(hass, utcnow() + timedelta(minutes=6))
+    await hass.async_block_till_done()
+    assert manager.active("sun") is None
+    assert "sun" not in hass.data[DEBUG_CAPTURE_RUNTIME_KEY].domains
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_unload_cancels_a_model_catalog_refresh_still_running(hass, enable_custom_integrations, monkeypatch):
+    from custom_components.phoenix_mcp import agent_chat_views
+
+    started, cancelled = asyncio.Event(), asyncio.Event()
+
+    async def held(_hass):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    monkeypatch.setattr(agent_chat_views, "async_refresh_all_catalogs", held)
+    entry, _data = await _setup_runtime(hass)
+    async with asyncio.timeout(3):
+        await started.wait()
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    async with asyncio.timeout(3):
+        await cancelled.wait()

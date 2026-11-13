@@ -549,6 +549,12 @@ DECISION_PERCENTAGE_EVIDENCE_CONNECTORS = MappingProxyType({
 DECISION_PERCENTAGE_UNITS = (("%",), ("％",), ("percent",), ("per", "cent"), ("por", "ciento"), ("百", "分", "之"))
 # Adding a preview category must not automatically authorize an execution path.
 DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query", *DECISION_ENTITY_CATEGORIES})
+# Nothing checks a model-chosen operation against the sentence, so one that opens, unlocks, disarms or
+# sounds something never runs from a decision; strict local recognition still handles these commands.
+DECISION_PROVIDER_REFUSED_CATEGORIES = frozenset({
+    "lock_unlock", "lock_open", "cover_open", "cover_toggle", "valve_open", "valve_toggle",
+    "siren_on", "siren_toggle", "alarm_disarm", "alarm_trigger",
+})
 # Bound independent identity checks without assuming whitespace in every language.
 DECISION_TARGET_MENTION_LIMIT = 256
 DECISION_UNSEGMENTED_TARGET_LANGUAGES = frozenset({'zh', 'ja', 'ko', 'th', 'lo', 'km', 'my'})
@@ -561,7 +567,7 @@ DECISION_HYBRID_REASONS = frozenset({
     "response_too_large", "provider_context_limit", "malformed", "timeout", "unavailable",
     "request_budget_exhausted", "budget_unavailable",
     "context_unverified", "context_unavailable", "context_changed", "low_probability", "invalid_context",
-    "model_unverified", "category_mismatch",
+    "model_unverified", "category_mismatch", "operation_unconfirmed",
 })
 DECISION_BRIGHTNESS_CHOICES = _sealed_groups({
     # Enumerate whole values so classification does not require digit arithmetic.

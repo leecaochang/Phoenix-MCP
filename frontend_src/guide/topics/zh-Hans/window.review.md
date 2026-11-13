@@ -26,12 +26,12 @@
 更改的显示方式取决于请求做什么：
 
 - 配置和 YAML：**{{label:common.before}}** 和 **{{label:common.after}}** 并排显示。在 **{{label:changes.lineViewShort}}** 和 **{{label:changes.codeEditorShort}}** 之间切换，或把两侧上下堆叠。
-- 仪表盘、卡片和能源仪表盘：**{{label:common.diff}}** 或 **{{label:common.preview}}**，后者会绘制结果。
+- 仪表盘、卡片和能源仪表盘：**{{label:common.diff}}** 或 **{{label:common.preview}}**，后者会绘制结果。每个请求都先显示 **{{label:common.diff}}**。预览会以你的权限运行卡片，因此只对你信任的更改选择它。
 - 对设备的操作：操作、其目标，以及 MESA 允许、暂缓或阻止的内容。
 - 删除、重命名、辅助元素、集成等系统操作：请求为何需要批准、将发生什么、谁在使用它、哪些 Phoenix 设置提及它。展开底部的 **{{label:approvals.previewAllDetails}}** 查看全部。
 - 删除待办事项：每个事项及其状态，并提示删除后无法恢复。
 
-这些视图选择会保存在此浏览器中，变更也会使用它们。
+其他视图选择会保存在此浏览器中，变更也会使用它们。
 
 ## 在请求间切换 {#step}
 

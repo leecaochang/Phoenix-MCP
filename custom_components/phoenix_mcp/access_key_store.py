@@ -21,6 +21,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import utcnow
 
 from .access_key_schema import normalize_access_key_root
+from .debug_capture import async_forget_debug_capture_owner
 from .durable_storage import DurableStorageError, DurableStore
 from .const import (
     AUDIT_FLUSH_INTERVALS, AUDIT_LOG_MAXLENS, CONVERSATION_LOG_DEFAULTS, CONVERSATION_LOG_LIMITS,
@@ -1190,6 +1191,8 @@ class AccessKeyStore:
         access_key = self._access_keys.pop(access_key_id, None)
         if access_key is None:
             return None
+        # Debug records it raised are readable by it alone, so they end with it.
+        async_forget_debug_capture_owner(self._hass, access_key_id)
         archived = ArchivedAccessKeyRecord(
             id=access_key.id,
             name=access_key.name,

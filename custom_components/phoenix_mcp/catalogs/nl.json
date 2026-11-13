@@ -27,6 +27,9 @@
     "local_unauthorized": "Deze toegangssleutel is niet langer geautoriseerd.",
     "local_state_matched": "Home Assistant meldt de gevraagde status.",
     "local_state_unconfirmed": "Opdracht verzonden. Home Assistant heeft de gevraagde status nog niet bevestigd.",
+    "local_operation_matched": "Actie: {operation}. Home Assistant meldt de gevraagde status.",
+    "local_operation_unconfirmed": "Actie verzonden: {operation}. Home Assistant heeft de gevraagde status nog niet bevestigd.",
+    "decision_operation_unconfirmed": "Ik heb deze opdracht niet uitgevoerd, omdat ik de actie niet kon bevestigen. Zeg hem nog eens duidelijk en noem de actie en het apparaat.",
     "local_summary_count": "Aan Assist blootgestelde entiteiten waartoe ik toegang heb, met status {state}: {matched} van {total}. Onbekend of niet beschikbaar: {unknown}.",
     "local_summary_total": "Aan Assist blootgestelde entiteiten waartoe ik toegang heb: {total}. Onbekend of niet beschikbaar: {unknown}.",
     "local_summary_breakdown": "Aan Assist blootgestelde entiteiten waartoe ik toegang heb: {total}. {summary}.",
@@ -356,8 +359,8 @@
       "energyDashboard": "Energiedashboard",
       "cardNoun": "kaart",
       "previewErrorHead": {
-        "one": "Een kaart in dit voorbeeld meldde een configuratiefout. Kopieer zo nodig het onderstaande bericht en plak het bij de agent, zodat die de kaart kan herstellen.",
-        "other": "Kaarten in dit voorbeeld meldden configuratiefouten. Kopieer zo nodig het onderstaande bericht en plak het bij de agent, zodat die de kaarten kan herstellen."
+        "one": "{count} kaart in dit voorbeeld meldde een configuratiefout. Kopieer zo nodig het onderstaande bericht en plak het bij de agent, zodat die de kaart kan herstellen.",
+        "other": "{count} kaarten in dit voorbeeld meldden configuratiefouten. Kopieer zo nodig het onderstaande bericht en plak het bij de agent, zodat die de kaarten kan herstellen."
       },
       "previewTextAlternative": "Het voorbeeld toont de kaarten als afbeeldingen. Kies {diff} om de wijziging als tekst te lezen.",
       "byAdmin": "Beheerder"
@@ -835,7 +838,11 @@
         "target_out_of_scope": "Doel buiten bereik",
         "access_key_expired": "Toegangssleutel verlopen",
         "access_key_inactive": "Toegangssleutel was inactief",
-        "access_key_revoked": "Toegangssleutel ingetrokken"
+        "access_key_revoked": "Toegangssleutel ingetrokken",
+        "access_key_rotated": "Geannuleerd bij het roteren van de toegangssleutel",
+        "oauth_sign_in_removed": "Geannuleerd bij het verwijderen van de aanmelding van de app",
+        "oauth_turned_off": "Geannuleerd bij het uitschakelen van OAuth-aanmelding",
+        "oauth_sign_in_ended": "Geannuleerd omdat de aanmelding van de app was beëindigd"
       },
       "reasonExecutionFailedDetail": "Uitvoering mislukt: {detail}",
       "reject": "Afwijzen",
@@ -1082,6 +1089,7 @@
       "approvalReasonString": "reason moet een tekenreeks zijn.",
       "approvalRecordFailed": "Deze goedkeuring kon niet worden vastgelegd voordat deze werd uitgevoerd. Er is niets uitgevoerd; probeer het opnieuw.",
       "approvalAccessKeyInactive": "De toegangssleutel is niet langer actief, dus dit verzoek kan niet worden uitgevoerd. Er is niets uitgevoerd.",
+      "approvalCredentialEnded": "De toegangssleutel is geroteerd of de aanmelding van de app is beëindigd, dus dit verzoek kan niet worden uitgevoerd. Er is niets uitgevoerd.",
       "archivedAccessKeyNotFound": "Gearchiveerde toegangssleutel niet gevonden.",
       "assistExposurePassThroughOnly": "use_assist_exposure is alleen geldig voor pass_through-toegangssleutels.",
       "assistPipelineFailed": "De Assist-pipeline kon niet worden aangemaakt.",
@@ -1917,7 +1925,8 @@
       "importReplaceHelp": "Voeg de profielen uit het bestand toe en vervang bestaande profielen voor dezelfde doelen. Dit kan niet ongedaan worden gemaakt.",
       "viewAutomationsHelp": "Toon of verberg de automatiseringen die MESA maar deels kon controleren, omdat ze sjablonen of blueprints gebruiken.",
       "openOrphanHelp": "Open dit profiel in de Profieleditor, waar je het kunt verwijderen. Wat het dekte, bestaat niet meer.",
-      "dismissNoticeHelp": "Verberg deze melding in deze browser. Genegeerde meldingen herstellen haalt hem terug."
+      "dismissNoticeHelp": "Verberg deze melding in deze browser. Genegeerde meldingen herstellen haalt hem terug.",
+      "comboMatchCount": "Overeenkomsten: {count}"
     },
     "settings": {
       "addProviderFirst": "Voeg eerst een provideraccount toe in AI-providers.",
@@ -2517,8 +2526,8 @@
       "dashboard_resource.create.title": "Dashboardbron {url} toevoegen",
       "dashboard_resource.update.title": "Dashboardbron {url} wijzigen",
       "dashboard_resource.delete.title": "Dashboardbron {url} verwijderen",
-      "dashboard_resource.create.body": "Elke browser die een dashboard opent, laadt {url}. Een JavaScript-bestand wordt uitgevoerd met de Home Assistant-toegang van die persoon, dus keur alleen een bestand goed dat je vertrouwt.",
-      "dashboard_resource.update.body": "Hiermee wordt een bestand gewijzigd dat elke browser laadt bij het openen van een dashboard. Vergelijk hieronder het huidige en het voorgestelde bestand.",
+      "dashboard_resource.create.body": "Elke browser die een dashboard opent, laadt {url}, net als de browser van een beheerder die het Phoenix MCP-paneel opent. Een JavaScript-bestand wordt uitgevoerd met de Home Assistant-toegang van die persoon, dus keur alleen een bestand goed dat je vertrouwt.",
+      "dashboard_resource.update.body": "Hiermee wordt een bestand gewijzigd dat elke browser laadt bij het openen van een dashboard, net als de browser van een beheerder bij het openen van het Phoenix MCP-paneel. Vergelijk hieronder het huidige en het voorgestelde bestand.",
       "dashboard_resource.delete.body": "Dashboards laden {url} niet meer. Kaarten die uit dit bestand komen, tonen een fout totdat het weer wordt toegevoegd.",
       "edit_energy_config.fallback.body": "Hiermee wordt de Home Assistant-dashboardconfiguratie bijgewerkt.",
       "edit_energy_config.fallback.title": "De configuratie van het energiedashboard wijzigen",
@@ -3239,11 +3248,13 @@
       "chooseKeyHelp": "Kies de toegangssleutel waarvan deze app de machtigingen krijgt.",
       "keyAtCap": "{name}, die al het maximale aantal aanmeldingen heeft",
       "requestExpires": "Dit verzoek eindigt over {time}",
+      "requestEndsAt": "Dit verzoek eindigt om {time}.",
+      "requestEndingSoon": "Er is minder dan een minuut over om dit verzoek goed te keuren.",
       "requestExpired": "Dit aanmeldverzoek is beëindigd. Begin opnieuw vanuit de app.",
       "approve": "Goedkeuren",
       "approveHelp": "Laat deze app de gekozen toegangssleutel gebruiken en stuur de aanmelding terug naar de app.",
       "deny": "Weigeren",
-      "denyHelp": "Wijs deze aanmelding af en laat het de app weten.",
+      "denyHelp": "Wijs deze aanmelding af en laat het de app weten als het adres ervan is geverifieerd.",
       "close": "Sluiten",
       "approvedLeaving": "Goedgekeurd. Terug naar de app...",
       "deniedLeaving": "Geweigerd. Terug naar de app...",

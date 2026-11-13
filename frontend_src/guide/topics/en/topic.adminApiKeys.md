@@ -162,7 +162,7 @@ The response is `201` with the new record plus `access_key`, the key itself: `ph
 | `rate_limit_burst` | integer | 0 to 100000. |
 | `persona` | string | One of `home_companion`, `read_only`, `voice_assistant`, `automation_builder`, `power_user`, `home_admin`, `new_user`, `dashboard_designer`, `maintenance`, `esphome`, `custom`. |
 | `notes` | string or null | At most 2000 characters, after line endings become LF and surrounding spaces are trimmed. Control, bidirectional override and tag characters are refused. `null` or `""` clears the notes. |
-| `oauth_enabled` | boolean | Turning it on opens the sign-in window. Turning it off ends every OAuth sign-in of the key. |
+| `oauth_enabled` | boolean | Turning it on opens the sign-in window. Turning it off ends every OAuth sign-in of the key and cancels the approvals they queued, with reason `oauth_turned_off`. |
 | `cap_*` | string | Any [capability field](guide:#capability-fields): `deny`, `allow` or `confirm`. |
 
 PATCH refuses any field not in this table, and `expires_at` can't be changed at all.
@@ -214,6 +214,8 @@ Related: [{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
 ### Rotate a key {#key-rotate}
 
 `POST /access-keys/{id}/rotate` gives the key a new value and takes no body. The old value and every OAuth sign-in of the key stop working straight away. The key keeps its rate-limit state and counters.
+
+Rotating also cancels every approval the key has waiting, with reason `access_key_rotated`, because whoever held the old value may have queued them.
 
 The response is `200` with the record plus `access_key`, the new value. As on create, Phoenix shows it only once. Phoenix fires the `phoenix_mcp_access_key_rotated` event with `access_key_id`, `access_key_name`, `rotated_by` and `timestamp`.
 
@@ -267,7 +269,7 @@ POST   /api/phoenix-mcp/admin/oauth/requests/{request_id}/deny
 
 `DELETE /access-keys/{id}/oauth/window` closes the window early and answers with the same status. It works while the kill switch is on.
 
-`DELETE /access-keys/{id}/oauth/sign-ins/{sign_in_id}` ends one sign-in and answers `204`. It works while the kill switch is on.
+`DELETE /access-keys/{id}/oauth/sign-ins/{sign_in_id}` ends one sign-in and answers `204`. It also cancels the approvals that sign-in queued, with reason `oauth_sign_in_removed`. It works while the kill switch is on.
 
 `GET /oauth/requests/{request_id}` answers with a waiting request. Its fields are `client_id`, `client_host`, `client_name`, `verified`, `problem` and `redirect_host`. It also has `loopback_only`, `created_at`, `expires_at` and `keys`. Opening it fetches the app's metadata document once. `keys` lists the keys a request may be approved for now.
 

@@ -84,6 +84,14 @@ SHAPES = {
     "rule marks": lambda n: "- " * (n // 2) + "x",
     "open thinking tags": lambda n: "<think>" * (n // 7),
     "short lines": lambda n: "k: v\n" * (n // 5),
+    "keys inside a harmless value": lambda n: "a={'password': " * (n // 15),
+    "credential key then brackets": lambda n: "token={" + "[" * n,
+    "header keys": lambda n: "cookie: " * (n // 8),
+    "authorization then text": lambda n: "Authorization: " + "x " * (n // 2),
+    "bot token digits": lambda n: "1234567:" * (n // 8),
+    "webhook paths": lambda n: "/api/webhook/" * (n // 13),
+    "long dotted chain": lambda n: "a." * (n // 2) + "b",
+    "colon runs after a key": lambda n: "a:" * (n // 2),
     "unicode space": lambda n: " " * n + "x",
 }
 

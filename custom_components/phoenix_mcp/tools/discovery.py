@@ -11,7 +11,7 @@ tools/system.py.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime, timedelta
 from typing import Any
 import dataclasses
@@ -32,6 +32,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers import label_registry as lr
+from homeassistant.helpers.service import async_get_all_descriptions
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.util.dt import as_utc, utcnow
@@ -40,10 +41,13 @@ import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.const import __version__ as ha_version
 
-from ..authoring_validation import async_target_findings, async_validation_message, authoring_input_error
+from ..authoring_validation import (
+    async_target_findings, async_template_refusal, async_validation_message, authoring_input_error,
+)
 from ..const import UPDATE_INSTALL_SERVICE, CAPABILITY_DENIED_REASONS, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DEVICE_LIST_DEFAULT_LIMIT, DEVICE_LIST_MAX_LIMIT, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, MUSIC_ASSISTANT_LIBRARY_SERVICES, STORAGE_HELPER_TYPES, NO_TARGET_SERVICES, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_ENTITIES_MAX_LIMIT, SEARCH_FUZZY_MATCH_CUTOFF, SEARCH_POWER_TYPES, SEARCH_RADIO_TYPES, SERVICE_FIELDS_MAX, SERVICE_FIELD_MAX_DESCRIPTION, SERVICE_FIELD_MAX_OPTIONS, SERVICE_FIELD_VALUE_MAX_DEPTH, REDACTION_SENTINEL, REFERENCE_WARNING_MAX
 from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
 from ..household_authority import household_admin_access
+from ..audit import MAX_QUERY_LIMIT
 from ..data import PhoenixData
 from ..device_semantics import (
     DeviceRegistrySnapshot,
@@ -56,7 +60,7 @@ from ..device_semantics import (
     readable_entity_aliases,
 )
 from ..routing.intent_recognition import RecognitionUnavailable, async_recognize
-from ..service_targets import call_reach, dedicated_tool_refusal, gate_entity_ids, merge_speech_players, named_script_refusal, required_secondary_targets, script_input_selector_error, script_input_selectors, secondary_target_error, speech_target_refusal, unreadable_group_error, unregistered_target_error, template_fields, template_fields_error, unbound_service_targets, unbound_target_error, unsupported_secondary_targets, visible_reach, visible_reach_warnings
+from ..service_targets import call_reach, CallReach, dedicated_tool_refusal, gate_entity_ids, merge_speech_players, named_script_refusal, required_secondary_targets, script_input_selector_error, script_input_selectors, secondary_target_error, speech_target_refusal, unreadable_group_error, unregistered_target_error, template_fields, template_fields_error, unbound_service_targets, unbound_target_error, unsupported_secondary_targets, visible_reach, visible_reach_warnings
 from ..tool_contracts import normalize_tool_args, state_projection
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_call
 from ..mesa_core.trigger_validator import entities_by_role
@@ -1960,8 +1964,6 @@ async def _tool_find_available_actions(
     fields_unavailable = False
     if include_fields:
         try:
-            # Local: inside a guard for releases that lack it.
-            from homeassistant.helpers.service import async_get_all_descriptions
             descriptions = (await async_get_all_descriptions(hass)).get(domain, {}) or {}
         except Exception:  # descriptions are documentation, never required
             _LOGGER.debug("Service descriptions unavailable for %s", entity_id, exc_info=True)
@@ -2751,6 +2753,29 @@ _YAML_READERS = {
 }
 
 
+def _own_audit_entries(data: PhoenixData, access_key_id: str) -> Iterator[Any]:
+    """Every audit row of one access key, newest first, read a page at a time."""
+    offset = 0
+    while True:
+        page = data.audit.query(access_key_id=access_key_id, limit=MAX_QUERY_LIMIT, offset=offset) or []
+        yield from page
+        if len(page) < MAX_QUERY_LIMIT:
+            return
+        offset += len(page)
+
+
+def _outcome_as_answered(outcome: str, resource: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
+    """An audit outcome as the key was answered: a refusal over an entity it cannot read was "not found".
+
+    The administrator's audit view keeps the distinction; told to the key, it would confirm which
+    guessed IDs exist.
+    """
+    if (outcome == "denied" and isinstance(resource, str) and valid_entity_id(resource)
+            and resolve_read(resource, access_key, hass) not in (Permission.READ, Permission.WRITE)):
+        return "not_found"
+    return outcome
+
+
 async def _tool_get_audit_summary(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -2762,22 +2787,26 @@ async def _tool_get_audit_summary(
     limit = max(1, min(limit, 200))
 
     outcome = args.get("outcome")
-    entries = data.audit.query(access_key_id=access_key.id, outcome=outcome, limit=limit)
-    if entries is None:
+    if data.audit.query(access_key_id=access_key.id, outcome=outcome, limit=1) is None:
         return _tool_error("Invalid outcome filter."), "invalid_request", "get_audit_summary"
 
     items = []
-    for e in entries:
+    for e in _own_audit_entries(data, access_key.id):
+        shown = _outcome_as_answered(e.outcome, e.resource, access_key, hass)
+        if outcome is not None and shown != outcome:
+            continue
         item: dict[str, Any] = {
             "request_id": e.request_id,
             "timestamp": e.timestamp.isoformat(),
             "method": e.method,
             "resource": e.resource,
-            "outcome": e.outcome,
+            "outcome": shown,
         }
         if e.mesa_advisory:
             item["mesa_advisory"] = True
         items.append(item)
+        if len(items) == limit:
+            break
     body = {"access_key_name": access_key.name, "count": len(items), "entries": items}
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_audit_summary"
 
@@ -3258,8 +3287,6 @@ async def _tool_dry_run_service(
         return _tool_error(template_fields_error(templated)), "invalid_request", "dry_run_service"
     if refusal := await named_script_refusal(hass, domain, service):
         return _tool_error(refusal), "invalid_request", "dry_run_service"
-    if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), args.get("entity_id")):
-        return _tool_error(script_input_selector_error(selecting)), "invalid_request", "dry_run_service"
     if media := media_read_refusal(domain, args.get("service_data"), access_key, hass, data, preview=True):
         return _tool_error(media[0]), media[1], "dry_run_service"
     # Sanitised exactly as the real call sanitises it, so the preview predicts
@@ -3306,10 +3333,10 @@ async def _tool_dry_run_service(
         }
         return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
 
-    # ESPHome user-defined actions: no entity target, authorized by the owning
-    # device's write scope. Reporting the declared argument signature is the
-    # point of a dry run here, since the schema is device-defined and a wrong
-    # argument name is the likeliest failure.
+    # ESPHome user-defined actions: no entity target, authorized by write scope over
+    # the owning device and MESA over all of it, as call_service does. Reporting the
+    # declared argument signature is the point of a dry run here, since the schema is
+    # device-defined and a wrong argument name is the likeliest failure.
     if domain == _ESPHOME_DOMAIN:
         esphome_entry = resolve_esphome_user_service(hass, service)
         if esphome_entry is not None:
@@ -3320,6 +3347,27 @@ async def _tool_dry_run_service(
             predicted_action = "denied" if not writable else (
                 "allowed" if required_cap is None else _cap_outcome(effective_cap(access_key, required_cap))
             )
+            device_mesa: dict | None = None
+            device_settings = data.store.get_settings()
+            if writable and data.mesa is not None and device_settings.mesa_mode != MESA_MODE_OFF:
+                device = CallReach(service_gate_targets(domain=domain, service=service, access_key=access_key, hass=hass))
+                device_verdict = evaluate_service_call(
+                    data.mesa, device_settings.mesa_mode, access_key, device.entities,
+                    domain=domain, service=service, service_data=service_data, session_id="dry_run",
+                )
+                shown = visible_reach(device.entities, access_key, hass)
+                device_mesa = {
+                    "allowed": [entity_id for entity_id in device_verdict.allowed if entity_id in shown],
+                    "confirm": [entity_id for entity_id in device_verdict.confirm if entity_id in shown],
+                    "blocked": [{"entity_id": e, "rule": r, "reason": reason} for e, r, reason in device_verdict.blocked
+                                if e in shown],
+                    "warnings": visible_reach_warnings(device_verdict.warnings, device, access_key, hass),
+                }
+                if predicted_action == "allowed" and (device_verdict.blocked or not device_verdict.allowed
+                                                      and not device_verdict.confirm):
+                    predicted_action = "denied"
+                elif predicted_action == "allowed" and device_verdict.confirm:
+                    predicted_action = "pending_approval"
             allowed = predicted_action == "allowed"
             signature = _esphome_action_signature(esphome_entry, service)
             declared = {a["name"] for a in signature}
@@ -3329,6 +3377,7 @@ async def _tool_dry_run_service(
                 "declared_args": signature,
                 "unknown_args": sorted(k for k in service_data if k not in declared),
                 "missing_args": sorted(declared - set(service_data)),
+                "mesa": device_mesa,
                 "predicted_outcome": predicted_action,
                 "would_execute": allowed,
             }
@@ -3345,6 +3394,8 @@ async def _tool_dry_run_service(
         entity_id=args.get("entity_id"), device_id=args.get("device_id"),
         area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
     )
+    if selecting := await script_input_selectors(hass, domain, service, args.get("service_data"), permitted):
+        return _tool_error(script_input_selector_error(selecting)), "invalid_request", "dry_run_service"
 
     target_args: dict[str, Any] = {
         "entity_id": gate_entity_ids(domain, service, service_data, args.get("entity_id"), hass),
@@ -3478,9 +3529,13 @@ def _readable_by(access_key: AccessKeyRecord, hass: HomeAssistant) -> Callable[[
 
 
 async def _tool_validate_automation_or_script(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: validate an automation or script config without saving it."""
+    """MCP tool: validate an automation or script config without saving it.
+
+    Its templates are compiled and trial-rendered in the template worker before Home Assistant
+    compiles them.
+    """
     if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "validate_automation_or_script"
 
@@ -3488,6 +3543,8 @@ async def _tool_validate_automation_or_script(
     config = args.get("config")
     if cfg_type not in ("automation", "script"):
         return _tool_error("Provide type ('automation' or 'script') and a config object."), "invalid_request", "validate_automation_or_script"
+    if refusal := await async_template_refusal(config, hass, data):
+        return _tool_error(refusal), "invalid_request", "validate_automation_or_script"
 
     input_error = authoring_input_error(args, cfg_type)
     if input_error:

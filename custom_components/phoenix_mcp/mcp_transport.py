@@ -6,6 +6,7 @@ import asyncio
 import base64
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime
 import json
 import logging
 import math
@@ -24,12 +25,13 @@ from .const import (
     MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS,
     MCP_LEGACY_SESSION_BUSY_RETRY_SECONDS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS,
     PHOENIX_VERSION, MAX_REQUEST_BODY_BYTES as _MAX_BODY, MCP_BODY_READ_TIMEOUT_SECONDS,
-    OAUTH_GRANT_REQUEST_KEY,
+    OAUTH_GRANT_REQUEST_KEY, OAUTH_TOKEN_UNTIL_REQUEST_KEY,
 )
 from .conversation_log import transport_session
 from .data import PhoenixData
 from .helpers import (
     build_error_response as _error, fire_rate_limit_events as _fire_rate_limit_events, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log,
+    read_bounded_body,
 )
 from .access_key_auth import (
     async_get_authenticated_access_key as _async_get_authenticated_access_key,
@@ -76,6 +78,8 @@ _MCP_CACHEABLE_METHODS = frozenset({
     "server/discover", "tools/list", "prompts/list", "resources/list",
     "resources/templates/list", "resources/read",
 })
+_HANDSHAKE_NOTIFICATIONS = frozenset({"notifications/initialized", "initialized"})
+_HANDSHAKE_WITH_ID = "Invalid Request: initialized is a notification and must not carry an id."
 _MCP_LEGACY_SESSION_TTL_SECONDS = 3600.0
 _MCP_LEGACY_UNINITIALIZED_TTL_SECONDS = 60.0
 _MCP_LEGACY_SESSION_LIMIT = 256
@@ -320,24 +324,15 @@ async def _handle_streamable_batch(
     # Items are dispatched sequentially (not via asyncio.gather) so a batch can never
     # run up to MAX_BATCH_ITEMS side-effecting tools concurrently and interleave
     # writes; order is preserved and one item's failure stays isolated.
-    if len(items) > MAX_BATCH_ITEMS:
-        _audit_mcp_transport(
-            data, access_key, request_id, client_ip, body=items, resource="mcp:batch"
-        )
-        return web.Response(
-            status=400,
-            content_type="application/json",
-            text=json.dumps(_jsonrpc_error(None, -32600, f"Batch too large. Maximum {MAX_BATCH_ITEMS} items.")),
-            headers={"X-Phoenix-Request-ID": request_id},
-        )
-
+    # _batch_refusal has already refused a batch over MAX_BATCH_ITEMS.
+    refused_notifications: list[Any] = []
     responses = await _dispatch_streamable_batch(
         items, access_key, hass, data, client_ip, base_url=base_url,
-        request_id=request_id,
+        request_id=request_id, refused_notifications=refused_notifications,
     )
 
     if not responses:
-        return web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id})
+        return web.Response(status=400 if refused_notifications else 202, headers={"X-Phoenix-Request-ID": request_id})
 
     resp = web.Response(
         # With no request in the batch, every entry reports a refused message with no id.
@@ -368,11 +363,12 @@ async def _dispatch_streamable_batch(
     *,
     base_url: str,
     request_id: str | None = None,
+    refused_notifications: list[Any] | None = None,
 ) -> list[dict]:
     """Dispatch each batch item in order, returning only the entries that reply.
 
     Sequential, not gathered, so side-effecting tools never interleave; failures stay
-    isolated.
+    isolated. A refused notification, which has no entry, is added to ``refused_notifications``.
     """
     bus = _progress_ctx.get()
     batch_policy_version = access_key.settings_version
@@ -408,9 +404,17 @@ async def _dispatch_streamable_batch(
                 return None
             return _jsonrpc_error(msg_id, *payload)
         method, params = payload
-        if is_notification and method in _MCP_METHODS and method not in {"notifications/initialized", "initialized"}:
+        if not is_notification and method in _HANDSHAKE_NOTIFICATIONS:
+            _audit_mcp_transport(data, access_key, request_id or generate_request_id(), client_ip,
+                                 body=item, resource="mcp:batch")
+            return _jsonrpc_error(msg_id, -32600, _HANDSHAKE_WITH_ID)
+        if is_notification and method in _MCP_METHODS and method not in _HANDSHAKE_NOTIFICATIONS:
+            # A request method without an id is refused, as alone (400); a notification
+            # gets no entry, so the caller learns of it only from the batch's status.
             _audit_mcp_transport(data, access_key, request_id or generate_request_id(), client_ip,
                                  body=item, resource="mcp:notification")
+            if refused_notifications is not None:
+                refused_notifications.append(item)
             return None
 
         if method not in _MCP_LEGACY_METHODS:
@@ -570,6 +574,15 @@ def _progress_notification(bus: _ProgressBus, elapsed: float) -> dict:
     return {"jsonrpc": "2.0", "method": "notifications/progress", "params": params}
 
 
+def _authority_withheld_reply(msg_id: Any, *, modern: bool) -> dict:
+    """The reply that closes a stream whose authority ended while its request ran."""
+    reply = _jsonrpc_error(msg_id, -32000, (
+        "Request authority changed. The result was withheld and the action may have run. "
+        "Check Home Assistant before repeating it with current permissions."
+    ))
+    return cast(dict, _modernize_response(reply, "")) if modern else reply
+
+
 async def _mcp_sse_response(
     request: web.Request,
     hass: HomeAssistant,
@@ -584,8 +597,11 @@ async def _mcp_sse_response(
     """Run ``dispatch`` and deliver its JSON-RPC result as a single SSE message.
 
     The payload matches the plain JSON path, with a frame every MCP_SSE_KEEPALIVE_SECONDS so
-    an intermediary does not drop a held gate. Only this function writes to the stream.
+    an intermediary does not drop a held gate. Before each such frame the request's authority
+    is checked; once it ends the stream closes with the result withheld, cancelling modern
+    dispatch as a disconnect does. Only this function writes to the stream.
     """
+    authority = request_authority.get()
     resp = web.StreamResponse(
         status=200,
         headers={
@@ -602,6 +618,7 @@ async def _mcp_sse_response(
     task.add_done_callback(_log_dispatch_task_error)
     started = time.monotonic()
     writable = True
+    authority_lost = False
     try:
         while True:
             done, _pending = await asyncio.wait(
@@ -611,6 +628,20 @@ async def _mcp_sse_response(
                 break
             if not writable:
                 continue
+            if authority is not None:
+                try:
+                    authority.current_access_key()
+                except AuthorityChangedError:
+                    authority_lost = True
+                    if cancel_on_disconnect:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                    # Legacy dispatch stays detached, as on a disconnect; it ends at its
+                    # own next authority check and its result is never written here.
+                    break
             elapsed = time.monotonic() - started
             frame = (
                 _sse_frame(_progress_notification(bus, elapsed))
@@ -635,14 +666,18 @@ async def _mcp_sse_response(
                     break
 
         try:
-            response_msg = None if task.cancelled() else task.result()
+            if authority_lost:
+                response_msg = None if msg_id is None else _authority_withheld_reply(msg_id, modern=cancel_on_disconnect)
+            else:
+                response_msg = None if task.cancelled() else task.result()
         except Exception:
             # Defense in depth: _dispatch_mcp already nets tools/call exceptions, and
             # the batch path isolates per item. Never surface the text to the client.
             _LOGGER.exception("Unhandled exception on the MCP SSE path rid=%s", request_id)
             response_msg = _jsonrpc_error(msg_id, -32603, "Internal error.")
 
-        if writable and response_msg is not None:
+        # An empty batch array is no reply; JSON-RPC forbids sending one.
+        if writable and response_msg:
             try:
                 await resp.write(_sse_frame(response_msg))
             except Exception:  # client disconnected mid-flight
@@ -878,40 +913,29 @@ async def _read_post_body(post: _McpPost) -> list[bytes] | web.Response:
         return post.audited(
             _error("request_too_large", "Request body too large.", 413, request_id)
         )
-    # aiohttp's StreamReader.read(n) is a SHORT read: it returns as soon as
-    # the buffer has ANY data, up to n bytes, not once n bytes have
-    # arrived. A single read(_MAX_BODY + 1) call could therefore silently
-    # truncate a larger tool-call body arriving across multiple
-    # TCP/chunked segments. Loop until EOF instead, bailing as soon as the
-    # cap is exceeded.
-    chunks: list[bytes] = []
-    total = 0
     try:
-        async with asyncio.timeout(MCP_BODY_READ_TIMEOUT_SECONDS):
-            while total <= _MAX_BODY:
-                chunk = await request.content.read(_MAX_BODY - total + 1)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                total += len(chunk)
-                at_eof = getattr(request.content, "at_eof", None)
-                if callable(at_eof) and at_eof():
-                    break
+        body = await read_bounded_body(request.content, _MAX_BODY, MCP_BODY_READ_TIMEOUT_SECONDS)
     except Exception:
         return post.audited(
             _error("invalid_request", "Failed to read request body.", 400, request_id)
         )
-    if total > _MAX_BODY:
+    if len(body) > _MAX_BODY:
         return post.audited(
             _error("request_too_large", "Request body too large.", 413, request_id)
         )
-    return chunks
+    return [body]
 
 
 def _oauth_grant_id(request: web.Request) -> str | None:
     """The OAuth sign-in that authenticated this request, if one did."""
     grant_id = request.get(OAUTH_GRANT_REQUEST_KEY)
     return grant_id if isinstance(grant_id, str) else None
+
+
+def _oauth_token_until(request: web.Request) -> datetime | None:
+    """When the OAuth access token that authenticated this request ends, if one did."""
+    until = request.get(OAUTH_TOKEN_UNTIL_REQUEST_KEY)
+    return until if isinstance(until, datetime) else None
 
 
 def _authority_lost_response(
@@ -988,7 +1012,7 @@ def _batch_refusal(post: _McpPost, parsed: list) -> web.Response | None:
     if not session.get("initialized") and parsed:
         first = parsed[0]
         if (isinstance(first, dict) and first.get("jsonrpc") == "2.0" and "id" not in first
-                and first.get("method") in {"notifications/initialized", "initialized"}
+                and first.get("method") in _HANDSHAKE_NOTIFICATIONS
                 and _classify_jsonrpc_message(first)[0] == "dispatch"):
             session["initialized"] = True
     if not session.get("initialized"):
@@ -1117,7 +1141,16 @@ def _admit_envelope(post: _McpPost, body: dict) -> _McpMessage | web.Response:
         ), body=body)
     method, params = payload
 
-    if is_notification and method in _MCP_METHODS and method not in {"notifications/initialized", "initialized"}:
+    if not is_notification and method in _HANDSHAKE_NOTIFICATIONS:
+        # A request is owed one reply, and this method has none; it never completes the
+        # handshake, as in a batch.
+        return post.audited(web.Response(
+            status=refused_status,
+            content_type="application/json",
+            text=json.dumps(_jsonrpc_error(msg_id, -32600, _HANDSHAKE_WITH_ID, modern=modern)),
+            headers={"X-Phoenix-Request-ID": request_id},
+        ), body=body)
+    if is_notification and method in _MCP_METHODS and method not in _HANDSHAKE_NOTIFICATIONS:
         return post.audited(web.Response(status=400,
             headers={"X-Phoenix-Request-ID": request_id}), body=body)
     return _McpMessage(body, modern, is_notification, msg_id, method, params)
@@ -1322,7 +1355,29 @@ async def _post_message(
     return await _dispatch_post_message(post, message, rl_headers, wants_sse, base_url)
 
 
-_HANDSHAKE_NOTIFICATIONS = frozenset({"notifications/initialized", "initialized"})
+# Headers a gateway in front of Phoenix may route or allowlist on. A repeated one is
+# refused: Phoenix reads the first copy, and a proxy that keeps the last would judge
+# a different request from the one that runs.
+_SINGLE_MCP_HEADERS = ("MCP-Protocol-Version", "Mcp-Method", "Mcp-Name", "Mcp-Session-Id")
+
+
+def _repeated_header_refusal(post: _McpPost, parsed: object) -> web.Response | None:
+    """Refuse a request that repeats any of _SINGLE_MCP_HEADERS, with 400."""
+    request = post.request
+    repeated = next((name for name in _SINGLE_MCP_HEADERS if len(request.headers.getall(name, ())) > 1), None)
+    if repeated is None:
+        return None
+    modern = _is_modern_request(parsed, request) if isinstance(parsed, dict) else _modern_headers(request)
+    msg_id = _sanitize_jsonrpc_id(parsed.get("id")) if isinstance(parsed, dict) else None
+    code, message = (
+        (-32020, f"Header mismatch: the {repeated} header is repeated.") if modern
+        else (-32600, f"Invalid Request: the {repeated} header is repeated.")
+    )
+    return post.audited(
+        _protocol_error_response(msg_id, code, message, post.request_id, modern=modern), body=parsed,
+    )
+
+
 _UNPARSED = object()
 
 
@@ -1397,6 +1452,7 @@ class PhoenixMcpView(PhoenixView):
         access_key, _rl_result = result
         authority = RequestAuthority(
             hass, data, access_key.id, access_key.access_key_hash, _oauth_grant_id(request),
+            oauth_token_until=_oauth_token_until(request),
         )
         request_authority.set(authority)
         try:
@@ -1481,6 +1537,7 @@ class PhoenixMcpView(PhoenixView):
         access_key, rl_result = result
         authority = RequestAuthority(
             hass, data, access_key.id, access_key.access_key_hash, _oauth_grant_id(request),
+            oauth_token_until=_oauth_token_until(request),
         )
         request_authority.set(authority)
         post = _McpPost(request, hass, data, access_key, request_id, client_ip)
@@ -1499,7 +1556,7 @@ class PhoenixMcpView(PhoenixView):
         parsed: object = _UNPARSED
         if body_bytes:
             try:
-                parsed = parse_json_body(body_bytes)
+                parsed = parse_json_body(body_bytes, unique_keys=True)
             except (ValueError, RecursionError):  # Invalid JSON or text, numeric overflow, or excessive nesting.
                 _LOGGER.warning(
                     "MCP POST: invalid JSON body (%d bytes read, Content-Length %s) rid=%s",
@@ -1521,6 +1578,9 @@ class PhoenixMcpView(PhoenixView):
                 return resp
         if parsed is _UNPARSED:
             return post.parse_error_response()
+        repeated = _repeated_header_refusal(post, parsed)
+        if repeated is not None:
+            return repeated
 
         # Response framing, not a session: an SSE-capable client gets the SAME
         # single JSON-RPC response, delivered as one `message` event, with
@@ -1569,8 +1629,11 @@ class PhoenixMcpContextView(PhoenixView):
             return result
         access_key, _rl = result
 
+        # No RequestAuthority spans this read, so the signed-in app is named here.
+        grant = data.oauth_grants.get(_oauth_grant_id(request))
         _log(data, access_key, request_id=request_id, method="GET", resource="/api/phoenix-mcp/context",
-             outcome="allowed", client_ip=client_ip)
+             outcome="allowed", client_ip=client_ip,
+             oauth_app=grant.audit_label() if grant is not None else None)
 
         fmt = request.query.get("format", "")
         if fmt == "json":

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from homeassistant.core import callback
+
 import asyncio
 import json
 from unittest.mock import MagicMock
@@ -63,7 +65,7 @@ async def test_named_script_cannot_substitute_an_unrelated_target(hass, runtime,
     access_key, data = runtime
     access_key.pass_through = pass_through
     seen = []
-    hass.bus.async_listen("runtime_hidden", lambda event: seen.append(event))
+    hass.bus.async_listen("runtime_hidden", callback(lambda event: seen.append(event)))
     args = _args("script", "hidden", "script.visible")
     result, outcome, _ = await _call_tool("call_service", args, access_key, hass, data)
     assert outcome == "denied" and result["isError"]
@@ -80,7 +82,7 @@ async def test_named_script_matches_storage_id_after_entity_rename(hass, runtime
     registry.async_update_entity("script.visible", new_entity_id="script.renamed")
     await hass.async_block_till_done()
     seen = []
-    hass.bus.async_listen("runtime_script", lambda event: seen.append(event.data["value"]))
+    hass.bus.async_listen("runtime_script", callback(lambda event: seen.append(event.data["value"])))
     args = _args("script", "visible", "script.renamed", value="bound")
     result, outcome, _ = await _call_tool("dry_run_service", args, access_key, hass, data)
     assert outcome == "allowed" and _body(result)["predicted_outcome"] == "allowed"
@@ -106,7 +108,7 @@ async def test_unknown_script_service_is_opaque(hass, runtime, target):
 async def test_script_start_and_stop_are_runtime_controls(hass, runtime):
     access_key, data = runtime
     started = asyncio.Event()
-    hass.bus.async_listen("runtime_started", lambda event: started.set())
+    hass.bus.async_listen("runtime_started", callback(lambda event: started.set()))
     result, outcome, _ = await _call_tool("call_service", _args("script", "turn_on", "script.waiting"), access_key, hass, data)
     assert outcome == "allowed" and not result.get("isError"), result
     await asyncio.wait_for(started.wait(), 5)  # generous: a loaded runner can delay the script start
@@ -120,7 +122,7 @@ async def test_script_start_and_stop_are_runtime_controls(hass, runtime):
 async def test_automation_enable_disable_and_trigger_are_distinct(hass, runtime):
     access_key, data = runtime
     seen = []
-    hass.bus.async_listen("runtime_automation", lambda event: seen.append(event))
+    hass.bus.async_listen("runtime_automation", callback(lambda event: seen.append(event)))
     entity_id = "automation.runtime_automation"
     for service, state in (("turn_off", "off"), ("turn_on", "on")):
         result, outcome, _ = await _call_tool("call_service", _args("automation", service, entity_id), access_key, hass, data)
@@ -223,7 +225,7 @@ async def test_named_script_approval_rechecks_registry_binding(hass, runtime):
     data.mesa = await async_setup_mesa(hass, "enforced")
     _profile(data, "script.visible", "confirm")
     seen = []
-    hass.bus.async_listen("runtime_script", lambda event: seen.append(event))
+    hass.bus.async_listen("runtime_script", callback(lambda event: seen.append(event)))
     args = _args("script", "visible", "script.visible")
     _, outcome, _ = await _call_tool("call_service", args, access_key, hass, data)
     assert outcome == "pending_approval"

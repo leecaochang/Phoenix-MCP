@@ -25,9 +25,18 @@ def test_temporal_admission_boundaries(change, reason):
     if change == 'missing': targets = {}
     if change == 'kind': source = {'kind': 'date', 'value': '2026-12-25'}
     original = deepcopy(checks)
-    outcome, proposal = temporal_proposal(checks, targets, source, 'Start Test timer for five minutes', 'en')
+    outcome, proposal = temporal_proposal(checks, targets, source, 'Start Test timer for five minutes', 'en', [])
     assert outcome == reason and checks == original
     if change is None:
         assert proposal['value'] == '00:05:00' and proposal['entity_ids'] == ['timer.test']
     else:
         assert proposal is None
+
+
+def test_temporal_identity_refuses_a_name_nested_in_an_outside_entity():
+    checks = {'route': answer('timer_duration', 'provider'), 'target': answer('t0', 'none'), 'value': answer('value', 'none')}
+    targets = {'t0': {'entity_id': 'timer.test', 'name': 'Test timer', 'eligible_categories': ['timer_duration']}}
+    outside = [('timer.oven_test_timer', ['timer.oven_test_timer', 'Oven Test timer'])]
+    outcome, proposal = temporal_proposal(checks, targets, {'kind': 'duration', 'value': '00:05:00'},
+                                          'Start Oven Test timer for five minutes', 'en', outside)
+    assert (outcome, proposal) == ('target_unverified', None)

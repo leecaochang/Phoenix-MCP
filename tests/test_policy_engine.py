@@ -330,6 +330,15 @@ class TestChildDeviceAuthority:
         )
         assert part_env["part_light"] not in result
 
+    def test_device_target_leaves_out_a_disabled_entity_whose_state_lingers(self, hass, part_env, entity_reg):
+        key = _make_access_key(domains={"light": "GREEN"})
+        entity_reg.async_update_entity(part_env["part_light"], disabled_by=er.RegistryEntryDisabler.USER)
+        hass.states.async_set(part_env["part_light"], "on")
+        result, _ = resolve_service_targets(
+            device_id=part_env["part"].id, service_domain="light", access_key=key, hass=hass,
+        )
+        assert result == []
+
 
 class TestConfigEntryRegistryPolicy:
     """Config-entry authorization is inherited without a new tree level."""
@@ -799,6 +808,15 @@ class TestResolveAliasCanonical:
 class TestScrubSensitiveAttributes:
     def _state(self, entity_id: str, attrs: dict) -> State:
         return State(entity_id, "on", attrs)
+
+    def test_an_attribute_named_after_a_hidden_entity_is_dropped(self, hass):
+        hass.states.async_set("lock.front_door", "locked")
+        hass.states.async_set("light.porch", "on")
+        key = _make_access_key(entities={"light.porch": "GREEN", "lock.front_door": "RED"})
+        state = self._state("light.porch", {"lock.front_door": "unlocked at 03:12", "brightness": 10})
+        attributes = scrub_sensitive_attributes(state, key, hass)["attributes"]
+        assert "lock.front_door" not in attributes
+        assert attributes["brightness"] == 10
 
     def test_removes_entity_picture(self, hass):
         state = self._state("camera.front", {"entity_picture": "/api/camera/front", "name": "Front"})

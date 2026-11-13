@@ -11,7 +11,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.data import PhoenixData
@@ -263,10 +263,10 @@ def _patch_semantic_schema_lookups(
         return condition_schemas or {}
 
     monkeypatch.setattr(
-        "homeassistant.helpers.trigger.async_get_all_descriptions", _triggers,
+        "custom_components.phoenix_mcp.mesa.async_get_all_trigger_descriptions", _triggers,
     )
     monkeypatch.setattr(
-        "homeassistant.helpers.condition.async_get_all_descriptions", _conditions,
+        "custom_components.phoenix_mcp.mesa.async_get_all_condition_descriptions", _conditions,
     )
 
 
@@ -572,7 +572,7 @@ async def test_lease_request_release_round_trip_across_calls(env):
     different request still matches.
     """
     events = []
-    env.bus.async_listen("phoenix_mcp_mesa_lease_expired", lambda e: events.append(e.data))
+    env.bus.async_listen("phoenix_mcp_mesa_lease_expired", callback(lambda e: events.append(e.data)))
 
     data = await _data_with_profiles(env)
     access_key = _access_key(domains={"light": "GREEN"})

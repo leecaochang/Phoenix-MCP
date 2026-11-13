@@ -1200,6 +1200,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     from .approvals import (
         REASON_INTEGRATION_REMOVED,
         async_cancel_approvals_for_access_key,
+        audit_closed_approvals,
         dismiss_approval_notification,
         fire_approval_resolved_event,
     )
@@ -1234,6 +1235,13 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     for record in changed:
         dismiss_approval_notification(hass, record.id)
         fire_approval_resolved_event(hass, record)
+    if state is not None and changed:
+        # Removal keeps the audit log, so the closures are written to it and saved now.
+        audit_closed_approvals(state.audit, store.get_settings(), changed)
+        try:
+            await state.audit.async_save()
+        except Exception:  # removal retires credentials regardless
+            _LOGGER.exception("Phoenix MCP: could not save the audit log during removal")
     # Every key is archived above, so no sign-in can be used; the file goes with them.
     try:
         if state is not None:
@@ -1244,6 +1252,12 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
                                private=True).async_remove()
     except Exception:  # removal retires credentials regardless
         _LOGGER.exception("Phoenix MCP: could not remove the OAuth sign-in file during removal")
+    try:
+        from .logger_control import async_remove_logger_overrides
+
+        await async_remove_logger_overrides(hass)
+    except Exception:  # removal retires credentials regardless
+        _LOGGER.exception("Phoenix MCP: could not end timed logger overrides during removal")
     await async_wipe_agentcli_secrets(hass)
 
 

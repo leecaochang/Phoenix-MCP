@@ -5,7 +5,7 @@ from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.core import ServiceCall, ServiceRegistry
+from homeassistant.core import ServiceCall, ServiceRegistry, callback
 
 from custom_components.phoenix_mcp import agent_chat, home_companion, home_companion_turn, tool_catalog, tool_defs, tool_dispatch
 from custom_components.phoenix_mcp.llm import accounts as llm_accounts
@@ -347,7 +347,7 @@ async def test_a_confirm_refusal_with_no_registry_entry_reads_as_refused_when_th
     data.mesa.store.set('light.selected',SemanticProfile.from_dict('light.selected',
         {'semantic_profile':{'operational_boundaries':{'control_mode':'confirm'}}},default_origin=MetadataOrigin.USER))
     blocked=[]
-    hass.bus.async_listen('phoenix_mcp_mesa_blocked',blocked.append)
+    hass.bus.async_listen('phoenix_mcp_mesa_blocked', callback(lambda event: blocked.append(event)))
     # One control round and no answer: the next provider round fails.
     scripted(monkeypatch,[[('light__HassLightSet',{'name':'light.selected','brightness':40})]])
     with patch.object(ServiceRegistry,'async_call',AsyncMock()) as service:

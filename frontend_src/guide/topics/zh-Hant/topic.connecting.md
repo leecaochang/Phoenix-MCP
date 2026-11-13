@@ -62,11 +62,13 @@ VS Code 每個請求最多接受 128 個工具。權限較多的金鑰可能提�
 
 之後，應用程式會使用你為它核准的金鑰，並遵循該金鑰的權限、能力、核准和速率限制。它的請求會以該金鑰的名義顯示在稽核日誌中。
 
-應用程式必須能從網際網路透過 HTTPS 存取 Home Assistant，位址就是 Phoenix 顯示的那個。家庭網路或 VPN 位址對託管應用程式無效。
+應用程式必須能從網際網路透過 HTTPS 存取 Home Assistant，位址就是 Phoenix 顯示的那個。家庭網路或 VPN 位址對託管應用程式無效。在反向代理或通道之後，Home Assistant 必須信任該代理，才能知道請求是透過 HTTPS 抵達的；純 HTTP 永遠不會提供登入。
+
+應用程式必須能從伺服器位址本身找到登入方式（受保護資源中繼資料，RFC 9728），目前的 MCP 應用程式都是這樣做的。只支援較早 2025-03-26 登入方式的應用程式會進入 Home Assistant 自己的登入，Phoenix 會拒絕由此取得的憑證。
 
 ### 核准登入 {#oauth-approve}
 
-Phoenix 會顯示應用程式自稱的名稱、識別它的網站，以及它返回的位址。請檢查這些是否與你剛連線的應用程式相符。
+Phoenix 會顯示應用程式自稱的名稱、識別它的完整位址，以及它返回的位址。請檢查這些是否與你剛連線的應用程式相符。
 
 選擇應用程式取得的金鑰，然後選擇 **{{label:oauth.approve}}**。只有開啟 OAuth 且登入時段正在開放的金鑰才會列出。你的瀏覽器會回到應用程式，應用程式隨即完成連線。
 
@@ -96,13 +98,13 @@ Phoenix 沒有自己的遠端服務。家庭網路外的應用程式會像瀏覽
 
 登入 Home Assistant 本身的應用程式也可以透過 Home Assistant 的 Model Context Protocol 整合存取 Phoenix 的工具。對大多數應用程式來說，[OAuth 登入](guide:#oauth)更簡單，並把它們限定在一個金鑰上。在 2026.11 之前，它叫 MCP Server。它們使用綁定到 [Assist 工具提供者](guide:topic.homeAssistantFeatures#assist-tool-provider)的金鑰。
 
-在 2026.11 上，請使用 /api/mcp/phoenix_mcp，它需要管理員登入。Home Assistant 2026.7 沒有這個位址，2026.11 之前的其他版本也可能沒有，因此請在這些版本上使用 /api/mcp。
+從 2026.8 起，請使用 /api/mcp/phoenix_mcp，它需要管理員登入。Home Assistant 2026.7 沒有這個位址，因此請在該版本上使用 /api/mcp。
 
-/api/mcp 位址遵循該整合的 Require an administrator account 選項。新條目會開啟它，較早的條目會保持關閉，2026.7 沒有這個選項。非管理員只能使用家庭工具，並受他們自己的 Home Assistant 權限限制。
+從 2026.10 起，/api/mcp 位址遵循該整合的 Require an administrator account 選項。新條目會開啟它，較早的條目會保持關閉。2026.10 之前沒有這個選項，因此任何登入 Home Assistant 的人都可以使用 /api/mcp。非管理員只能使用家庭工具，並受他們自己的 Home Assistant 權限限制。
 
 在這條路徑上，金鑰的速率限制不適用，稽核日誌會把呼叫顯示為 Assist，應用程式只有主動要求時才會收到 Phoenix 的說明。
 
-從 2026.11 起，請檢查該整合的選項。新條目預設開啟 Expose all AI tools，會提供每一組工具，包括 Phoenix 的工具。請關閉它，並在 AI tools 下選擇 Phoenix MCP（限定範圍）。Read-only 選項只給應用程式留下標記為唯讀的工具，但它不能取代金鑰的能力設定。
+從 2026.10 起，請檢查該整合的選項。新條目預設開啟 Expose all AI tools，會提供每一組工具，包括 Phoenix 的工具。請關閉它，並在 AI tools 下選擇 Phoenix MCP（限定範圍）。從 2026.11 起，Read-only 選項只給應用程式留下標記為唯讀的工具，但它不能取代金鑰的能力設定。
 
 在這條路徑上，Home Assistant 其他 API 的工具不經過 Phoenix，因此金鑰、核准、MESA 和稽核日誌都不涵蓋它們。當兩個 API 提供同名工具時，Home Assistant 會加上前綴，例如 `phoenix-mcp__`。
 

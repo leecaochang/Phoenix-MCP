@@ -22,6 +22,7 @@
       "approvalReasonString": "reason deve essere una stringa.",
       "approvalRecordFailed": "Impossibile registrare questa approvazione prima di eseguirla. Non è stato eseguito nulla; riprova.",
       "approvalAccessKeyInactive": "La chiave di accesso non è più attiva, quindi questa richiesta non può essere eseguita. Non è stato eseguito nulla.",
+      "approvalCredentialEnded": "La chiave di accesso è stata ruotata o l'accesso dell'app è terminato, quindi questa richiesta non può essere eseguita. Non è stato eseguito nulla.",
       "archivedAccessKeyNotFound": "Chiave di accesso archiviata non trovato.",
       "assistExposurePassThroughOnly": "use_assist_exposure è valido solo per le chiavi di accesso pass_through.",
       "assistPipelineFailed": "Impossibile creare la pipeline di Assist.",
@@ -714,8 +715,8 @@
       "dashboard_resource.create.title": "Aggiungi la risorsa della plancia {url}",
       "dashboard_resource.update.title": "Modifica la risorsa della plancia {url}",
       "dashboard_resource.delete.title": "Rimuovi la risorsa della plancia {url}",
-      "dashboard_resource.create.body": "Ogni browser che apre una plancia caricherà {url}. Un file JavaScript viene eseguito con l'accesso a Home Assistant di quella persona, quindi approva solo un file di cui ti fidi.",
-      "dashboard_resource.update.body": "Questo modifica un file che ogni browser carica quando apre una plancia. Confronta qui sotto il file attuale e quello proposto.",
+      "dashboard_resource.create.body": "Ogni browser che apre una plancia caricherà {url}, e così il browser di un amministratore che apre il pannello Phoenix MCP. Un file JavaScript viene eseguito con l'accesso a Home Assistant di quella persona, quindi approva solo un file di cui ti fidi.",
+      "dashboard_resource.update.body": "Questo modifica un file che ogni browser carica quando apre una plancia, e che il browser di un amministratore carica quando apre il pannello Phoenix MCP. Confronta qui sotto il file attuale e quello proposto.",
       "dashboard_resource.delete.body": "Le plance smetteranno di caricare {url}. Le schede che ne derivano mostreranno un errore finché il file non verrà aggiunto di nuovo.",
       "edit_energy_config.fallback.title": "Modifica la configurazione della plancia energetica",
       "edit_energy_config.fallback.body": "Verrà aggiornata la configurazione della plancia di Home Assistant.",
@@ -863,7 +864,11 @@
         "target_out_of_scope": "Destinazione fuori ambito",
         "access_key_expired": "Chiave di accesso scaduta",
         "access_key_inactive": "La chiave di accesso non era attiva",
-        "access_key_revoked": "Chiave di accesso revocata"
+        "access_key_revoked": "Chiave di accesso revocata",
+        "access_key_rotated": "Annullata alla rotazione della chiave di accesso",
+        "oauth_sign_in_removed": "Annullata alla rimozione dell'accesso dell'app",
+        "oauth_turned_off": "Annullata alla disattivazione dell'accesso OAuth",
+        "oauth_sign_in_ended": "Annullata perché l'accesso dell'app era terminato"
       },
       "reasonExecutionFailedDetail": "Esecuzione non riuscita: {detail}",
       "reject": "Rifiuta",
@@ -1465,7 +1470,8 @@
       "importReplaceHelp": "Aggiungi i profili del file, sostituendo quelli esistenti per le stesse destinazioni. Non si può annullare.",
       "viewAutomationsHelp": "Mostra o nascondi le automazioni che MESA ha potuto controllare solo in parte, perché usano modelli o progetti.",
       "openOrphanHelp": "Apri questo profilo in Editor dei profili, dove puoi eliminarlo. Ciò che copriva non esiste più.",
-      "dismissNoticeHelp": "Nascondi questa segnalazione in questo browser. Ripristina le segnalazioni ignorate la fa tornare."
+      "dismissNoticeHelp": "Nascondi questa segnalazione in questo browser. Ripristina le segnalazioni ignorate la fa tornare.",
+      "comboMatchCount": "Corrispondenze: {count}"
     },
     "selectBy": {
       "area": "Area",
@@ -1952,8 +1958,8 @@
       "energyDashboard": "Plancia energetica",
       "cardNoun": "una scheda",
       "previewErrorHead": {
-        "one": "Una scheda in questa anteprima ha segnalato un errore di configurazione. Se necessario, copia il messaggio qui sotto e incollalo all'agente in modo che possa correggere la scheda.",
-        "other": "Alcune schede in questa anteprima hanno segnalato errori di configurazione. Se necessario, copia il messaggio qui sotto e incollalo all'agente in modo che possa correggere le schede."
+        "one": "{count} scheda in questa anteprima ha segnalato un errore di configurazione. Se necessario, copia il messaggio qui sotto e incollalo all'agente in modo che possa correggere la scheda.",
+        "other": "{count} schede in questa anteprima hanno segnalato errori di configurazione. Se necessario, copia il messaggio qui sotto e incollalo all'agente in modo che possa correggere le schede."
       },
       "previewTextAlternative": "L'anteprima mostra le schede come immagini. Scegli {diff} per leggere la modifica come testo.",
       "byAdmin": "Amministratore"
@@ -3158,11 +3164,13 @@
       "chooseKeyHelp": "Scegli la chiave di accesso di cui questa app riceve le autorizzazioni.",
       "keyAtCap": "{name}, che ha già il numero massimo di accessi consentito",
       "requestExpires": "Questa richiesta termina tra {time}",
+      "requestEndsAt": "Questa richiesta termina alle {time}.",
+      "requestEndingSoon": "Manca meno di un minuto per approvare questa richiesta.",
       "requestExpired": "Questa richiesta di accesso è terminata. Ricomincia dall'app.",
       "approve": "Approva",
       "approveHelp": "Lascia che questa app usi la chiave di accesso scelta e rimandala all'app.",
       "deny": "Nega",
-      "denyHelp": "Rifiuta questo accesso e avvisa l'app.",
+      "denyHelp": "Rifiuta questo accesso e avvisa l'app se il suo indirizzo è verificato.",
       "close": "Chiudi",
       "approvedLeaving": "Approvato. Ritorno all'app...",
       "deniedLeaving": "Negato. Ritorno all'app...",
@@ -3213,6 +3221,9 @@
     "local_unauthorized": "Questa chiave di accesso non è più autorizzata.",
     "local_state_matched": "Home Assistant segnala lo stato richiesto.",
     "local_state_unconfirmed": "Comando inviato. Home Assistant non ha ancora confermato lo stato richiesto.",
+    "local_operation_matched": "Azione: {operation}. Home Assistant segnala lo stato richiesto.",
+    "local_operation_unconfirmed": "Azione inviata: {operation}. Home Assistant non ha ancora confermato lo stato richiesto.",
+    "decision_operation_unconfirmed": "Non ho eseguito questo comando perché non ho potuto confermare l’azione. Ripetilo chiaramente, indicando l’azione e il dispositivo.",
     "local_summary_count": "Entità esposte ad Assist a cui posso accedere, con stato {state}: {matched} su {total}. Sconosciute o non disponibili: {unknown}.",
     "local_summary_total": "Entità esposte ad Assist a cui posso accedere: {total}. Sconosciute o non disponibili: {unknown}.",
     "local_summary_breakdown": "Entità esposte ad Assist a cui posso accedere: {total}. {summary}.",

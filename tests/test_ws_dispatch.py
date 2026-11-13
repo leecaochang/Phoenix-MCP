@@ -630,3 +630,35 @@ async def test_cancellation_after_an_error_receipt_retrieves_it(hass, hass_admin
         await caller
     assert receipts[0].done() and not wd.ws_commands_unsettled()
     assert not receipts[0]._log_traceback, "the error receipt was left unretrieved"
+
+
+def _user(name: str, *, admin: bool = True, **fields):
+    from homeassistant.auth import models as auth_models
+    from homeassistant.auth.const import GROUP_ID_ADMIN
+    from pytest_homeassistant.common import MockUser
+
+    groups = [auth_models.Group(name="Administrators", policy={}, id=GROUP_ID_ADMIN)] if admin else []
+    return MockUser(name=name, groups=groups, **fields)
+
+
+async def test_admin_commands_run_as_an_active_human_administrator(hass, monkeypatch):
+    """An inactive or system-generated administrator listed first is passed over."""
+    inactive, system, active = (
+        _user("inactive", is_active=False), _user("system", system_generated=True), _user("active"))
+    users = [inactive, system, _user("plain", admin=False), active]
+    monkeypatch.setattr(hass.auth, "async_get_users", lambda: _async_value(users))
+    assert await wd_module._resolve_admin_user(hass) is active
+    owner = _user("owner", is_owner=True)
+    users.append(owner)
+    assert await wd_module._resolve_admin_user(hass) is owner
+
+
+async def test_admin_commands_refuse_without_an_active_human_administrator(hass, monkeypatch):
+    users = [_user("inactive", is_active=False), _user("system", system_generated=True), _user("plain", admin=False)]
+    monkeypatch.setattr(hass.auth, "async_get_users", lambda: _async_value(users))
+    with pytest.raises(WsDispatchError, match="No active admin"):
+        await wd_module._resolve_admin_user(hass)
+
+
+async def _async_value(value):
+    return value

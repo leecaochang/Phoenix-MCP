@@ -671,6 +671,8 @@ class TestApprovalApprove:
         audit_kwargs = data.audit.record.call_args_list[-1].kwargs
         assert audit_kwargs["outcome"] == "allowed"
         assert audit_kwargs["payload"] == {
+            "approval_id": "appr_a",
+            "admin_request_id": data.audit.record.call_args_list[0].kwargs["request_id"],
             "finalization": "conflict",
             "stored_status": STATUS_REJECTED,
             "executor_outcome": "allowed",

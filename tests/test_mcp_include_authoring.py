@@ -34,7 +34,7 @@ from custom_components.phoenix_mcp.tools.authoring import _execute_edit_automati
 from custom_components.phoenix_mcp.tools.restore import async_restore_version
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
-from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite
+from custom_components.phoenix_mcp.tool_common import RefusedBeforeWrite, _bind_reviewed
 from custom_components.phoenix_mcp.tools import authoring
 from custom_components.phoenix_mcp.tools.authoring import (
     _automation_op_error,
@@ -883,6 +883,9 @@ class TestTagTextInWrites:
             cap_scene_write="allow", cap_registry_read="allow",
         )
         clean = _tool_args(env, domain, operation, "ui", "UI")
+        if operation == "edit":
+            # An approved edit carries the hash of the entry its review showed, as the gate binds it.
+            clean = _bind_reviewed(clean, yi.read_entry(str(env), domain, "ui"))
         tagged = dict(clean, config=_with_tag_text(domain, clean["config"], "!secret wifi"))
         before = snapshot(env)
 

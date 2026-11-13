@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE, EVENT_HOMEASSISTANT_STOP
-from homeassistant.core import CoreState
+from homeassistant.core import CoreState, callback
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
@@ -421,7 +421,7 @@ async def test_an_outcome_that_could_not_be_saved_is_reported_and_not_offered_ag
     client = await hass_client()
     slow = _Slow()
     claims: list[bool] = []
-    hass.bus.async_listen(f"{DOMAIN}_approval_claimed", lambda event: claims.append(event.data["claimed"]))
+    hass.bus.async_listen(f"{DOMAIN}_approval_claimed", callback(lambda event: claims.append(event.data["claimed"])))
     notify = patch("custom_components.phoenix_mcp.admin.approvals.create_approval_notification")
     refuse = AsyncMock(side_effect=DurableStorageError("no write"))
     with patch(EXECUTOR, side_effect=slow.run), notify as offered:
@@ -632,7 +632,7 @@ async def test_rotating_a_key_through_the_real_router(
     _, data = await _setup(hass)
     key, raw = await data.store.async_create_access_key("compromised", "admin")
     fired = []
-    hass.bus.async_listen("phoenix_mcp_access_key_rotated", fired.append)
+    hass.bus.async_listen("phoenix_mcp_access_key_rotated", callback(lambda event: fired.append(event)))
     agent = await hass_client_no_auth()
     context = "/api/phoenix-mcp/context"
     assert (await agent.get(context, headers={"Authorization": f"Bearer {raw}"})).status == 200

@@ -453,3 +453,39 @@ async def test_visible_entry_shape_drift_is_an_error_not_false_chronology():
     assert outcome == "invalid_request"
     assert result["isError"] is True
     assert body == "Unexpected logbook entry shape from Home Assistant."
+
+
+_HIDDEN_TRIGGER = "binary_sensor.bedroom_door"
+# Rows as Home Assistant builds them: the automation's row says what triggered it, and a row
+# that run caused copies the trigger into context_source.
+_TRIGGERED_ROWS = [
+    {"name": "Bedroom light on door open", "message": f"triggered by state of {_HIDDEN_TRIGGER}",
+     "source": f"state of {_HIDDEN_TRIGGER}", "entity_id": "automation.bedroom_light", "when": 1.0},
+    {"entity_id": "light.bedroom", "state": "on", "when": 1.1, "context_event_type": "automation_triggered",
+     "context_domain": "automation", "context_name": "Bedroom light on door open",
+     "context_entity_id": "automation.bedroom_light", "context_source": f"state of {_HIDDEN_TRIGGER}",
+     "context_message": f"triggered by state of {_HIDDEN_TRIGGER}"},
+    {"name": "Hall", "message": "triggered by state of light.hall", "entity_id": "automation.hall", "when": 1.2},
+]
+
+
+def _automation_and_light_only(entity_id, _key, _hass):
+    if not isinstance(entity_id, str):
+        return Permission.NOT_FOUND
+    return Permission.READ if entity_id.split(".")[0] in ("automation", "light") else Permission.NO_ACCESS
+
+
+@pytest.mark.asyncio
+async def test_a_readable_row_names_no_hidden_trigger_in_its_text():
+    with patch("custom_components.phoenix_mcp.policy_engine._resolve_access_key_access",
+               side_effect=_automation_and_light_only), \
+         patch("custom_components.phoenix_mcp.tools.logs.async_ws_command",
+               new=AsyncMock(return_value=[dict(row) for row in _TRIGGERED_ROWS])):
+        body, _result, outcome = await _call({})
+    assert outcome == "allowed"
+    assert _HIDDEN_TRIGGER not in json.dumps(body)
+    rows = {entry["entity_id"]: entry for entry in body["entries"]}
+    assert rows["automation.bedroom_light"]["message"] == "triggered by state of <redacted-entity>"
+    assert rows["light.bedroom"]["context_source"] == "state of <redacted-entity>"
+    # A readable trigger stays named, and so does the row's own entity.
+    assert rows["automation.hall"]["message"] == "triggered by state of light.hall"

@@ -26,12 +26,12 @@
 變更的顯示方式取決於請求做什麼：
 
 - 設定和 YAML：**{{label:common.before}}** 和 **{{label:common.after}}** 並排顯示。在 **{{label:changes.lineViewShort}}** 和 **{{label:changes.codeEditorShort}}** 之間切換，或把兩側上下堆疊。
-- 儀表板、卡片和能源儀表板：**{{label:common.diff}}** 或 **{{label:common.preview}}**，後者會繪製結果。
+- 儀表板、卡片和能源儀表板：**{{label:common.diff}}** 或 **{{label:common.preview}}**，後者會繪製結果。每個請求都先顯示 **{{label:common.diff}}**。預覽會以你的權限執行卡片，因此只對你信任的變更選擇它。
 - 對裝置的操作：操作、其目標，以及 MESA 允許、暫緩或阻止的內容。
 - 刪除、重新命名、輔助項目、整合等系統操作：請求為何需要核准、將發生什麼、誰在使用它、哪些 Phoenix 設定提及它。展開底部的 **{{label:approvals.previewAllDetails}}** 查看全部。
 - 刪除待辦事項：每個事項及其狀態，並提示刪除後無法復原。
 
-這些檢視選擇會儲存在此瀏覽器中，變更也會使用它們。
+其他檢視選擇會儲存在此瀏覽器中，變更也會使用它們。
 
 ## 在請求間切換 {#step}
 

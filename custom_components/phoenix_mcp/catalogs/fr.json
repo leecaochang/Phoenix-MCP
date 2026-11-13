@@ -121,7 +121,11 @@
         "phoenix_mcp_restarted": "Annulée au redémarrage de Home Assistant",
         "phoenix_mcp_data_wiped": "Annulée lors de l'effacement des données Phoenix MCP",
         "integration_removed": "Annulée lors de la suppression de Phoenix MCP",
-        "recovery_review_replaced": "La configuration a changé ; remplacée par une nouvelle vérification"
+        "recovery_review_replaced": "La configuration a changé ; remplacée par une nouvelle vérification",
+        "access_key_rotated": "Annulée lors du renouvellement de la clé d’accès",
+        "oauth_sign_in_removed": "Annulée lors de la suppression de la connexion de l’application",
+        "oauth_turned_off": "Annulée lors de la désactivation de la connexion OAuth",
+        "oauth_sign_in_ended": "Annulée car la connexion de l’application avait pris fin"
       },
       "reasonExecutionFailedDetail": "Échec de l'exécution : {detail}",
       "reject": "Rejeter",
@@ -735,8 +739,8 @@
       "energyDashboard": "Tableau de bord énergétique",
       "cardNoun": "une carte",
       "previewErrorHead": {
-        "one": "Une carte de cet aperçu a signalé une erreur de configuration. Si nécessaire, copiez le message ci-dessous et collez-le à l'agent pour qu'il corrige la carte.",
-        "other": "Des cartes de cet aperçu ont signalé des erreurs de configuration. Si nécessaire, copiez le message ci-dessous et collez-le à l'agent pour qu'il corrige les cartes."
+        "one": "{count} carte de cet aperçu a signalé une erreur de configuration. Si nécessaire, copiez le message ci-dessous et collez-le à l'agent pour qu'il corrige la carte.",
+        "other": "{count} cartes de cet aperçu ont signalé des erreurs de configuration. Si nécessaire, copiez le message ci-dessous et collez-le à l'agent pour qu'il corrige les cartes."
       },
       "previewTextAlternative": "L'aperçu montre les cartes sous forme d'images. Choisissez {diff} pour lire la modification sous forme de texte.",
       "byAdmin": "Administrateur"
@@ -1233,7 +1237,8 @@
       "importReplaceHelp": "Ajoutez les profils du fichier en remplaçant ceux qui existent pour les mêmes cibles. Action irréversible.",
       "viewAutomationsHelp": "Affichez ou masquez les automatisations que MESA n’a pu vérifier qu’en partie, car elles utilisent des modèles ou des blueprints.",
       "openOrphanHelp": "Ouvrez ce profil dans l’éditeur de profil, où vous pouvez le supprimer. Ce qu’il couvrait n’existe plus.",
-      "dismissNoticeHelp": "Masquez cet avis dans ce navigateur. Restaurer les avis rejetés le ramène."
+      "dismissNoticeHelp": "Masquez cet avis dans ce navigateur. Restaurer les avis rejetés le ramène.",
+      "comboMatchCount": "Correspondances : {count}"
     },
     "selectBy": {
       "area": "Pièce",
@@ -1978,6 +1983,7 @@
       "approvalReasonString": "reason doit être une chaîne.",
       "approvalRecordFailed": "Impossible d'enregistrer cette approbation avant de l'exécuter. Rien n'a été exécuté ; réessayez.",
       "approvalAccessKeyInactive": "La clé d’accès n'est plus active, cette demande ne peut donc pas s'exécuter. Rien n'a été exécuté.",
+      "approvalCredentialEnded": "La clé d’accès a été renouvelée ou la connexion de l’application a pris fin, cette demande ne peut donc pas s’exécuter. Rien n’a été exécuté.",
       "assistExposurePassThroughOnly": "use_assist_exposure n'est valable que pour les clés d’accès pass_through.",
       "assistPipelineFailed": "Impossible de créer le pipeline Assist.",
       "assistPipelineUnavailable": "Les pipelines Assist ne sont pas disponibles dans ce Home Assistant.",
@@ -2436,8 +2442,8 @@
       "dashboard_resource.create.title": "Ajouter la ressource du tableau de bord {url}",
       "dashboard_resource.update.title": "Modifier la ressource du tableau de bord {url}",
       "dashboard_resource.delete.title": "Supprimer la ressource du tableau de bord {url}",
-      "dashboard_resource.create.body": "Chaque navigateur qui ouvre un tableau de bord chargera {url}. Un fichier JavaScript s'exécute avec l'accès à Home Assistant de la personne concernée ; n'approuvez donc qu'un fichier de confiance.",
-      "dashboard_resource.update.body": "Cela modifie un fichier que chaque navigateur charge à l'ouverture d'un tableau de bord. Comparez ci-dessous le fichier actuel et le fichier proposé.",
+      "dashboard_resource.create.body": "Chaque navigateur qui ouvre un tableau de bord chargera {url}, tout comme le navigateur d'un administrateur qui ouvre le panneau Phoenix MCP. Un fichier JavaScript s'exécute avec l'accès à Home Assistant de la personne concernée ; n'approuvez donc qu'un fichier de confiance.",
+      "dashboard_resource.update.body": "Cela modifie un fichier que chaque navigateur charge à l'ouverture d'un tableau de bord, tout comme le navigateur d'un administrateur à l'ouverture du panneau Phoenix MCP. Comparez ci-dessous le fichier actuel et le fichier proposé.",
       "dashboard_resource.delete.body": "Les tableaux de bord cesseront de charger {url}. Les cartes qui en proviennent afficheront une erreur jusqu'à ce que ce fichier soit rajouté.",
       "edit_energy_config.fallback.title": "Modifier la configuration du tableau de bord énergétique",
       "edit_energy_config.fallback.body": "Cela mettra à jour la configuration du tableau de bord Home Assistant.",
@@ -3158,11 +3164,13 @@
       "chooseKeyHelp": "Choisissez la clé d’accès dont cette application reçoit les autorisations.",
       "keyAtCap": "{name}, qui a déjà le nombre maximal de connexions autorisé",
       "requestExpires": "Cette demande se termine dans {time}",
+      "requestEndsAt": "Cette demande se termine à {time}.",
+      "requestEndingSoon": "Il reste moins d'une minute pour approuver cette demande.",
       "requestExpired": "Cette demande de connexion a pris fin. Recommencez depuis l’application.",
       "approve": "Approuver",
       "approveHelp": "Laissez cette application utiliser la clé d’accès choisie et renvoyez-la vers l’application.",
       "deny": "Refuser",
-      "denyHelp": "Refusez cette connexion et prévenez l’application.",
+      "denyHelp": "Refusez cette connexion et prévenez l’application si son adresse est vérifiée.",
       "close": "Fermer",
       "approvedLeaving": "Approuvé. Retour à l’application...",
       "deniedLeaving": "Refusé. Retour à l’application...",
@@ -3213,6 +3221,9 @@
     "local_unauthorized": "Cette clé d’accès n’est plus autorisée.",
     "local_state_matched": "Home Assistant indique que l’état demandé est atteint.",
     "local_state_unconfirmed": "Commande envoyée. Home Assistant n’a pas encore confirmé l’état demandé.",
+    "local_operation_matched": "Action : {operation}. Home Assistant indique que l’état demandé est atteint.",
+    "local_operation_unconfirmed": "Action envoyée : {operation}. Home Assistant n’a pas encore confirmé l’état demandé.",
+    "decision_operation_unconfirmed": "Je n’ai pas exécuté cette commande, car je n’ai pas pu confirmer l’action. Veuillez la répéter clairement, en nommant l’action et l’appareil.",
     "local_summary_count": "Entités exposées à Assist auxquelles je peux accéder, avec l'état {state} : {matched} sur {total}. Inconnues ou indisponibles : {unknown}.",
     "local_summary_total": "Entités exposées à Assist auxquelles je peux accéder : {total}. Inconnues ou indisponibles : {unknown}.",
     "local_summary_breakdown": "Entités exposées à Assist auxquelles je peux accéder : {total}. {summary}.",

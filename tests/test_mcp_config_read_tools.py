@@ -12,6 +12,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import json
+import os
 import uuid
 from unittest.mock import patch, MagicMock
 
@@ -19,15 +20,23 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
+from homeassistant.util.yaml import load_yaml
 from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
-from custom_components.phoenix_mcp.tools.authoring import _read_automations_yaml
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 
 pytestmark = pytest.mark.usefixtures("immediate_authoring_observation")
+
+
+def _read_automations_yaml(path: str) -> list:
+    """The stored list in an editor file, as Home Assistant loads it."""
+    if not os.path.isfile(path):
+        return []
+    data = load_yaml(path)
+    return data if isinstance(data, list) else []
 
 
 @pytest.fixture(autouse=True)

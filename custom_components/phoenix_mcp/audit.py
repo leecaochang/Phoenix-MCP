@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import heapq
+import itertools
 import json
 import logging
 import uuid
 from collections import deque
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal
 
 from homeassistant.util.dt import utcnow
@@ -118,6 +120,11 @@ def _bounded_field(value: object) -> str:
     return _storable_text(s if len(s) <= MAX_AUDIT_FIELD_LEN else s[:MAX_AUDIT_FIELD_LEN] + "...[truncated]")
 
 MAX_QUERY_LIMIT = 500
+# A key's refused requests beyond this many in one window are counted on one row, so a
+# flood of cheap refusals cannot push everything else out of the log.
+AUDIT_REFUSAL_ROWS_PER_WINDOW = 30
+AUDIT_REFUSAL_WINDOW = timedelta(seconds=60)
+_REFUSED_OUTCOMES = frozenset({"denied", "not_found", "not_implemented", "invalid_request", "rate_limited"})
 MAX_AUDIT_PAYLOAD_BYTES = 2048
 # How much of a payload is sanitized. A row keeps MAX_AUDIT_PAYLOAD_BYTES, so more
 # buys nothing, and the sanitizer runs on the event loop for every audited call,
@@ -190,6 +197,8 @@ class AuditEntry:
     originating_access_key_id: str | None = None
     # The OAuth sign-in's app, {"name", "host"}, copied when the row was written.
     oauth_app: dict[str, str] | None = None
+    # Insertion order across the log's two rings; never saved.
+    seq: int = field(default=0, repr=False, compare=False)
 
     def to_dict(self) -> dict:
         d = {
@@ -223,14 +232,37 @@ class AuditEntry:
 class AuditLog:
     """Circular buffer audit log, optionally persisted through a Store.
 
-    Logging toggles apply at record time, not query time. Counters in sensor.py ignore these
-    toggles and reflect total activity.
+    Two rings of the same size: approval and administrator rows, and all others, so requests
+    a key sends never push the trail out. Logging toggles apply at record time, not query
+    time. Counters in sensor.py ignore these toggles and reflect total activity.
     """
 
     def __init__(self, maxlen: int = AUDIT_LOG_MAXLEN, store: Store | None = None) -> None:
         self._log: deque[AuditEntry] = deque(maxlen=maxlen)
+        # Approval and administrator rows, kept apart so other rows never push them out.
+        self._trail: deque[AuditEntry] = deque(maxlen=maxlen)
+        self._seq = itertools.count(1)
+        self._refusals: dict[str, _RefusalWindow] = {}
         self._store = store
         self.save_failed = False
+
+    def _append(self, entry: AuditEntry) -> None:
+        entry.seq = next(self._seq)
+        (self._trail if _is_trail_row(entry) else self._log).append(entry)
+
+    def _rows(self) -> list[AuditEntry]:
+        """Every row of both rings, oldest first."""
+        return list(heapq.merge(self._log, self._trail, key=lambda entry: entry.seq))
+
+    def _refusal_window(self, access_key_id: str, when: datetime) -> _RefusalWindow:
+        """The key's current refusal window, opening a new one when the last has ended."""
+        window = self._refusals.get(access_key_id)
+        if window is None or not window.start <= when < window.start + AUDIT_REFUSAL_WINDOW:
+            if len(self._refusals) >= 1024:
+                self._refusals = {key: kept for key, kept in self._refusals.items()
+                                  if when < kept.start + AUDIT_REFUSAL_WINDOW}
+            window = self._refusals[access_key_id] = _RefusalWindow(when)
+        return window
 
     def record(
         self,
@@ -255,7 +287,8 @@ class AuditLog:
     ) -> None:
         """Append an audit entry, subject to the current logging settings.
         Skipped by disable_all_logging or the per-outcome toggle, except pending_approval and
-        approval/* rows. log_entity_names and log_client_ip redact names and IPs, keeping
+        approval/* rows. A key's refusals past AUDIT_REFUSAL_ROWS_PER_WINDOW in one window are
+        counted on one row. log_entity_names and log_client_ip redact names and IPs, keeping
         Phoenix's own surfaces named. ``oauth_app`` defaults to the request's own OAuth sign-in.
         """
         if settings.disable_all_logging:
@@ -285,6 +318,17 @@ class AuditLog:
         if outcome == "rate_limited" and not settings.log_rate_limited:
             return
 
+        when = timestamp or utcnow()
+        window: _RefusalWindow | None = None
+        if outcome in _REFUSED_OUTCOMES and not approval_lifecycle and access_key_id != "admin":
+            window = self._refusal_window(access_key_id, when)
+            window.rows += 1
+            if window.rows <= AUDIT_REFUSAL_ROWS_PER_WINDOW:
+                window = None
+            elif window.summary is not None:
+                window.fold(outcome)
+                return
+
         logged_resource = resource if settings.log_entity_names else _REDACTED
         logged_ip = client_ip if settings.log_client_ip or client_ip in _INTERNAL_SOURCES else _REDACTED
 
@@ -296,9 +340,9 @@ class AuditLog:
         household = household_authority.get()
         if ha_user_id is None and access_key_id == "admin" and access_key_name.startswith("admin:"):
             ha_user_id = access_key_name.removeprefix("admin:")
-        self._log.append(AuditEntry(
+        entry = AuditEntry(
             request_id=_storable_text(request_id),
-            timestamp=timestamp or utcnow(),
+            timestamp=when,
             access_key_id=_storable_text(access_key_id),
             access_key_name=_storable_text(access_key_name),
             method=method,
@@ -313,7 +357,12 @@ class AuditLog:
             ha_user_id=_storable_text(ha_user_id if ha_user_id is not None else household.user_id if household else None),
             originating_access_key_id=_storable_text(originating_access_key_id),
             oauth_app=_oauth_app_field(oauth_app if oauth_app is not None else _request_oauth_app(access_key_id)),
-        ))
+        )
+        if window is not None:
+            # The first refusal past the window's allowance becomes the row that counts the rest.
+            window.summary = entry
+            window.fold(outcome)
+        self._append(entry)
 
     _VALID_OUTCOMES = frozenset({
         "allowed", "denied", "not_found", "rate_limited", "not_implemented", "invalid_request",
@@ -339,7 +388,7 @@ class AuditLog:
         if outcome is not None and outcome not in self._VALID_OUTCOMES:
             return None
 
-        entries = list(self._log)
+        entries = self._rows()
 
         if access_key_id is not None:
             entries = [e for e in entries if e.access_key_id == access_key_id]
@@ -415,10 +464,13 @@ class AuditLog:
     def clear(self) -> None:
         """Remove all in-memory entries without touching storage."""
         self._log.clear()
+        self._trail.clear()
+        self._refusals.clear()
 
     def resize(self, maxlen: int) -> None:
-        """Replace the deque with one of the given maxlen, dropping the oldest entries."""
+        """Give both rings the given maxlen, dropping the oldest entries."""
         self._log = deque(self._log, maxlen=maxlen)
+        self._trail = deque(self._trail, maxlen=maxlen)
 
     async def async_save(self) -> None:
         """Snapshot the in-memory buffer to HA storage.
@@ -431,7 +483,7 @@ class AuditLog:
         try:
             await self._store.async_save({
                 "version": AUDIT_STORAGE_VERSION,
-                "entries": [e.to_dict() for e in self._log],
+                "entries": [e.to_dict() for e in self._rows()],
             })
         except Exception:
             self.save_failed = True
@@ -462,7 +514,8 @@ class AuditLog:
         entries, scrubbed = await asyncio.get_running_loop().run_in_executor(
             None, self._parse_rows, raw.get("entries", []),
         )
-        self._log.extend(entries)
+        for entry in entries:
+            self._append(entry)
         if scrubbed:
             try:
                 await self.async_save()
@@ -512,7 +565,7 @@ class AuditLog:
 
     async def async_wipe(self) -> None:
         """Clear all entries from memory and write an empty snapshot to disk."""
-        self._log.clear()
+        self.clear()
         if self._store is None:
             return
         await self._store.async_save({
@@ -521,4 +574,33 @@ class AuditLog:
         })
 
     def __len__(self) -> int:
-        return len(self._log)
+        return len(self._log) + len(self._trail)
+
+
+def _is_trail_row(entry: AuditEntry) -> bool:
+    """Whether a row belongs to the approval and administrator trail."""
+    return (
+        entry.outcome == "pending_approval"
+        or str(entry.method).startswith("approval/")
+        or entry.access_key_id == "admin"
+    )
+
+
+@dataclass
+class _RefusalWindow:
+    """One key's refused requests in one AUDIT_REFUSAL_WINDOW."""
+
+    start: datetime
+    rows: int = 0
+    summary: AuditEntry | None = None
+    outcomes: dict[str, int] = field(default_factory=dict)
+
+    def fold(self, outcome: str) -> None:
+        """Count one more refusal on the summary row and rewrite its payload."""
+        self.outcomes[outcome] = self.outcomes.get(outcome, 0) + 1
+        if self.summary is not None:
+            self.summary.payload = json.dumps({"folded_refusals": {
+                "requests": sum(self.outcomes.values()),
+                "outcomes": dict(sorted(self.outcomes.items())),
+                "window_seconds": int(AUDIT_REFUSAL_WINDOW.total_seconds()),
+            }})

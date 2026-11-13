@@ -274,8 +274,8 @@ _APPROVAL_SUMMARY_BODIES = MappingProxyType({
     "blueprint.delete": "This will permanently delete the {domain} blueprint {rel}.",
     "blueprint.delete.consumers": "This will permanently delete {rel}. Automations and scripts that still use it: {count}.",
     "dashboard.delete": "This will permanently delete the dashboard {label}.",
-    "dashboard_resource.create": "Every browser that opens a dashboard will load {url}. A JavaScript file runs with that person's Home Assistant access, so approve only a file you trust.",
-    "dashboard_resource.update": "This changes a file every browser loads when it opens a dashboard. Compare the current and proposed file below.",
+    "dashboard_resource.create": "Every browser that opens a dashboard will load {url}, and so will an administrator's browser that opens the Phoenix MCP panel. A JavaScript file runs with that person's Home Assistant access, so approve only a file you trust.",
+    "dashboard_resource.update": "This changes a file every browser loads when it opens a dashboard, and an administrator's browser loads when it opens the Phoenix MCP panel. Compare the current and proposed file below.",
     "dashboard_resource.delete": "Dashboards will stop loading {url}. Cards that come from it will show an error until it is added back.",
     "dashboard_card.delete": "This will permanently delete the selected card from {label}.",
     "dashboard_card.delete.section": "This will permanently delete the selected card from {label}.",
@@ -450,6 +450,10 @@ VOICE_TEMPLATES: Mapping[str, str] = MappingProxyType({
     "local_unauthorized": "This access key is no longer authorized.",
     "local_state_matched": "Home Assistant reports the requested state.",
     "local_state_unconfirmed": "Command sent. Home Assistant has not yet confirmed the requested state.",
+    # {operation} is Home Assistant's own translated name of the service that ran.
+    "local_operation_matched": "Action: {operation}. Home Assistant reports the requested state.",
+    "local_operation_unconfirmed": "Action sent: {operation}. Home Assistant has not yet confirmed the requested state.",
+    "decision_operation_unconfirmed": "I did not run this command because I could not confirm the action. Please say it again plainly, naming the action and the device.",
     "local_pending": "This command needs approval in the Phoenix MCP panel.",
     "local_review": "Review command",
     # Link label after a typed Assist reply that queued approvals (not spoken).

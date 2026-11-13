@@ -763,6 +763,8 @@ export interface ApprovalRecord {
   result: unknown | null;
   request_id: string;
   client_ip: string | null;
+  /** The app whose OAuth sign-in queued the request; absent for a raw key and older records. */
+  oauth_app?: { name: string; host: string } | null;
   /** Its saved action is executing right now (server-side claim). Sent on the
    *  pending list so a panel loaded mid-execution also renders it non-actionable,
    *  not only one that received the claim event. */

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from tests.runtime_fixtures import patch_readers
+from homeassistant.core import Context
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
@@ -205,3 +206,27 @@ async def test_cancelled_choice_is_counted_without_a_model_or_action(hass, ambig
     stats = h.data.routing_statistics.summary()[ingress]
     assert stats['outcomes']['cancelled'] == 1 and stats['outcomes']['failed'] == 1
     assert stats['outcomes']['local'] == stats['outcomes']['decision'] == stats['provider_turns'] == 0
+
+
+async def test_voice_choice_belongs_to_the_user_who_asked(hass, ambiguous_home, hass_admin_user):
+    """Another HA user replying in the same client-chosen conversation neither runs nor spends the choice."""
+    h = ambiguous_home
+    other = await hass.auth.async_create_user('Other admin', group_ids=['system-admin'])
+    store = MagicMock()
+    store.resolve.return_value = SimpleNamespace(model='m')
+    provider_turn = AsyncMock(return_value='Provider answer')
+    async def say(text, user):
+        return await voice_agent.async_voice_answer(hass, h.data, text, language='en', conversation_id='chosen-by-client',
+                                                    context=Context(user_id=user.id))
+    with (patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)),
+          patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=MagicMock()),
+          patch("custom_components.phoenix_mcp.voice_agent.async_run_voice_turn", provider_turn),
+          patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        assert 'Which target' in await say('turn on the desk lamp', hass_admin_user)
+        assert await say('1', other) == 'Provider answer'
+        call.assert_not_called()
+        await say('1', hass_admin_user)
+    call.assert_awaited_once()
+    assert call.await_args.args == ('light', 'turn_on', {'entity_id': [h.ids[0]]})
+    assert call.await_args.kwargs['context'].user_id == hass_admin_user.id

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from aiohttp import web
 
 from custom_components.phoenix_mcp import esphome_builder
 from custom_components.phoenix_mcp.esphome_constants import (
@@ -28,7 +29,7 @@ from tests.runtime_fixtures import FakeDeviceBuilder, builder_stream as stream
 async def connect(fake, aiohttp_client, monkeypatch):
     """Point the client's session getter at a local server running `fake`."""
     client = await aiohttp_client(fake.app())
-    monkeypatch.setattr(esphome_builder, "async_get_clientsession", lambda hass: client.session)
+    monkeypatch.setattr(esphome_builder, "_builder_session", lambda hass: client.session)
     return str(client.make_url("")).rstrip("/")
 
 
@@ -491,7 +492,7 @@ async def test_disallowed_commands_raise_before_any_network_io(hass, monkeypatch
     def explode(_hass):
         raise AssertionError("the allowlist must be checked before any session work")
 
-    monkeypatch.setattr(esphome_builder, "async_get_clientsession", explode)
+    monkeypatch.setattr(esphome_builder, "_builder_session", explode)
 
     with pytest.raises(ValueError):
         await async_builder_command(
@@ -505,7 +506,7 @@ async def test_capture_checks_the_allowlist_before_any_network_io(hass, monkeypa
     def explode(_hass):
         raise AssertionError("the allowlist must be checked before any session work")
 
-    monkeypatch.setattr(esphome_builder, "async_get_clientsession", explode)
+    monkeypatch.setattr(esphome_builder, "_builder_session", explode)
 
     with pytest.raises(ValueError):
         await esphome_builder.async_builder_capture(
@@ -642,3 +643,30 @@ async def test_head_ratio_zero_keeps_only_the_tail(hass, aiohttp_client, monkeyp
     assert res.output.startswith("\n... [output truncated] ...\n")
     assert res.output.endswith("REPORT END\n")
     assert len(res.output) <= 40 + len("\n... [output truncated] ...\n")
+
+
+@pytest.mark.parametrize("entry", ["command", "capture"])
+async def test_a_redirect_from_the_builder_address_is_never_followed(
+    hass, aiohttp_client, socket_enabled, entry
+):
+    """Whatever answers at the Builder address cannot send the connection elsewhere."""
+    fake = FakeDeviceBuilder()
+    app = fake.app()
+
+    async def bounce(_request):
+        raise web.HTTPFound("/ws")
+
+    app.router.add_get("/moved/ws", bounce)
+    client = await aiohttp_client(app)
+    url = str(client.make_url("/moved")).rstrip("/")
+    with pytest.raises(BuilderUnavailable):
+        if entry == "command":
+            await async_builder_command(hass, url, "devices/list", {}, timeout_seconds=5)
+        else:
+            await esphome_builder.async_builder_capture(hass, url, "devices/logs", {"configuration": "a.yaml"},
+                                                        capture_seconds=0.3)
+    assert fake.received == []
+    # The same server without the redirect is reachable through the same session.
+    res = await async_builder_command(hass, str(client.make_url("")).rstrip("/"), "devices/list", {},
+                                      timeout_seconds=5)
+    assert res.result == {}

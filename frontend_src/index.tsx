@@ -10,6 +10,7 @@ import {
   syncTranslations,
 } from "./i18n";
 import { setHass } from "./api";
+import { purgeIfNotAdmin } from "./utils/agentcli_state";
 import DOCKVIEW_CSS from "dockview-react/dist/styles/dockview.css?inline";
 import PANEL_CSS from "./phoenix-mcp-panel.css?inline";
 import DOCK_CSS from "./shell/dock/dock.css?inline";
@@ -94,6 +95,8 @@ class PhoenixPanelElement extends HTMLElement {
   set hass(hass: unknown) {
     this._hass = hass;
     setHass(hass);
+    // What an admin's chat left in this browser is not for this user to read.
+    purgeIfNotAdmin(hass);
     if (!this._i18nStarted) {
       this._i18nStarted = true;
       loadTranslations(hass, resolveLanguage(hass)).then((committed) => {

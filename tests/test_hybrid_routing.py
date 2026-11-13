@@ -15,7 +15,10 @@ from custom_components.phoenix_mcp.tools import service as service_tools
 from custom_components.phoenix_mcp.admin.settings import _validated_settings_patch
 from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
-from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_PLAN_KEY
+from custom_components.phoenix_mcp.routing.routing_tables import (
+    COMMAND_ROUTING_PLAN_KEY, DECISION_ENTITY_CATEGORIES, DECISION_PROVIDER_REFUSED_CATEGORIES,
+)
+from custom_components.phoenix_mcp.catalog_text import voice_text
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.routing.decision_types import DecisionError
 from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
@@ -23,7 +26,7 @@ from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
-from tests.runtime_fixtures import patch_readers, qualify_test_decision_model
+from tests.runtime_fixtures import decision_write_reply, patch_readers, qualify_test_decision_model
 
 
 @pytest.fixture
@@ -76,26 +79,48 @@ async def run_voice(hass, home, *, category="light_on", sentence="Please illumin
     return answer, remote, provider
 
 
-@pytest.mark.parametrize("category,service,extra", [
-    ("light_on", "turn_on", {}), ("light_off", "turn_off", {}),
+# Each sentence says the operation its category names; local recognition misses both.
+@pytest.mark.parametrize("category,service,sentence", [
+    ("light_on", "turn_on", "Please illuminate my desk lamp"), ("light_off", "turn_off", "Please extinguish my desk lamp"),
 ])
 @pytest.mark.parametrize("routing_mode", ["hybrid", "auto"])
-async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybrid_home, category, service, extra, routing_mode):
+async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybrid_home, category, service, sentence, routing_mode):
     await hybrid_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
     data, access_key, _, _, entity_id = hybrid_home
     await data.store.async_patch_settings(decision_shadow_enabled=True)
     with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        answer, remote, provider = await run_voice(hass, hybrid_home, category=category, percent=extra.get("brightness_pct", 50))
-    assert answer == ("Home Assistant reports the requested state." if service == "turn_off" else
-                      "Command sent. Home Assistant has not yet confirmed the requested state.")
+        answer, remote, provider = await run_voice(hass, hybrid_home, category=category, sentence=sentence)
+    # The reply names the operation the decision chose, so a wrong one is audible.
+    assert answer == await decision_write_reply(hass, "light", service, matched=service == "turn_off")
     assert remote.await_count == 2
-    assert len(remote.await_args.args[4]["questions"]) == (3 if category == "light_brightness" else 1)
-    call.assert_awaited_once_with("light", service, {"entity_id": [entity_id], **extra}, blocking=True, return_response=False)
+    assert len(remote.await_args.args[4]["questions"]) == 1
+    call.assert_awaited_once_with("light", service, {"entity_id": [entity_id]}, blocking=True, return_response=False)
     provider.assert_not_called()
     assert data.decision_shadow.observations == 0
     assert data.decision_shadow.summary()["hybrid"] == {"evaluations": 1, "reasons": {"plan_ready": 1}}
     assert data.agent_recovery.records(access_key.id) == []
+
+
+@pytest.mark.parametrize("exposed", [True, False])
+async def test_catalog_name_inside_a_longer_name_outside_scope_is_not_evidence(hass, hybrid_home, exposed):
+    """The user names a switch the key cannot act on; the light whose name it contains stays untouched."""
+    data, _, _, _, desk = hybrid_home
+    heater = er.async_get(hass).async_get_or_create("switch", "test", "heater", original_name="Heater desk lamp")
+    hass.states.async_set(heater.entity_id, "on", {"friendly_name": "Heater desk lamp"})
+    async_expose_entity(hass, "conversation", heater.entity_id, exposed)
+    hass.states.async_set(desk, "on", {"friendly_name": "Desk lamp", "supported_color_modes": ["brightness"]})
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, hybrid_home, category="light_off",
+                                                   sentence="please extinguish the heater desk lamp")
+    if exposed:
+        call.assert_not_called()
+        provider.assert_awaited_once()
+        assert data.decision_shadow.summary()["hybrid"]["reasons"] == {"target_unverified": 1}
+    else:
+        # An entity hidden from Assist is no competitor; the catalog name stands.
+        call.assert_awaited_once_with("light", "turn_off", {"entity_id": [desk]}, blocking=True, return_response=False)
 
 
 async def test_state_query_uses_existing_scoped_read(hass, hybrid_home):
@@ -387,12 +412,11 @@ async def test_provider_check_settings_are_validated_and_defaulted(hass, hybrid_
     assert error is not None and error.status == 400
 
 
-@pytest.mark.parametrize("language,sentence,reply", [
-    ("zh-Hans", "请打开台灯", "命令已发送。Home Assistant 尚未确认请求的状态。"),
-    ("es", "enciende la lámpara", "Comando enviado. Home Assistant aún no ha confirmado el estado solicitado."),
+@pytest.mark.parametrize("language,sentence,prefix", [
+    ("zh-Hans", "请打开台灯", "操作已发送："), ("es", "enciende la lámpara", "Acción enviada: "),
 ])
 @pytest.mark.parametrize("routing_mode", ["hybrid", "auto"])
-async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(hass, hybrid_home, language, sentence, reply, routing_mode):
+async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(hass, hybrid_home, language, sentence, prefix, routing_mode):
     await hybrid_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
     data, _, _, _, entity_id = hybrid_home
     await data.store.async_patch_settings(command_routing_languages=[language])
@@ -403,7 +427,8 @@ async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(h
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, sentence=sentence, language=language,
                                                  category="light_on")
-    assert answer == reply
+    assert answer.startswith(prefix)
+    assert answer == await decision_write_reply(hass, "light", "turn_on", matched=False, language=language)
     assert remote.await_count == 2
     assert all(args.args[4]["state"]["language"] == ("zh-CN" if language == "zh-Hans" else "es") for args in remote.await_args_list)
     call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id]}, blocking=True, return_response=False)
@@ -1149,8 +1174,8 @@ def entity_command_wire(payload, entity_id, category, value=None):
 
 @pytest.mark.parametrize('entity_command_home', [
     ('input_boolean_on', None), ('counter_increment', None), ('timer_cancel', None),
-    ('input_button_press', None), ('cover_open', None), ('vacuum_return_to_base', None),
-    ('lock_unlock', None), ('scene_activate', None), ('script_on', None),
+    ('input_button_press', None), ('cover_close', None), ('vacuum_return_to_base', None),
+    ('lock_lock', None), ('scene_activate', None), ('script_on', None),
     ('select_option', 'Away'), ('input_select_option', 'Away'), ('input_text_value', 'Visitors welcome'),
 ], indirect=True)
 async def test_entity_commands_reach_guarded_dispatch(hass, entity_command_home):
@@ -1164,6 +1189,108 @@ async def test_entity_commands_reach_guarded_dispatch(hass, entity_command_home)
     provider.assert_not_called()
     call.assert_awaited_once_with(domain, service, {'entity_id': [home[-1]], **({field: value} if field else {})},
                                  blocking=True, return_response=False)
+
+
+_OPPOSITE_SENTENCES = {
+    'lock_unlock': 'Lock Test helper', 'lock_open': 'Lock Test helper', 'cover_open': 'Close Test helper',
+    'cover_toggle': 'Close Test helper', 'valve_open': 'Shut Test helper now', 'valve_toggle': 'Close Test helper',
+    'siren_on': 'Silence Test helper', 'siren_toggle': 'Silence Test helper', 'alarm_disarm': 'Arm Test helper',
+    'alarm_trigger': 'Arm Test helper',
+}
+
+
+@pytest.mark.parametrize('mesa_mode', ['off', 'advisory'])
+@pytest.mark.parametrize('entity_command_home', [(category, None) for category in sorted(DECISION_PROVIDER_REFUSED_CATEGORIES)],
+                         indirect=True)
+async def test_joint_decision_never_runs_a_risky_operation(hass, entity_command_home, mesa_mode):
+    """The user said close, lock, silence or arm; a decision for the opposite asks again instead."""
+    home, category, value, _, (domain, _, _) = entity_command_home
+    data = home[0]
+    if category.endswith('_toggle'):
+        # A toggle needs both directions, so it is offered only for a device that can open and close.
+        from custom_components.phoenix_mcp.entity_commands import _FEATURES
+        flags = ('OPEN', 'CLOSE') if domain in ('cover', 'valve') else ('TURN_ON', 'TURN_OFF')
+        features = int(getattr(_FEATURES[domain], flags[0]) | getattr(_FEATURES[domain], flags[1]))
+        hass.states.async_set(home[-1], 'off', {'friendly_name': 'Test helper', 'supported_features': features})
+    if mesa_mode == 'advisory':
+        await data.store.async_patch_settings(mesa_mode='advisory')
+        data.mesa = await async_setup_mesa(hass, 'advisory')
+    async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, home, request=respond, sentence=_OPPOSITE_SENTENCES[category])
+    remote.assert_awaited_once()
+    call.assert_not_called()
+    provider.assert_not_called()
+    assert answer == voice_text('en', 'decision_operation_unconfirmed')
+    assert not data.store.get_pending_approvals()
+    assert data.decision_shadow.summary()['hybrid'] == {'evaluations': 1, 'reasons': {'operation_unconfirmed': 1}}
+
+
+def test_sequential_classifier_cannot_offer_a_risky_operation():
+    from custom_components.phoenix_mcp.routing.routing_tables import (
+        DECISION_PERCENTAGE_PREVIEW_CHOICES, DECISION_ROUTE_CHOICES,
+    )
+    assert not DECISION_PROVIDER_REFUSED_CATEGORIES & (DECISION_ROUTE_CHOICES.keys() | DECISION_PERCENTAGE_PREVIEW_CHOICES.keys())
+    assert DECISION_PROVIDER_REFUSED_CATEGORIES <= DECISION_ENTITY_CATEGORIES.keys()
+
+
+@pytest.mark.parametrize('prepare', [True, False])
+async def test_sequential_target_selection_refuses_a_risky_operation(hass, hybrid_home, prepare):
+    """Should the classifier ever offer one, a risky choice stops before any target request."""
+    from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority
+    data, access_key, store, account, _ = hybrid_home
+    provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
+    category = {'choice': 'cover_open', 'probabilities': {'cover_open': 1.0, 'provider': 0.0}}
+    with patch.object(DecisionProvider, 'select_target', AsyncMock()) as select:
+        result = await data.decision_shadow._select_target(
+            hass, RoutingAuthority.capture(data, access_key), provider, None, 'Close the desk lamp', category, 1000, prepare=prepare)
+    assert result['reason'] == 'operation_unconfirmed' and '_plan' not in result
+    select.assert_not_called()
+
+
+@pytest.mark.parametrize('entity_command_home', [('cover_open', None)], indirect=True)
+async def test_risky_operation_preview_is_reported_without_a_proposal(hass, entity_command_home):
+    from custom_components.phoenix_mcp.routing.decision_batch import async_preview_batch
+    home, category, *_ = entity_command_home
+    data, access_key, *_ = home
+    async def respond(*args): return entity_command_wire(args[4], home[-1], category)
+    with patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)):
+        result = await async_preview_batch(hass, data, access_key, 'Close Test helper', 'en', {'reason': 'no_match', 'proposal': None})
+    assert result['reason'] == 'operation_unconfirmed' and 'proposal' not in result
+
+
+@pytest.mark.parametrize('entity_command_home', [('cover_open', None)], indirect=True)
+async def test_saved_plan_for_a_risky_operation_is_never_current(hass, entity_command_home):
+    """A plan saved before the refusal existed, or reached past it, fails its recheck at approval."""
+    from custom_components.phoenix_mcp.routing import decision_batch, plan_currency
+    home, category, value, _, (domain, service, _) = entity_command_home
+    data, access_key, *_ = home
+    await set_mesa(hass, home, 'confirm')
+    async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
+    with (patch.object(decision_batch, 'DECISION_PROVIDER_REFUSED_CATEGORIES', frozenset()),
+          patch.object(plan_currency, 'DECISION_PROVIDER_REFUSED_CATEGORIES', frozenset()),
+          patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[]))):
+        reply, _, provider = await run_voice(hass, home, request=respond, sentence='Close Test helper')
+    assert 'needs approval' in reply
+    record = data.store.get_pending_approvals()[0]
+    assert record['args'][COMMAND_ROUTING_PLAN_KEY]['decision_category'] == 'cover_open'
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, outcome, _ = await tool_dispatch.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
+    assert outcome == 'denied'
+    call.assert_not_called()
+
+
+@pytest.mark.parametrize('entity_command_home', [('cover_close', None)], indirect=True)
+async def test_reply_after_a_decision_write_names_the_operation(hass, entity_command_home):
+    home, category, value, _, (domain, service, _) = entity_command_home
+    async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock)):
+        answer, _, _ = await run_voice(hass, home, request=respond, sentence='Please shut Test helper')
+    assert answer == await decision_write_reply(hass, domain, service, matched=False)
+    assert 'Close' in answer
 
 
 @pytest.mark.parametrize('entity_command_home', [('select_option', 'Away')], indirect=True)

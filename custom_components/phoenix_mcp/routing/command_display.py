@@ -83,6 +83,17 @@ async def async_state_translations(hass: HomeAssistant, language: object) -> dic
         return {}
 
 
+async def async_service_label(hass: HomeAssistant, domain: str, service: str, language: object) -> str | None:
+    """HA's translated name for one service, or None when HA has none or cannot load it."""
+    try:
+        async with asyncio.timeout(COMMAND_ROUTING_TRANSLATION_TIMEOUT_SECONDS):
+            translated = await translation.async_get_translations(hass, canonical_language(language), 'services', {domain})
+    except (TimeoutError, HomeAssistantError, ValueError):
+        return None
+    label = translated.get(f'component.{domain}.services.{service}.name')
+    return label if isinstance(label, str) and label and len(label) <= 1024 else None
+
+
 def state_label(translations: dict[str, str], domain: str, value: str, device_class: object = None) -> str | None:
     """HA's label for one entity state, preferring the device-class variant."""
     keys = ([f'component.{domain}.entity_component.{device_class}.state.{value}'] if isinstance(device_class, str) else [])

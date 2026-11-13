@@ -62,11 +62,13 @@ VS Code 每个请求最多接受 128 个工具。权限较多的密钥可能提�
 
 之后，应用会使用你为它批准的密钥，并遵循该密钥的权限、能力、审批和速率限制。它的请求会以该密钥的名义显示在审计日志中。
 
-应用必须能从互联网通过 HTTPS 访问 Home Assistant，地址就是 Phoenix 显示的那个。家庭网络或 VPN 地址对托管应用无效。
+应用必须能从互联网通过 HTTPS 访问 Home Assistant，地址就是 Phoenix 显示的那个。家庭网络或 VPN 地址对托管应用无效。在反向代理或隧道之后，Home Assistant 必须信任该代理，才能知道请求是通过 HTTPS 到达的；纯 HTTP 永远不会提供登录。
+
+应用必须能从服务器地址本身找到登录方式（受保护资源元数据，RFC 9728），当前的 MCP 应用都是这样做的。只支持较早 2025-03-26 登录方式的应用会进入 Home Assistant 自己的登录，Phoenix 会拒绝由此得到的凭据。
 
 ### 批准登录 {#oauth-approve}
 
-Phoenix 会显示应用自报的名称、识别它的站点，以及它返回的地址。请检查这些是否与你刚连接的应用一致。
+Phoenix 会显示应用自报的名称、识别它的完整地址，以及它返回的地址。请检查这些是否与你刚连接的应用一致。
 
 选择应用获得的密钥，然后选择 **{{label:oauth.approve}}**。只有开启了 OAuth 且登录窗口期正在开放的密钥才会列出。你的浏览器会回到应用，应用随即完成连接。
 
@@ -96,13 +98,13 @@ Phoenix 没有自己的远程服务。家庭网络外的应用会像浏览器一
 
 登录 Home Assistant 本身的应用也可以通过 Home Assistant 的 Model Context Protocol 集成访问 Phoenix 的工具。对大多数应用来说，[OAuth 登录](guide:#oauth)更简单，并把它们限定在一个密钥上。在 2026.11 之前，它叫 MCP Server。它们使用绑定到 [Assist 工具提供商](guide:topic.homeAssistantFeatures#assist-tool-provider)的密钥。
 
-在 2026.11 上，请使用 /api/mcp/phoenix_mcp，它需要管理员登录。Home Assistant 2026.7 没有这个地址，2026.11 之前的其他版本也可能没有，因此请在这些版本上使用 /api/mcp。
+从 2026.8 起，请使用 /api/mcp/phoenix_mcp，它需要管理员登录。Home Assistant 2026.7 没有这个地址，因此请在该版本上使用 /api/mcp。
 
-/api/mcp 地址遵循该集成的 Require an administrator account 选项。新条目会开启它，较早的条目会保持关闭，2026.7 没有这个选项。非管理员只能使用家庭工具，并受他们自己的 Home Assistant 权限限制。
+从 2026.10 起，/api/mcp 地址遵循该集成的 Require an administrator account 选项。新条目会开启它，较早的条目会保持关闭。2026.10 之前没有这个选项，因此任何登录 Home Assistant 的人都可以使用 /api/mcp。非管理员只能使用家庭工具，并受他们自己的 Home Assistant 权限限制。
 
 在这条路径上，密钥的速率限制不适用，审计日志会把调用显示为 Assist，应用只有主动请求时才会收到 Phoenix 的说明。
 
-从 2026.11 起，请检查该集成的选项。新条目默认开启 Expose all AI tools，会提供每一组工具，包括 Phoenix 的工具。请关闭它，并在 AI tools 下选择 Phoenix MCP（限定范围）。Read-only 选项只给应用留下标记为只读的工具，但它不能替代密钥的能力设置。
+从 2026.10 起，请检查该集成的选项。新条目默认开启 Expose all AI tools，会提供每一组工具，包括 Phoenix 的工具。请关闭它，并在 AI tools 下选择 Phoenix MCP（限定范围）。从 2026.11 起，Read-only 选项只给应用留下标记为只读的工具，但它不能替代密钥的能力设置。
 
 在这条路径上，Home Assistant 其他 API 的工具不经过 Phoenix，因此密钥、审批、MESA 和审计日志都不覆盖它们。当两个 API 提供同名工具时，Home Assistant 会添加前缀，例如 `phoenix-mcp__`。
 

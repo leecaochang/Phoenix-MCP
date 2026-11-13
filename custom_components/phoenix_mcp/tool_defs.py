@@ -70,6 +70,7 @@ _DASHBOARD_SEARCH_FIRST = (
     "Find cards with a get_dashboard_config search, not a full read that resends every card: "
     "its matches carry the paths and content_hash this tool needs. "
 )
+_DASHBOARD_ACTIVE = "Adding a template, a code-running custom card or an absolute URL always needs approval. "
 _DASHBOARD_SAVED = (
     "A successful result confirms the change and returns the new content_hash; do not re-read to check it."
 )
@@ -540,9 +541,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "Call a Home Assistant service. Target groups (kind entity, device, area or all) are resolved "
             "and flattened to the entities this access key can write; out-of-scope targets are dropped "
             "silently. A service only takes the targets it declares: every target must be of the service's own domain or "
-            "listed in its description, and homeassistant.turn_on, turn_off, toggle and update_entity take any entity. "
+            "listed in its description, and homeassistant.turn_on, turn_off, toggle and update_entity take any entity, without data when a target is a script. "
             "A service without a target is refused, except the core reloads (cap_yaml_edit), "
-            "homeassistant.restart and stop (cap_restart), ESPHome device actions (write on the device) and the Music Assistant library reads music_assistant.search and get_library (cap_service_response and read on a Music Assistant entity; for a genre, mood or year search playlists first; with none, search for artists that fit and pass the found uris as the music_assistant.play_media media_id list). The call passes the capability gate and "
+            "homeassistant.restart and stop (cap_restart), ESPHome device actions (write on everything the device can operate, and MESA over all its entities) and the Music Assistant library reads music_assistant.search and get_library (cap_service_response and read on a Music Assistant entity; for a genre, mood or year search playlists first; with none, search for artists that fit and pass the found uris as the music_assistant.play_media media_id list). The call passes the capability gate and "
             "per-entity MESA policy, so it may return pending_approval or be refused. Preview a risky "
             "call first with dry_run_service (and whatif to see which automations it would trigger). "
             "For runtime controls use automation.trigger (run actions, skip_condition defaults true), "
@@ -631,7 +632,8 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "description": (
             "Return this access key's own recent activity from the Phoenix MCP audit log (request_id, time, method, "
             "resource, outcome), newest first. Only this access key's entries are returned. Useful for "
-            "self-correction (did my last call succeed?). No capability required."
+            "self-correction (did my last call succeed?). A call refused because an entity is outside this "
+            "key's scope is listed as not_found, as it was answered. No capability required."
         ),
         "inputSchema": {
             "type": "object",
@@ -987,8 +989,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "live bucket updates can move records between pages. Search matches full scrubbed text before compaction. "
             "Response byte limits can return fewer buckets than limit; continue with next_cursor. "
             "Pass a bucket's detail_ref to get_log_detail for its full scrubbed text. "
-            "Set source=integration_debug to read the INFO and DEBUG records of integrations whose level was "
-            "raised with set_integration_log_level (Home Assistant's system log never keeps them); it also requires "
+            "Set source=integration_debug to read the INFO and DEBUG records of integrations this access key "
+            "raised with set_integration_log_level, written while it held the raise (Home Assistant's system log "
+            "never keeps them; other keys' raises are not readable); it also requires "
             "Diagnostics and accepts integration, search, limit and cursor. "
             "Set source=fault_log for a protected "
             "bounded tail of home-assistant.log.fault, requiring both Log read and Diagnostics. "
@@ -2249,7 +2252,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "true for a condensed view that highlights the error and last step. Without automation_id, returns "
             "every accessible automation and script with retained runs: counts by outcome, the last run, and "
             "each run that recorded an error, errors first: one call to learn whether anything failed. Values "
-            "recorded for entities outside this access key's read scope are redacted. Returns 'not found' if "
+            "recorded for entities outside this access key's read scope are redacted, and so are the results of "
+            "a step that evaluated one. A run's stored configuration and a webhook trigger's request need the "
+            "automation or script authoring capability; webhook IDs are always redacted. Returns 'not found' if "
             "the automation or script is not accessible."
         ),
         "cap": "cap_traces",
@@ -2965,8 +2970,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Validate an automation or script config without saving it. Returns structural validity plus, "
             "for each referenced entity, whether it is accessible to this access key (entities outside the "
             "access key's scope are reported as inaccessible and not visible). warnings name an unregistered "
-            "service and a target its service, trigger or condition does not apply to. Decouples the "
-            "schema check from committing the write."
+            "service and a target its service, trigger or condition does not apply to. Its templates "
+            "are first compiled and trial-rendered in a separate, time-limited worker, and refused if "
+            "they exceed its limits. Decouples the schema check from committing the write."
         ),
         "cap": "cap_diagnostics",
         "inputSchema": {
@@ -3151,7 +3157,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "restore_configuration",
         "description": (
-            "Restore a secret-safe Template helper, blueprint, Energy, or dashboard registry/layout/resource snapshot created by this access key. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. A blueprint comes back as Home Assistant re-renders it, without its comments or formatting; the receipt says so when that changes the text. Unsupported families and non-invertible effects are refused."
+            "Restore a secret-safe Template helper, blueprint, Energy, or dashboard registry/layout/resource snapshot created by this access key. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. A blueprint comes back as Home Assistant re-renders it, without its comments or formatting; the receipt says so when that changes the text. A registry snapshot from before the dashboard existed deletes it with its views, after saving a layout copy. Unsupported families and non-invertible effects are refused."
         ),
         "caps_any": [
             "cap_helper_write",
@@ -3194,12 +3200,12 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Check an automation trigger before saving it: register it with Home Assistant for up to "
             "timeout seconds (max 30) and return the first firing's trigger variables, or fired=false. "
-            "Supports state, numeric_state, template, time, time_pattern, sun, homeassistant, zone "
-            "and device triggers, and entity triggers such as light.turned_on with a target. Every "
-            "entity it names or reaches (in any field or template, through a target's devices, "
-            "areas, floors or labels, or a device trigger's device) must be readable by this key; "
-            "templates use literal lookups such as states('sensor.x'). Event, MQTT, webhook and "
-            "conversation triggers are refused."
+            "Supports state, numeric_state, time, time_pattern, sun, homeassistant, zone and device "
+            "triggers, and entity triggers such as light.turned_on with a target. Every entity it "
+            "names or reaches (in any field, through a target's devices, areas, floors or labels, or a "
+            "device trigger's device) must be readable by this key. Templates are refused, template "
+            "triggers included: check a template's current value with test_condition. Event, MQTT, "
+            "webhook and conversation triggers are refused."
         ),
         "cap": "cap_config_read",
         "inputSchema": {
@@ -3210,7 +3216,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "oneOf": [{"type": "object"}, {"type": "array", "items": {"type": "object"}, "minItems": 1, "maxItems": 10}],
                 },
                 "timeout": {"type": "integer", "minimum": 1, "maximum": 30, "default": 30, "description": "Maximum seconds to wait for a firing."},
-                "variables": {"type": "object", "description": "Plain values the trigger's templates may read by name."},
+                "variables": {"type": "object", "description": "Plain values passed to the trigger as variables."},
             },
             "required": ["trigger"],
         },
@@ -3222,8 +3228,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "return result=true or false, with any template errors. Supports state, numeric_state, "
             "template, time, sun, zone and device conditions, and, or and not, and entity conditions "
             "such as switch.is_on with a target. Every entity it names or reaches must be readable by "
-            "this key. Pass variables, such as a sample trigger object, for templates that read them; "
-            "states are still read only by literal lookups such as states('sensor.x')."
+            "this key. Templates are rendered in a separate, time-limited worker over a copy of the "
+            "states this key can read, not inside Home Assistant. Pass variables, such as a sample "
+            "trigger object, for templates that read them; states are still read only by literal "
+            "lookups such as states('sensor.x')."
         ),
         "cap": "cap_config_read",
         "inputSchema": {
@@ -3283,8 +3291,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "file's real value. Masking works by name, so a secret under an ordinary name stays "
             "visible. !include and !secret are returned as written, never resolved. A file that does "
             "not parse is refused, as its credentials cannot be located; the error gives the line. "
-            "Files with secret in their name, hidden directories, and the esphome directory cannot "
-            "be read. Use get_esphome_yaml for ESPHome device files, where entity scope is enforced. "
+            "Files with secret in their name, hidden directories, the esphome directory and paths with "
+            "characters outside printable ASCII cannot be read. Use get_esphome_yaml for ESPHome device files, where entity scope is enforced. "
             "content_hash covers the WHOLE file, even when key is given, and is "
             "only comparable between reads. This tool only reads: YAML configuration is edited by the operator, and "
             "automations, scripts and scenes are changed with their own tools."
@@ -3657,8 +3665,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "set_dashboard_resource",
         "description": (
-            "Add, change or remove one dashboard resource. Every browser that opens a dashboard runs a "
-            "registered JavaScript file with that person's Home Assistant access, so register only a file the operator "
+            "Add, change or remove one dashboard resource. Every browser that opens a dashboard, and an administrator's "
+            "browser that opens the Phoenix MCP panel, runs a registered JavaScript file with that person's Home "
+            "Assistant access, so register only a file the operator "
             "asked for. An administrator reviews every change. url must be a local path under /local/ or "
             "/hacsfiles/; remote URLs are refused. HACS and the Marketplace register the cards they install; do not add those "
             "again. create needs url and type; update needs resource_id and url, type or both; delete needs "
@@ -3716,7 +3725,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "changing, or removing a single card, prefer add_dashboard_card / "
             "edit_dashboard_card / delete_dashboard_card, which do not resend the whole "
             "layout. Omit url_path for the default dashboard. Storage-mode dashboards "
-            "only (YAML-mode is rejected). Every layout write first takes a safety copy, so a layout that holds a "
+            "only (YAML-mode is rejected). " + _DASHBOARD_ACTIVE + "Every layout write first takes a safety copy, so a layout that holds a "
             "credential or nests over 100 levels is refused, naming the location. "
             "A layout whose views, sections, badges or cards are not lists would not display, so it is "
             "refused. May require admin approval. Pass expected_hash (the content_hash from a "
@@ -3743,7 +3752,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Add ONE card to a Lovelace dashboard view without resending the whole "
             "layout (prefer this over set_dashboard_config for a single-card change). "
-            + _DASHBOARD_SEARCH_FIRST +
+            + _DASHBOARD_SEARCH_FIRST + _DASHBOARD_ACTIVE +
             "A match's path [\"views\", V, \"sections\", S, \"cards\", C] gives view_index V and "
             "section_index S for a card beside it; read the layout only when the target view has no "
             "card to search for. Omit url_path for the default dashboard. Storage-mode dashboards "
@@ -3768,7 +3777,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "edit_dashboard_card",
         "description": (
             "Replace ONE card's config on a Lovelace dashboard without resending the "
-            "whole layout. " + _DASHBOARD_SEARCH_FIRST +
+            "whole layout. " + _DASHBOARD_SEARCH_FIRST + _DASHBOARD_ACTIVE +
             "A top-level match's path [\"views\", V, \"sections\", S, \"cards\", C] gives "
             "view_index V, section_index S and card_index C; change a card nested inside another "
             "card with patch_dashboard and its path. Omit url_path for the default dashboard. "
@@ -3821,7 +3830,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Change path-addressed values anywhere in a Lovelace dashboard without resending the layout. Use "
             "this for what the card tools cannot reach (a view-level badge, a view option, a single field inside "
             "a card) and for several related edits at once, such as repointing every card get_relationships "
-            "listed for a replaced entity. " + _DASHBOARD_SEARCH_FIRST + "Read the whole layout only "
+            "listed for a replaced entity. " + _DASHBOARD_SEARCH_FIRST + _DASHBOARD_ACTIVE + "Read the whole layout only "
             "for something search cannot find, such as a view option. Each change's path is an array of keys and 0-based indexes, e.g. [\"views\", 0, "
             "\"badges\", 4, \"entity\"]; kind set replaces or adds the value there, append adds to a list it "
             "addresses, remove deletes it. Changes apply in order, each to the layout the previous one left, "

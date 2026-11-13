@@ -32,8 +32,10 @@ from homeassistant.helpers import area_registry as ar_mod
 from homeassistant.helpers import device_registry as dr_mod
 from homeassistant.helpers import entity_registry as er_mod
 from homeassistant.helpers import sun as sun_mod
+from homeassistant.helpers.condition import async_get_all_descriptions as async_get_all_condition_descriptions
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.trigger import async_get_all_descriptions as async_get_all_trigger_descriptions
 from homeassistant.util.async_ import run_callback_threadsafe
 from homeassistant.util.percentage import percentage_to_ranged_value, ranged_value_to_percentage
 from homeassistant.util.yaml import load_yaml as _load_yaml
@@ -160,14 +162,16 @@ class PhoenixMesaBackend(StorageBackend):
     """
 
     def __init__(self, initial: dict[str, dict[str, Any]] | None = None) -> None:
-        self._data: dict[str, dict[str, Any]] = dict(initial or {})
+        self._data: dict[str, dict[str, Any]] = copy.deepcopy(dict(initial or {}))
 
+    # Every copy is deep, as in mesa-core's MemoryBackend: a caller that edits a nested
+    # value of what it read or wrote must not change the stored policy or a snapshot.
     def read(self, key: str) -> dict[str, Any] | None:
         value = self._data.get(key)
-        return dict(value) if value is not None else None
+        return copy.deepcopy(value) if value is not None else None
 
     def write(self, key: str, data: dict[str, Any]) -> None:
-        self._data[key] = dict(data)
+        self._data[key] = copy.deepcopy(data)
 
     def delete(self, key: str) -> None:
         self._data.pop(key, None)
@@ -179,12 +183,12 @@ class PhoenixMesaBackend(StorageBackend):
         return keys
 
     def snapshot(self) -> dict[str, dict[str, Any]]:
-        """Deep-enough copy for persistence (profile docs are plain JSON)."""
-        return {k: dict(v) for k, v in self._data.items()}
+        """A deep copy for persistence and rollback."""
+        return copy.deepcopy(self._data)
 
     def restore(self, documents: dict[str, dict[str, Any]]) -> None:
-        """Replace the whole in-memory set with a saved snapshot."""
-        self._data = {k: dict(v) for k, v in documents.items()}
+        """Replace the whole in-memory set with a deep copy of a saved snapshot."""
+        self._data = copy.deepcopy(documents)
 
     def carry(self, old: str, new: str, replacement: dict[str, Any] | None) -> None:
         """Apply one rename to the in-memory set."""
@@ -332,8 +336,9 @@ _T = TypeVar("_T")
 def _on_event_loop(hass: HomeAssistant, callback: Callable[..., _T]) -> Callable[..., _T]:
     """Run a registry-walking host callback on the event loop.
 
-    Callable from mesa-core's worker threads; registries change only on the loop, and on the
-    loop itself the callback runs directly.
+    Callable from mesa-core's worker threads; registries and states change only on the loop,
+    and on the loop itself the callback runs directly. Every host callback that reads them
+    goes through here.
     """
 
     def _call(*args: Any) -> _T:
@@ -369,7 +374,7 @@ def _build_get_entity_device(hass: HomeAssistant) -> Callable[[str], str | None]
         entry = er_mod.async_get(hass).async_get(entity_id)
         return entry.device_id if entry is not None else None
 
-    return _get_entity_device
+    return _on_event_loop(hass, _get_entity_device)
 
 
 def _build_get_device_parent(hass: HomeAssistant) -> Callable[[str], str | None]:
@@ -383,7 +388,7 @@ def _build_get_device_parent(hass: HomeAssistant) -> Callable[[str], str | None]
         chain = device_authority_chain(hass, device_id)
         return chain[1] if chain is not None and len(chain) == 2 else None
 
-    return _get_device_parent
+    return _on_event_loop(hass, _get_device_parent)
 
 
 def _build_get_entity_integration(hass: HomeAssistant) -> Callable[[str], str | None]:
@@ -396,7 +401,7 @@ def _build_get_entity_integration(hass: HomeAssistant) -> Callable[[str], str | 
         entry = er_mod.async_get(hass).async_get(entity_id)
         return entry.platform if entry is not None else None
 
-    return _get_entity_integration
+    return _on_event_loop(hass, _get_entity_integration)
 
 
 def build_expand_target(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
@@ -472,7 +477,7 @@ def _build_get_state(hass: HomeAssistant) -> Callable[[str], str | None]:
         state = hass.states.get(entity_id)
         return state.state if state is not None else None
 
-    return _get_state
+    return _on_event_loop(hass, _get_state)
 
 
 def _build_get_calendar_events(hass: HomeAssistant) -> Callable[[str], list[str]]:
@@ -488,7 +493,7 @@ def _build_get_calendar_events(hass: HomeAssistant) -> Callable[[str], list[str]
             raise LookupError(f"{calendar_id} reports no usable state")
         return [str(state.attributes.get("message") or calendar_id)] if state.state == "on" else []
 
-    return _get_calendar_events
+    return _on_event_loop(hass, _get_calendar_events)
 
 
 def _build_get_solar_elevation(hass: HomeAssistant) -> Callable[[datetime], float | None]:
@@ -622,22 +627,12 @@ async def async_semantic_moments(hass: HomeAssistant, entity_id: str) -> list[di
 
     trigger_schemas: dict[str, Any] = {}
     try:
-        # Local: inside a guard for releases that lack it.
-        from homeassistant.helpers.trigger import (
-            async_get_all_descriptions as async_get_all_trigger_descriptions,
-        )
-
         trigger_schemas = await async_get_all_trigger_descriptions(hass)
     except Exception:  # schema is best-effort; ids above still stand
         _LOGGER.debug("semantic moments trigger schema lookup failed for %s", entity_id, exc_info=True)
 
     condition_schemas: dict[str, Any] = {}
     try:
-        # Local: inside a guard for releases that lack it.
-        from homeassistant.helpers.condition import (
-            async_get_all_descriptions as async_get_all_condition_descriptions,
-        )
-
         condition_schemas = await async_get_all_condition_descriptions(hass)
     except Exception:  # schema is best-effort; ids above still stand
         _LOGGER.debug("semantic moments condition schema lookup failed for %s", entity_id, exc_info=True)
@@ -1844,6 +1839,7 @@ async def async_create_mesa_approval(
             diff=diff,
             request_id=request_id,
             client_ip=client_ip,
+            access_key=access_key,
         )
     create_approval_notification(hass, approval)
     fire_approval_requested_event(hass, approval)

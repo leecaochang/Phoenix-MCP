@@ -4,7 +4,10 @@ Everything here rides cap_lovelace_write, including reads: a layout names entiti
 placement, the same information the writes edit. set_dashboard_config replaces a whole layout, while
 card ops and patch_dashboard carry only the change, because resending a whole dashboard in one tool
 call blows weaker providers' output limits. All guard with an optimistic-lock content_hash, checked
-pre-gate and at apply time. This module never imports the dispatcher.
+pre-gate and at apply time, and bind what their review showed, refused at apply time once changed.
+A layout is active content: cards render templates and fetch URLs with each viewer's authority, so
+a write adding any of that needs a person's review even under Allow (_active_content). This module
+never imports the dispatcher.
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ import copy
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any, TypeGuard
 
 from homeassistant.core import HomeAssistant
@@ -22,6 +26,7 @@ from ..card_catalog import CardEntry, CatalogFreshness, assess_freshness
 from ..const import (
     BUILTIN_CARD_TYPES,
     CAP_DENY,
+    DASHBOARD_CODE_CARD_TYPES,
     DASHBOARD_SCRUB_MAX_DEPTH,
     DASHBOARD_SEARCH_MAX_MATCHES,
     DASHBOARD_SEARCH_MAX_WARNINGS,
@@ -46,11 +51,14 @@ from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..request_authority import AuthorityChangedError, mark_dispatch_started, write_boundary
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
+    _bind_reviewed,
     _cas_conflict,
     _check_authority_before_dispatch,
     _gate,
+    _noting_reviewed_actions,
     _record_version,
     _recovery_failure,
+    _reviewed_conflict,
     _tool_error,
     _tool_refused_before_write,
     _tool_success,
@@ -72,6 +80,8 @@ from ..ws_dispatch import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+# A diff builder given no reviewed layout reads the current one itself.
+_UNREAD: Any = object()
 
 
 def _dashboard_layout_snapshot(url_path: str | None, config: dict | None) -> dict:
@@ -532,6 +542,50 @@ async def _card_warnings(payload: Any, data: PhoenixData, hass: HomeAssistant) -
     return warnings
 
 
+# Text a card renders with the viewer's authority: Jinja ({{ }} and {% %}) and the JavaScript
+# templates of button-card and its kin ([[[ ]]]).
+_TEMPLATE_MARKERS = (("{{", "{{ }}"), ("{%", "{% %}"), ("[[[", "[[[ ]]]"))
+# An absolute or protocol-relative URL, which a viewer's browser fetches or follows; a relative
+# path stays on Home Assistant itself. javascript: runs where it is followed.
+_ACTIVE_URL_RE = re.compile(r"(?i)(?:\b[a-z][a-z0-9+.-]*:)?//[^\s/'\"<>()\[\]{}|\\^`]+|\bjavascript:")
+_ACTIVE_CONTENT_SHOWN = 10
+
+
+def _active_items(layout: Any) -> set[tuple[str, str]]:
+    """Each (label, evidence) of active content in a layout or card; never recursive."""
+    found: set[tuple[str, str]] = set()
+    stack: list[Any] = [layout]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            card_type = node.get("type")
+            if (isinstance(card_type, str) and card_type.startswith("custom:")
+                    and card_type[len("custom:"):] in DASHBOARD_CODE_CARD_TYPES):
+                found.add((card_type, json.dumps(node, sort_keys=True, default=str)))
+            stack.extend(node.keys())
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+        elif isinstance(node, str):
+            for marker, label in _TEMPLATE_MARKERS:
+                if marker in node:
+                    found.add((label, node))
+            for match in _ACTIVE_URL_RE.finditer(node):
+                found.add((match.group(0)[:100], node))
+    return found
+
+
+def _active_content(written: Any, current: Any) -> list[str]:
+    """What a layout write adds that renders with each viewer's authority, for review.
+
+    Templates, code-running custom cards and absolute URLs already in the stored layout give no
+    new reach, so a write keeping them is not flagged; anything new or changed is.
+    """
+    added = _active_items(written) - _active_items(current)
+    labels = sorted({label for label, _ in added})
+    return labels[:_ACTIVE_CONTENT_SHOWN] + (["..."] if len(labels) > _ACTIVE_CONTENT_SHOWN else [])
+
+
 async def _tool_create_dashboard(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
@@ -657,22 +711,38 @@ async def _execute_delete_dashboard(
     except (WsDispatchError, ConfigurationRecoveryError) as exc:
         return _tool_error(f"Could not capture dashboard registry snapshot: {exc}"), "invalid_request", "delete_dashboard"
     dashboard_id, before = _addressed_by_row_id(before, dashboard_id)
-    # Home Assistant deletes the dashboard's stored layout with its registry row,
-    # so the views and cards need their own durable pre-image before anything is
-    # dispatched; an auto-generated dashboard has none to lose.
-    url_path = (before.get("dashboard") or {}).get("url_path")
-    try:
-        layout = await async_get_lovelace_config(hass, url_path, storage_only=True) if isinstance(url_path, str) else None
-    except WsDashboardNotFoundError:
-        layout = None
-    except WsDispatchError as exc:
-        return _tool_error(f"Could not capture the dashboard layout; nothing was deleted: {exc}"), "invalid_request", "delete_dashboard"
-    if layout is None:
+
+    async def delete() -> tuple[dict, str, str]:
         return await _recoverable_dashboard_registry_write(
             dashboard_id=dashboard_id, before=before, operation="dashboard_registry_delete",
             command="lovelace/dashboards/delete", payload={"dashboard_id": dashboard_id},
             access_key=access_key, hass=hass, data=data,
         )
+
+    return await capturing_layout_delete(
+        (before.get("dashboard") or {}).get("url_path"), delete,
+        access_key=access_key, hass=hass, data=data, tool_name="delete_dashboard",
+    )
+
+
+async def capturing_layout_delete(
+    url_path: Any, delete: Callable[[], Awaitable[tuple[dict, str, str]]], *,
+    access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData, tool_name: str,
+) -> tuple[dict, str, str]:
+    """Run a dashboard deletion after recording its stored layout as its own recovery copy.
+
+    Home Assistant deletes the layout with the registry row, so the views and cards get a durable
+    pre-image before anything is dispatched, or nothing is deleted. An auto-generated dashboard has
+    none to lose. The result gains layout_recovery_id.
+    """
+    try:
+        layout = await async_get_lovelace_config(hass, url_path, storage_only=True) if isinstance(url_path, str) else None
+    except WsDashboardNotFoundError:
+        layout = None
+    except WsDispatchError as exc:
+        return _tool_error(f"Could not capture the dashboard layout; nothing was deleted: {exc}"), "invalid_request", tool_name
+    if layout is None:
+        return await delete()
     recovery = data.config_recovery
     resource = f"dashboard_layout:{url_path}"
     try:
@@ -682,11 +752,7 @@ async def _execute_delete_dashboard(
                 expected=_dashboard_layout_snapshot(url_path, None))
             try:
                 await recovery.mark(layout_rid, "dispatching")
-                result = await _recoverable_dashboard_registry_write(
-                    dashboard_id=dashboard_id, before=before, operation="dashboard_registry_delete",
-                    command="lovelace/dashboards/delete", payload={"dashboard_id": dashboard_id},
-                    access_key=access_key, hass=hass, data=data,
-                )
+                result = await delete()
                 try:
                     remaining = await async_get_lovelace_config(hass, url_path, storage_only=True)
                 except WsDashboardNotFoundError:
@@ -700,7 +766,7 @@ async def _execute_delete_dashboard(
             finally:
                 recovery.leave(layout_rid)
     except ConfigurationRecoveryError as exc:
-        return _tool_error(f"Could not capture the dashboard layout; nothing was deleted: {exc}"), "invalid_request", "delete_dashboard"
+        return _tool_error(f"Could not capture the dashboard layout; nothing was deleted: {exc}"), "invalid_request", tool_name
     payload, outcome, resource_id = result
     try:
         body = json.loads(payload["content"][0]["text"])
@@ -894,14 +960,17 @@ async def _search_dashboards(
     )
 
 
-async def _build_diff_set_dashboard_config(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_set_dashboard_config(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, reviewed: Any = _UNREAD,
+) -> dict:
     config = dict_arg(args.get("config"))
     url_path = str(args.get("url_path") or "").strip() or None
     label = url_path or "(default dashboard)"
     views = config.get("views")
     before = None
     try:
-        current = await async_get_lovelace_config(hass, url_path, storage_only=True)
+        current = reviewed if reviewed is not _UNREAD else await async_get_lovelace_config(
+            hass, url_path, storage_only=True)
         if current is not None:
             # Redact out-of-scope entity ids the same way get_dashboard_config does.
             before = _truncate(json.dumps(filter_service_response(current, access_key, hass), indent=2, default=str))
@@ -989,10 +1058,14 @@ async def _tool_set_dashboard_config(
         conflict = _cas_conflict(args.get("expected_hash"), current, "set_dashboard_config")
         if conflict is not None:
             return conflict
+    args = _bind_reviewed(args, current)
+    active = _active_content(args.get("config"), current)
     blocked = await _gate(
         "cap_lovelace_write", access_key, hass, data,
-        tool_name="set_dashboard_config", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_set_dashboard_config(args, access_key, hass),
+        tool_name="set_dashboard_config", args=args, request_id=request_id, client_ip=client_ip,
+        diff=_noting_reviewed_actions(
+            lambda: _build_diff_set_dashboard_config(args, access_key, hass, reviewed=current), active),
+        review=bool(active),
     )
     if blocked is not None:
         return blocked
@@ -1023,7 +1096,8 @@ async def _execute_set_dashboard_config(
         ), "invalid_request", "set_dashboard_config"
     # Optimistic-concurrency guard at apply time: catches a change made during the
     # read/approve window (an absent dashboard is None, so any expected_hash conflicts).
-    conflict = _cas_conflict(args.get("expected_hash"), before, "set_dashboard_config")
+    conflict = (_cas_conflict(args.get("expected_hash"), before, "set_dashboard_config")
+                or _reviewed_conflict(args, before, "set_dashboard_config"))
     if conflict is not None:
         return conflict
     recovery_receipt: dict[str, str] = {}
@@ -1235,13 +1309,27 @@ async def _dashboard_card_current(
     return current
 
 
+def _reviewed_card_target(config: dict, op: str, args: dict) -> Any:
+    """What a card op's review shows of the layout: the addressed card, or for an add its card list.
+
+    None when the address no longer resolves.
+    """
+    cards, _ = _resolve_dashboard_cards(copy.deepcopy(config), args.get("view_index"), args.get("section_index"))
+    if cards is None:
+        return None
+    if op == "add":
+        return {"cards": cards}
+    index = args.get("card_index")
+    return {"card": cards[index]} if _card_index_ok(index) and 0 <= index < len(cards) else None
+
+
 # Version-summary key per card op, so the Changes tab's "added/edited/deleted"
 # verb is translatable rather than an English word spliced in at record time.
 _CARD_OP_VERSION_KEYS = {"add": "card.added", "edit": "card.edited", "delete": "card.deleted"}
 
 
 async def _build_diff_dashboard_card(
-    args: dict, op: str, access_key: AccessKeyRecord, hass: HomeAssistant
+    args: dict, op: str, access_key: AccessKeyRecord, hass: HomeAssistant, *, reviewed: Any = _UNREAD,
 ) -> dict:
     url_path = str(args.get("url_path") or "").strip() or None
     label = url_path or "(default dashboard)"
@@ -1253,7 +1341,8 @@ async def _build_diff_dashboard_card(
     before = None
     prior = None
     try:
-        current = await async_get_lovelace_config(hass, url_path, storage_only=True)
+        current = reviewed if reviewed is not _UNREAD else await async_get_lovelace_config(
+            hass, url_path, storage_only=True)
         if isinstance(current, dict):
             _, prior, _ = _apply_dashboard_card_op(current, op, args)
     except Exception:  # diagnostic only; the precheck already validated
@@ -1313,13 +1402,17 @@ async def _tool_dashboard_card(
     current = await _dashboard_card_current(args, hass, tool_name)
     if isinstance(current, tuple):
         return current
-    _, _, reason = _apply_dashboard_card_op(current, op, args)
+    new_config, _, reason = _apply_dashboard_card_op(current, op, args)
     if reason is not None:
         return _tool_error(reason), "invalid_request", tool_name
+    args = _bind_reviewed(args, _reviewed_card_target(current, op, args))
+    active = _active_content(new_config, current)
     blocked = await _gate(
         "cap_lovelace_write", access_key, hass, data,
-        tool_name=tool_name, args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_dashboard_card(args, op, access_key, hass),
+        tool_name=tool_name, args=args, request_id=request_id, client_ip=client_ip,
+        diff=_noting_reviewed_actions(
+            lambda: _build_diff_dashboard_card(args, op, access_key, hass, reviewed=current), active),
+        review=bool(active),
     )
     if blocked is not None:
         return blocked
@@ -1332,6 +1425,11 @@ async def _execute_dashboard_card(
     current = await _dashboard_card_current(args, hass, tool_name)
     if isinstance(current, tuple):
         return current
+    # The card the review showed must still sit at that index, and an add's card list must be
+    # unchanged, or an approved op would act on a card nobody reviewed.
+    stale = _reviewed_conflict(args, _reviewed_card_target(current, op, args), tool_name)
+    if stale is not None:
+        return stale
     new_config, prior, reason = _apply_dashboard_card_op(current, op, args)
     if reason is not None or new_config is None:
         return _tool_error(reason or "Invalid card operation."), "invalid_request", tool_name
@@ -1507,13 +1605,16 @@ def _patch_summary_fields(args: dict, label: str) -> dict:
     return _summary("patch_dashboard.multi", label=label, count=len(changes))
 
 
-async def _build_diff_patch_dashboard(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_patch_dashboard(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, reviewed: Any = _UNREAD,
+) -> dict:
     url_path = str_arg(args.get("url_path")).strip() or None
     label = url_path or "(default dashboard)"
     changes = [change for change in args.get("changes") or [] if isinstance(change, dict)]
     priors: list[Any] = []
     try:
-        current = await async_get_lovelace_config(hass, url_path, storage_only=True)
+        current = reviewed if reviewed is not _UNREAD else await async_get_lovelace_config(
+            hass, url_path, storage_only=True)
         if isinstance(current, dict):
             _, priors, _ = _apply_dashboard_patch(current, args)
     except Exception:  # diagnostic only; the precheck already validated
@@ -1565,13 +1666,17 @@ async def _tool_patch_dashboard(
     current = await _dashboard_card_current(args, hass, tool)
     if isinstance(current, tuple):
         return current
-    _, _, reason = _apply_dashboard_patch(current, args)
+    new_config, _, reason = _apply_dashboard_patch(current, args)
     if reason is not None:
         return _tool_error(reason), "invalid_request", tool
+    args = _bind_reviewed(args, current)
+    active = _active_content(new_config, current)
     blocked = await _gate(
         "cap_lovelace_write", access_key, hass, data,
-        tool_name=tool, args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_patch_dashboard(args, access_key, hass),
+        tool_name=tool, args=args, request_id=request_id, client_ip=client_ip,
+        diff=_noting_reviewed_actions(
+            lambda: _build_diff_patch_dashboard(args, access_key, hass, reviewed=current), active),
+        review=bool(active),
     )
     if blocked is not None:
         return blocked
@@ -1586,6 +1691,10 @@ async def _execute_patch_dashboard(
     current = await _dashboard_card_current(args, hass, tool)
     if isinstance(current, tuple):
         return current
+    # Paths address the layout the review showed; any change since makes them address something else.
+    stale = _reviewed_conflict(args, current, tool)
+    if stale is not None:
+        return stale
     new_config, _, reason = _apply_dashboard_patch(current, args)
     if reason is not None or new_config is None:
         return _tool_error(reason or "Invalid patch operation."), "invalid_request", tool

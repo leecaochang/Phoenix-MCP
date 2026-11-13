@@ -6,6 +6,8 @@ and its own media_player.play_media announcement.
 
 from __future__ import annotations
 
+from homeassistant.core import callback
+
 import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
@@ -104,7 +106,7 @@ async def test_a_key_with_every_grant_speaks_on_the_named_players(hass):
     speech: list = []
     hass.bus.async_listen(
         EVENT_CALL_SERVICE,
-        lambda event: speech.append(event.data["service_data"]) if event.data["domain"] == "tts" else None,
+        callback(lambda event: speech.append(event.data["service_data"]) if event.data["domain"] == "tts" else None),
     )
     result, outcome, _ = await _call_tool("call_service", _speak(["media_player.kitchen", "media_player.hall"]), _key(), hass, data)
     await hass.async_block_till_done()

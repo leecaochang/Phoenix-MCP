@@ -11,7 +11,7 @@ If new requests arrive while you're looking at history, opening the workspace ag
 
 ## Search {#search}
 
-Finds requests by access key, tool, title or reason, among all the requests the Show choice covers.
+Finds requests by access key, OAuth app, tool, title or reason, among all the requests the Show choice covers.
 
 ## The list {#list}
 

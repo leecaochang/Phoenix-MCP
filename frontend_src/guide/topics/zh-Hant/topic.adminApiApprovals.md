@@ -31,6 +31,7 @@ POST   /api/phoenix-mcp/admin/approvals/{approval_id}/reject
 | `closure_reason` | 為什麼它未執行就結束，或為什麼執行失敗。取值見下文。 |
 | `result` | 核准後工具的結果。 |
 | `request_id`、`client_ip` | 發起請求的智慧體請求。 |
+| `oauth_app` | 透過 OAuth 登入發出請求的應用程式的 `name` 和 `host`；直接用金鑰發出的請求為 `null`。 |
 | `household_request`、`ha_user_id` | 家庭請求標誌，以及請求背後的 Home Assistant 使用者。 |
 | `execution_started_at` | 核准開始執行操作的時間。 |
 
@@ -44,6 +45,8 @@ phoenix_mcp_data_wiped     execution_interrupted
 execution_failed           agent_chat_ended
 agent_chat_wait_timed_out  integration_removed
 recovery_review_replaced   phoenix_mcp_restarted
+access_key_rotated         oauth_sign_in_removed
+oauth_turned_off           oauth_sign_in_ended
 ```
 
 相關：[核准](guide:window.approvals)、[它可能如何結束](guide:topic.approvalLifecycle#outcomes)
@@ -98,6 +101,7 @@ MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。
 | 409 | `conflict` | `adminError.approvalExpired` | 它已超過 `expires_at`，因此本次呼叫以 `expired` 關閉它。沒有執行任何內容。 |
 | 409 | `conflict` | `adminError.approvalAlreadyResolved` | 另一個請求先完成了它。 |
 | 404 | `not_found` | `adminError.approvalAccessKeyInactive` | 存取金鑰不再有效。Phoenix 以 `cancelled` 關閉核准，原因為 `access_key_inactive`。 |
+| 404 | `not_found` | `adminError.approvalCredentialEnded` | 請求之後金鑰已輪換，或發出請求的 OAuth 登入已結束。Phoenix 以 `cancelled` 關閉核准，原因為 `access_key_rotated` 或 `oauth_sign_in_ended`。 |
 | 403 | `forbidden` | `adminError.approvalCapabilityDenied` | 此金鑰的能力現在設為拒絕存取。Phoenix 以 `failed` 關閉核准，原因為 `capability_denied`。 |
 | 503 | `service_unavailable` | `adminError.killSwitchEngaged` | 緊急停止開關已開啟。Phoenix 以 `cancelled` 關閉核准，原因為 `kill_switch`。 |
 | 503 | `service_unavailable` | `adminError.approvalRecordFailed` | Phoenix 無法儲存執行標記。沒有執行任何內容，核准仍為待處理。 |
@@ -105,7 +109,7 @@ MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。
 | 500 | `internal_error` | `adminError.approvalExecutionUncertain` | 執行引發錯誤。Phoenix 以 `failed` 關閉核准，原因為 `execution_interrupted`，並且不會再提供它。 |
 | 500 | `internal_error` | `adminError.approvalOutcomeNotSaved` | 操作已完成，但 Phoenix 無法儲存其結果。Phoenix 不會再提供此核准，之後以 `failed` 關閉它，原因為 `execution_interrupted`。它的 `approval/executed` 或 `approval/failed` 稽核條目帶有 `finalization: "not_saved"`，記錄了實際發生的情況。 |
 
-其中三個錯誤聽起來是暫時的，但會永久關閉核准：`approvalAccessKeyInactive`、`approvalCapabilityDenied` 和 `killSwitchEngaged`。之後修復條件也不會讓它恢復。
+其中四個錯誤聽起來是暫時的，但會永久關閉核准：`approvalAccessKeyInactive`、`approvalCredentialEnded`、`approvalCapabilityDenied` 和 `killSwitchEngaged`。之後修復條件也不會讓它恢復。
 
 ### 核准多個 {#batch-approve}
 

@@ -61,6 +61,8 @@ R 用于触发是安全的：智能体可以看到这些实体，但无法运行
 
 智能体在运行输入中指定的实体不同：它[需要与目标相同的访问权限](guide:topic.tools#actions)。Phoenix 只能看到输入中直接写明的内容，所以由片段拼出实体 ID 的脚本能绕过这项检查。
 
+Phoenix 会检查 `script.turn_on`、按名称运行的脚本和 `automation.trigger` 的输入，无论脚本是通过其 ID、区域还是设备指定的。`homeassistant.turn_on`、`turn_off` 和 `toggle` 会把数据原样交给脚本而不经检查，因此它们只能在不带数据时运行脚本。
+
 通用恒温器和通用湿度调节器辅助元素同样以 Home Assistant 的身份动作。Phoenix 不会透过它们检查其驱动的开关。
 
 相关：[自动化和脚本](guide:topic.tools#automations)

@@ -437,7 +437,7 @@ class TestFullStack:
         })
         client = await aiohttp_client(fake.app())
         monkeypatch.setattr(
-            esphome_builder, "async_get_clientsession", lambda _hass: client.session)
+            esphome_builder, "_builder_session", lambda _hass: client.session)
         url = str(client.make_url("")).rstrip("/")
 
         with patch(_DASHBOARD_PATCH, return_value=SimpleNamespace(url=url)):

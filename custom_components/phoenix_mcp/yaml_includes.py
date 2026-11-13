@@ -15,6 +15,7 @@ import fnmatch
 import json
 import os
 import re
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -113,6 +114,29 @@ MSG_PACKAGE_DUPLICATE = (
 MSG_SECRETS = (
     "configuration.yaml routes {domain} to secrets.yaml, which Phoenix MCP never reads."
 )
+MSG_EXPECTED_HASH_STALE = (
+    "This configuration changed since you last read it (expected_hash no "
+    "longer matches). Re-read it and reapply your change."
+)
+MSG_CHANGED_SINCE_REVIEW = (
+    "This configuration changed after the change was reviewed, so nothing was written. "
+    "Read it again and ask again, so the current version is what gets reviewed."
+)
+MSG_UNBOUND_REVIEW = (
+    "This approval was not bound to the content it reviewed, so nothing was written. "
+    "Read the configuration again and ask again."
+)
+MSG_CHANGED_WHILE_WRITING = (
+    "This configuration changed while it was being written, so nothing was written. "
+    "Re-read it and reapply your change."
+)
+# What reviewed_hash binds for a target that did not exist; never a content_hash value.
+REVIEWED_ABSENT = "absent"
+
+# A content hash an entry must still have when it is written, with the refusal naming
+# whose hash it was. A None hash is not checked.
+HashCheck = tuple[str | None, str]
+
 MSG_NOT_FOUND = {
     "automation": "No automation found with id '{entry_id}'.",
     "script": "No script found with id '{entry_id}'.",
@@ -267,8 +291,20 @@ class PhoenixInputLoader(PhoenixLenientLoader):
 
 
 def is_secrets_file(path: str) -> bool:
-    """Whether a path is, or links to, a file named secrets.yaml in any case."""
-    return os.path.basename(os.path.realpath(path)).lower() == SECRETS_YAML
+    """Whether a path is, or links to, a secrets.yaml, by its folded name or by identity.
+
+    A case-insensitive filesystem opens ſecrets.yaml as secrets.yaml, and str.lower() keeps the
+    long s, so the name is compared after NFKC and casefold(), and the file itself against the
+    secrets.yaml beside it. A failed comparison counts as a match.
+    """
+    real = os.path.realpath(path)
+    if unicodedata.normalize("NFKC", os.path.basename(real)).casefold() == SECRETS_YAML:
+        return True
+    sibling = os.path.join(os.path.dirname(real), SECRETS_YAML)
+    try:
+        return os.path.exists(real) and os.path.exists(sibling) and os.path.samefile(real, sibling)
+    except OSError:
+        return True
 
 
 class SecretsFileError(yaml.YAMLError):
@@ -1435,21 +1471,23 @@ def automation_identity_conflict(
 def automation_write(
     config_dir: str, entry_id: str, config: dict, create: bool,
     expected_hash: str | None = None, dry_run: bool = False,
-    generated_id: bool = False,
+    generated_id: bool = False, reviewed_hash: str | None = None,
 ) -> OpResult:
     """Check and write an automation in one worker job under the domain lock.
 
-    A dry run is advisory; the committing call locates and checks again.
+    A dry run is advisory; the committing call locates and checks again. reviewed_hash is
+    what an approval's review showed, compared with the entry located here.
     """
     try:
-        return _automation_write_checked(config_dir, entry_id, config, create, expected_hash, dry_run, generated_id)
+        return _automation_write_checked(
+            config_dir, entry_id, config, create, expected_hash, dry_run, generated_id, reviewed_hash)
     except (OSError, UnicodeError, yaml.YAMLError):
         return OpResult(ok=False, error_kind="io_error", message="Cannot safely read or write the automation configuration. Check the YAML files and filesystem permissions before retrying.")
 
 
 def _automation_write_checked(
     config_dir: str, entry_id: str, config: dict, create: bool,
-    expected_hash: str | None, dry_run: bool, generated_id: bool,
+    expected_hash: str | None, dry_run: bool, generated_id: bool, reviewed_hash: str | None = None,
 ) -> OpResult:
     """Perform the checked operation without exposing parser payloads in errors."""
     layout = _layout_or_result(config_dir, "automation")
@@ -1470,7 +1508,8 @@ def _automation_write_checked(
         if len(matches) > 1:
             return OpResult(ok=False, error_kind="duplicate", message="Duplicate automation IDs exist; resolve them in Home Assistant before writing.")
         current = encode_tags(items[matches[0]]) if matches else None
-        conflict = automation_identity_conflict(entry_id, config, current, create=create, expected_hash=expected_hash)
+        conflict = (_hash_conflict(current, ((reviewed_hash, MSG_CHANGED_SINCE_REVIEW),))
+                    or automation_identity_conflict(entry_id, config, current, create=create, expected_hash=expected_hash))
         if conflict is not None:
             return conflict
         if not dry_run:
@@ -1487,7 +1526,8 @@ def _automation_write_checked(
             return _locate_error_result(exc)
         if (refusal := _create_id_refusal(layout, entry_id, exc, generated_id=generated_id)) is not None:
             return refusal
-        conflict = automation_identity_conflict(entry_id, config, None, create=True, expected_hash=expected_hash)
+        conflict = (_hash_conflict(None, ((reviewed_hash, MSG_CHANGED_SINCE_REVIEW),))
+                    or automation_identity_conflict(entry_id, config, None, create=True, expected_hash=expected_hash))
         if conflict is not None:
             return conflict
         route = _create_route(layout, "automation")
@@ -1503,7 +1543,8 @@ def _automation_write_checked(
         if refusal is not None:
             return refusal
     current = encode_tags(located.config)
-    conflict = automation_identity_conflict(entry_id, config, current, create=create, expected_hash=expected_hash)
+    conflict = (_hash_conflict(current, ((reviewed_hash, MSG_CHANGED_SINCE_REVIEW),))
+                or automation_identity_conflict(entry_id, config, current, create=create, expected_hash=expected_hash))
     if conflict is not None:
         return conflict
     if contains_include_tags(located.config):
@@ -1513,8 +1554,23 @@ def _automation_write_checked(
     return _write_entry_files(located, "automation", config, config_dir)
 
 
-def perform_edit(config_dir: str, domain: str, entry_id: str, config: dict) -> OpResult:
-    """Replace an entry's config in place in the domain's editor file."""
+def _hash_conflict(current: Any, checks: tuple[HashCheck, ...]) -> OpResult | None:
+    """The first check the tag-encoded current entry fails, as a conflict, or None."""
+    observed = content_hash(current) if current is not None else REVIEWED_ABSENT
+    for expected, message in checks:
+        if expected is not None and observed != expected:
+            return OpResult(ok=False, error_kind="conflict", message=message)
+    return None
+
+
+def perform_edit(
+    config_dir: str, domain: str, entry_id: str, config: dict, *, checks: tuple[HashCheck, ...] = (),
+) -> OpResult:
+    """Replace an entry's config in place in the domain's editor file.
+
+    Every check is compared with the entry located in this same call, so a change made since
+    the caller's read is refused before anything is written.
+    """
     layout = _layout_or_result(config_dir, domain)
     if isinstance(layout, OpResult):
         return layout
@@ -1527,6 +1583,12 @@ def perform_edit(config_dir: str, domain: str, entry_id: str, config: dict) -> O
             ok=False, error_kind="refused",
             message=MSG_INCLUDE_REFUSAL.format(name=os.path.basename(located.ref_file)),
         )
+    refusal = _hand_written_refusal(located, domain, config_dir)
+    if refusal is not None:
+        return refusal
+    conflict = _hash_conflict(encode_tags(located.config), checks)
+    if conflict is not None:
+        return conflict
     return _write_entry_files(located, domain, config, config_dir)
 
 
@@ -1549,15 +1611,7 @@ def perform_delete(
         return refusal
     encoded_before = encode_tags(located.config)
     if expected_hash is not None and content_hash(encoded_before) != expected_hash:
-        return OpResult(
-            ok=False,
-            error_kind="conflict",
-            message=(
-                "This configuration changed since you last read it (expected_hash no "
-                "longer matches). Re-read it and reapply your change."
-            ),
-        )
-
+        return OpResult(ok=False, error_kind="conflict", message=MSG_EXPECTED_HASH_STALE)
 
     new_text = _splice(located.ref_text, located.start_line, located.end_line, None)
     index = _entry_index(located.ref_text, located.start_line)
@@ -1671,6 +1725,112 @@ def _create_append(path: str, shape: str, entry_id: str, config: dict) -> OpResu
         )
     write_utf8_file_atomic(path, new_text)
     return OpResult(ok=True, file=path)
+
+
+_MSG_EXISTS = {
+    "script": "A script with id '{entry_id}' already exists. Use edit_script to update it.",
+    "scene": "A scene with id '{entry_id}' already exists.",
+    "automation": "An automation with id '{entry_id}' already exists.",
+}
+
+
+def write_entry(
+    config_dir: str, domain: str, entry_id: str, *, mode: str, config: dict | None = None,
+    checks: tuple[HashCheck, ...] = (),
+) -> OpResult:
+    """Create, edit or delete one entry in a single worker job, routed or through the fallback.
+
+    mode is "create", "edit" or "delete". Checks are compared with the entry as this call finds
+    it. A delete's first check, when given, is its reviewed hash.
+    """
+    try:
+        if mode == "create":
+            op = perform_create(config_dir, domain, entry_id, config or {})
+        elif mode == "edit":
+            op = perform_edit(config_dir, domain, entry_id, config or {}, checks=checks)
+        else:
+            op = _checked_delete(config_dir, domain, entry_id, checks)
+        if not op.fallback:
+            return op
+        return _fallback_write(config_dir, domain, entry_id, mode, config, checks)
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return OpResult(ok=False, error_kind="io_error", message=(
+            f"Cannot safely read or write the {domain} configuration. Check the YAML files and "
+            "filesystem permissions before retrying."
+        ))
+
+
+def _checked_delete(config_dir: str, domain: str, entry_id: str, checks: tuple[HashCheck, ...]) -> OpResult:
+    """perform_delete after every check but the first, which perform_delete compares itself."""
+    layout = _layout_or_result(config_dir, domain)
+    if isinstance(layout, OpResult):
+        return layout
+    if len(checks) > 1:
+        try:
+            located = locate_entry(layout, entry_id)
+        except LocateError as exc:
+            return _locate_error_result(exc)
+        conflict = _hash_conflict(encode_tags(located.config), checks[1:])
+        if conflict is not None:
+            return conflict
+    return perform_delete(config_dir, domain, entry_id, checks[0][0] if checks else None)
+
+
+def _fallback_write(
+    config_dir: str, domain: str, entry_id: str, mode: str, config: dict | None,
+    checks: tuple[HashCheck, ...],
+) -> OpResult:
+    """Rewrite the editor file when configuration.yaml cannot be read, keeping tags opaque.
+
+    Refuses a file using !include, duplicate ids and a file outside the configuration
+    directory. !secret and !env_var values are written back as the tags they were.
+    """
+    path = os.path.join(config_dir, DEFAULT_FILES[domain])
+    name = DEFAULT_FILES[domain]
+    if _resolve_include_path(os.path.join(config_dir, CONFIGURATION_YAML), path, config_dir) is None:
+        return OpResult(ok=False, error_kind="refused", message=f"{name} is outside the configuration directory.")
+    if is_secrets_file(path):
+        raise SecretsFileError("secrets.yaml is never read.")
+    shape = _DOMAIN_SHAPES[domain]
+    items: Any = load_tagged(path) if os.path.isfile(path) else None
+    if items is None:
+        items = [] if shape == "list" else {}
+    if contains_include_tags(items):
+        return OpResult(ok=False, error_kind="refused", message=MSG_INCLUDE_REFUSAL.format(name=name))
+    if shape == "list":
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            return OpResult(ok=False, error_kind="refused", message=f"{name} must be a list of entries for fallback editing.")
+        matches = [index for index, item in enumerate(items) if _entry_matches(domain, item, entry_id)]
+        if len(matches) > 1:
+            return OpResult(ok=False, error_kind="duplicate", message=MSG_DUPLICATE.format(
+                domain=domain, entry_id=entry_id, files=name))
+        current = encode_tags(items[matches[0]]) if matches else None
+    else:
+        if not isinstance(items, dict):
+            return OpResult(ok=False, error_kind="refused", message=f"{name} must be a mapping of entries for fallback editing.")
+        current = encode_tags(items[entry_id]) if entry_id in items else None
+    if mode == "create":
+        if current is not None:
+            return OpResult(ok=False, error_kind="already_exists", message=_MSG_EXISTS[domain].format(entry_id=entry_id))
+    elif current is None:
+        return OpResult(ok=False, error_kind="not_found", message=MSG_NOT_FOUND[domain].format(entry_id=entry_id))
+    else:
+        conflict = _hash_conflict(current, checks)
+        if conflict is not None:
+            return conflict
+    if shape == "list":
+        if mode == "create":
+            items.append(config)
+        elif mode == "edit":
+            items[matches[0]] = config
+        else:
+            items.pop(matches[0])
+    elif mode == "delete":
+        del items[entry_id]
+    else:
+        items[entry_id] = config
+    write_utf8_file_atomic(path, in_existing_line_ending(path, dump_tagged(items)))
+    return OpResult(ok=True, before=current, file=path)
 
 
 def read_entry(config_dir: str, domain: str, entry_id: str) -> Any:

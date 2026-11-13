@@ -2,7 +2,7 @@
 
 Phoenix ships no model id as a default, as one would rot. Each account caches the provider's
 live catalogue, and from that alone ``best_model`` picks for automatic mode and ``successor``
-maps a dropped id to the newest of its family, else the best overall.
+maps a dropped id to the newest of its family, else of its tier.
 
 Pure over ids and optional creation timestamps. The ranking is a heuristic, so it decides only
 automatic mode and vanished ids; an explicit choice the provider lists is never overridden.
@@ -46,6 +46,12 @@ TIER_PREFERENCES: dict[str, tuple[str, ...]] = {
 # How aggregators mark a free variant of a model.
 FREE_MODEL_SUFFIX = ":free"
 
+# The account kind whose models run on the operator's own server. Its cloud models
+# (tagged "cloud" by Ollama) send everything to ollama.com, so no automatic choice
+# takes one, and a retired model is replaced only within its family.
+LOCAL_KIND = "ollama"
+_OLLAMA_CLOUD_TAG_RE = re.compile(r":(?:[^:/]*-)?cloud$")
+
 # Markers of a model the provider has not finished. A stable model always ranks
 # ahead of one of these in the same tier.
 _PRERELEASE_RE = re.compile(r"(?:^|[-_:/.])(?:preview|exp|experimental|beta|alpha|rc\d*|dev)(?:$|[-_:/.])")
@@ -66,6 +72,11 @@ _SPLIT_RE = re.compile(r"[-_:/\s]+")
 # A parameter count or size ("70b", "8b", "27b") belongs to the family; a version
 # ("3.8", "v4", "4o", "20251001") does not.
 _SIZE_TOKEN_RE = re.compile(r"^\d+(?:\.\d+)?[bkmt]$")
+
+
+def ollama_cloud_model(model_id: str) -> bool:
+    """Whether an Ollama model name carries the cloud tag (``gpt-oss:120b-cloud``, ``glm-4.6:cloud``)."""
+    return _OLLAMA_CLOUD_TAG_RE.search(model_id.lower()) is not None
 
 
 def family_key(model_id: str) -> str:
@@ -135,18 +146,21 @@ def successor(
     kind: str, retired: str, models: Sequence[str],
     created: Mapping[str, float] | None = None,
 ) -> str:
-    """The model that replaces a dropped id: its own family first, then the best overall.
+    """The model that replaces a dropped id: its own family first, then its own named tier.
 
-    A dropped ``:free`` id takes only another free model, or "" when none is listed, so that a
-    retirement never starts charging the account.
+    "" when neither has a model, so the retired id stays and the account shows it as gone rather
+    than switching to another tier at another price. A dropped ``:free`` id takes the best other
+    free model, as nothing starts charging, and a local Ollama id only its own family.
     """
-    if retired.endswith(FREE_MODEL_SUFFIX):
-        models = [m for m in models if m.endswith(FREE_MODEL_SUFFIX)]
-    if not models:
-        return ""
     family = family_key(retired)
+    if retired.endswith(FREE_MODEL_SUFFIX):
+        free = [m for m in models if m.endswith(FREE_MODEL_SUFFIX)]
+        return best_model(kind, [m for m in free if family and family_key(m) == family] or free, created)
     same = [m for m in models if family and family_key(m) == family]
-    return best_model(kind, same or models, created)
+    tier = _tier(kind, retired)
+    if same or kind == LOCAL_KIND or tier >= len(TIER_PREFERENCES.get(kind, ())):
+        return best_model(kind, same, created)
+    return best_model(kind, [m for m in models if _tier(kind, m) == tier], created)
 
 
 def effective_model(
@@ -154,17 +168,22 @@ def effective_model(
     created: Mapping[str, float] | None = None,
     eligible: Sequence[str] | None = None,
     replacements: Mapping[str, str] | None = None,
+    excluded: Sequence[str] = (),
 ) -> tuple[str, str]:
     """Return the model a request should use, and the id it replaced ("" if none).
     Empty ``stored`` means the best eligible model. A stored id stays unless the provider
     listed it and then dropped it; an empty catalogue changes nothing. ``eligible`` narrows
-    the pool only. ``replacements`` holds the successor a provider named for a model.
+    the pool only; ``excluded`` and a local server's cloud models never join it. ``replacements``
+    holds the successor a provider named for a model.
     """
-    pool = eligible if eligible else catalogue
+    skipped = set(excluded)
+    pool = [m for m in (eligible if eligible else catalogue) if m not in skipped
+            and not (kind == LOCAL_KIND and ollama_cloud_model(m))]
     if not stored:
         return best_model(kind, pool, created), ""
     if catalogue and stored not in catalogue and stored in seen:
         named = (replacements or {}).get(stored)
-        replacement = named if named in catalogue else successor(kind, stored, pool, created)
+        replacement = (named if named in catalogue and named not in skipped
+                       else successor(kind, stored, pool, created))
         return (replacement, stored) if replacement else (stored, "")
     return stored, ""

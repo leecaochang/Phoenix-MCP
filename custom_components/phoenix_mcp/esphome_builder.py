@@ -21,7 +21,7 @@ from typing import Any
 
 import aiohttp
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .esphome_constants import (
     ESPHOME_BUILDER_OUTPUT_MAX_CHARS, ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
@@ -29,6 +29,32 @@ from .esphome_constants import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Where the redirect-refusing Builder session is kept for the life of Home Assistant.
+_SESSION_KEY = "phoenix_mcp_esphome_builder_session"
+
+
+class BuilderRedirected(aiohttp.ClientError):
+    """The Builder address answered with a redirect, which Phoenix never follows."""
+
+
+async def _refuse_redirect(_session: Any, _context: Any, _params: Any) -> None:
+    raise BuilderRedirected("The ESPHome Device Builder answered with a redirect.")
+
+
+def _builder_session(hass: HomeAssistant) -> aiohttp.ClientSession:
+    """The session Builder connections use: it refuses every redirect before following it.
+
+    aiohttp's ws_connect has no redirect switch, and whatever answers at the Builder address
+    could otherwise send the connection to any host.
+    """
+    session = hass.data.get(_SESSION_KEY)
+    if session is None or session.closed:
+        trace = aiohttp.TraceConfig()
+        trace.on_request_redirect.append(_refuse_redirect)
+        session = async_create_clientsession(hass, trace_configs=[trace])
+        hass.data[_SESSION_KEY] = session
+    return session
 
 # Every command Phoenix MCP may send, in two bands.
 #
@@ -356,7 +382,7 @@ async def async_builder_command(
         # Before any network work: this is the allowlist boundary, not a hint.
         raise ValueError(f"Command not allowed for the Device Builder client: {command}")
 
-    session = async_get_clientsession(hass)
+    session = _builder_session(hass)
     collector = _OutputCollector(_max_chars(max_chars), head_ratio, scrub_output) if collect_output else None
     endpoint = f"{url.rstrip('/')}/ws"
 
@@ -466,7 +492,7 @@ async def async_builder_capture(
         # Before any network work, exactly as in async_builder_command.
         raise ValueError(f"Command not allowed for the Device Builder client: {command}")
 
-    session = async_get_clientsession(hass)
+    session = _builder_session(hass)
     collector = _OutputCollector(_max_chars(max_chars), scrub=scrub_output)
 
     try:

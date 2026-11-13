@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, TYPE_CHECKING
@@ -21,15 +21,20 @@ if TYPE_CHECKING:
     from .access_key_store import AccessKeyRecord
 
 
-def build_permitted_states(access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+def build_permitted_states(
+    access_key: AccessKeyRecord, hass: HomeAssistant, only: Collection[str] | None = None,
+) -> dict:
     """Return {entity_id: ScrubbedState} for the entities an access key may read.
 
-    The one source for template sandboxes, filtered by resolve() and assist_expose_check.
+    The one source for template sandboxes, filtered by resolve() and assist_expose_check;
+    ``only`` limits it to those entity IDs.
     """
     expose = assist_expose_check(access_key, hass)
+    states = hass.states.async_all() if only is None else [
+        state for entity_id in only if (state := hass.states.get(entity_id)) is not None]
     return {
         s.entity_id: ScrubbedState(s, scrub_attributes(s.attributes, access_key, hass))
-        for s in hass.states.async_all()
+        for s in states
         if resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
         and (expose is None or expose(s.entity_id))
     }
@@ -193,11 +198,12 @@ def safe_template_env() -> Any:
     return _SAFE_TEMPLATE_ENV
 
 
-def render_template_snapshot(template_str: str, permitted: dict) -> str:
+def render_template_snapshot(template_str: str, permitted: dict, data: dict | None = None) -> str:
     """Render a Jinja2 template against a detached snapshot of permitted state.
 
-    Uses safe_template_env() with permission-restricted state helpers and pure time shims.
-    Raises TemplateError, ValueError or jinja2 errors; callers map them to invalid_request.
+    Uses safe_template_env() with permission-restricted state helpers and pure time shims;
+    ``data`` adds plain caller variables, which never replace those. Raises TemplateError,
+    ValueError or jinja2 errors; callers map them to invalid_request.
     """
     # Local: not part of the recorded Home Assistant import floor.
     from homeassistant.helpers.template import MAX_TEMPLATE_OUTPUT
@@ -254,6 +260,7 @@ def render_template_snapshot(template_str: str, permitted: dict) -> str:
         return value if dt_util.now() > value else dt_util.get_time_remaining(value, precision)
 
     variables = {
+        **(data or {}),
         "states": filtered_states,
         "state_attr": _state_attr,
         "is_state": _is_state,

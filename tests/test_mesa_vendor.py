@@ -300,7 +300,52 @@ def test_vendor_copies_revision_blobs_despite_ignored_files_and_copy_race(tmp_pa
     record = json.loads(manifest.read_text())
     assert record['source_revision'] == revision
     assert record['source_version'] == '9.9.9'
-    assert set(record['files']) == {'__init__.py', sync._MODIFICATIONS_NAME}
+    assert set(record['files']) == {'__init__.py', sync._MODIFICATIONS_NAME, sync._PROVENANCE_NAME}
+    shipped = json.loads((destination / sync._PROVENANCE_NAME).read_text())
+    assert shipped['source_revision'] == revision
+    assert shipped['source_repository'] == 'https://example.invalid/mesa-core.git'
+    assert set(shipped['files']) == {'__init__.py', sync._MODIFICATIONS_NAME}
+    assert str(tmp_path) not in (destination / sync._PROVENANCE_NAME).read_text()
+
+
+def test_the_installed_copy_names_its_upstream_revision_without_a_local_path():
+    import json
+
+    sync = _sync_module()
+    manifest = json.loads(pathlib.Path(sync.MANIFEST).read_text(encoding="utf-8"))
+    text = (pathlib.Path(sync.DEST) / sync._PROVENANCE_NAME).read_text(encoding="utf-8")
+    shipped = json.loads(text)
+    for key in ("source_repository", "source_revision", "source_tag", "source_version"):
+        assert shipped[key] == manifest[key], key
+    assert shipped["source_repository"].startswith("https://")
+    assert "/Users/" not in text and "/home/" not in text
+    assert shipped["files"] == {name: digest for name, digest in manifest["files"].items()
+                                if name != sync._PROVENANCE_NAME}
+
+
+def test_check_refuses_a_stale_provenance_record(tmp_path, monkeypatch):
+    import json
+    import shutil
+
+    sync = _sync_module()
+    destination = tmp_path / "mesa_core"
+    shutil.copytree(sync.DEST, destination, ignore=shutil.ignore_patterns("__pycache__", "_VENDORED.txt"))
+    manifest = tmp_path / "manifest.json"
+    shutil.copy(sync.MANIFEST, manifest)
+    monkeypatch.setattr(sync, "DEST", destination)
+    monkeypatch.setattr(sync, "MANIFEST", manifest)
+    assert sync.check() == 0
+    record = json.loads((destination / sync._PROVENANCE_NAME).read_text(encoding="utf-8"))
+    record["source_revision"] = "0" * 40
+    (destination / sync._PROVENANCE_NAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    assert sync.check() == 1
+
+
+def test_a_local_origin_never_reaches_the_shipped_record(tmp_path, monkeypatch):
+    sync = _sync_module()
+    monkeypatch.setattr(sync, "DEST", tmp_path)
+    with pytest.raises(SystemExit, match="https"):
+        sync._provenance_text("1.0.0", {"source_repository": "/srv/mesa-core", "source_revision": "a" * 40})
 
 
 _PREFIX = "custom_components.phoenix_mcp.mesa_core"

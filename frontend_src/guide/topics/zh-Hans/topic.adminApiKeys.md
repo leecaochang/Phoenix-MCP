@@ -162,7 +162,7 @@ DELETE /api/phoenix-mcp/admin/access-keys/archived/{id}
 | `rate_limit_burst` | integer | 0 到 100000。 |
 | `persona` | string | 以下之一：`home_companion`、`read_only`、`voice_assistant`、`automation_builder`、`power_user`、`home_admin`、`new_user`、`dashboard_designer`、`maintenance`、`esphome`、`custom`。 |
 | `notes` | string 或 null | 最多 2000 个字符，在行尾变为 LF 并去除首尾空格之后。控制字符、双向覆盖字符和标签字符会被拒绝。`null` 或 `""` 会清除备注。 |
-| `oauth_enabled` | boolean | 开启它会打开登录窗口期。关闭它会结束该密钥的每个 OAuth 登录。 |
+| `oauth_enabled` | boolean | 开启它会打开登录窗口期。关闭它会结束该密钥的每个 OAuth 登录，并取消这些登录排队的审批，原因为 `oauth_turned_off`。 |
 | `cap_*` | string | 任意[能力字段](guide:#capability-fields)：`deny`、`allow` 或 `confirm`。 |
 
 PATCH 拒绝不在此表中的任何字段，且 `expires_at` 根本无法更改。
@@ -214,6 +214,8 @@ PATCH 拒绝不在此表中的任何字段，且 `expires_at` 根本无法更改
 ### 轮换密钥 {#key-rotate}
 
 `POST /access-keys/{id}/rotate` 为密钥提供新值，不接受正文。旧值以及该密钥的每个 OAuth 登录都会立即失效。密钥保留其速率限制状态和计数。
+
+轮换还会取消该密钥所有等待中的审批，原因为 `access_key_rotated`，因为持有旧值的人可能排队了这些请求。
 
 响应为 `200`，包含记录以及 `access_key`，即新值。与创建时一样，Phoenix 只显示一次。Phoenix 触发 `phoenix_mcp_access_key_rotated` 事件，包含 `access_key_id`、`access_key_name`、`rotated_by` 和 `timestamp`。
 
@@ -267,7 +269,7 @@ POST   /api/phoenix-mcp/admin/oauth/requests/{request_id}/deny
 
 `DELETE /access-keys/{id}/oauth/window` 提前关闭登录窗口期，并返回同样的状态。紧急停止开关开启时它也能使用。
 
-`DELETE /access-keys/{id}/oauth/sign-ins/{sign_in_id}` 结束一个登录并返回 `204`。紧急停止开关开启时它也能使用。
+`DELETE /access-keys/{id}/oauth/sign-ins/{sign_in_id}` 结束一个登录并返回 `204`。它还会取消该登录排队的审批，原因为 `oauth_sign_in_removed`。紧急停止开关开启时它也能使用。
 
 `GET /oauth/requests/{request_id}` 返回一个等待中的请求。其字段为 `client_id`、`client_host`、`client_name`、`verified`、`problem` 和 `redirect_host`。它还有 `loopback_only`、`created_at`、`expires_at` 和 `keys`。打开它会获取一次应用的元数据文档。`keys` 列出此请求当前可以批准使用的密钥。
 

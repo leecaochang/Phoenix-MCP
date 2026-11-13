@@ -247,19 +247,31 @@ async def test_non_english_never_sends(hass,decision_home,language):
 
 
 async def test_real_http_timeout_is_bounded_and_not_retried(socket_enabled):
+    """The request carries the configured deadline; firing it once the server holds the request ends the call."""
+    from aiohttp.helpers import TimeoutHandle
     entered=asyncio.Event();release=asyncio.Event();calls=0
     async def handler(request):
         nonlocal calls
         calls+=1;entered.set();await release.wait()
         return web.json_response(response())
     app=web.Application();app.router.add_post('/systemone',handler)
+    loop=asyncio.get_running_loop()
     async with TestServer(app) as server, ClientSession() as session:
         cfg=llm_accounts.ProviderConfig('typesafe','m',str(server.make_url('')).rstrip('/'))
+        started=loop.time()
+        call=asyncio.create_task(DecisionProvider(cfg,'systemone').classify(session,'command',60000))
         try:
-            with pytest.raises((TimeoutError,DecisionError)):
-                await DecisionProvider(cfg,'systemone').classify(session,'command',20)
-        finally:release.set()
-    assert entered.is_set() and calls==1
+            await entered.wait()
+            # Fire the client's own deadline instead of racing a short wall-clock one.
+            deadlines=[handle for handle in loop._scheduled if not handle.cancelled()
+                       and isinstance(getattr(handle._callback,'__self__',None),TimeoutHandle)]
+            assert len(deadlines)==1 and started+59<=deadlines[0].when()<=started+61
+            fire=deadlines[0]._callback;deadlines[0].cancel();fire()
+            with pytest.raises(DecisionError,match='timeout'):
+                await call
+        finally:
+            release.set();call.cancel()
+    assert calls==1
 
 
 @pytest.mark.parametrize('local_reason,expected', [('supported',0),('no_match',1),('timeout',0),('sentence_trigger',0)])

@@ -544,6 +544,10 @@ substitutions:
   admin_pass: ADMINPASS
   bypass_mode: KEEPTHISBYPASS
   compass: KEEPTHISCOMPASS
+# A substitution the file never uses is masked, as a package may use it as a credential.
+logger:
+  level: ${bypass_mode}
+  hardware_uart: ${compass}
 """
 
 

@@ -554,7 +554,8 @@
       "importReplaceHelp": "添加文件中的策略，替换相同目标的现有策略。此操作无法撤销。",
       "viewAutomationsHelp": "显示或隐藏 MESA 只能部分检查的自动化，因为它们使用了模板或蓝图。",
       "openOrphanHelp": "在策略编辑器中打开此策略，您可以在那里删除它。它覆盖的对象已不存在。",
-      "dismissNoticeHelp": "在此浏览器中隐藏此提示。“恢复已忽略的提示”可将其恢复。"
+      "dismissNoticeHelp": "在此浏览器中隐藏此提示。“恢复已忽略的提示”可将其恢复。",
+      "comboMatchCount": "匹配项：{count}"
     },
     "selectBy": {
       "area": "区域",
@@ -622,6 +623,7 @@
       "approvalReasonString": "reason 必须是字符串。",
       "approvalRecordFailed": "运行前无法记录此审批。未执行任何操作，请重试。",
       "approvalAccessKeyInactive": "此访问密钥已不再有效，因此此请求无法执行。未执行任何操作。",
+      "approvalCredentialEnded": "访问密钥已轮换或应用的登录已结束，因此此请求无法执行。未执行任何操作。",
       "assistExposurePassThroughOnly": "use_assist_exposure 仅适用于 pass_through 访问密钥。",
       "assistPipelineFailed": "无法创建 Assist 流水线。",
       "assistPipelineUnavailable": "此 Home Assistant 上无法使用 Assist 流水线。",
@@ -940,8 +942,8 @@
       "energyDashboard": "能源仪表盘",
       "cardNoun": "卡片",
       "previewErrorHead": {
-        "one": "此预览中的一张卡片报告了配置错误。如有需要，请复制下方消息并粘贴给智能体，让它修复该卡片。",
-        "other": "此预览中的卡片报告了配置错误。如有需要，请复制下方消息并粘贴给智能体，让它修复这些卡片。"
+        "one": "此预览中有 {count} 张卡片报告了配置错误。如有需要，请复制下方消息并粘贴给智能体，让它修复这些卡片。",
+        "other": "此预览中有 {count} 张卡片报告了配置错误。如有需要，请复制下方消息并粘贴给智能体，让它修复这些卡片。"
       },
       "previewTextAlternative": "预览将卡片显示为图片。选择“{diff}”可以文字形式阅读此更改。",
       "byAdmin": "管理员"
@@ -1244,7 +1246,11 @@
         "phoenix_mcp_restarted": "Home Assistant 重启时已取消",
         "phoenix_mcp_data_wiped": "清除 Phoenix MCP 数据时已取消",
         "integration_removed": "移除 Phoenix MCP 时已取消",
-        "recovery_review_replaced": "配置已更改；已由新的审核取代"
+        "recovery_review_replaced": "配置已更改；已由新的审核取代",
+        "access_key_rotated": "轮换访问密钥时已取消",
+        "oauth_sign_in_removed": "移除应用的登录时已取消",
+        "oauth_turned_off": "关闭 OAuth 登录时已取消",
+        "oauth_sign_in_ended": "应用的登录已结束，因此已取消"
       },
       "reasonExecutionFailedDetail": "执行失败：{detail}",
       "reject": "拒绝",
@@ -2436,8 +2442,8 @@
       "dashboard_resource.create.title": "添加仪表盘资源 {url}",
       "dashboard_resource.update.title": "更改仪表盘资源 {url}",
       "dashboard_resource.delete.title": "移除仪表盘资源 {url}",
-      "dashboard_resource.create.body": "每个打开仪表盘的浏览器都会加载 {url}。JavaScript 文件会以该用户的 Home Assistant 访问权限运行，因此请只批准您信任的文件。",
-      "dashboard_resource.update.body": "这将更改每个浏览器打开仪表盘时加载的文件。请在下方比较当前文件和拟议文件。",
+      "dashboard_resource.create.body": "每个打开仪表盘的浏览器，以及打开 Phoenix MCP 面板的管理员浏览器，都会加载 {url}。JavaScript 文件会以该用户的 Home Assistant 访问权限运行，因此请只批准您信任的文件。",
+      "dashboard_resource.update.body": "这将更改每个浏览器打开仪表盘时、以及管理员浏览器打开 Phoenix MCP 面板时加载的文件。请在下方比较当前文件和拟议文件。",
       "dashboard_resource.delete.body": "仪表盘将不再加载 {url}。来自该文件的卡片在重新添加之前会显示错误。",
       "edit_energy_config.fallback.body": "这将更新 Home Assistant 仪表盘配置。",
       "edit_energy_config.fallback.title": "更改能源仪表盘配置",
@@ -3158,11 +3164,13 @@
       "chooseKeyHelp": "选择此应用将获得其权限的访问密钥。",
       "keyAtCap": "{name}（登录数已达上限）",
       "requestExpires": "此请求将在 {time} 后结束",
+      "requestEndsAt": "此请求将于 {time} 结束。",
+      "requestEndingSoon": "批准此请求的剩余时间不足一分钟。",
       "requestExpired": "此登录请求已结束。请从应用重新开始。",
       "approve": "批准",
       "approveHelp": "让此应用使用所选访问密钥，并将登录交回应用。",
       "deny": "拒绝访问",
-      "denyHelp": "拒绝此登录并通知应用。",
+      "denyHelp": "拒绝此登录，并在应用地址已验证时通知应用。",
       "close": "关闭",
       "approvedLeaving": "已批准。正在返回应用…",
       "deniedLeaving": "已拒绝访问。正在返回应用…",
@@ -3213,6 +3221,9 @@
     "local_unauthorized": "此访问密钥已不再获得授权。",
     "local_state_matched": "Home Assistant 报告已达到请求的状态。",
     "local_state_unconfirmed": "命令已发送。Home Assistant 尚未确认请求的状态。",
+    "local_operation_matched": "操作：{operation}。Home Assistant 报告已达到请求的状态。",
+    "local_operation_unconfirmed": "操作已发送：{operation}。Home Assistant 尚未确认请求的状态。",
+    "decision_operation_unconfirmed": "我无法确认要执行的操作，因此没有运行此命令。请清楚地再说一遍，说明操作和设备。",
     "local_summary_count": "在我有权访问且已向 Assist 公开的实体中，状态为 {state} 的有 {matched} 个，共 {total} 个。状态未知或不可用的有 {unknown} 个。",
     "local_summary_total": "我有权访问且已向 Assist 公开的实体共有 {total} 个。状态未知或不可用的有 {unknown} 个。",
     "local_summary_breakdown": "我有权访问且已向 Assist 公开的实体共有 {total} 个。{summary}。",

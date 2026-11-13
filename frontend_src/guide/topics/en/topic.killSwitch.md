@@ -7,6 +7,7 @@ The kill switch cuts off every way an AI can reach your home through Phoenix. It
 
 - External apps connected over MCP are refused. Requests already running stop at their next check.
 - Agent Chat closes, and can't be opened again.
+- A running Agent Chat, Voice or AI Task turn sends nothing more to its AI model. A Voice or AI Task reply still arriving is cut off within a second.
 - The Voice Agent only replies that it's unavailable.
 - The AI Task entity becomes unavailable.
 - Assist Tool Provider offers no tools.

@@ -25,6 +25,8 @@ Phoenix 的传感器会继续计数，通知仍会到达。
 
 等待审批的请求、你的审批决定，以及在更改可能已运行时中断的请求始终会被记录。
 
+每个密钥每分钟的前 30 个被拒绝请求各有一条条目。该分钟内其余的请求共用一条条目，并在其负载中计数。
+
 ### {{label:settings.logRateLimitedLabel}} {#log-rate-limited}
 
 记录因密钥发送过多而被拒绝的请求。默认开启。
@@ -38,6 +40,8 @@ Phoenix 的传感器会继续计数，通知仍会到达。
 ### {{label:settings.maxLogEntriesLabel}} {#log-max-entries}
 
 审计日志保留多少条目：100、1,000、5,000 或 10,000（默认）。降低它会立即移除最旧的条目。磁盘上的副本会在下次保存时缩小。
+
+审批和管理员条目单独保留，数量上限相同，因此其他请求不会将它们挤出。
 
 ## {{label:conversations.title}} {#conversation-log}
 

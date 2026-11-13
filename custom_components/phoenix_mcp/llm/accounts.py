@@ -24,6 +24,7 @@ from ..provider_constants import (
     AGENT_CHAT_GROK_US_BASE_URL, AGENT_CHAT_GROQ_BASE_URL, AGENT_CHAT_INFRON_BALANCE_URL,
     AGENT_CHAT_INFRON_BASE_URL, AGENT_CHAT_KIMI_BASE_URL,
     AGENT_CHAT_KIMI_CHINA_BASE_URL, AGENT_CHAT_LEARNABLE_OPTIONS, AGENT_CHAT_LEARNED_REFUSAL_TTL_DAYS,
+    AGENT_CHAT_MAX_CATALOG_MODELS, AGENT_CHAT_MAX_MODEL_ID_LENGTH,
     AGENT_CHAT_MAX_TOOLS_PER_REQUEST, AGENT_CHAT_META_BASE_URL, AGENT_CHAT_MIMO_BASE_URL,
     AGENT_CHAT_MIMO_TOKEN_PLAN_AMS_BASE_URL, AGENT_CHAT_MIMO_TOKEN_PLAN_BASE_URL,
     AGENT_CHAT_MIMO_TOKEN_PLAN_SGP_BASE_URL, AGENT_CHAT_MINIMAX_BASE_URL,
@@ -49,6 +50,54 @@ _MODEL_SEEN_LIMIT = 1000
 # What a probe finds and a provider's catalogue may not state, and the successor a provider named,
 # which must outlive the model's own row once the catalogue drops it.
 _PROBED_CAPABILITIES = ("effort_levels", "temperature", "replacement")
+
+
+# Bounds on a stored capability row's own keys and text values; model ids use the catalogue's.
+_CAPABILITY_KEY_LENGTH = 64
+_CAPABILITY_LIST_ITEMS = 32
+
+
+def _stored_text(value: Any, limit: int) -> bool:
+    """Whether provider text may be stored: printable and within `limit`.
+
+    isprintable also refuses a lone surrogate, which would fail every later Store save.
+    """
+    return isinstance(value, str) and 0 < len(value) <= limit and value.isprintable()
+
+
+def _stored_value(value: Any) -> Any:
+    """A capability value fit to store, or None when it is not."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value if abs(value) <= 9_007_199_254_740_991 else None
+    if isinstance(value, str):
+        return value if _stored_text(value, AGENT_CHAT_MAX_MODEL_ID_LENGTH) else None
+    if isinstance(value, list) and len(value) <= _CAPABILITY_LIST_ITEMS:
+        kept = [item for item in value if _stored_text(item, AGENT_CHAT_MAX_MODEL_ID_LENGTH)]
+        return kept if len(kept) == len(value) else None
+    return None
+
+
+def _stored_capabilities(capabilities: Any) -> dict[str, dict]:
+    """Provider-declared capabilities within the bounds every stored provider string keeps.
+
+    A row under an id that could not be a catalogue model, and any key or value out of bounds, is
+    dropped rather than stored.
+    """
+    out: dict[str, dict] = {}
+    for model, row in (capabilities if isinstance(capabilities, dict) else {}).items():
+        if len(out) >= AGENT_CHAT_MAX_CATALOG_MODELS:
+            break
+        if not _stored_text(model, AGENT_CHAT_MAX_MODEL_ID_LENGTH) or not isinstance(row, dict):
+            continue
+        kept: dict[str, Any] = {}
+        for key, value in row.items():
+            stored = _stored_value(value) if _stored_text(key, _CAPABILITY_KEY_LENGTH) else None
+            if stored is not None:
+                kept[key] = stored
+        out[model] = kept
+    return out
 
 
 def _with_probed(capabilities: dict, previous: Any) -> dict:
@@ -161,7 +210,7 @@ class ProviderDefinition:
     # call rather than answered by the provider's HTTP 400. None: no known cap.
     max_tools: int | None = None
     # How tool calls arrive in a stream. "openai" concatenates argument deltas
-    # by index; "gemini" is Gemini's compatibility layer (see _merged_whole_arguments).
+    # by index; "gemini" is Gemini's compatibility layer (see _ArgumentText.merge_whole).
     tool_stream: str = "openai"
     # What proves an API key, for a provider whose model list answers without one.
     key_check_url: str | None = None
@@ -325,7 +374,7 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         _definition(
             "chatgpt", "OpenAI", AGENT_CHAT_OPENAI_BASE_URL, adapter="openai_responses", include_usage=True,
             model_filter="openai",
-            # No tool cap: the Responses API took 175 tools in a live turn, and OpenAI documents none.
+            # No tool cap: OpenAI documents none for the Responses API.
             fields=(_region_field(_OPENAI_ENDPOINTS), _API_KEY_FIELD), endpoints=_OPENAI_ENDPOINTS,
         ),
         _definition("gemini", "Gemini", AGENT_CHAT_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini",
@@ -646,19 +695,20 @@ class AgentCliStore:
             cfg = self._data.get(instance_id)
             if not isinstance(cfg, dict):
                 return False
-            cfg["capabilities"] = _with_probed(capabilities, cfg.get("capabilities"))
+            cfg["capabilities"] = _with_probed(_stored_capabilities(capabilities), cfg.get("capabilities"))
             cfg["capabilities_checked_at"] = checked_at
             await self._save()
             return True
 
     async def set_catalog(
         self, instance_id: str, models: list[str], created: dict[str, float], checked_at: str,
-        eligible: list[str] | None = None,
+        eligible: list[str] | None = None, remote: Any = (),
     ) -> bool:
         """Cache what the provider lists for this account; an empty listing is not recorded.
 
         `seen` accumulates every listed id, separating a retired model from a custom deployment the
-        listing never held, which must be left alone.
+        listing never held, which must be left alone. `remote` names listed models that run
+        elsewhere (a local Ollama server's cloud models), which no automatic choice may take.
         """
         # The catalogue lets a request pick the newest model, or replace a retired one, without a
         # network call. An empty listing means the provider could not answer, not that every model
@@ -677,6 +727,7 @@ class AgentCliStore:
                 "models": list(models),
                 "created": {m: created[m] for m in models if m in created},
                 "eligible": [m for m in eligible or [] if m in models],
+                "remote": [m for m in models if m in set(remote or ())],
                 "checked_at": checked_at,
             }
             await self._save()
@@ -698,6 +749,7 @@ class AgentCliStore:
             [m for m in cfg.get("seen") or [] if isinstance(m, str)],
             catalog.get("created") if isinstance(catalog.get("created"), dict) else None,
             eligible or None, replacements,
+            excluded=[m for m in catalog.get("remote") or [] if isinstance(m, str)],
         )
 
     async def record_refusal(self, instance_id: str, model: str, option: str, at: str) -> bool:

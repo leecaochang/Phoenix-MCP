@@ -32,15 +32,18 @@ def capture(hass):
     for logger in loggers:
         logger.setLevel(logging.DEBUG)
     for domain in ("hue", "zha"):
-        async_update_debug_capture(hass, domain, "DEBUG")
+        async_update_debug_capture(hass, domain, "DEBUG", OWNER)
     yield handler
     for logger, level in zip(loggers, levels):
         logger.setLevel(level)
     async_detach_debug_capture(hass)
 
 
-def _key(**caps) -> AccessKeyRecord:
-    return AccessKeyRecord(id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
+OWNER = str(uuid.uuid4())
+
+
+def _key(key_id: str = OWNER, **caps) -> AccessKeyRecord:
+    return AccessKeyRecord(id=key_id, name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
                            permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
                            **{"cap_log_read": "allow", "cap_diagnostics": "allow", **caps})
 
@@ -117,7 +120,7 @@ async def test_lowering_the_level_stops_the_capture_and_drops_its_records(hass, 
 
 
 async def test_phoenix_never_captures_itself(hass, capture):
-    async_update_debug_capture(hass, "phoenix_mcp", "DEBUG")
+    async_update_debug_capture(hass, "phoenix_mcp", "DEBUG", OWNER)
     assert "phoenix_mcp" not in capture.domains
     assert capture not in logging.getLogger("custom_components.phoenix_mcp").handlers
 
@@ -135,3 +138,53 @@ async def test_quoted_and_dict_secrets_are_scrubbed(hass, capture):
     for secret in ("hunter2", "abc.def-123", "tok-999", "k-777", "p w 1"):
         assert secret not in text
     assert "'username': 'bob'" in text and "'Accept': 'json'" in text
+
+
+async def test_only_the_raising_key_reads_the_capture(hass, capture):
+    """Debug output can carry other clients' traffic, so a second key with log read sees none of it."""
+    er.async_get(hass).async_get_or_create("light", "hue", "bulb", suggested_object_id="bulb")
+    hue = logging.getLogger("homeassistant.components.hue")
+    hue.debug("Received client message from another client")
+    outcome, other = await _read(hass, _key(str(uuid.uuid4())))
+    assert outcome == "allowed"
+    assert other["entries"] == [] and other["source"]["capturing"] == [] and other["source"]["retained"] == 0
+    _, own = await _read(hass, _key())
+    assert [entry["message"] for entry in own["entries"]] == ["Received client message from another client"]
+
+
+async def test_a_key_joining_a_capture_reads_only_what_was_written_after(hass, capture):
+    er.async_get(hass).async_get_or_create("light", "hue", "bulb", suggested_object_id="bulb")
+    hue = logging.getLogger("homeassistant.components.hue")
+    later = str(uuid.uuid4())
+    hue.debug("before the second raise")
+    async_update_debug_capture(hass, "hue", "DEBUG", later)
+    hue.debug("after the second raise")
+    _, body = await _read(hass, _key(later))
+    assert [entry["message"] for entry in body["entries"]] == ["after the second raise"]
+    _, first = await _read(hass, _key())
+    assert len(first["entries"]) == 2
+
+
+async def test_archiving_the_raising_key_ends_its_capture(hass, capture):
+    """A revoke or archive goes through the store, which ends what the key raised."""
+    from unittest.mock import AsyncMock
+
+    from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
+
+    store = AccessKeyStore(hass, AsyncMock())
+    record, _raw = await store.async_create_access_key("raiser", "admin", rate_limit_requests=0)
+    shared = str(uuid.uuid4())
+    async_update_debug_capture(hass, "hue", "DEBUG", record.id)
+    async_update_debug_capture(hass, "zha", "DEBUG", record.id)
+    async_update_debug_capture(hass, "zha", "DEBUG", shared)
+    logging.getLogger("homeassistant.components.hue").debug("hue record")
+    logging.getLogger("homeassistant.components.zha").debug("zha record")
+    await store.async_archive_access_key(record.id, revoked=True)
+    # hue is still held by the fixture's key; the archived key owns nothing any more.
+    assert not capture.domains_for(record.id)
+    assert capture.captures_for("zha", shared)
+    assert all(record.id not in row[6] or row[6] - {record.id} for row in capture.records)
+    capture.forget(OWNER)
+    capture.forget(shared)
+    assert capture.domains == set() and not capture.records
+    assert capture not in logging.getLogger("homeassistant.components.hue").handlers

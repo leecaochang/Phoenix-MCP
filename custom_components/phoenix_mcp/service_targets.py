@@ -23,7 +23,7 @@ from .const import (
     DEVICE_ACTUATOR_DOMAINS,
     DOMAIN,
     MEDIA_SOURCE_ENTITY_DOMAINS,
-    MEDIA_SOURCE_LIBRARY_DOMAINS,
+    MEDIA_SOURCE_OPEN_DOMAINS,
     MEDIA_SOURCE_RECORDING_DOMAINS,
     MUSIC_ASSISTANT_LIBRARY_SERVICES,
     NO_TARGET_SERVICES,
@@ -370,36 +370,41 @@ def gate_entity_ids(
     return [*([entity_id] if isinstance(entity_id, str) else entity_id if isinstance(entity_id, list) else []), *named]
 
 
-def _scripts_run(domain: str, service: str, entity_id: object) -> list[str]:
-    """Return the object IDs of the scripts a call runs, as far as its entity targets say."""
+def _scripts_run(domain: str, service: str, targets: object) -> list[str]:
+    """Return the object IDs of the scripts a call runs, read from its resolved targets."""
     if domain != "script":
         return []
     if service not in SCRIPT_ENTITY_SERVICES:
         return [service]
-    named = [entity_id] if isinstance(entity_id, str) else entity_id if isinstance(entity_id, list) else []
+    named = [targets] if isinstance(targets, str) else targets if isinstance(targets, list) else []
     return [item.split(".", 1)[1] for item in named if isinstance(item, str) and item.startswith("script.")]
 
 
 async def script_input_selectors(
-    hass: HomeAssistant, domain: str, service: str, service_data: object, entity_id: object,
+    hass: HomeAssistant, domain: str, service: str, service_data: object, targets: object,
 ) -> tuple[str, ...]:
     """Return the inputs that select targets no entity ID names: devices, areas, labels, "all".
 
-    Read by key and by the fields of the scripts this call runs. An entity selector stays out,
-    as its value is judged like any other. "all" in a field declared with no target selector
-    is an ordinary word.
+    Read by key and by the fields of each script among the resolved ``targets``, so a device
+    or area target is read like an entity one. An entity selector stays out, as its value is
+    judged like any other. "all" in a field declared with no target selector is an ordinary word.
     """
     inputs = script_inputs(domain, service, service_data)
     if not inputs:
         return ()
-    scripts = _scripts_run(domain, service, entity_id)
+    scripts = _scripts_run(domain, service, targets)
     descriptions = await _service_descriptions(hass) if scripts else None
     services = descriptions.get("script") if descriptions is not None else None
-    fields: dict[str, Any] = {}
-    for script in scripts:
-        fields.update(_flat_fields(services.get(script)) if isinstance(services, Mapping) else {})
+    # Each script reads the same inputs through its own fields, so one declaration that
+    # selects is enough; a plain one elsewhere does not excuse it.
+    declared = [
+        _flat_fields(services.get(script)) if isinstance(services, Mapping) else {} for script in scripts
+    ] or [{}]
 
     def selects(name: str, value: object) -> bool:
+        return any(selects_in(fields, name, value) for fields in declared)
+
+    def selects_in(fields: Mapping[str, Any], name: str, value: object) -> bool:
         field = fields.get(name)
         selector = field.get("selector") if isinstance(field, Mapping) else None
         declared_plain = isinstance(selector, Mapping) and not _contains_target_selector(selector)
@@ -456,6 +461,15 @@ def call_reach(
     reached = list(targets)
     every_target = False
     refusal = None
+    if (f"{domain}/{service}" in CROSS_DOMAIN_SERVICES and service_data
+            and any(entity_id.split(".", 1)[0] == "script" for entity_id in targets)):
+        # Core hands a generic service's whole data to each target domain's own service, and
+        # script.turn_on runs the script with the variables in it, unjudged on this name.
+        refusal = (
+            f"{domain}.{service} hands its service data to the scripts among its targets, where "
+            "it is not checked. Run a script with script.turn_on and pass its inputs in variables, "
+            "or call this service without service data. No action was dispatched."
+        )
     if named := script_input_entities(domain, service, service_data, hass):
         every_target = True
         permitted, _ = resolve_service_targets(
@@ -808,11 +822,16 @@ def media_source_recordings(service_data: object) -> list[str]:
 
 
 def media_source_library_items(service_data: object) -> list[tuple[str, str]]:
-    """Return (source, ID as written) for each private library media-source ID in a call's data."""
+    """Return (source, ID as written) for each media-source ID in a call's data from a private source.
+
+    Private is every source that is not open, a camera or image, or a camera recording one,
+    so a custom integration's source counts until it is judged.
+    """
     named = ((_media_source(value), value) for value in _strings(service_data))
+    judged_elsewhere = MEDIA_SOURCE_OPEN_DOMAINS | MEDIA_SOURCE_ENTITY_DOMAINS | MEDIA_SOURCE_RECORDING_DOMAINS
     return list(dict.fromkeys(
         (item[0], value) for item, value in named
-        if item is not None and item[0] in MEDIA_SOURCE_LIBRARY_DOMAINS
+        if item is not None and item[0] not in judged_elsewhere
     ))
 
 

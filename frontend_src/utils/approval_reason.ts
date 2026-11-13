@@ -21,6 +21,10 @@ export const APPROVAL_REASON_LABEL_KEYS: Readonly<Record<string, string>> = {
   phoenix_mcp_data_wiped: "approvals.reason.phoenix_mcp_data_wiped",
   integration_removed: "approvals.reason.integration_removed",
   recovery_review_replaced: "approvals.reason.recovery_review_replaced",
+  access_key_rotated: "approvals.reason.access_key_rotated",
+  oauth_sign_in_removed: "approvals.reason.oauth_sign_in_removed",
+  oauth_turned_off: "approvals.reason.oauth_turned_off",
+  oauth_sign_in_ended: "approvals.reason.oauth_sign_in_ended",
   // Stored as English before the slug existed.
   "Configuration changed; replaced by a fresh review.": "approvals.reason.recovery_review_replaced",
 };

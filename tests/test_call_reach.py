@@ -11,7 +11,8 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.helpers import device_registry as dr
@@ -49,6 +50,7 @@ from custom_components.phoenix_mcp.service_targets import (
 from custom_components.phoenix_mcp.policy_engine import required_service_cap
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool, async_execute_approved_tool
 from custom_components.phoenix_mcp.tools.service import _execute_call_service
+from tests.runtime_fixtures import esphome_device_info, esphome_entry, esphome_runtime
 
 
 def _profile(key: str, mode: str) -> SemanticProfile:
@@ -230,6 +232,7 @@ _SCRIPT = {"script": {
         "fields": {"where": {"selector": {"area": {}}}, "tone": {"selector": {"select": {"options": ["all", "low"]}}}},
         "sequence": [{"action": "lock.unlock", "target": {"area_id": "{{ where }}"}}],
     },
+    "spoken": {"fields": {"where": {"selector": {"text": {}}}}, "sequence": [{"event": "spoken"}]},
 }}
 
 
@@ -246,7 +249,7 @@ async def _scripts(hass) -> tuple[PhoenixData, list, list, str, str]:
 
 def _script_key(**fields) -> AccessKeyRecord:
     return _key(
-        {"script.door": "GREEN", "script.undeclared": "GREEN", "script.room": "GREEN",
+        {"script.door": "GREEN", "script.undeclared": "GREEN", "script.room": "GREEN", "script.spoken": "GREEN",
          "lock.green": "GREEN", "lock.red": "RED"},
         cap_physical_control="allow", **fields,
     )
@@ -511,6 +514,129 @@ async def test_a_named_script_with_an_entity_id_input_says_the_entity_needs_acce
     refusal = await named_script_refusal(hass, "script", "s")
     assert "script.turn_on" in refusal
     assert "same access as a target" in refusal
+
+
+# A generic turn service hands its whole data to script.turn_on, which runs the script with it.
+
+
+@pytest.mark.parametrize("service", ["turn_on", "turn_off", "toggle"])
+@pytest.mark.parametrize("physical", ["deny", "confirm", "allow"])
+@pytest.mark.parametrize(("script", "service_data"), [
+    ("script.undeclared", {"variables": {"door": "lock.red"}}),
+    ("script.door", {"variables": {"which_lock": "lock.red"}}),
+    ("script.room", {"variables": {"where": "kitchen"}}),
+    ("script.door", {"variables": {"which_lock": "lock.green"}}),
+    ("script.spoken", {"note": "hello"}),
+])
+async def test_a_generic_turn_service_carries_no_data_to_a_script(hass, service, physical, script, service_data):
+    data, pending, lock_calls, _, _ = await _scripts(hass)
+    key = _script_key()
+    key.cap_physical_control = physical
+    args = _call("homeassistant", service, script, service_data)
+    result = await _call_tool("call_service", args, key, hass, data)
+    assert result[1] == "denied", result
+    assert "script.turn_on" in _text(result)
+    preview = _body(await _call_tool("dry_run_service", args, key, hass, data))
+    assert preview["predicted_outcome"] == "denied"
+    assert "script.turn_on" in preview["refusal_reason"]
+    saved = {"domain": "homeassistant", "service": service, "entity_id": [script], "service_data": service_data}
+    assert (await _execute_call_service(saved, key, hass, data))[1] == "denied"
+    await hass.async_block_till_done()
+    assert lock_calls == []
+    assert pending == []
+
+
+async def test_a_generic_turn_service_on_an_area_holding_a_script_carries_no_data(hass):
+    from homeassistant.helpers import area_registry as ar
+
+    data, pending, lock_calls, _, _ = await _scripts(hass)
+    area = ar.async_get(hass).async_create("Scripts")
+    er.async_get(hass).async_update_entity("script.undeclared", area_id=area.id)
+    args = {"service": {"domain": "homeassistant", "name": "turn_on",
+                        "data": {"variables": {"door": "lock.red"}}},
+            "targets": [{"kind": "area", "ids": [area.id]}]}
+    result = await _call_tool("call_service", args, _script_key(), hass, data)
+    assert result[1] == "denied", result
+    await hass.async_block_till_done()
+    assert lock_calls == [] and pending == []
+
+
+async def test_a_generic_turn_service_keeps_its_data_for_other_targets_and_runs_a_script_bare(hass):
+    data, _, _, _, _ = await _scripts(hass)
+    light_calls = _record(hass, ("light", "turn_on"))
+    light = _entity(hass, "light", "x", "desk")
+    key = _key({light: "GREEN", "script.spoken": "GREEN"})
+    spoken: list = []
+    hass.bus.async_listen("spoken", spoken.append)
+    assert (await _call_tool("call_service", _call("homeassistant", "turn_on", light, {"brightness": 10}),
+                             key, hass, data))[1] == "allowed"
+    assert light_calls[0][2]["brightness"] == 10
+    assert (await _call_tool("call_service", _call("homeassistant", "turn_on", "script.spoken"),
+                             key, hass, data))[1] == "allowed"
+    await hass.async_block_till_done()
+    assert len(spoken) == 1
+    mixed = await _call_tool("call_service", _call("homeassistant", "turn_on", [light, "script.spoken"],
+                                                   {"brightness": 10}), key, hass, data)
+    assert mixed[1] == "denied", mixed
+    assert len(light_calls) == 1
+
+
+# The scripts a call runs are read from its resolved targets, however they were named.
+
+
+async def _script_on(hass, kind: str) -> str:
+    """Place script.room in an area or on a device and return that target's ID."""
+    if kind == "area":
+        from homeassistant.helpers import area_registry as ar
+
+        area = ar.async_get(hass).async_create("Scripts")
+        er.async_get(hass).async_update_entity("script.room", area_id=area.id)
+        return area.id
+    entry = MockConfigEntry(domain="script_host")
+    entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(config_entry_id=entry.entry_id, identifiers={("script_host", "1")})
+    er.async_get(hass).async_update_entity("script.room", device_id=device.id)
+    return device.id
+
+
+@pytest.mark.parametrize("kind", ["area", "device"])
+async def test_a_script_run_by_area_or_device_reads_its_declared_selectors(hass, kind):
+    data, pending, lock_calls, _, _ = await _scripts(hass)
+    target = await _script_on(hass, kind)
+    key = _script_key()
+    args = {"service": {"domain": "script", "name": "turn_on", "data": {"variables": {"where": "kitchen"}}},
+            "targets": [{"kind": kind, "ids": [target]}]}
+    # Admission refuses on its own, before the executor would.
+    with patch("custom_components.phoenix_mcp.tools.service._execute_call_service") as executor:
+        result = await _call_tool("call_service", args, key, hass, data)
+    assert result[1] == "invalid_request", result
+    assert "where" in _text(result)
+    executor.assert_not_called()
+    assert (await _call_tool("dry_run_service", args, key, hass, data))[1] == "invalid_request"
+    saved = {"domain": "script", "service": "turn_on", f"{kind}_id": [target],
+             "service_data": {"variables": {"where": "kitchen"}}}
+    assert (await _execute_call_service(saved, key, hass, data))[1] == "invalid_request"
+    plain = {**args, "service": {**args["service"], "data": {"variables": {"tone": "low"}}}}
+    assert (await _call_tool("call_service", plain, key, hass, data))[1] == "allowed"
+    await hass.async_block_till_done()
+    assert all(call[2].get("area_id") != "kitchen" for call in lock_calls)
+    assert pending == []
+
+
+@pytest.mark.parametrize("order", [["script.room", "script.spoken"], ["script.spoken", "script.room"]])
+async def test_one_script_declaring_a_selector_is_enough_whatever_the_others_declare(hass, order):
+    await _scripts(hass)
+    assert await script_input_selectors(hass, "script", "turn_on", {"variables": {"where": "kitchen"}}, order) == ("where",)
+    assert await script_input_selectors(hass, "script", "turn_on", {"variables": {"where": "kitchen"}}, ["script.spoken"]) == ()
+
+
+async def test_a_script_the_key_cannot_run_reveals_none_of_its_fields(hass):
+    data, _, _, _, _ = await _scripts(hass)
+    key = _key({"lock.green": "GREEN"}, cap_physical_control="allow")
+    args = _call("script", "turn_on", "script.room", {"variables": {"where": "kitchen"}})
+    result = await _call_tool("call_service", args, key, hass, data)
+    assert result[1] == "denied", result
+    assert "where" not in _text(result)
 
 
 # Whole-device services
@@ -984,4 +1110,105 @@ async def test_mesa_confirm_queues_no_approval_that_cannot_run(hass):
     result = await _call_tool("call_service", _call("cover", "open_cover", group), key, hass, data, request_id="rid")
     assert result[1] == "denied", result
     assert pending == []
+    assert ran == []
+
+
+# ESPHome device actions: the firmware can drive anything on its device.
+
+
+_SENSOR, _RELAY, _PULSE = "sensor.gate_state", "switch.gate_relay", "button.gate_pulse"
+_ACTION = {"service": {"domain": "esphome", "name": "gate_open"}}
+
+
+async def _gate_device(hass, entries, mode: str = "off") -> tuple[PhoenixData, list, list]:
+    assert await async_setup_component(hass, "homeassistant", {})
+    ran = _record(hass, ("esphome", "gate_open"))
+    data, pending = await _data(hass, mode)
+    esphome_entry(hass, entries, entity_ids=(_SENSOR, _RELAY, _PULSE), runtime=esphome_runtime(
+        esphome_device_info(name="gate"), services={1: SimpleNamespace(name="open", args=[])},
+    ))
+    for entity_id in (_SENSOR, _RELAY, _PULSE):
+        hass.states.async_set(entity_id, "off")
+    return data, pending, ran
+
+
+def _action_row(listing: tuple) -> dict:
+    return next(row for row in _body(listing)["actions"] if row["service"] == "esphome.gate_open")
+
+
+@pytest.mark.parametrize("grants", [
+    {_SENSOR: "GREEN", _RELAY: "RED", _PULSE: "GREEN"},
+    {_SENSOR: "GREEN", _PULSE: "GREEN"},
+    {_SENSOR: "GREEN", _RELAY: "GREEN", _PULSE: "RED"},
+    {_SENSOR: "GREEN", _RELAY: "GREEN"},
+    {_SENSOR: "GREEN", _RELAY: "YELLOW", _PULSE: "GREEN"},
+])
+async def test_a_device_action_needs_write_on_everything_its_device_can_operate(hass, esphome_entries, grants):
+    data, pending, ran = await _gate_device(hass, esphome_entries)
+    key = _key(grants, cap_physical_control="allow")
+    assert (await _call_tool("call_service", _ACTION, key, hass, data))[1] == "denied"
+    assert _body(await _call_tool("dry_run_service", _ACTION, key, hass, data))["predicted_outcome"] == "denied"
+    listing = await _call_tool("find_available_actions", {"entity_id": _SENSOR}, key, hass, data)
+    assert _action_row(listing)["available"] is False
+    assert ran == [] and pending == []
+
+
+async def test_a_device_action_runs_once_everything_it_can_operate_is_writable(hass, esphome_entries):
+    data, _, ran = await _gate_device(hass, esphome_entries)
+    # A sensor operates nothing, so a key may be refused it and still run the action.
+    key = _key({_SENSOR: "RED", _RELAY: "GREEN", _PULSE: "GREEN"}, cap_physical_control="allow")
+    assert _body(await _call_tool("dry_run_service", _ACTION, key, hass, data))["predicted_outcome"] == "allowed"
+    assert (await _call_tool("call_service", _ACTION, key, hass, data))[1] == "allowed"
+    assert len(ran) == 1
+
+
+@pytest.mark.parametrize(("profiled", "mode"), [(_RELAY, "prohibited"), (_SENSOR, "prohibited"), (_PULSE, "read_only")])
+async def test_mesa_judges_every_entity_of_the_device_on_a_device_action(hass, esphome_entries, profiled, mode):
+    data, pending, ran = await _gate_device(hass, esphome_entries, "enforced")
+    data.mesa.store.set(profiled, _profile(profiled, mode))
+    key = _key({_SENSOR: "GREEN", _RELAY: "GREEN", _PULSE: "GREEN"}, cap_physical_control="allow")
+    assert _body(await _call_tool("dry_run_service", _ACTION, key, hass, data))["predicted_outcome"] == "denied"
+    result = await _call_tool("call_service", _ACTION, key, hass, data, request_id="rid")
+    assert result[1] == "denied", result
+    assert ran == [] and pending == []
+
+
+async def test_a_device_action_under_mesa_confirm_binds_the_device_and_runs_once_approved(hass, esphome_entries):
+    data, pending, ran = await _gate_device(hass, esphome_entries, "enforced")
+    data.mesa.store.set(_RELAY, _profile(_RELAY, "confirm"))
+    for entity_id in (_SENSOR, _PULSE):
+        data.mesa.store.set(entity_id, _profile(entity_id, "autonomous"))
+    key = _key({_SENSOR: "GREEN", _RELAY: "GREEN", _PULSE: "GREEN"}, cap_physical_control="allow")
+    preview = _body(await _call_tool("dry_run_service", _ACTION, key, hass, data))
+    assert preview["predicted_outcome"] == "pending_approval"
+    assert preview["mesa"]["confirm"] == [_RELAY]
+    result = await _call_tool("call_service", _ACTION, key, hass, data, request_id="rid")
+    assert result[1] == "pending_approval", result
+    assert ran == []
+    assert pending[0]["tool_name"] == "call_service_mesa_approved"
+    assert pending[0]["args"][APPROVAL_TARGETS_KEY]["entity_ids"] == sorted([_SENSOR, _RELAY, _PULSE])
+    done = await async_execute_approved_tool(pending[0]["tool_name"], pending[0]["args"], key, hass, data)
+    assert done[1] == "allowed", done
+    assert len(ran) == 1
+    # A new entity on the device changes what the reviewed action reaches, though the key may write it.
+    extra = er.async_get(hass).async_get_or_create(
+        "switch", "esphome", "unique-gate_extra", suggested_object_id="gate_extra",
+        # The registry needs the real entry behind the fixture's stand-in.
+        config_entry=hass.config_entries._entries[esphome_entries[0].entry_id],
+    ).entity_id
+    hass.states.async_set(extra, "off")
+    key.permissions.entities[extra] = PermissionNode(state="GREEN")
+    data.mesa.store.set(extra, _profile(extra, "autonomous"))
+    stale = await async_execute_approved_tool(pending[0]["tool_name"], pending[0]["args"], key, hass, data)
+    assert stale[1] == "denied", stale
+    assert "changed" in _text(stale)
+    assert len(ran) == 1
+
+
+async def test_a_device_action_is_refused_when_mesa_is_configured_but_missing(hass, esphome_entries):
+    data, _, ran = await _gate_device(hass, esphome_entries)
+    data.store.get_settings.return_value = GlobalSettings(mesa_mode="enforced")
+    key = _key({_SENSOR: "GREEN", _RELAY: "GREEN", _PULSE: "GREEN"}, cap_physical_control="allow")
+    result = await _call_tool("call_service", _ACTION, key, hass, data)
+    assert result[1] == "denied", result
     assert ran == []

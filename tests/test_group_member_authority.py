@@ -6,6 +6,8 @@ a scene publishes a member list in the same attribute a group does.
 
 from __future__ import annotations
 
+from homeassistant.core import callback
+
 import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
@@ -46,7 +48,7 @@ async def _light_group(hass) -> list:
         hass.states.async_set(entity_id, "off", {"supported_color_modes": ["onoff"], "color_mode": "onoff"})
     await hass.async_block_till_done()
     seen: list = []
-    hass.bus.async_listen(EVENT_CALL_SERVICE, lambda event: seen.append(event.data))
+    hass.bus.async_listen(EVENT_CALL_SERVICE, callback(lambda event: seen.append(event.data)))
     return seen
 
 
@@ -360,7 +362,7 @@ async def _yaml_group(hass) -> list:
     await hass.async_block_till_done()
     assert registry.async_get("light.all_lamps") is None
     seen: list = []
-    hass.bus.async_listen(EVENT_CALL_SERVICE, lambda event: seen.append(event.data))
+    hass.bus.async_listen(EVENT_CALL_SERVICE, callback(lambda event: seen.append(event.data)))
     return seen
 
 

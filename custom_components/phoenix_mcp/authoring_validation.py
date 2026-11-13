@@ -8,18 +8,25 @@ import re
 from collections.abc import Callable, Iterable
 from difflib import get_close_matches
 from traceback import format_tb
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
 from homeassistant.components.automation.config import PLATFORM_SCHEMA
 from homeassistant.components.script.config import SCRIPT_ENTITY_SCHEMA
 from homeassistant.core import HomeAssistant, valid_entity_id
+from homeassistant.helpers.condition import async_get_all_descriptions as async_get_all_condition_descriptions
 from homeassistant.helpers.entity import entity_sources
 from homeassistant.helpers.service import async_get_all_descriptions as async_get_all_service_descriptions
+from homeassistant.helpers.trigger import async_get_all_descriptions as async_get_all_trigger_descriptions
 from homeassistant.loader import IntegrationNotFound, async_get_integration
 
 from .const import AUTHORING_MAX_ERRORS, AUTHORING_MAX_PATH_DEPTH, AUTHORING_TARGET_CHECK_MAX, REFERENCE_WARNING_MAX
+from .template_render import TemplateRenderError, async_check_caller_templates
+from .template_scope import caller_template_strings
 from .yaml_includes import TAG_STRING_REFUSAL, contains_tag_strings
+
+if TYPE_CHECKING:
+    from .data import PhoenixData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,15 +119,6 @@ async def async_unknown_key_findings(hass: HomeAssistant, config: Any) -> list[s
     if not sites:
         return []
     try:
-        # Local: inside a guard for releases that lack it.
-        from homeassistant.helpers.condition import (
-            async_get_all_descriptions as async_get_all_condition_descriptions,
-        )
-        # Local: inside a guard for releases that lack it.
-        from homeassistant.helpers.trigger import (
-            async_get_all_descriptions as async_get_all_trigger_descriptions,
-        )
-
         registered = {
             "trigger": set(await async_get_all_trigger_descriptions(hass)) | _LEGACY_TRIGGER_KEYS,
             "condition": set(await async_get_all_condition_descriptions(hass)) | _BUILTIN_CONDITION_KEYS,
@@ -173,15 +171,6 @@ async def async_target_findings(hass: HomeAssistant, config: Any, readable: Call
             async_get_services_for_target,
             async_get_triggers_for_target,
         )
-        # Local: inside a guard for releases that lack it.
-        from homeassistant.helpers.condition import (
-            async_get_all_descriptions as async_get_all_condition_descriptions,
-        )
-        # Local: inside a guard for releases that lack it.
-        from homeassistant.helpers.trigger import (
-            async_get_all_descriptions as async_get_all_trigger_descriptions,
-        )
-
         lookups = {"action": async_get_services_for_target, "trigger": async_get_triggers_for_target,
                    "condition": async_get_conditions_for_target}
         services = await async_get_all_service_descriptions(hass)
@@ -356,6 +345,19 @@ def _key_sites(config: Any) -> list[tuple[str, str, str, dict]]:
         for field in ("actions", "action", "sequence"):
             actions(config.get(field), "config." + field, 1)
     return sites
+
+
+async def async_template_refusal(value: Any, hass: HomeAssistant, data: PhoenixData) -> str | None:
+    """Refuse caller templates before Home Assistant compiles them on its event loop.
+
+    Every template string in ``value`` is compiled and trial-rendered in the template worker
+    first; the refusal text, or None when Home Assistant may validate them.
+    """
+    try:
+        await async_check_caller_templates(caller_template_strings(value), hass, data)
+    except TemplateRenderError as err:
+        return f"Templates refused before Home Assistant validated them: {err}"
+    return None
 
 
 def authoring_input_error(args: dict, domain: str) -> str | None:

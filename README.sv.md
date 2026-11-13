@@ -39,14 +39,14 @@ Panelen stöder för närvarande engelska, spanska, franska, italienska, tyska, 
 
 ## Dokumentation
 
-Handboken är inbyggd i panelen: öppna panelen **Phoenix MCP** och välj **Guide** i menyn **Hjälp**. Den förklarar varje fönster och inställning, vad agenter kan göra, behörigheter, funktioner, MESA och säkerhet. Den följer det du väljer, och du kan söka i den.
+Handboken är inbyggd i panelen: öppna panelen **Phoenix MCP** och välj **Guide** i menyn **Hjälp**. Den förklarar varje fönster och inställning, vad agenter kan göra, behörigheter, funktioner, MESA och säkerhet. Den följer det du väljer, och du kan söka i den. Guiden är skriven på engelska, förenklad kinesiska och traditionell kinesiska. På de andra språken är bara dess välkomstsida översatt, och övriga sidor visas på engelska.
 
 Första gången här? Efter konfigurationen nedan öppnar du panelen **Phoenix MCP** och väljer **Konfigurera en agent**. En guide tar dig igenom att skapa en åtkomstnyckel, välja vad den får göra och ansluta Agent Chat eller din egen app.
 
 ## Krav
 
 - Home Assistant 2026.7.0 eller senare.
-- En Phoenix MCP-instans per Home Assistant. Home Assistant installerar beroendena `Babel>=2.18.0` och `jsonschema>=4.26.0` åt dig.
+- En Phoenix MCP-instans per Home Assistant. Home Assistant installerar beroendena `Babel>=2.18.0` och `jsonschema>=4.26.0` åt dig. På en Home Assistant Core-installation installerar den också kraven för de integrationer som Phoenix MCP startar efter, till exempel ZHA, Bluetooth och ESPHome, även om du inte använder dem.
 
 ## Installera från Marknadsplatsen
 

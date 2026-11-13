@@ -61,6 +61,8 @@ An approval covers the exact entities, and any group members, it was requested f
 
 An entity the agent names in a run's inputs is different: it [needs the same access as a target](guide:topic.tools#actions). Phoenix sees only what an input names outright, so a script that builds an entity ID from parts gets past this.
 
+Phoenix checks inputs on `script.turn_on`, on a script run by name and on `automation.trigger`, whether the script is chosen by its ID, an area or a device. `homeassistant.turn_on`, `turn_off` and `toggle` hand their data to a script unchecked, so they run a script only without data.
+
 Generic Thermostat and Generic Hygrostat helpers also act as Home Assistant. Phoenix doesn't look through them to the switch they drive.
 
 Related: [Automations and scripts](guide:topic.tools#automations)

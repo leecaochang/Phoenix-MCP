@@ -22,14 +22,14 @@ from uuid import uuid4
 
 from .agent_chat import async_run_voice_turn
 from .agent_turn import _current_dispatch_access_key
-from .catalog_text import LocalizedReason, voice_text
-from .const import VOICE_MAX_SPOKEN_CHARS
+from .catalog_text import LocalizedReason, spoken_sentences, voice_text
+from .const import DOMAIN, VOICE_MAX_SPOKEN_CHARS
 from .helpers import instance_base_url as _base_url
 from .home_companion import is_companion
 from .household_authority import household_scope
 from .llm.accounts import _get_secret_store
 from .llm.factory import build_provider
-from .request_authority import AuthorityChangedError
+from .request_authority import AuthorityChangedError, household_authority
 from .routing.command_clarification import (
     async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel,
 )
@@ -39,7 +39,7 @@ from .routing.command_execution import (
 from .routing.command_routing import (
     RoutingAuthority, async_evaluate_command, effective_routing_mode,
 )
-from .routing.decision_shadow import async_preview_decision
+from .routing.decision_shadow import async_preview_decision, operation_unconfirmed
 from .routing.voice_context import capture_voice_origin
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,7 +89,8 @@ def _speakable(text: str, language: object = None) -> str:
     """A reply as speech: at most the spoken limit, saying so when cut, without Markdown."""
     if len(text) <= VOICE_MAX_SPOKEN_CHARS:
         return _spoken_text(text)
-    return f"{_spoken_text(text[:VOICE_MAX_SPOKEN_CHARS])} {voice_text(language, 'answer_truncated')}"
+    return spoken_sentences([_spoken_text(text[:VOICE_MAX_SPOKEN_CHARS]), voice_text(language, "answer_truncated")],
+                            language)
 
 
 # conversation is a declared after-dependency, and routing_tables needs the intents
@@ -111,7 +112,8 @@ from .conversation_log import recorded_turn, record_identity
 from .component_guard import require_component
 
 
-@recorded_turn("voice", "user_text", transform=lambda text: _speakable(text))
+# The log keeps what the speaker heard, in the conversation's language.
+@recorded_turn("voice", "user_text", transform=lambda text, call: _speakable(text, call.get("language")))
 async def async_voice_answer(
     hass: HomeAssistant, data: Any, user_text: str, *,
     include_review_hint: bool = False, language: object = None,
@@ -186,7 +188,9 @@ async def _async_voice_answer(
         origin = capture_voice_origin(hass, satellite_id, device_id)
         context: dict[str, Any] = {'voice_origin': origin} if origin is not None else {}
         can_clarify = routing_mode in ('local', 'hybrid') and isinstance(conversation_id, str) and 0 < len(conversation_id) <= 128
-        conversation = ['voice', conversation_id, satellite_id, device_id]
+        # The conversation ID is client-chosen, so a pending choice also belongs to the HA user who asked.
+        household = household_authority.get()
+        conversation = ['voice', conversation_id, satellite_id, device_id, household.user_id if household else None]
         binding = clarification_binding(hass, authority, language, origin)
         pending = data.command_routing.clarifications.consume(conversation, binding) if can_clarify else None
         if pending is not None:
@@ -244,15 +248,26 @@ async def _async_voice_answer(
                 return await async_execute_command_plan(
                     hass, data, access_key, decision["_plan"], authority, _base_url(hass), language=language,
                 )
+            if operation_unconfirmed(decision):
+                refusal = LocalCommandReply(voice_text(language, "decision_operation_unconfirmed"))
+                local_result(refusal, "decision")
+                return refusal.text
 
     provider = build_provider(cfg)
     session = async_get_clientsession(hass)
+    key_id = access_key.id
+
+    def still_bound() -> bool:
+        # The binding is the grant, as on Assist: switching Voice off or rebinding it stops this key.
+        current = data.store.get_settings()
+        return bool(current.voice_agent_enabled and current.voice_agent_access_key_id == key_id)
+
     try:
         return await async_run_voice_turn(
             hass, data, access_key, provider, session, _base_url(hass), user_text,
             include_review_hint=include_review_hint,
             max_iterations=data.store.get_settings().agentcli_max_iterations,
-            language=language,
+            language=language, still_bound=still_bound,
         )
     except Exception:  # a provider/loop failure must not raise
         _LOGGER.exception("Phoenix MCP voice agent turn failed")
@@ -333,7 +348,11 @@ def async_sync_voice_agent(hass: HomeAssistant, entry: Any, data: Any) -> None:
 
     Registered only when fully configured and not shutting down. The kill switch is not part
     of this gate: async_voice_answer declines each turn, so a pipeline speaks "unavailable".
+    A retired runtime changes nothing, as the agent it would remove is its successor's.
     """
+    current = hass.data.get(DOMAIN)
+    if current is not None and current is not data:
+        return
     s = data.store.get_settings()
     fully_configured = bool(
         s.voice_agent_enabled and s.voice_agent_access_key_id

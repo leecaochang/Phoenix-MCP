@@ -23,7 +23,7 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionNode, PermissionTree
-from tests.runtime_fixtures import patch_readers, qualify_test_decision_model
+from tests.runtime_fixtures import decision_write_reply, patch_readers, qualify_test_decision_model
 
 
 @pytest.fixture(autouse=True)
@@ -614,18 +614,21 @@ async def decision_chat_turn(hass, home, *, category='light_on', percent=50, req
     return provider, events, messages, remote
 
 
-@pytest.mark.parametrize('category,percent,service', [
-    ('light_on', 50, 'turn_on'), ('light_off', 50, 'turn_off'),
-    ('state_query', 50, None),
+# Each sentence says the operation its category names; local recognition misses all three.
+@pytest.mark.parametrize('category,percent,service,sentence', [
+    ('light_on', 50, 'turn_on', 'Please illuminate the desk lamp'),
+    ('light_off', 50, 'turn_off', 'Please extinguish the desk lamp'),
+    ('state_query', 50, None, 'Please describe the desk lamp'),
 ])
 @pytest.mark.parametrize('routing_mode', ['hybrid', 'auto'])
-async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, hybrid_chat, category, percent, service, routing_mode):
+async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, hybrid_chat, category, percent, service, sentence, routing_mode):
     await hybrid_chat[0].store.async_patch_settings(agentcli_routing_mode=routing_mode)
     from custom_components.phoenix_mcp.tools import service as service_tools
     data, access_key = hybrid_chat
     with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        provider, events, messages, remote = await decision_chat_turn(hass, hybrid_chat, category=category, percent=percent)
+        provider, events, messages, remote = await decision_chat_turn(hass, hybrid_chat, category=category, percent=percent,
+                                                                      sentence=sentence)
     assert remote.await_count == 2
     provider.stream_turn.assert_not_called()
     if service:
@@ -634,8 +637,7 @@ async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, 
     else:
         call.assert_not_called()
     assert messages[-1]['content'] == (
-        'Home Assistant reports the requested state.' if service == 'turn_off' else
-        'Command sent. Home Assistant has not yet confirmed the requested state.' if service else 'The state is Off.')
+        await decision_write_reply(hass, 'light', service, matched=service == 'turn_off') if service else 'The state is Off.')
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
     assert data.agent_recovery.records(access_key.id) == []
     assert data.decision_shadow.summary()['chat_hybrid'] == {'evaluations': 1, 'reasons': {'plan_ready': 1}}
@@ -1365,6 +1367,34 @@ async def test_qualified_jev_chat_uses_one_joint_request(hass, hybrid_chat, cate
         assert messages[-1]['content'] == 'The state is Off.'
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
+
+
+async def test_qualified_jev_chat_asks_again_instead_of_unlocking(hass, hybrid_chat):
+    """A lock decision opposite to the sentence never runs; Chat answers with the plain-command request."""
+    from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+    from custom_components.phoenix_mcp.catalog_text import voice_text
+    from custom_components.phoenix_mcp.tools import service as service_tools
+    data, access_key = hybrid_chat
+    access_key.permissions.domains['lock'] = PermissionNode(state='GREEN')
+    hass.services.async_register('lock', 'unlock', AsyncMock())
+    entry = er.async_get(hass).async_get_or_create('lock', 'test', 'front', original_name='Front door')
+    hass.states.async_set(entry.entity_id, 'locked', {'friendly_name': 'Front door'})
+    async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    store = await llm_accounts._get_secret_store(hass)
+    await store.set_model(data.store.get_settings().decision_provider_id, 'jev-latest')
+    async def response(session, method, path, timeout, payload):
+        target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entry.entity_id)
+        return {**chat_decision_wire(payload, 'lock_unlock', target=target), 'model': 'jev-1.13.0'}
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, events, messages, remote = await decision_chat_turn(hass, hybrid_chat, request=response,
+                                                                      sentence='Please secure the Front door')
+    remote.assert_awaited_once()
+    call.assert_not_called()
+    provider.stream_turn.assert_not_called()
+    assert messages[-1] == {'role': 'assistant', 'content': voice_text('en', 'decision_operation_unconfirmed')}
+    assert events[-1] == ('done', {'stop_reason': 'end_turn'})
+    assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'operation_unconfirmed': 1}
 
 
 def followup_response(payload, *, value='37', decline=False):

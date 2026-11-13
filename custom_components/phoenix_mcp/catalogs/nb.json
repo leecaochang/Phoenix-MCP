@@ -214,6 +214,7 @@
       "aiTaskNotConfigured": "Sett først opp Phoenix MCP AI Task med en tilgangsnøkkel, en leverandør og en modell, og aktiver den.",
       "aiTaskPreferencesUnavailable": "Innstillinger for AI-oppgaver er ikke tilgjengelige i denne Home Assistant-instansen.",
       "approvalAccessKeyInactive": "Tilgangsnøkkelen er ikke lenger aktiv, så denne forespørselen kan ikke kjøres. Ingenting ble kjørt.",
+      "approvalCredentialEnded": "Tilgangsnøkkelen ble rotert, eller appens pålogging ble avsluttet, så denne forespørselen kan ikke kjøres. Ingenting ble kjørt.",
       "approvalAlreadyResolved": "Godkjenningen var allerede behandlet.",
       "approvalExpired": "Denne forespørselen utløp før du godkjente den, så ingenting ble kjørt.",
       "approvalBatchMaximum": "En gruppe kan inneholde maksimalt {max} godkjenninger.",
@@ -867,8 +868,8 @@
       "dashboard_resource.create.title": "Legg til dashbordressurs {url}",
       "dashboard_resource.update.title": "Endre dashbordressurs {url}",
       "dashboard_resource.delete.title": "Fjern dashbordressurs {url}",
-      "dashboard_resource.create.body": "Hver nettleser som åpner et dashbord, vil laste inn {url}. En JavaScript-fil kjører med den personens tilgang til Home Assistant, så godkjenn bare en fil du stoler på.",
-      "dashboard_resource.update.body": "Dette endrer en fil som hver nettleser laster inn når den åpner et dashbord. Sammenlign den nåværende og den foreslåtte filen nedenfor.",
+      "dashboard_resource.create.body": "Hver nettleser som åpner et dashbord, vil laste inn {url}, og det samme gjør en administrators nettleser som åpner Phoenix MCP-panelet. En JavaScript-fil kjører med den personens tilgang til Home Assistant, så godkjenn bare en fil du stoler på.",
+      "dashboard_resource.update.body": "Dette endrer en fil som hver nettleser laster inn når den åpner et dashbord, og som en administrators nettleser laster inn når den åpner Phoenix MCP-panelet. Sammenlign den nåværende og den foreslåtte filen nedenfor.",
       "dashboard_resource.delete.body": "Dashbord slutter å laste inn {url}. Kort som kommer fra den, viser en feil til den legges til igjen.",
       "edit_energy_config.fallback.body": "Dette oppdaterer dashbordkonfigurasjonen i Home Assistant.",
       "edit_energy_config.fallback.title": "Endre konfigurasjonen for energidashbordet",
@@ -997,7 +998,11 @@
         "kill_switch": "Nødstopp aktivert",
         "rate_limited_at_execution": "Hastighetsbegrenset ved utføring",
         "target_missing": "Målet finnes ikke lenger",
-        "target_out_of_scope": "Målet er utenfor omfanget"
+        "target_out_of_scope": "Målet er utenfor omfanget",
+        "access_key_rotated": "Avbrutt da tilgangsnøkkelen ble rotert",
+        "oauth_sign_in_removed": "Avbrutt da appens pålogging ble fjernet",
+        "oauth_turned_off": "Avbrutt da OAuth-pålogging ble slått av",
+        "oauth_sign_in_ended": "Avbrutt fordi appens pålogging var avsluttet"
       },
       "reasonExecutionFailedDetail": "Utførelsen mislyktes: {detail}",
       "reject": "Avvis",
@@ -1347,8 +1352,8 @@
       "energyDashboard": "Energidashbord",
       "cardNoun": "kort",
       "previewErrorHead": {
-        "one": "Et kort i denne forhåndsvisningen rapporterte en konfigurasjonsfeil. Kopier om nødvendig meldingen nedenfor og lim den inn hos agenten, slik at den kan rette kortet.",
-        "other": "Kort i denne forhåndsvisningen rapporterte konfigurasjonsfeil. Kopier om nødvendig meldingen nedenfor og lim den inn hos agenten, slik at den kan rette kortene."
+        "one": "{count} kort i denne forhåndsvisningen rapporterte en konfigurasjonsfeil. Kopier om nødvendig meldingen nedenfor og lim den inn hos agenten, slik at den kan rette kortet.",
+        "other": "{count} kort i denne forhåndsvisningen rapporterte konfigurasjonsfeil. Kopier om nødvendig meldingen nedenfor og lim den inn hos agenten, slik at den kan rette kortene."
       },
       "previewTextAlternative": "Forhåndsvisningen viser kortene som bilder. Velg {diff} for å lese endringen som tekst.",
       "byAdmin": "Administrator"
@@ -1996,7 +2001,8 @@
       "importReplaceHelp": "Legg til profilene i filen og erstatt eksisterende profiler for de samme målene. Dette kan ikke angres.",
       "viewAutomationsHelp": "Vis eller skjul automasjonene MESA bare delvis kunne sjekke, fordi de bruker maler eller blåkopier.",
       "openOrphanHelp": "Åpne denne profilen i Profileditor, der du kan slette den. Det den dekket, finnes ikke lenger.",
-      "dismissNoticeHelp": "Skjul dette varselet i denne nettleseren. Gjenopprett lukkede varsler henter det tilbake."
+      "dismissNoticeHelp": "Skjul dette varselet i denne nettleseren. Gjenopprett lukkede varsler henter det tilbake.",
+      "comboMatchCount": "Treff: {count}"
     },
     "mesaSuggestion": {
       "baseline_note": " Forbudt samsvarer med den innebygde basislinjen for dette domenet, så profilen gjør denne intensjonen eksplisitt. For å tillate agentkontroll bak administratorgodkjenning i stedet, velg Bekreft i Profileditor før du lagrer; godkjenning gjelder når MESA er håndhevet.",
@@ -3164,11 +3170,13 @@
       "chooseKeyHelp": "Velg tilgangsnøkkelen som gir denne appen sine tillatelser.",
       "keyAtCap": "{name}, som allerede har høyeste tillatte antall pålogginger",
       "requestExpires": "Denne forespørselen avsluttes om {time}",
+      "requestEndsAt": "Denne forespørselen avsluttes kl. {time}.",
+      "requestEndingSoon": "Det er mindre enn ett minutt igjen til å godkjenne denne forespørselen.",
       "requestExpired": "Denne påloggingsforespørselen er avsluttet. Start på nytt fra appen.",
       "approve": "Godkjenn",
       "approveHelp": "La denne appen bruke den valgte tilgangsnøkkelen, og send påloggingen tilbake til appen.",
       "deny": "Nekt",
-      "denyHelp": "Avslå denne påloggingen og gi beskjed til appen.",
+      "denyHelp": "Avslå denne påloggingen og gi beskjed til appen når adressen dens er bekreftet.",
       "close": "Lukk",
       "approvedLeaving": "Godkjent. Går tilbake til appen...",
       "deniedLeaving": "Nektet. Går tilbake til appen...",
@@ -3251,6 +3259,9 @@
     "local_state_matched": "Home Assistant rapporterer den forespurte tilstanden.",
     "local_state_unavailable": "Utilgjengelig",
     "local_state_unconfirmed": "Kommando sendt. Home Assistant har ikke bekreftet den forespurte tilstanden ennå.",
+    "local_operation_matched": "Handling: {operation}. Home Assistant rapporterer den forespurte tilstanden.",
+    "local_operation_unconfirmed": "Handling sendt: {operation}. Home Assistant har ikke bekreftet den forespurte tilstanden ennå.",
+    "decision_operation_unconfirmed": "Jeg kjørte ikke kommandoen fordi jeg ikke kunne bekrefte handlingen. Si den igjen tydelig, og nevn handlingen og enheten.",
     "local_state_unknown": "Ukjent",
     "local_summary_breakdown": "Entiteter som er eksponert for Assist og som jeg har tilgang til: {total}. {summary}.",
     "local_summary_count": "Entiteter som er eksponert for Assist og som jeg har tilgang til, med tilstanden {state}: {matched} av {total}. Ukjent eller utilgjengelig: {unknown}.",

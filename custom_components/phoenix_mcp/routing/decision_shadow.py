@@ -19,7 +19,7 @@ from .decision_batch import async_prepare_batch, batch_execution_eligible
 from .decision_targets import capture_sequential_targets
 from .routing_tables import (
     DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES,
-    DECISION_EXECUTION_CATEGORIES, DECISION_ENTITY_CATEGORIES,
+    DECISION_EXECUTION_CATEGORIES, DECISION_ENTITY_CATEGORIES, DECISION_PROVIDER_REFUSED_CATEGORIES,
 )
 from .decision_provider import DecisionProvider, _evaluate_guarded, sequential_revision_admitted
 from .decision_types import DecisionError, confident_choice
@@ -27,7 +27,7 @@ from .routing_tables import TOOL_ROUTING_SETTINGS, TOOL_ROUTING_REASONS
 from .decision_metrics import DecisionMetrics
 from copy import deepcopy
 from homeassistant.core import HomeAssistant
-from .decision_identity import explicit_write_target
+from .decision_identity import explicit_write_target, identity_competitors
 from .numeric_evidence import read_explicit_percentage, compare_percentage
 from ..conversation_log import record_current
 from ..llm.accounts import (
@@ -206,6 +206,8 @@ class DecisionShadow:
                         return result("authority_changed")
                     if not targets:
                         return result("observed", answer)
+                    if prepare and answer["choice"] in DECISION_PROVIDER_REFUSED_CATEGORIES and confident_choice(answer):
+                        return result("operation_unconfirmed", answer)
                     if prepare and ((answer["choice"] not in DECISION_EXECUTION_CATEGORIES and answer["choice"] != "provider")
                                     or answer["choice"] in DECISION_ENTITY_CATEGORIES):
                         return result("numeric_unverified" if answer["choice"] in DECISION_NUMERIC_CATEGORIES
@@ -239,6 +241,8 @@ class DecisionShadow:
             return result("provider_fallback")
         if not confident_choice(category):
             return result("low_probability")
+        if category["choice"] in DECISION_PROVIDER_REFUSED_CATEGORIES:
+            return result("operation_unconfirmed")
         access_key = authority.current(hass)
         if access_key is None:
             return result("authority_changed")
@@ -283,7 +287,8 @@ class DecisionShadow:
                 if type(percent) is not int or not 0 <= percent <= 100:
                     return result("brightness_declined" if category["choice"] == "light_brightness" else "percentage_declined", decision=answer)
                 proposal[operation.proposal_field] = percent
-            if not explicit_write_target(sentence, snapshot.targets, proposal, language):
+            if not explicit_write_target(sentence, snapshot.targets, proposal, language,
+                                         identity_competitors(hass, snapshot.targets)):
                 return result("target_unverified", decision=answer)
             selection = {**result("target_selected", entity_id, answer), "proposal": proposal}
             if operation is not None:
@@ -301,6 +306,13 @@ class DecisionShadow:
             return selection
         except DecisionError as error:
             return result(str(error))
+
+
+def operation_unconfirmed(decision: dict) -> bool:
+    """True when a confident decision chose an operation Phoenix never runs from a decision."""
+    selection = decision.get("target_selection")
+    return decision.get("reason") == "operation_unconfirmed" or (
+        isinstance(selection, dict) and selection.get("reason") == "operation_unconfirmed")
 
 
 async def async_preview_decision(hass: HomeAssistant, data: Any, access_key: Any, sentence: str,

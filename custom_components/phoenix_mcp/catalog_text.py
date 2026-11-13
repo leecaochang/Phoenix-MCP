@@ -162,12 +162,17 @@ def _placeholders(value: str) -> frozenset[str] | None:
         return None
 
 
+# CLDR plural categories; a locale may use ones English has no form for.
+_PLURAL_CATEGORIES = frozenset({"zero", "one", "two", "few", "many", "other"})
+
+
 @lru_cache(maxsize=8)
 def panel_catalog(language: str) -> dict[str, str]:
     """Return the panel's strings for one language, English-backed and flattened.
 
     A translation whose {placeholder} set differs from English, or that does not parse, is
-    dropped for the English one, as a backstop for a hand-edited install.
+    dropped for the English one, as a backstop for a hand-edited install. A plural category
+    English lacks (few, many) is compared with the English ``other`` form and dropped too.
     """
     resolved = canonical_language(language)
     english = _catalog_section("en", "panel")
@@ -176,6 +181,9 @@ def panel_catalog(language: str) -> dict[str, str]:
     merged = dict(english)
     for key, value in _catalog_section(resolved, "panel").items():
         base = english.get(key)
+        stem, _, category = key.rpartition(".")
+        if base is None and category in _PLURAL_CATEGORIES:
+            base = english.get(f"{stem}.other")
         if base is not None and (
             (names := _placeholders(value)) is None or names != _placeholders(base)
         ):

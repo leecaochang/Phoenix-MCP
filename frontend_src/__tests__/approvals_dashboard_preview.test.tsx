@@ -152,7 +152,7 @@ describe("dashboard preview toggle in Review", () => {
     await waitFor(() => expect(container.querySelector(".dash-preview-card-slot")).toBeTruthy());
   });
 
-  it("remembers the Preview choice: the next approval opens in Preview without a click", async () => {
+  it("does not remember the Preview choice: the next approval opens on the text diff", async () => {
     const rec = record({
       tool_name: "set_dashboard_config",
       args: { config: { views: [{ title: "Home", cards: [{ type: "markdown", content: "hi" }] }] } },
@@ -167,8 +167,9 @@ describe("dashboard preview toggle in Review", () => {
       id: "appr_2",
       diff: { kind: "yaml_diff", summary: "Another layout" },
     }));
-    // No click: the persisted preference opens the diff area in Preview mode.
-    await waitFor(() => expect(second.container.querySelector(".dash-preview-card-slot")).toBeTruthy());
+    // No card is drawn before the reviewer asks for Preview on this request too.
+    await second.findByRole("button", { name: "Preview" });
+    expect(second.container.querySelector(".dash-preview-card-slot")).toBeNull();
   });
 
   it("offers Preview for a patch_dashboard approval that targets a card", async () => {

@@ -7,6 +7,8 @@ it now holds. Unknown and inaccessible lists answer the same.
 
 from __future__ import annotations
 
+from homeassistant.core import callback
+
 import json
 import uuid
 from datetime import UTC, date, datetime
@@ -267,7 +269,7 @@ async def test_a_write_to_an_unavailable_list_is_refused_before_any_service_or_a
         hass, gone, entity_id, args):
     # Home Assistant announces every service call on its bus, so none may appear.
     called = []
-    hass.bus.async_listen("call_service", lambda event: called.append(event.data))
+    hass.bus.async_listen("call_service", callback(lambda event: called.append(event.data)))
     data = _data()
     data.approvals = MagicMock(async_create=AsyncMock())
     content, outcome, _ = await _call_tool("set_todo_item", {"entity_id": entity_id, **args}, gone, hass, data)
@@ -281,7 +283,7 @@ async def test_a_write_to_an_unavailable_list_is_refused_before_any_service_or_a
 async def test_the_service_call_listener_sees_a_real_write(hass, gone):
     """Positive control for the refusal test above: the same listener records an ordinary add."""
     called = []
-    hass.bus.async_listen("call_service", lambda event: called.append(event.data["service"]))
+    hass.bus.async_listen("call_service", callback(lambda event: called.append(event.data["service"])))
     body, outcome = await _call(hass, "set_todo_item", {"entity_id": "todo.shopping", "action": "add", "summary": "Tea"},
                                 gone)
     await hass.async_block_till_done()
@@ -435,7 +437,7 @@ async def test_clear_completed_removes_exactly_the_completed_items(hass, lists):
 
 async def test_clear_completed_never_uses_the_service_that_chooses_at_execution(hass, lists):
     called = []
-    hass.bus.async_listen("call_service", lambda event: called.append(event.data["service"]))
+    hass.bus.async_listen("call_service", callback(lambda event: called.append(event.data["service"])))
     await _set(hass, action="clear_completed")
     await hass.async_block_till_done()
     assert "remove_item" in called and "remove_completed_items" not in called

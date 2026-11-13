@@ -25,6 +25,8 @@ Records requests that were refused, malformed, not supported, or named something
 
 Requests waiting for approval, your approval decisions, and requests cut short while a change may have run are always recorded.
 
+A key's first 30 refused requests in a minute each get an entry. The rest of that minute share one entry, which counts them in its payload.
+
 ### {{label:settings.logRateLimitedLabel}} {#log-rate-limited}
 
 Records requests turned away because a key sent too many. On by default.
@@ -38,6 +40,8 @@ How often the audit log is saved to disk: every 5, 10, 15 (default), 30 or 60 mi
 ### {{label:settings.maxLogEntriesLabel}} {#log-max-entries}
 
 How many entries the audit log keeps: 100, 1,000, 5,000 or 10,000 (default). Lowering it removes the oldest entries straight away. The copy on disk shrinks at the next save.
+
+Approval and administrator entries are kept apart, up to the same number, so other requests never push them out.
 
 ## {{label:conversations.title}} {#conversation-log}
 

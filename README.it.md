@@ -39,14 +39,14 @@ Attualmente il pannello supporta inglese, spagnolo, francese, italiano, tedesco,
 
 ## Documentazione
 
-Il manuale è integrato nel pannello: apri il pannello **Phoenix MCP** e scegli **Guida** dal menu **Aiuto**. Spiega ogni finestra e impostazione, cosa possono fare gli agenti, le autorizzazioni, le capacità, MESA e la sicurezza. Segue ciò che selezioni, e puoi effettuare ricerche al suo interno.
+Il manuale è integrato nel pannello: apri il pannello **Phoenix MCP** e scegli **Guida** dal menu **Aiuto**. Spiega ogni finestra e impostazione, cosa possono fare gli agenti, le autorizzazioni, le capacità, MESA e la sicurezza. Segue ciò che selezioni, e puoi effettuare ricerche al suo interno. La Guida è scritta in inglese, cinese semplificato e cinese tradizionale. Nelle altre lingue è tradotta solo la sua pagina di benvenuto, e le altre pagine appaiono in inglese.
 
 Prima volta qui? Dopo la configurazione descritta più avanti, apri il pannello **Phoenix MCP** e scegli **Configura un agente**. Una procedura guidata ti accompagna nella creazione di una chiave di accesso, nella scelta di cosa può fare e nel collegamento di Agent Chat o della tua app.
 
 ## Requisiti
 
 - Home Assistant 2026.7.0 o versioni successive.
-- Un’istanza di Phoenix MCP per Home Assistant. Home Assistant installa per te le dipendenze `Babel>=2.18.0` e `jsonschema>=4.26.0`.
+- Un’istanza di Phoenix MCP per Home Assistant. Home Assistant installa per te le dipendenze `Babel>=2.18.0` e `jsonschema>=4.26.0`. Su un’installazione di Home Assistant Core installa anche i requisiti delle integrazioni dopo le quali si avvia Phoenix MCP, come ZHA, Bluetooth ed ESPHome, anche se non le usi.
 
 ## Installazione dal Marketplace
 

@@ -17,6 +17,7 @@
 
 import { JS_BUILD } from "../version";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
+import { onDashboardPage } from "../utils/dashboard_page";
 import { claimInjectController, type InjectController } from "./ownership";
 import {
   setAgentCliOwner, agentCliOpenPatch, purgeAgentCliStorage,
@@ -172,12 +173,13 @@ function start(): void {
   };
   (window as any).__phxAgentChat = bridge;
   unregisterShortcut = registerAgentChatShortcut(getHass, toggle);
-  // Opportunistic card-catalog harvest, as in the profile injector: this loads
-  // on every HA page, so it catches dashboards whose Lovelace resources are
-  // already imported. DYNAMICALLY imported and deferred to keep the always-loaded
-  // footprint tiny; the harvester pulls in api.ts, which is far larger than
-  // everything here. Rate-limited internally.
+  // Opportunistic card-catalog harvest, as in the profile injector: only on a
+  // dashboard page, whose Lovelace resources Home Assistant has already imported.
+  // DYNAMICALLY imported and deferred to keep the always-loaded footprint tiny;
+  // the harvester pulls in api.ts, which is far larger than everything here.
+  // Rate-limited internally.
   trackedTimeout(() => {
+    if (!onDashboardPage(getHass())) return;
     import("../utils/card_harvest")
       .then((m) => m.syncCardCatalog())
       .catch(() => { /* harvesting is best effort and never blocks the chat bridge */ });

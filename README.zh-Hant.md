@@ -39,14 +39,14 @@ Phoenix MCP 完全在 Home Assistant 內執行，無需部署單獨的服務。�
 
 ## 文件
 
-使用手冊內建於面板中：開啟 **Phoenix MCP** 面板，從**說明**選單中選擇**指南**。它說明每個視窗和設定、智慧體可以做什麼、權限、能力、MESA 和安全性。它會跟隨您的選擇，並且支援搜尋。
+使用手冊內建於面板中：開啟 **Phoenix MCP** 面板，從**說明**選單中選擇**指南**。它說明每個視窗和設定、智慧體可以做什麼、權限、能力、MESA 和安全性。它會跟隨您的選擇，並且支援搜尋。指南提供英文、簡體中文和繁體中文版本。在其他語言中只翻譯了歡迎頁面，其他頁面以英文顯示。
 
 第一次使用？完成下方的設定後，開啟 **Phoenix MCP** 面板並選擇**設定智慧體**。精靈會引導您建立存取金鑰、選擇它可以做什麼，並連接 Agent Chat 或您自己的應用程式。
 
 ## 需求
 
 - Home Assistant 2026.7.0 或更高版本。
-- 每個 Home Assistant 只能設定一個 Phoenix MCP 實例。Home Assistant 會為您安裝相依套件 `Babel>=2.18.0` 和 `jsonschema>=4.26.0`。
+- 每個 Home Assistant 只能設定一個 Phoenix MCP 實例。Home Assistant 會為您安裝相依套件 `Babel>=2.18.0` 和 `jsonschema>=4.26.0`。在 Home Assistant Core 安裝中，它還會安裝 Phoenix MCP 需在其後啟動的整合（如 ZHA、Bluetooth 和 ESPHome）的相依套件，即使您並未使用這些整合。
 
 ## 透過 Marketplace 安裝
 

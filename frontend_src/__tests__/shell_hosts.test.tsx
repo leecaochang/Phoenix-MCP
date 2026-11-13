@@ -175,7 +175,7 @@ describe("pinned bands and the floating layer", () => {
     expect(w.hosts.bottom!.style.height).toBe("120px");
     w.controller.close(w.group("c"));
     expect(w.hosts.bottom!.style.height).toBe("34px");
-    // Growing the row back needs window geometry (rows here are stubbed one window each); the live checks cover it.
+    // Growing the row back needs window geometry (rows here are stubbed one window each), which no test here covers.
     w.controller.reopen("c");
     expect(w.controller.folds.isFolded("a")).toBe(true);
   });
@@ -304,7 +304,7 @@ describe("pinned bands and the floating layer", () => {
     expect(w.heights("main")).toEqual({ a: 300, c: 300 });
     w.controller.unpin(w.group("b"));
     expect(w.controller.hostOf("b")).toBe("main");
-    // Its place beside a neighbour needs window geometry, which jsdom lacks; the live checks cover it.
+    // Its place beside a neighbour needs window geometry, which jsdom lacks, so no test here covers it.
     expect(w.heights("main")).toEqual({ a: 300, b: 250, c: 300 });
     expect(w.hosts.bottom!.style.height).toBe("0px");
   });

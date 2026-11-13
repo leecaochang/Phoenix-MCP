@@ -179,13 +179,30 @@ async def test_nested_delegation_no_duplicate_entry(conversation_data):
     async def inner(data, prompt):
         return prompt
 
-    @history.recorded_turn("voice", "prompt", transform=lambda s: s.upper())
+    @history.recorded_turn("voice", "prompt", transform=lambda s, _call: s.upper())
     async def outer(data, prompt):
         return await inner(data, prompt)
 
     assert await outer(data, "hello") == "hello"
     entry = only(data.conversations)
     assert entry["source"] == "voice" and entry["response"] == "HELLO"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("language,joined", [("de", " Ich musste abbrechen"), ("zh-Hans", "我不得不提前停下。")])
+async def test_a_cut_voice_reply_is_recorded_as_it_was_spoken(hass, conversation_data, language, joined):
+    """The log keeps what the speaker heard: its language's marker, joined as that language joins sentences."""
+    from custom_components.phoenix_mcp import voice_agent
+    from custom_components.phoenix_mcp.const import VOICE_MAX_SPOKEN_CHARS
+
+    data, _ = conversation_data
+    reply = "word " * (VOICE_MAX_SPOKEN_CHARS // 5 + 100)
+    with patch.object(voice_agent, "_async_voice_answer", AsyncMock(return_value=reply)):
+        assert await voice_agent.async_voice_answer(hass, data, "hi", language=language) == reply
+    recorded = only(data.conversations)["response"]
+    spoken = voice_agent._speakable(reply, language)
+    assert joined in spoken and "I had to stop" not in spoken
+    assert recorded == spoken
 
 
 @pytest.mark.asyncio

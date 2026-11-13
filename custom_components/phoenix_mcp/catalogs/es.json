@@ -358,8 +358,8 @@
       "energyDashboard": "Panel de control de energía",
       "cardNoun": "una tarjeta",
       "previewErrorHead": {
-        "one": "Una tarjeta de esta vista previa informó de un error de configuración. Si es necesario, copie el mensaje de abajo y péguelo al agente para que pueda corregir la tarjeta.",
-        "other": "Algunas tarjetas de esta vista previa informaron de errores de configuración. Si es necesario, copie el mensaje de abajo y péguelo al agente para que pueda corregir las tarjetas."
+        "one": "{count} tarjeta de esta vista previa informó de un error de configuración. Si es necesario, copie el mensaje de abajo y péguelo al agente para que pueda corregir la tarjeta.",
+        "other": "{count} tarjetas de esta vista previa informaron de errores de configuración. Si es necesario, copie el mensaje de abajo y péguelo al agente para que pueda corregir las tarjetas."
       },
       "previewTextAlternative": "La vista previa muestra las tarjetas como imágenes. Elija {diff} para leer el cambio como texto.",
       "byAdmin": "Administrador"
@@ -530,7 +530,11 @@
         "target_out_of_scope": "Objetivo fuera del ámbito",
         "access_key_expired": "Clave de acceso expirada",
         "access_key_inactive": "Clave de acceso inactivo",
-        "access_key_revoked": "Clave de acceso revocada"
+        "access_key_revoked": "Clave de acceso revocada",
+        "access_key_rotated": "Cancelada al rotar la clave de acceso",
+        "oauth_sign_in_removed": "Cancelada al eliminar el inicio de sesión de la aplicación",
+        "oauth_turned_off": "Cancelada al desactivar el inicio de sesión con OAuth",
+        "oauth_sign_in_ended": "Cancelada porque el inicio de sesión de la aplicación había terminado"
       },
       "reasonExecutionFailedDetail": "Error de ejecución: {detail}",
       "reject": "Rechazar",
@@ -1059,6 +1063,7 @@
       "approvalReasonString": "reason debe ser una cadena.",
       "approvalRecordFailed": "No se pudo registrar esta aprobación antes de ejecutarla. No se ejecutó nada; inténtelo de nuevo.",
       "approvalAccessKeyInactive": "La clave de acceso ya no está activa, así que esta solicitud no puede ejecutarse. No se ejecutó nada.",
+      "approvalCredentialEnded": "La clave de acceso se rotó o el inicio de sesión de la aplicación terminó, así que esta solicitud no puede ejecutarse. No se ejecutó nada.",
       "assistExposurePassThroughOnly": "use_assist_exposure solo es válido para claves de acceso pass_through.",
       "assistPipelineFailed": "No se pudo crear la canalización de Assist.",
       "assistPipelineUnavailable": "Las canalizaciones de Assist no están disponibles en este Home Assistant.",
@@ -1731,7 +1736,8 @@
       "importReplaceHelp": "Añada los perfiles del archivo, sustituyendo los existentes para los mismos destinos. No se puede deshacer.",
       "viewAutomationsHelp": "Muestre u oculte las automatizaciones que MESA solo pudo comprobar en parte, porque usan plantillas o planos.",
       "openOrphanHelp": "Abra este perfil en el Editor de perfiles, donde puede eliminarlo. Lo que cubría ya no existe.",
-      "dismissNoticeHelp": "Oculte este aviso en este navegador. Restaurar avisos descartados lo recupera."
+      "dismissNoticeHelp": "Oculte este aviso en este navegador. Restaurar avisos descartados lo recupera.",
+      "comboMatchCount": "Coincidencias: {count}"
     },
     "settings": {
       "addProviderFirst": "Añada primero una cuenta de proveedor en Proveedores de IA.",
@@ -2331,8 +2337,8 @@
       "dashboard_resource.create.title": "Añadir el recurso del panel de control {url}",
       "dashboard_resource.update.title": "Cambiar el recurso del panel de control {url}",
       "dashboard_resource.delete.title": "Eliminar el recurso del panel de control {url}",
-      "dashboard_resource.create.body": "Cada navegador que abra un panel de control cargará {url}. Un archivo JavaScript se ejecuta con el acceso a Home Assistant de esa persona, así que apruebe solo un archivo de su confianza.",
-      "dashboard_resource.update.body": "Esto cambia un archivo que carga cada navegador al abrir un panel de control. Compare a continuación el archivo actual y el propuesto.",
+      "dashboard_resource.create.body": "Cada navegador que abra un panel de control cargará {url}, y también el navegador de un administrador que abra el panel de Phoenix MCP. Un archivo JavaScript se ejecuta con el acceso a Home Assistant de esa persona, así que apruebe solo un archivo de su confianza.",
+      "dashboard_resource.update.body": "Esto cambia un archivo que carga cada navegador al abrir un panel de control, y también el navegador de un administrador al abrir el panel de Phoenix MCP. Compare a continuación el archivo actual y el propuesto.",
       "dashboard_resource.delete.body": "Los paneles de control dejarán de cargar {url}. Las tarjetas que provienen de él mostrarán un error hasta que se vuelva a añadir.",
       "edit_energy_config.fallback.title": "Cambiar la configuración del panel de control de energía",
       "edit_energy_config.fallback.body": "Se actualizará la configuración del panel de control de Home Assistant.",
@@ -3158,11 +3164,13 @@
       "chooseKeyHelp": "Elija la clave de acceso cuyos permisos recibe esta aplicación.",
       "keyAtCap": "{name}, que ya tiene el máximo de inicios de sesión permitido",
       "requestExpires": "Esta solicitud termina en {time}",
+      "requestEndsAt": "Esta solicitud termina a las {time}.",
+      "requestEndingSoon": "Queda menos de un minuto para aprobar esta solicitud.",
       "requestExpired": "Esta solicitud de inicio de sesión ha terminado. Vuelva a empezar desde la aplicación.",
       "approve": "Aprobar",
       "approveHelp": "Permita que esta aplicación use la clave de acceso elegida y devuélvala a la aplicación.",
       "deny": "Denegar",
-      "denyHelp": "Rechace este inicio de sesión e informe a la aplicación.",
+      "denyHelp": "Rechace este inicio de sesión e informe a la aplicación si su dirección está verificada.",
       "close": "Cerrar",
       "approvedLeaving": "Aprobado. Volviendo a la aplicación...",
       "deniedLeaving": "Denegado. Volviendo a la aplicación...",
@@ -3213,6 +3221,9 @@
     "local_unauthorized": "Esta clave de acceso ya no está autorizada.",
     "local_state_matched": "Home Assistant informa del estado solicitado.",
     "local_state_unconfirmed": "Comando enviado. Home Assistant aún no ha confirmado el estado solicitado.",
+    "local_operation_matched": "Acción: {operation}. Home Assistant informa del estado solicitado.",
+    "local_operation_unconfirmed": "Acción enviada: {operation}. Home Assistant aún no ha confirmado el estado solicitado.",
+    "decision_operation_unconfirmed": "No he ejecutado este comando porque no he podido confirmar la acción. Repítelo con claridad e indica la acción y el dispositivo.",
     "local_summary_count": "Entidades expuestas a Assist a las que tengo acceso, con el estado {state}: {matched} de {total}. Desconocidas o no disponibles: {unknown}.",
     "local_summary_total": "Entidades expuestas a Assist a las que tengo acceso: {total}. Desconocidas o no disponibles: {unknown}.",
     "local_summary_breakdown": "Entidades expuestas a Assist a las que tengo acceso: {total}. {summary}.",

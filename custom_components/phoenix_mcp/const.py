@@ -203,12 +203,19 @@ OAUTH_ISSUER_PATH = "/api/phoenix-mcp/oauth"
 OAUTH_PANEL_PATH = "/phoenix-mcp/oauth"
 # Where a request from Phoenix's MCP view carries the sign-in it was authenticated by.
 OAUTH_GRANT_REQUEST_KEY = "phoenix_mcp_oauth_grant_id"
+# And the moment the access token it presented stops being accepted.
+OAUTH_TOKEN_UNTIL_REQUEST_KEY = "phoenix_mcp_oauth_token_until"
 OAUTH_ACCESS_TOKEN_TTL_SECONDS = 3600
 # A replaced refresh or access token keeps working this long, so a retried or
-# concurrent refresh does not end the sign-in.
+# concurrent refresh does not end the sign-in. A replaced refresh token may be redeemed
+# once more inside it (one sibling), while fewer than OAUTH_REFRESH_SIBLINGS_MAX refresh
+# tokens are current; any further use is reuse and ends the sign-in.
 OAUTH_REFRESH_GRACE_SECONDS = 60
 OAUTH_REFRESH_SIBLINGS_MAX = 3
 OAUTH_RETIRED_TOKENS_MAX = 8
+# Hex characters of a refresh token naming its sign-in, so a token that fell off the
+# retired list is still recognised as reuse.
+OAUTH_REFRESH_FAMILY_HEX_LENGTH = 16
 OAUTH_CODE_TTL_SECONDS = 60
 OAUTH_REQUEST_TTL_SECONDS = 600
 OAUTH_WINDOW_SECONDS = 600
@@ -226,6 +233,8 @@ OAUTH_URL_MAX_LENGTH = 2048
 OAUTH_STATE_MAX_LENGTH = 512
 OAUTH_CLIENT_NAME_MAX_LENGTH = 80
 OAUTH_FORM_MAX_BYTES = 16 * 1024
+# Bounds the whole token or revoke form read, like MCP_BODY_READ_TIMEOUT_SECONDS.
+OAUTH_FORM_READ_TIMEOUT_SECONDS = 10
 OAUTH_CLIENT_METADATA_MAX_BYTES = 32 * 1024
 OAUTH_CLIENT_METADATA_TIMEOUT_SECONDS = 5
 # Credentials an OAuth endpoint refuses to read from a query string.
@@ -372,6 +381,15 @@ CARD_CATALOG_STORAGE_VERSION = 1
 MAX_CARD_CATALOG_ENTRIES = 500
 MAX_CARD_STUB_CONFIG_BYTES = 2000
 MAX_CARD_CATALOG_FAILURES = 50
+# Custom cards that run code taken from their own configuration (JavaScript templates,
+# evaluated functions, raw HTML or templating of other cards). Every viewer's browser
+# runs it with that viewer's session, so a layout write adding or changing one needs
+# approval even where cap_lovelace_write is Allow. Template markers in any card are
+# caught separately; this list covers what a marker cannot show.
+DASHBOARD_CODE_CARD_TYPES = frozenset({
+    "apexcharts-card", "button-card", "card-templater", "config-template-card",
+    "decluttering-card", "html-template-card", "plotly-graph", "streamline-card",
+})
 # HA's own card types: the card picker's core cards plus the Energy cards. A bare
 # type in this set is a built-in card, available without any harvest.
 # It follows the current HA card picker; a type an older HA lacks only misses its
@@ -536,6 +554,10 @@ SENSITIVE_KEY_SUBSTRINGS = frozenset({
     "network_key", "networkkey", "pre_shared_key", "preshared_key", "presharedkey",
     "shared_key", "signing_key", "ssh_key", "license_key", "licensekey",
     "passwd", "pwd", "bearer",
+    # Credentials under ordinary names: a cookie is a session, and the rest are API, account
+    # and Z-Wave network keys.
+    "cookie", "user_key", "consumer_key", "appid", "sp_dc",
+    "s0_legacy_key", "s2_access_control_key", "s2_authenticated_key", "s2_unauthenticated_key",
 })
 # Too short to match as substrings ("ping", "shipping", "upskill", "bypass"), so these
 # mark a secret only as the final word of a key name, as in wpa_psk, door-pin or mqtt_pass.
@@ -543,6 +565,10 @@ SENSITIVE_KEY_FINAL_WORDS = frozenset({"pin", "psk", "pass"})
 # Credential suffixes also catch integration-prefixed secrets without treating
 # access_key_name and access_key_id metadata as credential values.
 SENSITIVE_KEY_SUFFIXES = ("access_key", "accesskey")
+# Credentials to Home Assistant itself, masked by readers (logs, YAML reads, traces) but not
+# sensitive keys: an automation keeps its webhook ID through authoring and recovery copies,
+# which refuse a sensitive key. Matched as the end of a key name, after the is_sensitive_key folding.
+READER_CREDENTIAL_KEYS = ("webhook_id",)
 
 # The placeholder every redacting reader substitutes for a value the key may not see. Named
 # so a write path can refuse to persist it (`tool_common.redaction_sentinel_path`), as a
@@ -779,7 +805,9 @@ CAPABILITY_TIERS: Mapping[str, str] = MappingProxyType({
     # Dashboard resources are the JavaScript and CSS files every browser loads
     # when it opens a dashboard, so registering a JavaScript file runs code
     # with the viewing person's Home Assistant session. That is why it is separate from
-    # cap_lovelace_write (layouts are data) and sits in the irreversible tier.
+    # cap_lovelace_write and sits in the irreversible tier. A layout is not inert either:
+    # cards render templates and fetch URLs with each viewer's authority, so a layout
+    # write carrying such content needs approval (DASHBOARD_CODE_CARD_TYPES).
     "cap_dashboard_resources": "irreversible",
     "cap_backup": "irreversible",
     # Both are reads of configuration the operator owns; cap_yaml_edit also gates
@@ -979,10 +1007,11 @@ WHOLE_DEVICE_SERVICES = PHYSICAL_COMMAND_SERVICES | {UPDATE_INSTALL_SERVICE}
 # runs as Home Assistant, past every check call_service makes.
 REVIEWED_ACTION_DOMAINS = frozenset({"hassio", "pyscript", "python_script", "rest_command", "shell_command"})
 REVIEWED_ACTION_SERVICES = DUAL_GATE_SERVICES | {UPDATE_INSTALL_SERVICE}
-# What a raw command can operate on a device, so a key sending one needs write access to each.
+# What a raw command or an ESPHome device action can operate on a device, so a key sending one
+# needs write access to each. Buttons, numbers, selects and texts drive the device too.
 DEVICE_ACTUATOR_DOMAINS = PHYSICAL_GATE_DOMAINS | {
-    "climate", "fan", "humidifier", "lawn_mower", "light", "media_player", "remote", "siren",
-    "switch", "vacuum", "water_heater",
+    "button", "climate", "fan", "humidifier", "lawn_mower", "light", "media_player", "number", "remote",
+    "select", "siren", "switch", "text", "vacuum", "water_heater",
 }
 # Data flags that send a call past its targets, which Phoenix resolved and judged. A broadcast
 # addresses every node of the network. Read from every core services.yaml.
@@ -998,13 +1027,12 @@ MEDIA_SOURCE_ENTITY_DOMAINS = frozenset({"camera", "image"})
 # entity names, each named by its integration's domain. An ID from one can reach any camera that
 # integration manages, so it needs the picture read of every camera entity the integration has.
 MEDIA_SOURCE_RECORDING_DOMAINS = frozenset({"motioneye", "nest", "netatmo", "reolink", "unifiprotect"})
-# Media sources holding private photos, files and captures that no entity scopes: an ID from one
-# needs cap_camera_read, as a sender such as smtp or ntfy would hand the item to anyone. ai_task
-# serves generated images, which the key that generated one may still name without it. Local
-# media, radio, speech and music servers stay open.
-MEDIA_SOURCE_LIBRARY_DOMAINS = frozenset({
-    "ai_task", "google_photos", "icloud", "image_upload", "immich", "synology_dsm", "system_bridge", "xbox",
-})
+# Media sources whose items are shared media, open to any key: local media, internet radio,
+# generated speech and media servers. Every other source can hold private photos, files and
+# captures that no entity scopes (google_photos, immich, a custom integration's), so an ID from
+# one needs cap_camera_read, as a sender such as smtp or ntfy would hand the item to anyone.
+# ai_task serves generated images, which the key that generated one may still name without it.
+MEDIA_SOURCE_OPEN_DOMAINS = frozenset({"dlna_dms", "jellyfin", "media_source", "radio_browser", "tts"})
 # AI Task hands each attachment to the model, which describes it to the caller. Only an
 # entity source can be scoped, so an attachment from any other source is refused, except an
 # image the same key generated: every caller's images share one folder under guessable names.
@@ -1047,6 +1075,9 @@ TARGET_SELECTOR_KEYS = frozenset({"entity_id", "device_id", "area_id", "floor_id
 
 # Server-owned exact control bindings, persisted with approval executor arguments.
 APPROVAL_TARGETS_KEY = "_phoenix_approval_targets"
+# Server-owned hash of the content an edit's review showed, persisted with its arguments; an
+# approved edit whose target no longer hashes to it is refused.
+APPROVAL_REVIEWED_HASH_KEY = "_phoenix_reviewed_hash"
 APPROVAL_TARGETS_VERSION = 1
 APPROVAL_TARGET_LIMIT = 1024
 APPROVAL_TARGET_DEPTH = 16

@@ -13,6 +13,7 @@ from urllib.parse import urlencode, urlsplit
 from aiohttp import web
 from homeassistant.components.http.const import KEY_HASS_USER
 
+from ..approvals import REASON_OAUTH_SIGN_IN_REMOVED, async_cancel_sign_in_approvals
 from ..const import DOMAIN, OAUTH_MAX_GRANTS_PER_ACCESS_KEY, OAUTH_RESOURCE_PATH
 from ..data import PhoenixData
 from ..durable_storage import DurableStorageError
@@ -310,5 +311,9 @@ class PhoenixAdminAccessKeyOAuthSignInView(PhoenixView):
             await data.oauth_grants.async_remove(sign_in_id)
         except DurableStorageError:
             return _err("service_unavailable", "The sign-in could not be removed.", 503, rid, key="oauthSaveFailed")
+        # What the sign-in queued goes with it, inline waits included; approve also rechecks it.
+        await async_cancel_sign_in_approvals(
+            self.hass, data, access_key_id, REASON_OAUTH_SIGN_IN_REMOVED, sign_in_id=sign_in_id,
+        )
         _audit_admin(self.hass, request, rid, request.path)
         return web.Response(status=204, headers={"X-Phoenix-Request-ID": rid})

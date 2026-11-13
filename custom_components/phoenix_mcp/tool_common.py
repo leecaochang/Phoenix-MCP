@@ -28,6 +28,7 @@ from .approvals import (
     STATUS_PENDING, list_approvals, STATUS_APPROVED, get_approval,
 )
 from .const import (
+    APPROVAL_REVIEWED_HASH_KEY,
     DOMAIN,
     DOMAIN_IMPORTANT_ATTRIBUTES,
     LEAN_ALWAYS_ATTRS,
@@ -50,7 +51,8 @@ from .helpers import content_hash
 from .catalog_text import version_summary_fields as _version_summary
 from .approvals import DiffSource, _resolve_diff, async_evaluate_capability
 from .access_key_store import AccessKeyRecord
-from .request_authority import AuthorityChangedError, check_request_authority, mark_dispatch_started
+from .request_authority import AuthorityChangedError, _approved_exec_ctx, check_request_authority, mark_dispatch_started
+from .yaml_includes import MSG_CHANGED_SINCE_REVIEW, MSG_UNBOUND_REVIEW, REVIEWED_ABSENT
 
 if TYPE_CHECKING:
     from .data import PhoenixData
@@ -833,6 +835,33 @@ def _cas_conflict(
         "invalid_request",
         tool_name,
     )
+
+
+def reviewed_hash(content: Any) -> str:
+    """The binding hash of the content an approval review showed; an absent target has its own value."""
+    return REVIEWED_ABSENT if content is None else content_hash(content)
+
+
+def _bind_reviewed(args: dict, reviewed: Any) -> dict:
+    """Return args carrying the hash of what the review shows, replacing any caller-supplied value."""
+    bound = {key: value for key, value in args.items() if key != APPROVAL_REVIEWED_HASH_KEY}
+    bound[APPROVAL_REVIEWED_HASH_KEY] = reviewed_hash(reviewed)
+    return bound
+
+
+def _reviewed_conflict(args: dict, current: Any, tool_name: str) -> tuple[dict, str, str] | None:
+    """Refuse a write whose target no longer matches what its review showed.
+
+    Arguments without the binding pass outside an approval (a direct Allow call or an admin
+    restore); an approved execution without it is refused, so an older approval asks again.
+    """
+    if APPROVAL_REVIEWED_HASH_KEY not in args:
+        if not _approved_exec_ctx.get():
+            return None
+        return _tool_refused_before_write(MSG_UNBOUND_REVIEW), "invalid_request", tool_name
+    if args[APPROVAL_REVIEWED_HASH_KEY] != reviewed_hash(current):
+        return _tool_refused_before_write(MSG_CHANGED_SINCE_REVIEW), "invalid_request", tool_name
+    return None
 
 
 def redaction_sentinel_path(value: Any, _prefix: tuple = ()) -> list | None:

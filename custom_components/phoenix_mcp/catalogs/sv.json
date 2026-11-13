@@ -214,6 +214,7 @@
       "aiTaskNotConfigured": "Konfigurera först Phoenix MCP AI Task med en åtkomstnyckel, en leverantör och en modell, och aktivera den.",
       "aiTaskPreferencesUnavailable": "Inställningar för AI-uppgifter är inte tillgängliga i den här Home Assistant-instansen.",
       "approvalAccessKeyInactive": "Åtkomstnyckeln är inte längre aktiv, så den här begäran kan inte köras. Inget kördes.",
+      "approvalCredentialEnded": "Åtkomstnyckeln roterades eller appens inloggning upphörde, så den här begäran kan inte köras. Inget kördes.",
       "approvalAlreadyResolved": "Godkännandet har redan behandlats.",
       "approvalExpired": "Den här begäran gick ut innan du godkände den, så inget kördes.",
       "approvalBatchMaximum": "En batch får innehålla högst {max} godkännanden.",
@@ -867,8 +868,8 @@
       "dashboard_resource.create.title": "Lägg till kontrollpanelsresurs {url}",
       "dashboard_resource.update.title": "Ändra kontrollpanelsresurs {url}",
       "dashboard_resource.delete.title": "Ta bort kontrollpanelsresurs {url}",
-      "dashboard_resource.create.body": "Varje webbläsare som öppnar en kontrollpanel läser in {url}. En JavaScript-fil körs med den personens åtkomst till Home Assistant, så godkänn bara en fil du litar på.",
-      "dashboard_resource.update.body": "Detta ändrar en fil som varje webbläsare läser in när den öppnar en kontrollpanel. Jämför den nuvarande och den föreslagna filen nedan.",
+      "dashboard_resource.create.body": "Varje webbläsare som öppnar en kontrollpanel läser in {url}, och det gör även en administratörs webbläsare som öppnar Phoenix MCP-panelen. En JavaScript-fil körs med den personens åtkomst till Home Assistant, så godkänn bara en fil du litar på.",
+      "dashboard_resource.update.body": "Detta ändrar en fil som varje webbläsare läser in när den öppnar en kontrollpanel, och som en administratörs webbläsare läser in när den öppnar Phoenix MCP-panelen. Jämför den nuvarande och den föreslagna filen nedan.",
       "dashboard_resource.delete.body": "Kontrollpaneler slutar läsa in {url}. Kort som kommer från den visar ett fel tills den läggs till igen.",
       "edit_energy_config.fallback.body": "Detta uppdaterar kontrollpanelskonfigurationen i Home Assistant.",
       "edit_energy_config.fallback.title": "Ändra konfigurationen för energikontrollpanelen",
@@ -997,7 +998,11 @@
         "kill_switch": "Nödstoppet är aktiverat",
         "rate_limited_at_execution": "Hastighetsbegränsad vid körning",
         "target_missing": "Målet finns inte längre",
-        "target_out_of_scope": "Målet ligger utanför omfånget"
+        "target_out_of_scope": "Målet ligger utanför omfånget",
+        "access_key_rotated": "Avbruten när åtkomstnyckeln roterades",
+        "oauth_sign_in_removed": "Avbruten när appens inloggning togs bort",
+        "oauth_turned_off": "Avbruten när OAuth-inloggning stängdes av",
+        "oauth_sign_in_ended": "Avbruten eftersom appens inloggning hade upphört"
       },
       "reasonExecutionFailedDetail": "Körningen misslyckades: {detail}",
       "reject": "Avvisa",
@@ -1347,8 +1352,8 @@
       "energyDashboard": "Energikontrollpanel",
       "cardNoun": "kort",
       "previewErrorHead": {
-        "one": "Ett kort i den här förhandsgranskningen rapporterade ett konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta kortet.",
-        "other": "Kort i den här förhandsgranskningen rapporterade konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta korten."
+        "one": "{count} kort i den här förhandsgranskningen rapporterade ett konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta kortet.",
+        "other": "{count} kort i den här förhandsgranskningen rapporterade konfigurationsfel. Kopiera vid behov meddelandet nedan och klistra in det till agenten så att den kan rätta korten."
       },
       "previewTextAlternative": "Förhandsgranskningen visar korten som bilder. Välj {diff} för att läsa ändringen som text.",
       "byAdmin": "Administratör"
@@ -1996,7 +2001,8 @@
       "importReplaceHelp": "Lägg till filens profiler och ersätt befintliga för samma mål. Detta kan inte ångras.",
       "viewAutomationsHelp": "Visa eller dölj automatiseringarna som MESA bara kunde kontrollera delvis, eftersom de använder mallar eller blueprints.",
       "openOrphanHelp": "Öppna profilen i Profilredigerare, där du kan radera den. Det den täckte finns inte längre.",
-      "dismissNoticeHelp": "Dölj notisen i den här webbläsaren. Återställ avfärdade notiser tar tillbaka den."
+      "dismissNoticeHelp": "Dölj notisen i den här webbläsaren. Återställ avfärdade notiser tar tillbaka den.",
+      "comboMatchCount": "Träffar: {count}"
     },
     "mesaSuggestion": {
       "baseline_note": " Förbjudet matchar den inbyggda baslinjen för denna domän, så profilen tydliggör den avsikten. Om du i stället vill tillåta agentstyrning bakom administratörsgodkännande väljer du Bekräfta i Profilredigerare innan du sparar; godkännande gäller när MESA är påtvingat.",
@@ -3164,11 +3170,13 @@
       "chooseKeyHelp": "Välj den åtkomstnyckel vars behörigheter den här appen får.",
       "keyAtCap": "{name}, som redan har högsta tillåtna antal inloggningar",
       "requestExpires": "Den här begäran upphör om {time}",
+      "requestEndsAt": "Den här begäran upphör kl. {time}.",
+      "requestEndingSoon": "Det är mindre än en minut kvar att godkänna den här begäran.",
       "requestExpired": "Den här inloggningsbegäran har upphört. Börja om från appen.",
       "approve": "Godkänn",
       "approveHelp": "Låt den här appen använda den valda åtkomstnyckeln och skicka tillbaka inloggningen till appen.",
       "deny": "Neka",
-      "denyHelp": "Avvisa den här inloggningen och meddela appen.",
+      "denyHelp": "Avvisa den här inloggningen och meddela appen om dess adress är verifierad.",
       "close": "Stäng",
       "approvedLeaving": "Godkänd. Återvänder till appen...",
       "deniedLeaving": "Nekad. Återvänder till appen...",
@@ -3251,6 +3259,9 @@
     "local_state_matched": "Home Assistant rapporterar det begärda tillståndet.",
     "local_state_unavailable": "Otillgänglig",
     "local_state_unconfirmed": "Kommandot har skickats. Home Assistant har ännu inte bekräftat det begärda tillståndet.",
+    "local_operation_matched": "Åtgärd: {operation}. Home Assistant rapporterar det begärda tillståndet.",
+    "local_operation_unconfirmed": "Åtgärd skickad: {operation}. Home Assistant har ännu inte bekräftat det begärda tillståndet.",
+    "decision_operation_unconfirmed": "Jag körde inte kommandot eftersom jag inte kunde bekräfta åtgärden. Säg det igen tydligt och nämn åtgärden och enheten.",
     "local_state_unknown": "Okänd",
     "local_summary_breakdown": "Entiteter som är exponerade för Assist och som jag har åtkomst till: {total}. {summary}.",
     "local_summary_count": "Entiteter som är exponerade för Assist och som jag har åtkomst till, med tillståndet {state}: {matched} av {total}. Okända eller otillgängliga: {unknown}.",

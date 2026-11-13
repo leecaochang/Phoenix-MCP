@@ -51,14 +51,14 @@ Phoenix MCP 脱胎于一个被弃置的开源项目，它的名字也由此而�
 
 ## 文档
 
-使用手册内置于面板中：打开 **Phoenix MCP** 面板，从**帮助**菜单中选择**指南**。它介绍每个窗口和设置、智能体可以做什么、权限、功能、MESA 和安全。它会跟随您的选择，并且支持搜索。
+使用手册内置于面板中：打开 **Phoenix MCP** 面板，从**帮助**菜单中选择**指南**。它介绍每个窗口和设置、智能体可以做什么、权限、功能、MESA 和安全。它会跟随您的选择，并且支持搜索。指南提供英文、简体中文和繁体中文版本。在其他语言中只翻译了欢迎页，其他页面以英文显示。
 
 第一次使用？完成下方的设置后，打开 **Phoenix MCP** 面板并选择**设置智能体**。向导会引导您创建访问密钥、选择它可以做什么，并连接 Agent Chat 或您自己的应用。
 
 ## 要求
 
 - Home Assistant 2026.7.0 或更高版本。
-- 每个 Home Assistant 只能配置一个 Phoenix MCP 实例。Home Assistant 会为您安装依赖项 `Babel>=2.18.0` 和 `jsonschema>=4.26.0`。
+- 每个 Home Assistant 只能配置一个 Phoenix MCP 实例。Home Assistant 会为您安装依赖项 `Babel>=2.18.0` 和 `jsonschema>=4.26.0`。在 Home Assistant Core 安装中，它还会安装 Phoenix MCP 需在其后启动的集成（如 ZHA、Bluetooth 和 ESPHome）的依赖项，即使您并未使用这些集成。
 
 ## 通过市场安装
 

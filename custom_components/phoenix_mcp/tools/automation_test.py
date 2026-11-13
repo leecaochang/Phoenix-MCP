@@ -1,7 +1,10 @@
 """Test an automation trigger or condition against the live home before it is saved.
 
 test_trigger registers trigger definitions with Home Assistant's own trigger helpers for a short,
-bounded wait and reports the first firing; test_condition evaluates one condition now. Both read
+bounded wait and reports the first firing; test_condition evaluates one condition now. Neither lets
+Home Assistant compile or render a caller template: test_trigger refuses templates, which would run
+on every state change, and test_condition renders each one in the disposable template worker over
+the key's scrubbed states and hands Home Assistant only a reference to the result. Both read
 only what the key may read: every entity a definition names, by ID, registry ID or literal template
 lookup, every entity a target expands to and every entity of a device trigger's device needs Read,
 proved before anything runs and again before a result is returned. A definition whose reach cannot
@@ -15,11 +18,11 @@ import datetime
 import json
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
 from homeassistant.core import Context, HomeAssistant, State, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, TemplateError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import condition as ha_condition
 from homeassistant.helpers import entity_registry as er
@@ -42,12 +45,15 @@ from ..policy_engine import (
 )
 from ..redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 from ..request_authority import check_request_authority
-from ..template_scope import HelperScopeError, template_entities
+from ..template_render import TemplateRenderError, async_evaluate_templates_for_access_key
+from ..template_scope import HelperScopeError, caller_template_strings, is_template, template_entities
 from ..tool_common import _tool_error, _tool_success
+
+if TYPE_CHECKING:
+    from ..data import PhoenixData
 
 _LOGGER = logging.getLogger(__name__)
 
-_TEMPLATE_MARKERS = ("{{", "{%", "{#")
 _KIND_KEYS = frozenset({"platform", "trigger", "condition"})
 _VARIABLE_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 _RESERVED_VARIABLES = HELPER_TEMPLATE_STATE_FUNCTIONS | HELPER_TEMPLATE_PURE_FUNCTIONS | {"states", "loop"}
@@ -60,6 +66,13 @@ _UNSCOPED = (
     "device of a device trigger or condition. Name entities with entity_id elsewhere."
 )
 _MAX_RESULT_DEPTH = 12
+_TRIGGER_TEMPLATES = (
+    "Templates cannot be tested with test_trigger: Home Assistant would run them on every state "
+    "change. Check a template's current value with test_condition, as a template condition."
+)
+# Caller variable names start with a letter, so these never collide with one.
+_RESULT_VARIABLE = "_phoenix_template_{}"
+_SELECTOR_FIELDS = ("device_id", "area_id", "floor_id", "label_id")
 
 
 class _Refused(Exception):
@@ -103,7 +116,7 @@ def _collect(value: Any, hass: HomeAssistant, scope: _Scope, data_names: frozens
     if depth > _MAX_RESULT_DEPTH:
         raise _Refused("This definition is nested too deeply to check.")
     if isinstance(value, str):
-        if any(marker in value for marker in _TEMPLATE_MARKERS):
+        if is_template(value):
             try:
                 scope.entities |= template_entities(value, data_names, scope.attributes)
             except HelperScopeError as err:
@@ -149,16 +162,24 @@ def _reached(scope: _Scope, hass: HomeAssistant) -> set[str] | None:
     """Every entity the targets and devices reach now, or None when one names nothing that exists.
 
     Targets use Core's own expansion with groups expanded, and with configuration and diagnostic
-    entities left out only where the kind's own class leaves them out. A device must have an entity.
+    entities left out only where the kind's own class leaves them out. Each device, area, floor
+    and label selector must reach an entity, as in describe_area, so an empty one looks missing.
+    A device trigger's device must have an entity.
     """
     reached: set[str] = set()
     for kind, target in scope.targets:
+        primary = scope.primary_only.get(kind, False)
         selected = ha_target.async_extract_referenced_entity_ids(
-            hass, ha_target.TargetSelection(target), True,
-            primary_entities_only=scope.primary_only.get(kind, False))
+            hass, ha_target.TargetSelection(target), True, primary_entities_only=primary)
         if (selected.missing_devices or selected.missing_areas or selected.missing_floors
                 or selected.missing_labels):
             return None
+        for field in _SELECTOR_FIELDS:
+            for selector in target.get(field) or []:
+                alone = ha_target.async_extract_referenced_entity_ids(
+                    hass, ha_target.TargetSelection({field: [selector]}), True, primary_entities_only=primary)
+                if not alone.referenced | alone.indirectly_referenced:
+                    return None
         reached |= selected.referenced | selected.indirectly_referenced
     registry = er.async_get(hass)
     for device_id in scope.devices:
@@ -218,7 +239,7 @@ def _trigger_kinds(triggers: list) -> list[str]:
         if "." not in kind and kind not in AUTOMATION_TEST_TRIGGERS:
             raise _Refused(
                 f"The {kind} trigger cannot be tested here. Supported: "
-                f"{', '.join(sorted(AUTOMATION_TEST_TRIGGERS))}, and entity triggers such as "
+                f"{', '.join(sorted(AUTOMATION_TEST_TRIGGERS - {'template'}))}, and entity triggers such as "
                 "light.turned_on with an entity_id target."
             )
         kinds.append(kind)
@@ -256,17 +277,26 @@ def _condition_kinds(condition: Any, depth: int = 0) -> list[str]:
 
 async def _entity_class(hass: HomeAssistant, platform: str, key: str) -> type | None:
     """The class of a new-style trigger or condition key when it is one of Core's entity classes."""
-    base: type
-    try:
-        if platform == "trigger":
-            # Local: Core's entity trigger and condition bases arrived after the supported floor.
+    base: Any
+    # Both bases exist at the 2026.7 floor in the flat helper modules; the trigger base moved to
+    # a package in 2026.10 and the condition base in 2026.11.
+    if platform == "trigger":
+        try:
+            # Local: the package path exists only from 2026.10.
             from homeassistant.helpers.trigger.entity_trigger import EntityTriggerBase
-            base, relative = EntityTriggerBase, ha_trigger.get_relative_description_key
-        else:
-            # Local: as above.
+            base = EntityTriggerBase
+        except ImportError:
+            base = getattr(ha_trigger, "EntityTriggerBase", None)
+        relative = ha_trigger.get_relative_description_key
+    else:
+        try:
+            # Local: the package path exists only from 2026.11.
             from homeassistant.helpers.condition.entity_condition import EntityConditionBase
-            base, relative = EntityConditionBase, ha_condition.get_relative_description_key
-    except ImportError:
+            base = EntityConditionBase
+        except ImportError:
+            base = getattr(ha_condition, "EntityConditionBase", None)
+        relative = ha_condition.get_relative_description_key
+    if not isinstance(base, type):
         return None
     domain = key.split(".", 1)[0]
     try:
@@ -345,6 +375,8 @@ async def _tool_test_trigger(
         ), "invalid_request", "test_trigger"
     scope = _Scope()
     try:
+        if caller_template_strings(triggers):
+            raise _Refused(_TRIGGER_TEMPLATES)
         variables = _variables(args)
         kinds = _trigger_kinds(triggers)
         _collect(triggers, hass, scope, frozenset(variables))
@@ -390,10 +422,66 @@ async def _tool_test_trigger(
     return _tool_success(json.dumps(body, default=str)), "allowed", "test_trigger"
 
 
+class _FailedTemplate:
+    """A template the worker could not render: Home Assistant's render of its reference raises."""
+
+    def __init__(self, message: str) -> None:
+        self._message = message
+
+    def __str__(self) -> str:
+        raise TemplateError(self._message)
+
+
+def _with_template_references(raw: Any, hass: HomeAssistant) -> tuple[Any, list[dict], dict[str, Any]]:
+    """A copy of a raw condition with each template replaced by a reference to its worker result.
+
+    Returns the copy, the renders to run and, per reference variable, the render index, or for
+    a numeric_state value_template one index per entity, rendered with that entity as state.
+    """
+    renders: list[dict] = []
+    references: dict[str, Any] = {}
+
+    def walk(value: Any, holder: dict | None, key: Any) -> Any:
+        if is_template(value):
+            name = _RESULT_VARIABLE.format(len(references))
+            if holder is not None and key == "value_template" and holder.get("condition") == "numeric_state":
+                named = holder.get("entity_id")
+                per_entity = {}
+                for part in named if isinstance(named, list) else [named]:
+                    for entity_id in _entity_strings(part, hass) if isinstance(part, str) else []:
+                        per_entity[entity_id] = len(renders)
+                        renders.append({"template": value, "state": entity_id})
+                references[name] = per_entity
+                return "{{ " + name + "[state.entity_id] }}"
+            references[name] = len(renders)
+            renders.append({"template": value, "state": None})
+            return "{{ " + name + " }}"
+        if isinstance(value, dict):
+            return {item_key: walk(item, value, item_key) for item_key, item in value.items()}
+        if isinstance(value, list):
+            return [walk(item, None, None) for item in value]
+        return value
+
+    return walk(raw, None, None), renders, references
+
+
+def _reference_values(references: dict[str, Any], answers: list[dict]) -> dict[str, Any]:
+    """The variables a rewritten condition reads: each worker output, or a value whose render raises."""
+    def value(index: int) -> Any:
+        answer = answers[index]
+        return answer["output"] if "output" in answer else _FailedTemplate(answer["failure"])
+
+    return {name: {entity_id: value(i) for entity_id, i in index.items()} if isinstance(index, dict) else value(index)
+            for name, index in references.items()}
+
+
 async def _tool_test_condition(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: evaluate one condition against current states, with optional plain-data variables."""
+    """MCP tool: evaluate one condition against current states, with optional plain-data variables.
+
+    Templates are rendered in the template worker; Home Assistant evaluates the rest.
+    """
     if effective_cap(access_key, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "test_condition"
     raw = args.get("condition")
@@ -409,8 +497,17 @@ async def _tool_test_condition(
             return _tool_error(refusal), "not_found" if refusal is _NOT_FOUND else "denied", "test_condition"
     except _Refused as err:
         return _tool_error(str(err)), "invalid_request", "test_condition"
+    rewritten, renders, references = _with_template_references(raw, hass)
+    answers: list[dict] = []
+    if renders:
+        try:
+            answers = await async_evaluate_templates_for_access_key(
+                renders, variables, scope.entities, access_key, hass, data)
+        except TemplateRenderError as err:
+            return _tool_error(f"The condition's templates could not be evaluated: {err}"), \
+                "invalid_request", "test_condition"
     try:
-        validated = await ha_condition.async_validate_condition_config(hass, cv.CONDITION_SCHEMA(raw))
+        validated = await ha_condition.async_validate_condition_config(hass, cv.CONDITION_SCHEMA(rewritten))
         checker = await ha_condition.async_from_config(hass, validated)
     except (vol.Invalid, HomeAssistantError) as err:
         return _tool_error(f"Home Assistant refused this condition: {_error_text(err, access_key, hass)}"), \
@@ -419,7 +516,8 @@ async def _tool_test_condition(
     condition_trace = ha_trace.trace_get()
     try:
         with ha_trace.suppress_template_error_logging():
-            passed = checker.async_check(variables=variables or None)
+            passed = checker.async_check(
+                variables={**variables, **_reference_values(references, answers)} or None)
     except HomeAssistantError as err:
         return _tool_error(f"The condition could not be evaluated: {_error_text(err, access_key, hass)}"), \
             "invalid_request", "test_condition"
@@ -429,12 +527,14 @@ async def _tool_test_condition(
     if (refusal := _scope_error(scope, access_key, hass)) is not None:
         return _tool_error(refusal), "not_found" if refusal is _NOT_FOUND else "denied", "test_condition"
     body: dict[str, Any] = {"result": bool(passed)}
-    errors = [
-        _error_text(Exception(message), access_key, hass)
+    messages = [message for answer in answers for message in answer.get("warnings", [])]
+    messages += [
+        message
         for elements in (condition_trace or {}).values()
         for element in elements
         for message in getattr(element, "template_errors", None) or []
     ]
+    errors = [_error_text(Exception(message), access_key, hass) for message in messages]
     if errors:
         body["template_errors"] = errors[:10]
     return _tool_success(json.dumps(body, default=str)), "allowed", "test_condition"

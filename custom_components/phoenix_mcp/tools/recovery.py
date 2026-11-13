@@ -42,7 +42,7 @@ from ..ws_dispatch import (
     WsDashboardNotFoundError, async_get_lovelace_config, WsDispatchError, async_ws_command,
 )
 from .lovelace import (
-    _dashboard_layout_snapshot, _recoverable_dashboard_save, dashboard_registry_refused,
+    _dashboard_layout_snapshot, _recoverable_dashboard_save, capturing_layout_delete, dashboard_registry_refused,
     _dashboard_registry_snapshot,
 )
 
@@ -111,6 +111,45 @@ def _restore_diff(record: dict[str, Any], side: str, current: dict[str, Any]) ->
         if isinstance(before, dict) else None,
         "after": json.dumps(selected, indent=2, sort_keys=True, default=str),
         "preview": {"helper_type": selected["options"]["template_type"], "side": side},
+    }
+
+
+def _restores_to_absent(snapshot: dict[str, Any], target: dict[str, Any]) -> bool:
+    """Whether restoring this registry snapshot deletes the dashboard that exists now."""
+    return snapshot.get("exists") is False and bool(target.get("exists"))
+
+
+async def _dashboard_registry_restore_diff(
+    snapshot: dict[str, Any], target: dict[str, Any], hass: HomeAssistant,
+) -> dict[str, Any]:
+    """The review of a registry restore; one that deletes the dashboard says so, with its views."""
+    if not _restores_to_absent(snapshot, target):
+        return {
+            "kind": "config_diff", **_summary("restore.dashboard_registry", label=snapshot["resource_id"]),
+            "target": {"type": "dashboard", "id": snapshot["resource_id"]},
+            "before": json.dumps(target, default=str),
+            "after": json.dumps(snapshot, default=str),
+        }
+    row = target.get("dashboard") or {}
+    label = row.get("title") or row.get("url_path") or snapshot["resource_id"]
+    views = None
+    try:
+        layout = await async_get_lovelace_config(hass, row.get("url_path"), storage_only=True)
+        views = len(layout["views"]) if isinstance(layout, dict) and isinstance(layout.get("views"), list) else 0
+    except WsDashboardNotFoundError:
+        views = 0
+    except Exception:  # the count is advisory; the delete captures the layout itself
+        views = None
+    return {
+        "kind": "system_action", **_summary("dashboard.delete", label=label),
+        "target": {"type": "dashboard", "id": snapshot["resource_id"], "label": label},
+        "before": json.dumps(target, default=str),
+        "preview": {
+            "warning": ("The selected snapshot is from before this dashboard existed, so restoring it deletes "
+                        "the dashboard with all its views and cards. Phoenix keeps a recovery copy of the "
+                        "layout first."),
+            "views": views,
+        },
     }
 
 
@@ -418,16 +457,12 @@ async def _tool_restore_dashboard_registry(
         digest, fingerprint = content_hash(snapshot), content_hash(target)
     except Exception:  # incomplete registry read is not absence
         return _tool_error("Could not read the current dashboard registry."), "invalid_request", tool
+    diff = await _dashboard_registry_restore_diff(snapshot, target, hass)
     if args.get("snapshot_digest") is None and args.get("target_fingerprint") is None:
         return _tool_success(json.dumps({
             "status": "needs_confirmation", "recovery_id": record["id"], "side": side,
             "snapshot_digest": digest, "target_fingerprint": fingerprint,
-            "diff": {
-                "kind": "config_diff", **_summary("restore.dashboard_registry", label=snapshot["resource_id"]),
-                "target": {"type": "dashboard", "id": snapshot["resource_id"]},
-                "before": json.dumps(target, default=str),
-                "after": json.dumps(snapshot, default=str),
-            },
+            "diff": diff,
         }, default=str)), "allowed", tool
     if args.get("snapshot_digest") != digest or args.get("target_fingerprint") != fingerprint:
         return _tool_error("The selected dashboard registry snapshot or target changed; request a fresh restore receipt."), "invalid_request", tool
@@ -435,11 +470,7 @@ async def _tool_restore_dashboard_registry(
              "snapshot_digest": digest, "target_fingerprint": fingerprint}
     blocked = await _gate(
         "cap_lovelace_write", access_key, hass, data, tool_name=tool, args=bound,
-        request_id=request_id, client_ip=client_ip,
-        diff=lambda: {"kind": "config_diff", **_summary("restore.dashboard_registry", label=snapshot["resource_id"]),
-                      "target": {"type": "dashboard", "id": snapshot["resource_id"]},
-                      "before": json.dumps(target, default=str),
-                      "after": json.dumps(snapshot, default=str)},
+        request_id=request_id, client_ip=client_ip, diff=lambda: diff,
     )
     if blocked is not None:
         return blocked
@@ -458,14 +489,31 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, acce
     key = _dashboard_registry_lookup_key(record, side, snapshot)
     if content_hash(snapshot) != args.get("snapshot_digest"):
         return _tool_error("The selected dashboard registry snapshot changed after approval."), "invalid_request", tool
-    sent = None
     try:
         target = await _dashboard_registry_snapshot(hass, key)
-        if content_hash(target) != args.get("target_fingerprint"):
-            return _tool_error("The dashboard registry changed after approval."), "invalid_request", tool
-        check_request_authority()
-        if target == snapshot:
-            return _tool_success(json.dumps({"status": "verified", "already_applied": True})), "allowed", tool
+    except Exception:  # an unreadable registry is not absence; nothing was dispatched
+        return _tool_error("Could not read the current dashboard registry."), "invalid_request", tool
+    if content_hash(target) != args.get("target_fingerprint"):
+        return _tool_error("The dashboard registry changed after approval."), "invalid_request", tool
+    check_request_authority()
+    if target == snapshot:
+        return _tool_success(json.dumps({"status": "verified", "already_applied": True})), "allowed", tool
+    if _restores_to_absent(snapshot, target):
+        # Core deletes the stored layout with the row, so the layout gets its own recovery
+        # copy first, as delete_dashboard does.
+        return await capturing_layout_delete(
+            (target.get("dashboard") or {}).get("url_path"),
+            lambda: _restore_dashboard_registry_row(record, side, snapshot, key, target, access_key, hass, data),
+            access_key=access_key, hass=hass, data=data, tool_name=tool,
+        )
+    return await _restore_dashboard_registry_row(record, side, snapshot, key, target, access_key, hass, data)
+
+
+async def _restore_dashboard_registry_row(record, side, snapshot, key, target, access_key, hass: HomeAssistant, data):
+    """Restore one registry row under its recovery record, after the caller's target check."""
+    tool = "restore_configuration"
+    sent = None
+    try:
         recovery = data.config_recovery
         resource = f"dashboard_registry:{key}"
         async with recovery.resource(resource):

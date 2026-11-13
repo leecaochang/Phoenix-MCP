@@ -35,6 +35,8 @@
 
 決定智慧體可以做什麼的存取金鑰。你只能選擇有效的金鑰。建立或撤銷金鑰後，清單會隨之更新。如果金鑰已撤銷或過期，它會在此處被清除。
 
+選擇其他金鑰或關閉智慧體，也會停止仍在使用舊金鑰執行的對話。
+
 Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{label:routing.enableVoice}}**。
 
 ### {{label:settings.providerAccount}} {#voice-provider}
@@ -43,7 +45,9 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 ### {{label:settings.model}} {#voice-model}
 
-負責回答的模型。請先選擇帳戶。如果提供者停用該模型，Phoenix 會切換到其後續模型。
+負責回答的模型。請先選擇帳戶。如果提供者停用該模型，Phoenix 會切換到其[後續模型](guide:window.settingsProviders#change-model)。
+
+智慧體最多等待 30 秒讓模型開始回答，本機 Ollama 伺服器除外。之後它最多等待 3 分鐘接收新內容，每次回覆最多等待 10 分鐘。
 
 ### {{label:routing.enableVoice}} {#voice-commands}
 
@@ -95,7 +99,7 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 ### {{label:settings.model}} {#ai-task-model}
 
-執行任務的模型。
+執行任務的模型。如果模型的一次回覆超過 10 分鐘，或 3 分鐘內沒有新內容，任務就會失敗。
 
 ### {{label:settings.conversationStyle}} {#ai-task-style}
 

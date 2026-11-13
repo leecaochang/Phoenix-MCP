@@ -41,6 +41,8 @@ Restoring a helper usually replaces it whole, so fields added since are removed.
 
 Before some risky writes, Phoenix also keeps a safety copy, separate from Changes. If a write may not have finished, Phoenix asks in Approvals whether to put the copy back. Safety copies survive deleting core data.
 
+Restoring a dashboard to a copy from before it existed deletes the dashboard with its views. Phoenix keeps a safety copy of the views first, and the review tells you it deletes the dashboard.
+
 Phoenix won't keep a copy that holds a secret, so it refuses the change instead. For a dashboard, the agent's message names the place in the layout. Ordinary card settings such as `max_tokens` or a `session` label are fine, and the layout can nest up to 100 levels.
 
 Phoenix checks unfinished writes every 30 seconds and at startup. It keeps up to 256 safety copies, each up to 1 MiB. Resolved copies are kept for 30 days, and at most 20 per item.

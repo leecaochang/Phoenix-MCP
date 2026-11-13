@@ -6,6 +6,7 @@ disconnect tests use a real socket on a server configured the same way. Most fau
 cancel the task that is running the action, which is how a stopping Home Assistant reaches it.
 """
 
+from homeassistant.core import callback
 import asyncio
 from contextlib import contextmanager, suppress
 from dataclasses import replace
@@ -145,7 +146,7 @@ async def test_cancel_during_dispatch_resolves_failed_and_is_never_offered_again
     data, runner, client, _ = home
     record = await _approval(data, runner)
     resolved = []
-    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", resolved.append)
+    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", callback(lambda event: resolved.append(event)))
 
     async def cancelled(*_a, **_k):
         asyncio.current_task().cancel()
@@ -205,14 +206,14 @@ async def _settled(data, record_id):
 
 
 def _audit_methods(data):
-    return [row.method for row in data.audit._log]
+    return [row.method for row in data.audit._rows()]
 
 
 async def test_a_disconnect_leaves_the_approved_action_running_to_its_end(hass, socket_home):
     data, runner, client = socket_home
     record = await _approval(data, runner)
     resolved = []
-    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", resolved.append)
+    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", callback(lambda event: resolved.append(event)))
     steps, resume = [], asyncio.Event()
     leaving = _Disconnect(client, APPROVE.format(record.id))
 
@@ -242,7 +243,7 @@ async def test_a_disconnect_during_the_final_save_still_reports_the_outcome(hass
     data, runner, client = socket_home
     record = await _approval(data, runner)
     resolved = []
-    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", resolved.append)
+    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", callback(lambda event: resolved.append(event)))
     resume = asyncio.Event()
     leaving = _Disconnect(client, APPROVE.format(record.id))
     real_save = data.store._store.async_save
@@ -340,7 +341,7 @@ async def test_a_stop_during_the_final_save_reports_only_a_saved_outcome(hass, h
     data, runner, client, _ = home
     record = await _approval(data, runner)
     resolved = []
-    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", resolved.append)
+    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", callback(lambda event: resolved.append(event)))
     real_save = data.store._store.async_save
     running = []
 
@@ -368,7 +369,7 @@ async def test_a_stop_during_the_final_save_reports_only_a_saved_outcome(hass, h
     else:
         assert stored.status == STATUS_PENDING and stored.execution_started_at is not None
         assert not resolved
-        assert [row.payload for row in data.audit._log if row.method == "approval/executed"] != []
+        assert [row.payload for row in data.audit._rows() if row.method == "approval/executed"] != []
 
 
 @contextmanager
@@ -657,7 +658,7 @@ async def test_the_first_failed_check_closes_the_request(hass, home, hass_admin_
     row = audit.call_args.kwargs
     assert audit.call_count == 1
     assert (row["method"], row["outcome"]) == (method, "denied")
-    assert row["payload"] == ({"reason": reason} if reason else None)
+    assert row["payload"] == {"approval_id": record.id, **({"reason": reason} if reason else {})}
     assert row["resource"] == f"approval:restart_ha:{record.id}"
     assert (row["access_key_id"], row["access_key_name"], row["ha_user_id"]) == (
         "admin", f"admin:{hass_admin_user.id}", hass_admin_user.id)
@@ -745,9 +746,13 @@ async def test_the_lifecycle_audit_names_the_admin_and_the_execution_names_the_k
         response = await client.post(APPROVE.format(record.id), json={})
     assert response.status == 200
     decision, execution = (call.kwargs for call in audit.call_args_list)
-    assert (decision["method"], decision["outcome"], decision["payload"]) == ("approval/approved", "allowed", None)
+    assert (decision["method"], decision["outcome"], decision["payload"]) == (
+        "approval/approved", "allowed", {"approval_id": record.id})
     assert (decision["access_key_id"], decision["ha_user_id"]) == ("admin", hass_admin_user.id)
-    assert (execution["method"], execution["outcome"], execution["payload"]) == ("approval/executed", "allowed", None)
+    # The execution joins the queuing request; the decision keeps the administrator's.
+    assert (execution["method"], execution["outcome"]) == ("approval/executed", "allowed")
+    assert execution["payload"] == {"approval_id": record.id, "admin_request_id": decision["request_id"]}
+    assert execution["request_id"] == record.request_id != decision["request_id"]
     assert (execution["access_key_id"], execution["access_key_name"]) == (runner.id, runner.name)
     assert execution["ha_user_id"] == "requester"
     assert decision["settings"] is execution["settings"] is data.store.get_settings()
@@ -860,7 +865,9 @@ async def test_an_unsaved_outcome_records_what_the_executor_reported(hass, home)
     with (patch.object(data.audit, "record", wraps=data.audit.record) as audit, patch(EXECUTOR, execute)):
         await client.post(APPROVE.format(record.id), json={})
     del data.store._store.async_save
-    assert audit.call_args.kwargs["payload"] == {"finalization": "not_saved", "executor_outcome": "allowed"}
+    assert audit.call_args.kwargs["payload"] == {
+        "approval_id": record.id, "admin_request_id": audit.call_args_list[0].kwargs["request_id"],
+        "finalization": "not_saved", "executor_outcome": "allowed"}
 
 
 async def test_an_audit_failure_on_an_unsaved_outcome_still_keeps_the_claim(hass, home):
@@ -890,7 +897,7 @@ async def test_a_notification_that_cannot_be_dismissed_decides_nothing(hass, hom
     data, runner, client, _ = home
     record = await _approval(data, runner)
     resolved = []
-    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", resolved.append)
+    hass.bus.async_listen(f"{DOMAIN}_approval_resolved", callback(lambda event: resolved.append(event)))
     execute = AsyncMock(return_value=OK)
 
     with (patch("homeassistant.components.persistent_notification.async_dismiss", side_effect=RuntimeError("boom")),

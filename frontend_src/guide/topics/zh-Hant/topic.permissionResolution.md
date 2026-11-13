@@ -61,6 +61,8 @@ R 用於觸發是安全的：智慧體可以看到這些實體，但無法執行
 
 智慧體在執行輸入中指定的實體不同：它[需要與目標相同的存取權限](guide:topic.tools#actions)。Phoenix 只能看到輸入中直接寫明的內容，所以由片段拼出實體 ID 的腳本能繞過這項檢查。
 
+Phoenix 會檢查 `script.turn_on`、依名稱執行的腳本和 `automation.trigger` 的輸入，無論腳本是透過其 ID、區域還是裝置指定的。`homeassistant.turn_on`、`turn_off` 和 `toggle` 會把資料原樣交給腳本而不經檢查，因此它們只能在不帶資料時執行腳本。
+
 通用恆溫器和通用濕度調節器輔助項目同樣以 Home Assistant 的身分動作。Phoenix 不會透過它們檢查其驅動的開關。
 
 相關：[自動化和腳本](guide:topic.tools#automations)

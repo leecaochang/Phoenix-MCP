@@ -23,6 +23,7 @@ import { api, setHass } from "../api";
 import { JS_BUILD } from "../version";
 import { purgeAgentCliStorage } from "../utils/agentcli_state";
 import { syncCardCatalog } from "../utils/card_harvest";
+import { onDashboardPage } from "../utils/dashboard_page";
 import { loadTranslations, resolveLanguage, syncTranslations, t } from "../i18n";
 import { applyProfileButton, BTN_CLASS, deepQueryAll, extractEntityId, isSelfMutation, nameInsertionPoint, onEntityPage, pageRoot, personEntityId, SUBPAGE_SURFACES, WIDEN_STYLE_ID } from "./dom";
 import { claimInjectController, type InjectController } from "./ownership";
@@ -586,11 +587,12 @@ function start(): void {
     return;
   }
   setHass(hass);
-  // Opportunistic card-catalog harvest. This module loads on EVERY HA page, so
-  // it sees dashboards whose Lovelace resources are already imported, keeping
-  // the catalog fresher than the panel alone can. Rate-limited internally and
-  // fire-and-forget: it must never delay or fail the profile injection.
-  void syncCardCatalog();
+  // Opportunistic card-catalog harvest, only on a dashboard page: there Home
+  // Assistant has already imported the Lovelace resources, which keeps the
+  // catalog fresher than the panel alone can without running a resource on a page
+  // that would not load it. Rate-limited internally and fire-and-forget: it must
+  // never delay or fail the profile injection.
+  if (onDashboardPage(hass)) void syncCardCatalog();
   // The first scan waits for the strings, so it paints its buttons with labels rather than raw keys.
   const generation = identityGeneration;
   void loadTranslations(hass, resolveLanguage(hass)).then(() => { if (generation === identityGeneration) safe(scan); });

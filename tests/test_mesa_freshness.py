@@ -8,6 +8,8 @@ and the restricted privacy level have tightened it.
 
 from __future__ import annotations
 
+from homeassistant.core import callback
+
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -34,7 +36,7 @@ def _access_key() -> AccessKeyRecord:
 async def test_natural_expiry_fires_without_another_lease_operation(hass):
     runtime = await async_setup_mesa(hass, "advisory")
     events = []
-    hass.bus.async_listen("phoenix_mcp_mesa_lease_expired", lambda e: events.append(e.data))
+    hass.bus.async_listen("phoenix_mcp_mesa_lease_expired", callback(lambda e: events.append(e.data)))
     # Granted a minute ago for ten seconds, so it has already run out.
     granted = runtime.lease_manager.request(
         ["light.a"], 10, session_id="fresh", now=datetime.now(UTC) - timedelta(minutes=1),

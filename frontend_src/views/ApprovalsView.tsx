@@ -308,6 +308,7 @@ export function ReviewWindow() {
         <p className="phx-review-context" data-guide="window.review#context">
           <ApprovalStatusLabel record={r} claimed={claimed} />
           <span>{r.access_key_name}</span>
+          {r.oauth_app && <span>{oauthAppLabel(r)}</span>}
           <span>{pending ? <ExpiresIn record={r} /> : t("approvalSummary.history.resolvedAt", { time: formatDateTime(r.resolved_at || r.created_at) })}</span>
         </p>
       </div>
@@ -357,6 +358,11 @@ function Section({ id, label, defaultOpen, guide, help, children }: { id: string
   );
 }
 
+/** The app whose OAuth sign-in queued a request, as Log Details names it. */
+function oauthAppLabel(r: ApprovalRecord): string {
+  return r.oauth_app ? `${r.oauth_app.name || t("oauth.unnamedApp")} · ${r.oauth_app.host}` : "";
+}
+
 export function RequestDetailsWindow() {
   const a = useApprovals();
   const r = a?.current;
@@ -370,6 +376,7 @@ export function RequestDetailsWindow() {
             <h4 className="phx-request-title">{diffSummary(r.diff) || friendlyToolName(r.tool_name)}</h4>
             <div className="approval-detail-meta">
               <span className="stat-label">{t("approvals.metaAccessKey")}</span><span>{r.access_key_name}</span>
+              {r.oauth_app && <><span className="stat-label">{t("audit.rowOAuthApp")}</span><span>{oauthAppLabel(r)}</span></>}
               <span className="stat-label">{t("approvals.metaTool")}</span><span><code>{friendlyToolName(r.tool_name)}</code></span>
               <span className="stat-label">{t("approvals.metaCapability")}</span><span><code>{r.cap_name}</code></span>
               <span className="stat-label">{t("approvals.metaCreated")}</span><span>{formatDateTime(r.created_at)}</span>

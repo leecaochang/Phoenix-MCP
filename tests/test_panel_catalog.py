@@ -206,6 +206,20 @@ def test_backend_rendered_matching_translation_is_used(tmp_path, monkeypatch) ->
     assert catalog_text.voice_text("de", "local_state", state="an") == "Der Zustand ist an."
 
 
+def test_a_plural_category_english_lacks_is_checked_against_its_other_form(tmp_path, monkeypatch) -> None:
+    """Polish few and many have no English key; a renamed placeholder there is dropped too."""
+    _fake_catalogs(
+        tmp_path,
+        monkeypatch,
+        en={"panel": {"n": {"one": "{count} profile", "other": "{count} profiles"}}},
+        pl={"panel": {"n": {"one": "{count} profil", "few": "{cnt} profile", "many": "{count} profili",
+                            "other": "{count} profilu"}}},
+    )
+    catalog = catalog_text.panel_catalog("pl")
+    assert "n.few" not in catalog
+    assert catalog["n.many"] == "{count} profili" and catalog["n.other"] == "{count} profilu"
+
+
 def test_unparseable_panel_translation_keeps_the_english(tmp_path, monkeypatch) -> None:
     """A stray brace drops that one string instead of failing the whole catalog."""
     _fake_catalogs(

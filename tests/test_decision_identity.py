@@ -1,16 +1,21 @@
 """Literal target evidence is independent of a model's selected probability."""
 import pytest
+from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp.routing.decision_identity import explicit_write_target
+from custom_components.phoenix_mcp.routing.decision_identity import explicit_write_target, identity_competitors
 from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ENTITY_CATEGORIES
 
 
-def check(sentence, *, name='Audit Lamp', aliases=(), language='en', other=None, intent='PhoenixEntityLightColor', value='blue'):
+def check(sentence, *, name='Audit Lamp', aliases=(), language='en', other=None, intent='PhoenixEntityLightColor', value='blue',
+          outside=()):
     targets = {'t0': {'entity_id': 'light.audit_lamp', 'name': name, 'aliases': list(aliases)}}
     if other is not None:
         targets['t1'] = {'entity_id': 'light.other', 'name': other}
     return explicit_write_target(sentence, targets, {
-        'intent': intent, 'entity_ids': ['light.audit_lamp'], 'value': value}, language)
+        'intent': intent, 'entity_ids': ['light.audit_lamp'], 'value': value}, language, outside)
 
 
 @pytest.mark.parametrize('sentence,expected', [
@@ -66,10 +71,43 @@ def test_copied_text_value_is_not_target_identity_evidence():
 def test_identity_read_and_resource_bounds_are_explicit():
     assert check('What is it doing?', intent='HassGetState')
     assert not check('Audit Lamp ' * 257)
-    assert not explicit_write_target('Audit Lamp', {}, {'intent': 'HassTurnOn', 'entity_ids': []}, 'en')
+    assert not explicit_write_target('Audit Lamp', {}, {'intent': 'HassTurnOn', 'entity_ids': []}, 'en', [])
 
 
 def test_redacted_catalog_text_is_not_identity_evidence():
     assert not check('Set <redacted> to blue.', name='<redacted>')
     assert not check('Set <redacted-entity> to blue.', aliases=['<redacted-entity>'])
     assert check('Set light.audit_lamp to blue.', name='<redacted>')
+
+
+def test_name_outside_the_catalog_that_covers_the_mention_refuses():
+    heater = [('switch.heater', ['switch.heater', 'Heater Audit Lamp'])]
+    assert not check('Set the Heater Audit Lamp to blue.', outside=heater)
+    assert not check('Set Audit Lamp to blue.', outside=[('switch.twin', ['Audit Lamp'])])
+    assert not check('Set Audit Lamp Post to blue.', outside=[('light.post', ['Lamp Post'])])
+    # A shorter outside name inside the catalog name, or one elsewhere in the sentence, proves nothing against it.
+    assert check('Set Audit Lamp to blue.', outside=[('sensor.audit', ['Audit'])])
+    assert check('Set Audit Lamp to blue in the Heater room.', outside=[('switch.heater', ['Heater'])])
+    assert check('Set Audit Lamp to blue.', outside=heater)
+
+
+@pytest.mark.parametrize('sentence,expected', [
+    ('关闭 lamppost', False), ('关闭lamppost', False), ('关闭Lamp', True), ('把Lamp关掉', True), ('关闭 lamp 2', True),
+])
+def test_latin_names_keep_boundaries_in_unsegmented_languages(sentence, expected):
+    assert check(sentence, name='Lamp', language='zh-CN', intent='HassTurnOff') is expected
+
+
+async def test_competitors_are_every_exposed_entity_outside_the_catalog(hass: HomeAssistant):
+    assert await async_setup_component(hass, 'homeassistant', {})
+    registry = er.async_get(hass)
+    desk = registry.async_get_or_create('light', 'test', 'desk', original_name='Desk lamp')
+    heater = registry.async_get_or_create('switch', 'test', 'heater', original_name='Heater desk lamp')
+    registry.async_update_entity(heater.entity_id, aliases={'Warmer'})
+    hidden = registry.async_get_or_create('switch', 'test', 'hidden', original_name='Hidden desk lamp')
+    for entry in (desk, heater, hidden):
+        hass.states.async_set(entry.entity_id, 'on', {'friendly_name': entry.original_name})
+        async_expose_entity(hass, 'conversation', entry.entity_id, entry is not hidden)
+    competitors = dict(identity_competitors(hass, {'t0': {'entity_id': desk.entity_id, 'name': 'Desk lamp'}}))
+    assert set(competitors) == {heater.entity_id}
+    assert {heater.entity_id, 'Heater desk lamp', 'Warmer'} <= set(competitors[heater.entity_id])

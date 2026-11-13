@@ -67,3 +67,31 @@ def test_mutable_refs_are_isolated_to_scheduled_canaries() -> None:
         assert "if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'" in text
         assert _uses(path, "compatibility-canary").count(mutable_ref) == 1
         assert text.count(mutable_ref) == 1
+
+
+def test_every_checkout_drops_the_job_token() -> None:
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(lines):
+            if re.match(r"^\s+-?\s*uses:\s*actions/checkout@", line):
+                block = []
+                for following in lines[index + 1:]:
+                    if re.match(r"^\s+- ", following) or not following.startswith("        "):
+                        break
+                    block.append(following.strip())
+                assert "persist-credentials: false" in block, (path.name, index + 1)
+
+
+def test_the_hacs_action_never_comments() -> None:
+    path = WORKFLOWS / "hacs.yml"
+    for job in _jobs(path):
+        assert _uses(path, job)
+    text = path.read_text(encoding="utf-8")
+    assert text.count("uses: hacs/action@") == text.count("comment: false") == 2
+
+
+def test_the_compatibility_matrix_runs_on_a_schedule_and_never_gates_a_push() -> None:
+    text = (WORKFLOWS / "compatibility.yml").read_text(encoding="utf-8")
+    triggers = text.split("\non:\n", 1)[1].split("\n\n", 1)[0]
+    assert "  schedule:\n    - cron:" in triggers and "  workflow_dispatch:" in triggers
+    assert "push" not in triggers and "pull_request" not in triggers

@@ -2,7 +2,10 @@
 
 A per-request ScopedProfileStore shows the four handlers only entities the key may read, so
 counts, cursors and fingerprints stay scope-relative. Out-of-scope and ghost lookups return
-the identical not_found envelope.
+the identical not_found envelope. A readable profile can still name other entities in its
+text and predicates (an area layer, a limit watching another entity), so every string of a
+result has the entity IDs the key cannot read replaced, and an entry keyed by one goes.
+Administrator surfaces read the store directly and keep the text.
 """
 
 from __future__ import annotations
@@ -10,6 +13,7 @@ from __future__ import annotations
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er_mod
+from homeassistant.loader import async_get_loaded_integration
 
 import hashlib
 import json
@@ -19,8 +23,8 @@ from typing import TYPE_CHECKING, Any
 
 from .const import CAP_DENY, MAX_PREVIEW_ENTITY_IDS
 from .capability import effective_cap
-from .redaction import redact_inaccessible_entity_ids_in_text
-from .mesa import async_semantic_moments, build_caller_context
+from .redaction import entity_exists, redact_inaccessible_entity_ids_in_text
+from .mesa import _on_event_loop, async_semantic_moments, build_caller_context
 from .mesa_core import InheritanceResolver, ProfileQueryResult, ProfileStore
 from .mesa_core.mcp.schemas import TOOL_DESCRIPTIONS, TOOL_SCHEMAS
 from .mesa_core.mcp.tools import MesaToolHandlers
@@ -231,7 +235,7 @@ def authored_restrictions(
                 entry = {"entity_id": entity_id, "control_mode": mode}
                 reason = getattr(boundaries, "control_reason", None)
                 if reason:
-                    entry["reason"] = reason
+                    entry["reason"] = scoped_mesa_text(str(reason), access_key, hass)
                 restricted.append(entry)
             else:
                 truncated += 1
@@ -243,6 +247,38 @@ def authored_restrictions(
     if truncated:
         summary["restricted_truncated"] = truncated
     return summary
+
+
+_PREDICATE_ENTITY_KEYS = ("entity", "entity_id")
+_PREDICATE_VALUE_KEYS = ("value", "values", "state", "operator")
+
+
+def scoped_mesa_text(text: str, access_key: "AccessKeyRecord", hass: HomeAssistant) -> str:
+    """Policy text as an agent may read it: existing entities it cannot read replaced. Event loop only.
+
+    Operator text is not the agent's, so a name that is no entity (a moment ID such as
+    light.turned_on, a service) is no oracle and stays.
+    """
+    return redact_inaccessible_entity_ids_in_text(
+        text, access_key, hass, keep=lambda entity_id: not entity_exists(hass, entity_id))
+
+
+def _scoped_result(value: Any, access_key: "AccessKeyRecord", hass: HomeAssistant, depth: int = 0) -> Any:
+    """A retrieval result with scoped_mesa_text over every string; a hidden entity's key drops its entry."""
+    if depth > 64:
+        return "<redacted>"
+    if isinstance(value, str):
+        return scoped_mesa_text(value, access_key, hass)
+    if isinstance(value, dict):
+        scoped = {key: _scoped_result(item, access_key, hass, depth + 1) for key, item in value.items()
+                  if not isinstance(key, str) or scoped_mesa_text(key, access_key, hass) == key}
+        # A predicate on a hidden entity would still say what state the policy watches for.
+        if any(scoped.get(key) != value.get(key) for key in _PREDICATE_ENTITY_KEYS if isinstance(value.get(key), str)):
+            scoped.update({key: "<redacted>" for key in _PREDICATE_VALUE_KEYS if key in scoped})
+        return scoped
+    if isinstance(value, (list, tuple)):
+        return [_scoped_result(item, access_key, hass, depth + 1) for item in value]
+    return value
 
 
 def _build_validity_context(hass: HomeAssistant) -> Callable[[str], dict[str, Any]]:
@@ -266,7 +302,7 @@ def _build_validity_context(hass: HomeAssistant) -> Callable[[str], dict[str, An
             context["integration_version"] = version
         return context
 
-    return _validity_context
+    return _on_event_loop(hass, _validity_context)
 
 
 def _integration_version(hass: HomeAssistant, entity_id: str) -> str | None:
@@ -278,9 +314,6 @@ def _integration_version(hass: HomeAssistant, entity_id: str) -> str | None:
         entry = er_mod.async_get(hass).async_get(entity_id)
         if entry is None or not entry.platform:
             return None
-        # Local: inside a guard for releases that lack it.
-        from homeassistant.loader import async_get_loaded_integration
-
         version = async_get_loaded_integration(hass, entry.platform).version
         return str(version) if version else None
     except Exception:  # an absent version is not an error
@@ -426,6 +459,7 @@ async def async_call_mesa_tool(
     result = await handler(args)
     if tool_name == "mesa_request_lease":
         result = _scope_lease_result(result, access_key, hass)
+    result = _scoped_result(result, access_key, hass)
     text = json.dumps(result, default=str)
     if _is_error_envelope(result):
         return _tool_error(text), _ERROR_OUTCOMES.get(result["error"], "invalid_request"), tool_name

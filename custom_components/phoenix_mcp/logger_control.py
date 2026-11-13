@@ -326,6 +326,30 @@ class LoggerOverrideManager:
         if self.storage_available:
             await self._store.async_save({"overrides": {}})
 
+    async def async_remove(self) -> None:
+        """Restore every timed override and delete the restoration file, for integration removal.
+
+        A restore that fails still ends the timers and deletes the file, then raises.
+        """
+        try:
+            await self.async_restore_all()
+        finally:
+            for domain in list(self._timers):
+                self._cancel_timer(domain)
+            self.records.clear()
+            if self.hass.data.get(LOGGER_CONTROL_RUNTIME_KEY) is self:
+                del self.hass.data[LOGGER_CONTROL_RUNTIME_KEY]
+            await self._store.async_remove()
+
+
+async def async_remove_logger_overrides(hass: HomeAssistant) -> None:
+    """End Phoenix's timed logger overrides and delete their file, set up in this process or not."""
+    manager = hass.data.get(LOGGER_CONTROL_RUNTIME_KEY)
+    if isinstance(manager, LoggerOverrideManager):
+        await manager.async_remove()
+    else:
+        await Store(hass, LOGGER_CONTROL_STORAGE_VERSION, LOGGER_CONTROL_STORAGE_KEY).async_remove()
+
 
 async def async_get_logger_override_manager(hass: HomeAssistant) -> LoggerOverrideManager:
     """Return the one manager for this HA process, surviving Phoenix reloads."""

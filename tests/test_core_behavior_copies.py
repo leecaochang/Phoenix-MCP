@@ -29,7 +29,7 @@ from custom_components.phoenix_mcp.const import (
     DOMAIN_IMPORTANT_ATTRIBUTES,
     LOCAL_BACKUP_AGENT_IDS,
     MEDIA_SOURCE_ENTITY_DOMAINS,
-    MEDIA_SOURCE_LIBRARY_DOMAINS,
+    MEDIA_SOURCE_OPEN_DOMAINS,
     MEDIA_SOURCE_RECORDING_DOMAINS,
     MESA_SUGGEST_COVER_DEVICE_CLASSES,
     NO_TARGET_SERVICES,
@@ -216,22 +216,13 @@ def test_every_core_speech_service_has_been_judged() -> None:
     assert speech - ANNOUNCEMENT_SERVICES - set(_SPEECH_SERVICES_ELSEWHERE) == set()
 
 
-# Core media sources left open: their items are shared media, not a household's private content.
-_MEDIA_SOURCES_NOT_ENTITIES = {
-    "dlna_dms": "a DLNA server's library, keyed by server",
-    "jellyfin": "a media server's library",
-    "radio_browser": "internet radio stations",
-    "tts": "speech generated on request",
-}
-
-
-def test_every_core_media_source_has_been_judged() -> None:
+def test_every_media_source_named_is_still_one_of_core() -> None:
+    """A source not named is private by default, so only a stale name can go wrong here."""
     sources = {path.parent.name for path in _COMPONENTS.glob("*/media_source.py")}
     assert MEDIA_SOURCE_ENTITY_DOMAINS | MEDIA_SOURCE_RECORDING_DOMAINS <= sources
-    gated = MEDIA_SOURCE_ENTITY_DOMAINS | MEDIA_SOURCE_RECORDING_DOMAINS | MEDIA_SOURCE_LIBRARY_DOMAINS
-    assert gated <= sources
-    judged = gated | set(_MEDIA_SOURCES_NOT_ENTITIES)
-    assert sources - judged == set()
+    # Local media is the media_source component's own source, registered under its domain.
+    assert "LocalSource(hass, DOMAIN" in (_COMPONENTS / "media_source" / "local_source.py").read_text()
+    assert MEDIA_SOURCE_OPEN_DOMAINS - {"media_source"} <= sources
 
 
 @pytest.mark.parametrize("source", sorted(MEDIA_SOURCE_RECORDING_DOMAINS))

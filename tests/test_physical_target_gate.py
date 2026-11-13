@@ -347,7 +347,7 @@ async def test_a_device_action_is_physical_where_the_device_is(hass, esphome_ent
     data, _ = _data(hass)
     sensor = "sensor.gate_state"
     _device_with_action(hass, esphome_entries, sensor, "lock.gate_bolt")
-    key = _key({sensor: "GREEN"}, cap_physical_control="deny", cap_search="allow")
+    key = _key({sensor: "GREEN", "lock.gate_bolt": "GREEN"}, cap_physical_control="deny", cap_search="allow")
     args = {"service": {"domain": "esphome", "name": "gate_open"}}
     result = await _call_tool("call_service", args, key, hass, data)
     assert result[1] == "denied"

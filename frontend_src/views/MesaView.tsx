@@ -19,7 +19,7 @@ import { api, ApiError } from "../api";
 import { Modal } from "../components/Modal";
 import { TagInput } from "../components/TagInput";
 import { Loading, ErrorMsg, StatusRegion } from "../components/common";
-import { compareStrings, t, tn } from "../i18n";
+import { compareStrings, foldForSearch, t, tn } from "../i18n";
 import { ActionButton } from "../ui/ActionButton";
 import { useNotify } from "../ui/notify";
 import { InlineConfirm } from "../ui/InlineConfirm";
@@ -422,16 +422,18 @@ export function Combo({
   const listboxId = useId();
   useEffect(() => { setQuery(labelFor(value)); }, [value, labelFor]);
 
-  const matches = useMemo(() => {
-    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const [matches, matchCount] = useMemo(() => {
+    const terms = foldForSearch(query.trim()).split(/\s+/).filter(Boolean);
     const pool = terms.length === 0
       ? options
       : options.filter((o) => {
-          const hay = `${o.value} ${o.label}`.toLowerCase();
+          const hay = foldForSearch(`${o.value} ${o.label}`);
           return terms.every((t) => hay.includes(t));
         });
-    return pool.slice(0, 10);
+    return [pool.slice(0, 10), pool.length] as const;
   }, [query, options]);
+  // The list is shown, and announced as expanded, only while it has something to choose.
+  const listShown = open && matches.length > 0;
 
   function pick(v: string) {
     onChange(v);
@@ -478,16 +480,19 @@ export function Combo({
         data-help={help}
         autoComplete="off"
         role="combobox"
-        aria-expanded={open}
+        aria-expanded={listShown}
         aria-autocomplete="list"
-        aria-controls={matches.length > 0 ? listboxId : undefined}
-        aria-activedescendant={open && matches.length > 0 ? `${listboxId}-option-${Math.min(active, matches.length - 1)}` : undefined}
+        aria-controls={listShown ? listboxId : undefined}
+        aria-activedescendant={listShown ? `${listboxId}-option-${Math.min(active, matches.length - 1)}` : undefined}
         onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); setActive(0); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
         onKeyDown={handleKeyDown}
       />
-      {open && matches.length > 0 && (
+      <span className="sr-only" role="status" aria-live="polite">
+        {open && query.trim() ? t("mesa.comboMatchCount", { count: matchCount }) : ""}
+      </span>
+      {listShown && (
         <ul className="combo-list" role="listbox" id={listboxId}>
           {matches.map((o, i) => (
             <li

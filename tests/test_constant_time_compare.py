@@ -108,7 +108,7 @@ def test_oauth_token_lookups_route_through_the_helper():
     from custom_components.phoenix_mcp import oauth_grants
     tree = ast.parse(pathlib.Path(oauth_grants.__file__).read_text())
     lookups = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
-               and n.name in ("find_by_access_hash", "_find_by_refresh_hash")]
+               and n.name in ("find_access_token", "_find_by_refresh_hash")]
     assert len(lookups) == 2, "an OAuth token lookup was renamed; update this guard"
     for node in lookups:
         assert "hmac_compare(" in ast.unparse(node), f"{node.name} compares token hashes without hmac_compare"

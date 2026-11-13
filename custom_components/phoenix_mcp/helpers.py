@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from functools import partial
 import hashlib
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from aiohttp import web
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.network import get_url
 from homeassistant.util.dt import get_default_time_zone, utcnow
 
 from .catalog_text import notification_text
@@ -69,6 +71,28 @@ def service_not_found_hint(domain: str, service: str) -> tuple[str, list[str]] |
         f"{', '.join(valid)}."
     )
     return message, valid
+
+
+async def read_bounded_body(stream: Any, limit: int, timeout: float) -> bytes:
+    """Read ``stream`` to its end, stopping once more than ``limit`` bytes arrived.
+
+    Returns at most ``limit + 1`` bytes, so an oversized body shows by its length. Raises
+    TimeoutError when the whole read outlasts ``timeout`` seconds, and whatever the stream
+    raises. aiohttp's ``read(n)`` returns as soon as any data is buffered, hence the loop.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    async with asyncio.timeout(timeout):
+        while total <= limit:
+            chunk = await stream.read(limit - total + 1)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            at_eof = getattr(stream, "at_eof", None)
+            if callable(at_eof) and at_eof():
+                break
+    return b"".join(chunks)
 
 
 def get_client_ip(request: web.Request) -> str:
@@ -264,9 +288,6 @@ def validation_error_message(err: ServiceValidationError | vol.Invalid) -> str:
 def instance_base_url(hass: HomeAssistant) -> str:
     """Home Assistant's best available URL for links in prompts, or "" if it has none."""
     try:
-        # Local: inside a guard for releases that lack it.
-        from homeassistant.helpers.network import get_url
-
         return get_url(hass)
     except Exception:  # NoURLAvailableError and anything else
         return ""

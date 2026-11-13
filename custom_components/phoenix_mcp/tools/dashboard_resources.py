@@ -303,8 +303,9 @@ def _prepare(args: dict, access_key: AccessKeyRecord, items: list[dict[str, Any]
 def _preview(plan: ResourcePlan) -> dict:
     preview: dict[str, Any] = {"operation": plan.operation, "current": plan.current, "proposed": plan.proposed}
     if plan.proposed is not None and plan.proposed.get("type") in ("module", "js"):
-        preview["warning"] = ("This JavaScript file runs in every browser that opens a dashboard, "
-                              "with that person's Home Assistant access.")
+        preview["warning"] = ("This JavaScript file runs in every browser that opens a dashboard, and in an "
+                              "administrator's browser that opens the Phoenix MCP panel, with that person's "
+                              "Home Assistant access.")
     if plan.warnings:
         preview["warnings"] = plan.warnings
     return {

@@ -7,6 +7,8 @@ and formatting survives. Device files feed three layers into one span set: curat
 credential-looking keys at any depth, and values matching secrets.yaml. Every scalar below a
 credential-named key is masked, and every other scalar is scanned for URLs, tokens, quoted
 assignments and the text of the credentials found, which a file can repeat under a neutral key.
+In a device file a substitution goes with a credential that refers to it, and so does one the
+file defines but never uses, since a package elsewhere may use it as one.
 A comment naming or quoting a credential goes with the comments touching it, since a commented-out
 block spans lines. The output is for reading: no tool writes it to a file.
 
@@ -18,17 +20,20 @@ from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
 import difflib
+import os
 import re
+import unicodedata
 from collections.abc import Callable, Collection, Iterable, Iterator
 from typing import Any, NamedTuple
 
 import yaml
 
 from .const import REDACTION_SENTINEL
-from .policy_engine import is_sensitive_key
+from .policy_engine import is_credential_key
 from .redaction import redact_secrets_in_text
 from .yaml_includes import (
     OPAQUE_TAGS,
+    SECRETS_YAML,
     YAML_READ_ERRORS,
     PhoenixLenientLoader,
     YamlParseError,
@@ -54,7 +59,7 @@ ESPHOME_SECRET_PATHS: tuple[tuple[str, ...], ...] = (
 )
 
 # Layer 2: key names that mark what they hold as a credential wherever they appear, on top
-# of the shared is_sensitive_key markers. Device files name keys freely (aes_key, mqttpass,
+# of the shared is_credential_key markers. Device files name keys freely (aes_key, mqttpass,
 # pw2, a bare key), so anything ending in key or pass counts apart from bypass, compass and
 # the public keys below.
 _SECRET_KEY_RE = re.compile(
@@ -64,6 +69,10 @@ _SECRET_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 _PUBLIC_KEY_NAMES = frozenset({"public_key", "peer_public_key", "on_key"})
+# A substitution reference, ${name} or $name, and the blocks that define one: a file's own and
+# the vars an include passes to a package.
+_SUBSTITUTION_RE = re.compile(r"\$\{(\w+)\}|\$(\w+)")
+_SUBSTITUTION_BLOCKS = frozenset({"substitutions", "vars"})
 # A pin in a device file is a GPIO, not a credential, so that shared marker does not apply.
 _GPIO_PIN_KEY_RE = re.compile(r"(?:^|[^a-z0-9])pin$", re.IGNORECASE)
 # Every value below such a key is masked, in either kind of file: request headers carry
@@ -127,6 +136,42 @@ def placeholder_for(path: str) -> str:
     return f"{_PLACEHOLDER_PREFIX}{path}{_PLACEHOLDER_SUFFIX}"
 
 
+_PRINTABLE_ASCII_RE = re.compile(r"[\x20-\x7e]+")
+
+
+def folded_path_parts(rel: str) -> list[str] | None:
+    """A relative path's components as the structural path rules compare them, or None.
+
+    A case-insensitive filesystem opens ſecrets.yaml as secrets.yaml, and str.lower() keeps the
+    long s, so a component that is not printable ASCII is refused and the rest are compared after
+    NFKC normalization and casefold().
+    """
+    parts = [p for p in rel.replace("\\", "/").split("/") if p not in ("", ".")]
+    if any(_PRINTABLE_ASCII_RE.fullmatch(part) is None for part in parts):
+        return None
+    return [unicodedata.normalize("NFKC", part).casefold() for part in parts]
+
+
+def links_to_secrets_yaml(path: str, root: str) -> bool:
+    """Whether a file is any secrets.yaml from its own directory up to `root`, by identity.
+
+    Catches a spelling or a hard link the name rules cannot see. Blocking: executor only; a
+    failed comparison counts as a match.
+    """
+    directory = os.path.dirname(path)
+    root = os.path.realpath(root)
+    while True:
+        candidate = os.path.join(directory, SECRETS_YAML)
+        try:
+            if os.path.exists(candidate) and os.path.samefile(path, candidate):
+                return True
+        except OSError:
+            return True
+        if os.path.realpath(directory) == root or os.path.dirname(directory) == directory:
+            return False
+        directory = os.path.dirname(directory)
+
+
 def esphome_rel_path_ok(rel: str) -> bool:
     """Return whether a config-relative path may be read as device YAML.
 
@@ -135,14 +180,14 @@ def esphome_rel_path_ok(rel: str) -> bool:
     """
     if not isinstance(rel, str) or not rel.strip():
         return False
-    parts = [p for p in rel.replace("\\", "/").split("/") if p]
+    parts = folded_path_parts(rel)
     if not parts:
         return False
     if any(p.startswith(".") for p in parts):
         return False
-    if parts[0].lower() == _ARCHIVE_DIR:
+    if parts[0] == _ARCHIVE_DIR:
         return False
-    name = parts[-1].lower()
+    name = parts[-1]
     return "secret" not in name and name.endswith(_ALLOWED_SUFFIXES)
 
 
@@ -258,12 +303,19 @@ def _under_secret_key(path: tuple[str, ...], secret_key: Callable[[str], bool]) 
     )
 
 
+def config_credential_key(name: str) -> bool:
+    """Return whether a key name marks a credential: the one matcher both kinds of file share."""
+    if name.lower() in _PUBLIC_KEY_NAMES:
+        return False
+    return bool(_SECRET_KEY_RE.search(name)) or is_credential_key(name)
+
+
 def _device_secret_key(name: str) -> bool:
-    """Return whether a key name in a device file marks a credential."""
+    """config_credential_key for a device file, where a pin is a GPIO and not a credential."""
     if name.lower() in _PUBLIC_KEY_NAMES:
         return False
     return bool(_SECRET_KEY_RE.search(name)) or (
-        is_sensitive_key(name) and not _GPIO_PIN_KEY_RE.search(name))
+        is_credential_key(name) and not _GPIO_PIN_KEY_RE.search(name))
 
 
 def _device_secret_path(path: tuple[str, ...]) -> bool:
@@ -273,7 +325,7 @@ def _device_secret_path(path: tuple[str, ...]) -> bool:
 
 def _config_secret_path(path: tuple[str, ...]) -> bool:
     """Return whether a scalar at this path of a configuration file is a credential."""
-    return _under_secret_key(path, is_sensitive_key)
+    return _under_secret_key(path, config_credential_key)
 
 
 def _scrubbed(text: str, secret_key: Callable[[str], bool]) -> str:
@@ -415,6 +467,45 @@ def secret_keys_from_text(text: str) -> set[str]:
     return {key_node.value for key_node, _value in root.value if isinstance(key_node, yaml.ScalarNode)}
 
 
+def _substitution_name(path: tuple[str, ...]) -> str | None:
+    """The substitution a scalar defines, under `substitutions:` or an include's `vars:`, if any."""
+    for index, segment in enumerate(path[:-1]):
+        if segment in _SUBSTITUTION_BLOCKS and path[index + 1] not in (_KEY_SEGMENT, _COMPLEX_KEY):
+            return path[index + 1]
+    return None
+
+
+def _credential_substitutions(
+    items: list[tuple[str, tuple[str, ...], Any]], secret_path: Callable[[tuple[str, ...]], bool],
+) -> set[str]:
+    """Substitutions to mask: those a credential refers to, and those this file never uses.
+
+    A substitution used only by another file (a package, an include) may be a credential there,
+    and one a masked substitution refers to is masked with it.
+    """
+    defined: dict[str, set[str]] = {}
+    used: set[str] = set()
+    hidden: set[str] = set()
+    for _dotted, path, node in items:
+        if path[-1:] == (_KEY_SEGMENT,):
+            continue
+        refers = {first or second for first, second in _SUBSTITUTION_RE.findall(node.value)}
+        name = _substitution_name(path)
+        if name is not None:
+            defined.setdefault(name, set()).update(refers)
+        if refers and secret_path(path):
+            hidden |= refers
+        used |= refers
+    hidden |= defined.keys() - used
+    pending = list(hidden)
+    while pending:
+        for refer in defined.get(pending.pop(), ()):
+            if refer not in hidden:
+                hidden.add(refer)
+                pending.append(refer)
+    return hidden
+
+
 class _Partition(NamedTuple):
     """A document's scalars, split by whether they are a credential whole."""
 
@@ -437,13 +528,16 @@ def _partition(
     credentials, others = [], []
     values = set(secret_values)
     names: set[str] = set()
-    for item in _walk(root, (), secret_key):
+    items = list(_walk(root, (), secret_key))
+    hidden = _credential_substitutions(items, secret_path) if secret_path is _device_secret_path else set()
+    for item in items:
         _dotted, path, node = item
         if path[-1:] == (_KEY_SEGMENT,):
             names.add(node.value)
         if _holds_no_value(node):
             continue
-        if secret_path(path) or (len(node.value) >= MIN_CROSS_CHECK_LENGTH and node.value in secret_values):
+        if (secret_path(path) or _substitution_name(path) in hidden
+                or (len(node.value) >= MIN_CROSS_CHECK_LENGTH and node.value in secret_values)):
             credentials.append(item)
             values |= _credential_forms(node.value, _node_text(text, node))
         else:
@@ -596,8 +690,8 @@ def mask_yaml_text(text: str) -> str:
     `!secret` and include references stay, as they hold no value. Raises YamlParseError,
     failing closed: an unparsed file's credentials cannot be located.
     """
-    scan = _scan_scalars(text, _config_secret_path, is_sensitive_key, ())
-    spans = scan.spans + _comment_spans(text, scan.spans, is_sensitive_key, scan.searchable)
+    scan = _scan_scalars(text, _config_secret_path, config_credential_key, ())
+    spans = scan.spans + _comment_spans(text, scan.spans, config_credential_key, scan.searchable)
     return _splice(text, spans, lambda _dotted: REDACTION_SENTINEL)
 
 
@@ -615,14 +709,14 @@ def masked_yaml_data(text: str) -> Any:
         root = loader.get_single_node()
         if root is None:
             return None
-        found = _partition(text, root, _config_secret_path, is_sensitive_key, ())
+        found = _partition(text, root, _config_secret_path, config_credential_key, ())
         hits = _value_hits([node.value for _dotted, _path, node in found.others], found.searchable)
         for _dotted, path, node in found.credentials:
             # Masked keys stay distinct, or a set or mapping would lose all but one of them.
             suffix = path[-2] if path[-1] == _HIDDEN_KEY else ""
             node.tag, node.value = _YAML_STR_TAG, f"{REDACTION_SENTINEL}{suffix}"
         for index, (_dotted, _path, node) in enumerate(found.others):
-            clean = scrub_secret_values(_scrubbed(node.value, is_sensitive_key), hits.get(index, ()))
+            clean = scrub_secret_values(_scrubbed(node.value, config_credential_key), hits.get(index, ()))
             if clean != node.value:
                 node.tag, node.value = _YAML_STR_TAG, clean
         return loader.construct_document(root)
@@ -724,7 +818,6 @@ def declared_components(text: str) -> dict[str, Any]:
     }
 
 
-_SUBSTITUTION_RE = re.compile(r"\$\{(\w+)\}|\$(\w+)")
 # The spellings ESPHome's boolean validator accepts as true.
 _YAML_TRUE = frozenset({"true", "yes", "on", "enable"})
 

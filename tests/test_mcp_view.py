@@ -207,6 +207,38 @@ async def test_mcp_401_access_token_in_query_param():
     assert result.status == 401
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["access_key", "key", "api_key", "auth", "phx", "Authorization"])
+@pytest.mark.parametrize("shape", ["raw", "bearer", "upper", "oauth_access", "oauth_refresh", "as_name"])
+async def test_mcp_401_any_phoenix_secret_in_the_query(name, shape):
+    access_key, raw = _make_access_key()
+    data = _make_data(access_key)
+    view = _make_mcp_view(data)
+    value = {"raw": raw, "bearer": f"Bearer {raw}", "upper": raw.upper(), "oauth_access": "phxo_" + "0" * 64,
+             "oauth_refresh": "phxr_" + "0" * 64, "as_name": ""}[shape]
+    query = {raw: ""} if shape == "as_name" else {name: value}
+    request = _make_request(method="POST", headers={"Authorization": f"Bearer {raw}"}, query=query)
+
+    result = await view.post(request)
+
+    assert result.status == 401
+    data.store.get_access_key_by_hash.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_mcp_ordinary_query_values_do_not_refuse_a_valid_key():
+    access_key, raw = _make_access_key()
+    data = _make_data(access_key)
+    view = _make_mcp_view(data)
+    request = _make_request(method="POST", headers={"Authorization": f"Bearer {raw}"},
+                            query={"key": "graph_x", "phx": "phoenix"})
+
+    result = await view.post(request)
+
+    assert result.status != 401
+    data.store.get_access_key_by_hash.assert_called()
+
+
 # --- POST /api/phoenix-mcp (Streamable HTTP transport) ---
 
 @pytest.mark.asyncio

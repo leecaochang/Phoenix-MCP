@@ -10,7 +10,7 @@ Phoenix keeps two logs. The audit log is a short record of every action and its 
 - **Evaluate actions**: each `ai_task/evaluate` call and refusal, under the Decisions access key. The entry holds a refusal's reason, never the questions or data.
 - **MESA blocks**: an extra entry for each entity MESA refused. These need the mesa_core.audit logger at its default level, INFO; raising it in Home Assistant's logger settings hides them, though the blocks still happen.
 - **OAuth sign-ins**: each token an app is given or refused. Any entry for a signed-in app's request also names the app, in [{{label:workspace.logDetails}}](guide:window.logDetails#audit-entry).
-- **Approvals**: each request queued for approval, and what happened to it: approved, carried out, rejected, cancelled or failed.
+- **Approvals**: each request queued for approval, and what happened to it: approved, carried out, rejected, cancelled or failed. A cancellation names its reason, such as a rotated key or a removed sign-in.
 - **Your changes in the panel**: access keys, permissions, settings, MESA profiles, restores, wipes and other administrator actions. These show the administrator instead of an access key. A settings change names what changed, even one that turns logging off.
 
 ## What isn't recorded {#not-audited}
@@ -33,6 +33,10 @@ Which outcomes are recorded is up to the [audit log settings](guide:window.setti
 ## How long audit entries are kept {#audit-keeping}
 
 The audit log keeps the newest 10,000 entries by default, and saves them to disk every 15 minutes and when Home Assistant stops. Change both in [{{label:workspace.logsNotifications}}](guide:window.settingsLogs#log-max-entries).
+
+Approvals and your changes in the panel are kept apart, up to the same number. Requests from agents never push them out.
+
+A key's refused requests count toward the limit, but only its first 30 in a minute get their own entry. The rest of that minute share one entry, which counts them by outcome.
 
 Nothing in the panel clears the audit log on its own. A Phoenix core data wipe does. Removing Phoenix keeps it.
 
@@ -58,3 +62,5 @@ Clear the log with **{{label:conversations.clear}}** in the Conversation Log win
 ## Finding the same request in both logs {#linked}
 
 A tool call's request ID is the same in both logs, and so is an approval's ID. In the audit log, filter by **{{label:audit.rowRequestId}}** or **{{label:audit.rowResource}}**; in the Conversation Log, search for it.
+
+An approval that was carried out or cancelled is logged under the request ID that asked for it. Every approval entry also holds the approval's ID, even when entity names are hidden.

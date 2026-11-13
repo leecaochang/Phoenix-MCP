@@ -65,6 +65,8 @@ describe("card configuration errors in the approval preview", () => {
     vi.mocked(api.rejectApproval).mockResolvedValue(record({ status: "rejected" }));
     const { container, findByText, findByRole, queryByRole } = renderApprovals();
     fireEvent.click(await findByText("Add 'custom:apexcharts-card' to dashboard"));
+    // The review opens on the text diff; Preview draws the cards only when asked.
+    fireEvent.click(await findByRole("button", { name: "Preview" }));
     await waitFor(() => expect(container.querySelector(".dash-preview-cards hui-card hui-error-card")).toBeTruthy());
     const message = await findByText("value.series[0] is not a ChartCardSeriesExternalConfig", { selector: ".dash-preview-error-msg" });
     expect(container.querySelector(".dash-preview-cards")).not.toContainElement(message);
@@ -96,7 +98,7 @@ describe("card configuration errors in the approval preview", () => {
     const { container, findByRole } = render(<DashboardPreview config={{ views: [{ cards: [{ type: "tile" }, { type: "gauge" }] }] }} />);
     await waitFor(() => expect(container.querySelectorAll(".dash-preview-error-list li")).toHaveLength(2));
     const panel = container.querySelector(".dash-preview-error-panel")!;
-    expect(panel.textContent).toContain("Cards in this preview reported configuration errors.");
+    expect(panel.textContent).toContain("2 cards in this preview reported configuration errors.");
     expect(panel.querySelectorAll("button")).toHaveLength(1);
     fireEvent.click(await findByRole("button", { name: "Copy Errors" }));
     const error = "value.series[0] is not a ChartCardSeriesExternalConfig";

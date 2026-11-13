@@ -11,7 +11,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 
 from .approvals import (
-    get_approval, async_update_approval_status, dismiss_approval_notification,
+    get_approval, async_update_approval_status, audit_closed_approvals, dismiss_approval_notification,
     fire_approval_resolved_event, async_create_pending_approval, create_approval_notification,
     fire_approval_requested_event, PendingApprovalCapacityError, PendingApproval,
     REASON_RECOVERY_REVIEW_REPLACED,
@@ -206,6 +206,7 @@ async def _queue_recovery(hass: HomeAssistant, data, record: dict, observed: dic
     if replaced is not None:
         dismiss_approval_notification(hass, replaced.id)
         fire_approval_resolved_event(hass, replaced)
+        audit_closed_approvals(data.audit, data.store.get_settings(), [replaced])
     if approval.id not in data.config_recovery.announced_approvals:
         create_approval_notification(hass, approval)
         data.config_recovery.announced_approvals.add(approval.id)
@@ -223,6 +224,7 @@ async def _close_resolved_approval(hass: HomeAssistant, data, record: dict) -> N
     if updated is not None:
         dismiss_approval_notification(hass, updated.id)
         fire_approval_resolved_event(hass, updated)
+        audit_closed_approvals(data.audit, data.store.get_settings(), [updated])
 
 
 async def reconcile_configurations(hass: HomeAssistant, data) -> None:

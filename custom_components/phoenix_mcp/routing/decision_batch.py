@@ -25,9 +25,9 @@ from .routing_tables import (
     DECISION_GROUPED_OPERATION_BYTES, DECISION_GROUPED_TARGET_BYTES,
     DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_TEMPORAL_CATEGORIES,
     COMMAND_ROUTING_VALUE_INTENTS, DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES,
-    DECISION_BATCH_MAX_TARGETS, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
+    DECISION_BATCH_MAX_TARGETS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, DECISION_PROVIDER_REFUSED_CATEGORIES,
 )
-from .decision_identity import explicit_write_target
+from .decision_identity import explicit_write_target, identity_competitors
 from .decision_provider import (
     DecisionValidationError, DecisionProvider, _evaluate_guarded, revision_admitted,
 )
@@ -194,6 +194,8 @@ async def async_prepare_batch(hass: HomeAssistant, authority: RoutingAuthority, 
         return category, selection
     if not confident_choice(category):
         return category, {**selection, "reason": "low_probability"}
+    if category["choice"] in DECISION_PROVIDER_REFUSED_CATEGORIES:
+        return category, {**selection, "reason": "operation_unconfirmed"}
     selection["decision"] = target
     is_summary = category['choice'] == 'state_summary'
     if is_summary:
@@ -249,7 +251,7 @@ async def async_prepare_batch(hass: HomeAssistant, authority: RoutingAuthority, 
         proposal["value"] = value
     elif any(answer.get(question, {}).get("choice", "none") != "none" for question in DECISION_ENTITY_VALUE_QUESTIONS):
         return category, {**selection, "reason": "category_mismatch"}
-    if not explicit_write_target(sentence, targets, proposal, language):
+    if not explicit_write_target(sentence, targets, proposal, language, identity_competitors(hass, targets)):
         return category, {**selection, "reason": "target_unverified"}
     plan = _capture_plan(hass, authority.data, current, proposal, ingress=ingress)
     if plan is None:
@@ -380,7 +382,8 @@ async def async_preview_batch(hass: HomeAssistant, data: Any, access_key: Any, s
             except DecisionError:
                 return result("targets_changed")
             if temporal is not None:
-                reason, temporal_candidate = temporal_proposal(answer, targets, temporal, sentence, lang)
+                reason, temporal_candidate = temporal_proposal(answer, targets, temporal, sentence, lang,
+                                                                identity_competitors(hass, targets))
                 return result(reason, decision=answer, proposal=temporal_candidate)
             category, target = answer["route"], answer["target"]
             is_summary = category['choice'] == 'state_summary'
@@ -394,6 +397,8 @@ async def async_preview_batch(hass: HomeAssistant, data: Any, access_key: Any, s
                 return result("provider_fallback", decision=answer)
             if not all(confident_choice(choice) for choice in answer.values()):
                 return result("low_probability", decision=answer)
+            if category["choice"] in DECISION_PROVIDER_REFUSED_CATEGORIES:
+                return result("operation_unconfirmed", decision=answer)
             descriptor = summaries.targets[target['choice']] if is_summary and summaries is not None else targets[target['choice']]
             if not is_summary and category["choice"] not in descriptor["eligible_categories"]:
                 return result("category_mismatch", decision=answer)
@@ -428,7 +433,7 @@ async def async_preview_batch(hass: HomeAssistant, data: Any, access_key: Any, s
                     evidence["value_check"] = compare_percentage(source_value, proposal[operation.proposal_field])
                 elif value["choice"] != "none":
                     return result("percentage_mismatch", decision=answer)
-            if not explicit_write_target(sentence, targets, proposal, lang):
+            if not explicit_write_target(sentence, targets, proposal, lang, identity_competitors(hass, targets)):
                 return result("target_unverified", decision=answer)
             return result("target_selected", decision=answer, proposal=proposal,
                           **evidence,
@@ -453,7 +458,8 @@ async def async_preview_batch(hass: HomeAssistant, data: Any, access_key: Any, s
             runtime.task = None
 
 
-def temporal_proposal(answer: dict, targets: dict, source: dict, sentence: str = "", language: str = "en") -> tuple[str, dict | None]:
+def temporal_proposal(answer: dict, targets: dict, source: dict, sentence: str, language: str,
+                      competitors: list[tuple[str, list[str]]]) -> tuple[str, dict | None]:
     """Validate independent operation, target and exact source-value choices."""
     route, target, value = answer["route"], answer["target"], answer["value"]
     if route["choice"] == "provider" or target["choice"] == "none" or value["choice"] == "none":
@@ -474,7 +480,7 @@ def temporal_proposal(answer: dict, targets: dict, source: dict, sentence: str =
     if (source["kind"] != kind and not (kind == "duration" and source["kind"] == "time")) or not valid_temporal_value(kind, source["value"], dt_util.get_default_time_zone()):
         return "numeric_unverified", None
     proposal = {"intent": intent, "entity_ids": [descriptor["entity_id"]], "value": source["value"]}
-    if not explicit_write_target(sentence, targets, proposal, language):
+    if not explicit_write_target(sentence, targets, proposal, language, competitors):
         return "target_unverified", None
     return "target_selected", proposal
 
@@ -510,7 +516,8 @@ async def async_prepare_temporal(hass: HomeAssistant, authority: RoutingAuthorit
     category = answer["route"]
     if not revision_admitted(DECISION_BATCH_EXECUTION_MODELS, provider.cfg, category["model"]):
         raise DecisionError("model_unverified")
-    reason, proposal = temporal_proposal(answer, targets, source, sentence, language)
+    reason, proposal = temporal_proposal(answer, targets, source, sentence, language,
+                                         identity_competitors(hass, targets))
     selection: dict = {"reason": reason, "decision": answer["target"], "executed": False}
     if proposal is None:
         return category, selection

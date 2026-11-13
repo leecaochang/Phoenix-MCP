@@ -4,9 +4,12 @@ The repository is public. A comment that cites a person or a date reads as autho
 long after the behaviour has moved on, so this holds the frontend, stylesheets and
 Python to the same rule. Dates that belong to a protocol or a fixture stay allowed.
 
-The patterns recognise the usual ways of writing these, not every phrasing, and the
-scan covers comments and docstrings of those sources only: Guide pages and workflow
-files are outside it.
+The patterns recognise the usual ways of writing these, not every phrasing. The person
+and date scan covers comments and docstrings of those sources. A second scan reads every
+tracked text file, strings included, for internal context: review finding ids, internal
+document paths and home directories. Literals private to the maintainer's network (addresses,
+host names) live in a Git-ignored local file, ``PRIVATE_LITERALS``; without it, as in CI,
+that part is skipped.
 """
 
 from __future__ import annotations
@@ -24,7 +27,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend_src"
 PYTHON_ROOTS = ("custom_components/phoenix_mcp", "tests", "scripts")
 
-ATTRIBUTION = re.compile(r"\(user,|\buser,?\s+20\d\d-\d\d|\buser\s+(?:asked|requested|wanted|decided|insisted)\b",
+ATTRIBUTION = re.compile(r"\(user,|\buser,?\s+20\d\d-\d\d|\buser\s+(?:asked|requested|wanted|decided|insisted)\b"
+                         r"|\buser\s+wants\s+(?:this|it)\b|\bowner\s+(?:asked|requested|wanted|wants|decided|insisted|chose)\b",
                          re.IGNORECASE)
 DATE = re.compile(r"(?<![\w-])20\d\d-\d\d-\d\d(?![\dT])")
 WRITTEN_DATE = re.compile(
@@ -40,6 +44,19 @@ RECORD_REFERENCE = re.compile(
 )
 # The MCP protocol names its revisions by date.
 PROTOCOL_REVISIONS = {"2025-03-26", "2026-07-28"}
+
+# Internal context no tracked file may carry, in comments or strings: review finding ids
+# such as X-QZ-1 or Q8-FOO-BAR-02, internal notes, and a home directory.
+INTERNAL_CONTEXT = re.compile(
+    r"\b[A-Z]\d{0,2}-(?=[A-Z0-9]*[A-Z][A-Z0-9]*[A-Z])[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*-\d+\b"
+    r"|docs-internal/|\bBACKLOG\.md\b|/(?:Users|home)/[a-z][a-z0-9_.-]*/"
+)
+# Fixture values the scan would otherwise flag, each one a deliberate example.
+INTERNAL_CONTEXT_FIXTURES = {"/Users/private/"}
+# Generated bundles repeat their sources, which the scan already reads.
+GENERATED = ("custom_components/phoenix_mcp/frontend/",)
+# One private literal per line; # starts a comment. Git-ignored, so absent from clones and CI.
+PRIVATE_LITERALS = ROOT / "docs-internal" / "hygiene-private-literals.txt"
 
 
 def _script_comments(source: str) -> list[tuple[int, str]]:
@@ -138,6 +155,81 @@ def _python_files() -> list[pathlib.Path]:
     )
 
 
+def _tracked_text_files() -> dict[str, str]:
+    """Every tracked text file outside the generated bundles, by repository path."""
+    try:
+        listed = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, text=True,
+                                check=True).stdout.split("\0")
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("git is not available to enumerate published files")
+    texts = {}
+    for name in listed:
+        path = ROOT / name
+        if not name or name.startswith(GENERATED) or name == f"tests/{pathlib.Path(__file__).name}" or not path.is_file():
+            continue
+        raw = path.read_bytes()
+        if b"\0" in raw:
+            continue
+        try:
+            texts[name] = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+    return texts
+
+
+def _internal_context(text: str) -> list[str]:
+    return [match.group() for match in INTERNAL_CONTEXT.finditer(text)
+            if match.group() not in INTERNAL_CONTEXT_FIXTURES]
+
+
+def _private_literals() -> list[str]:
+    if not PRIVATE_LITERALS.is_file():
+        return []
+    lines = (line.split("#", 1)[0].strip() for line in PRIVATE_LITERALS.read_text(encoding="utf-8").splitlines())
+    return [line for line in lines if line]
+
+
+def test_no_tracked_file_carries_internal_context() -> None:
+    files = _tracked_text_files()
+    assert len(files) > 300, "the tracked listing broke"
+    problems = {name: found for name, text in files.items() if (found := _internal_context(text))}
+    assert problems == {}
+
+
+def test_no_tracked_file_carries_a_private_literal() -> None:
+    literals = _private_literals()
+    if not literals:
+        pytest.skip("no local list of private literals here")
+    problems = {
+        name: [literal for literal in literals if literal in text]
+        for name, text in _tracked_text_files().items()
+    }
+    assert {name: found for name, found in problems.items() if found} == {}
+
+
+@pytest.mark.parametrize("text", [
+    "// fixes X-QZ-1 from round 3\n",
+    "// see K4-WIDGET-03 and Z9-ZORP-01\n",
+    "msg = 'see Q8-FOO-BAR-07'\n",
+    "// rules in docs-internal/agents/guide.md\n",
+    "// copied from /Users/someone/Documents/project/x.ts\n",
+    "// smoke-tested on the test server, see BACKLOG.md\n",
+    '"""Mirror of mesa_core internals, see docs-internal/spec/mesa.md."""\n',
+])
+def test_the_tracked_scan_finds_internal_context(text: str) -> None:
+    assert _internal_context(text)
+
+
+@pytest.mark.parametrize("text", [
+    "pattern = r'[A-Z0-9-]'; ok = 'A-Z0-9'\n",
+    "encoding = 'UTF-8'; header = 'X-Frame-Options'\n",
+    "path = '/Users/private/secret.txt'  # the scrub fixture\n",
+    "token = 'phx_' + 'a-b-1'\n",
+])
+def test_the_tracked_scan_leaves_ordinary_text(text: str) -> None:
+    assert _internal_context(text) == []
+
+
 def test_frontend_comments_cite_no_person_or_date() -> None:
     files = _frontend_files()
     assert len(files) > 100, "the source listing broke"
@@ -181,6 +273,9 @@ def test_no_test_title_carries_an_attribution() -> None:
     ("// revision 2026-07-28 of the protocol\n", 0),
     ("<p>don't 2026-01-01</p>\n// (user, 2026-01-01)\n", 1),
     ("// because the user asked for it\n", 1),
+    ("// the owner decided to keep it\n", 1),
+    ("// the user wants this kept\n", 1),
+    ("// when the user wants a colder room, lower it\n", 0),
     ("// the height the user chose stays\n", 0),
     ("// dated 2026/11/05\n", 1),
     ("// see /logs/2026/11/05/entry\n", 0),

@@ -78,13 +78,25 @@ def _parse_finite_float(value: str) -> float:
     return result
 
 
-def parse_json_body(body: bytes) -> Any:
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build a JSON object, refusing a key that appears twice in it."""
+    built = dict(pairs)
+    if len(built) != len(pairs):
+        raise ValueError("Repeated JSON object keys are not allowed.")
+    return built
+
+
+def parse_json_body(body: bytes, *, unique_keys: bool = False) -> Any:
     """Parse one HTTP body: strict UTF-8 without a BOM, finite numbers, no lone surrogate.
 
-    Raises ValueError or RecursionError. A surrogate escape parses, then fails the encode,
-    since every later serialization of the value would.
+    Raises ValueError or RecursionError; with ``unique_keys`` also for an object that repeats
+    a key, which other readers of the same body may resolve differently. A surrogate escape
+    parses, then fails the encode, since every later serialization of the value would.
     """
-    parsed = json.loads(body.decode("utf-8"), parse_constant=_reject_non_finite, parse_float=_parse_finite_float)
+    parsed = json.loads(
+        body.decode("utf-8"), parse_constant=_reject_non_finite, parse_float=_parse_finite_float,
+        object_pairs_hook=_unique_object if unique_keys else None,
+    )
     json.dumps(parsed, ensure_ascii=False).encode("utf-8")
     return parsed
 

@@ -323,6 +323,11 @@ AGENT_CHAT_MAX_SSE_BUFFER_BYTES = 8 * 1024 * 1024
 # so a flood of small newline-delimited frames cannot exhaust memory even though
 # each frame stays under the per-frame cap. A real response is far smaller.
 AGENT_CHAT_MAX_STREAM_BYTES = 32 * 1024 * 1024
+# Cap on one streamed tool call's argument text. The dispatcher refuses arguments
+# over MAX_REQUEST_BODY_BYTES as serialized UTF-8 JSON; a model's JSON text of the
+# same arguments can be up to about three times longer (\u escapes, whitespace),
+# so past this the call could never run and the response is refused at once.
+AGENT_CHAT_MAX_TOOL_ARGUMENT_CHARS = 4 * MAX_REQUEST_BODY_BYTES
 # Cap on one non-streaming provider reply (catalogue, capability and probe reads).
 # The largest public catalogue is a few MB; this bounds a faulty or hostile server.
 AGENT_CHAT_MAX_JSON_BYTES = 8 * 1024 * 1024
@@ -335,10 +340,15 @@ AGENT_CHAT_MAX_MODEL_ID_LENGTH = 200
 # per-response cap above bounds one stream; this bounds the sum so many iterations
 # cannot accumulate a large multiple. A real multi-step turn stays far below it.
 AGENT_CHAT_MAX_TURN_OUTPUT_BYTES = 48 * 1024 * 1024
-# Max idle gap between stream chunks before the provider request is aborted. The
-# total time is deliberately unbounded (a long agentic turn streams for minutes),
-# but a provider that stops sending data must not hang the turn forever.
+# Max idle gap between stream data before the provider request is aborted. SSE
+# comment lines (a gateway's keep-alive) do not count as data. Agent Chat's total
+# time is deliberately unbounded (a long agentic turn streams for minutes), but a
+# provider that stops sending data must not hang the turn forever.
 AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS = 180
+# The longest one Voice or AI Task model call may take, however steadily the
+# provider keeps sending. Nobody can cancel those turns, so a provider that
+# trickles data forever must not hold an automation or a speaker indefinitely.
+AGENT_HEADLESS_CALL_SECONDS = 600
 # A retry after a temporary provider failure waits this long for the first reply
 # rather than the full silent-stream bound: a provider that has just said it is
 # overloaded and then sends nothing is stuck, not thinking.

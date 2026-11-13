@@ -48,7 +48,7 @@ async def _actions(hass, include_fields=True, descriptions=DESCRIPTIONS):
     hass.states.async_set("climate.hall", "heat", {"supported_features": 1, "hvac_modes": ["heat", "off"]})
     data = _data()
     loader = AsyncMock(return_value=descriptions) if not isinstance(descriptions, Exception) else AsyncMock(side_effect=descriptions)
-    with patch("homeassistant.helpers.service.async_get_all_descriptions", loader):
+    with patch("custom_components.phoenix_mcp.tools.discovery.async_get_all_descriptions", loader):
         result, outcome, _ = await _call_tool("find_available_actions", {"entity_id": "climate.hall", "include_fields": include_fields},
                                               _key(), hass, data)
     assert outcome == "allowed", result
@@ -173,7 +173,7 @@ async def test_runtime_guidance_is_never_replaced(hass, service):
     hass.states.async_set("script.hall", "off")
     text = {f"component.script.services.{service}.description": "Core's generic text"}
     loader = AsyncMock(return_value={"script": {service: {"fields": {}}}})
-    with patch("homeassistant.helpers.service.async_get_all_descriptions", loader), patch(_TRANSLATIONS, AsyncMock(return_value=text)):
+    with patch("custom_components.phoenix_mcp.tools.discovery.async_get_all_descriptions", loader), patch(_TRANSLATIONS, AsyncMock(return_value=text)):
         result, outcome, _ = await _call_tool("find_available_actions", {"entity_id": "script.hall", "include_fields": True},
                                               _key("script"), hass, _data())
     assert outcome == "allowed", result
@@ -204,7 +204,7 @@ async def test_a_shipped_example_keeps_its_sample_entity(hass):
     hass.services.async_register("light", "turn_on", lambda call: None)
     hass.states.async_set("light.hall", "on")
     loader = AsyncMock(return_value={"light": {"turn_on": {"fields": {"flash": {"example": "light.kitchen", "selector": {"text": {}}}}}}})
-    with patch("homeassistant.helpers.service.async_get_all_descriptions", loader), patch(_TRANSLATIONS, AsyncMock(return_value={})):
+    with patch("custom_components.phoenix_mcp.tools.discovery.async_get_all_descriptions", loader), patch(_TRANSLATIONS, AsyncMock(return_value={})):
         result, _, _ = await _call_tool("find_available_actions", {"entity_id": "light.hall", "include_fields": True},
                                         _key("light"), hass, _data())
     rows = {row["service"]: row for row in json.loads(result["content"][0]["text"])["actions"]}

@@ -7,7 +7,7 @@ Each part folds, and stays folded or open for the next request you choose.
 
 ## {{label:approvals.colRequest}} {#request}
 
-The access key, tool, capability, when the request was made and expires or was decided, and its status. A decided request also shows the reason it ended.
+The access key, the app when one signed in with OAuth asked, tool, capability, when the request was made and expires or was decided, and its status. A decided request also shows the reason it ended.
 
 ## {{label:approvals.detailTabArgs}} {#raw-args}
 

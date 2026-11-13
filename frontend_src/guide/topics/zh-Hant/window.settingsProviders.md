@@ -17,7 +17,11 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 
 從提供者提供的模型中選擇。無法使用工具的模型會顯示為灰色，因為 Phoenix 需要工具來執行操作。
 
-**{{label:settings.agentcliModelAuto}}** 使用適合代理工作的目前模型，略過預覽版和已宣布停用的模型。如果你自己選擇模型，Phoenix 會一直保留它，直到提供者停用它。之後會切換到提供者指定的後續模型，否則切換到同系列中最新的模型。名稱以 `:free` 結尾的模型只會切換到另一個免費模型。
+**{{label:settings.agentcliModelAuto}}** 使用適合代理工作的目前模型，略過預覽版和已宣布停用的模型。如果你自己選擇模型，Phoenix 會一直保留它，直到提供者停用它。
+
+之後會切換到提供者指定的後續模型。沒有的話，切換到同系列中最新的模型，再沒有就切換到同一檔次中最新的模型，例如另一個 Haiku 模型。
+
+如果都沒有，Phoenix 會保留已停用的模型並顯示警告，請另選一個模型。名稱以 `:free` 結尾的模型只會切換到另一個免費模型。在本機 Ollama 伺服器上，Phoenix 只在同一系列內切換，**{{label:settings.agentcliModelAuto}}** 也從不選擇雲端模型。
 
 當 **{{label:settings.agentcliVerifyOptions}}** 開啟時，儲存時還會檢查模型支援哪些選項。這會消耗少量 API 額度。
 
@@ -72,7 +76,7 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 - OpenCode：Zen 或 Console 路徑。你只能在其中一條路徑上新增金鑰。
 - Z.ai：Standard API、Coding Plan 或 China。同一個金鑰可以為每個方案各儲存一次。
 - Qwen：除了 API 金鑰，還需要你的工作區基礎 URL，即一個公開的 HTTPS 位址。
-- Ollama（本機）：你的 Ollama 伺服器位址。Home Assistant 會連線它，因此請使用 Home Assistant 主機可以存取的位址。
+- Ollama（本機）：你的 Ollama 伺服器位址。Home Assistant 會連線它，因此請使用 Home Assistant 主機可以存取的位址。一般 `http://` 流量不加密；請參閱[哪些資料會離開你的家](guide:topic.security#leaves-home)。
 
 有些方案只供程式設計工具使用：Z.ai 的 Coding Plan、Xiaomi MiMo 的 Token Plan，以及阿里雲的 Coding Plan 和 Token Plan。它們的條款禁止在 Home Assistant 這類應用程式中使用，提供商可能會限流或封鎖金鑰。
 

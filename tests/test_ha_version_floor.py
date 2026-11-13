@@ -140,6 +140,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "EVENT_HOMEASSISTANT_STARTED": "0.0.0",
         "EVENT_HOMEASSISTANT_STOP": "0.0.0",
         "MATCH_ALL": "0.0.0",
+        "Platform": "0.0.0",
         "STATE_UNAVAILABLE": "0.0.0",
         "UnitOfTime": "0.0.0",
         "__version__": "0.0.0",
@@ -170,6 +171,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "HomeAssistantError": "0.0.0",
         "ServiceNotFound": "0.0.0",
         "ServiceValidationError": "0.0.0",
+        "TemplateError": "0.0.0",
         "Unauthorized": "0.0.0",
     },
     "homeassistant.components.homeassistant.scene": {"PLATFORM_SCHEMA": "0.0.0"},
@@ -206,6 +208,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "translation": "2025.2.0",
     },
     "homeassistant.helpers.aiohttp_client": {
+        "async_create_clientsession": "0.0.0",
         "async_get_clientsession": "0.0.0",
     },
     "homeassistant.helpers.entity_component": {"DATA_INSTANCES": "2026.7.0"},
@@ -249,7 +252,15 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.loader": {
         "IntegrationNotFound": "0.0.0",
         "async_get_integration": "0.0.0",
+        # Both verified present in 2026.7.0 and long older.
+        "async_get_integrations": "0.0.0",
+        "async_get_loaded_integration": "0.0.0",
     },
+    # Trigger and condition description loaders, verified present in 2026.7.0.
+    "homeassistant.helpers.condition": {"async_get_all_descriptions": "0.0.0"},
+    "homeassistant.helpers.trigger": {"async_get_all_descriptions": "0.0.0"},
+    # The public Repairs flow manager accessor, verified present in 2026.7.0.
+    "homeassistant.components.repairs": {"repairs_flow_manager": "0.0.0"},
     "homeassistant.components.light.const": {"DATA_PROFILES": "2024.8.0"},
     "homeassistant.util.percentage": {"percentage_to_ranged_value": "0.0.0", "ranged_value_to_percentage": "0.0.0"},
     "homeassistant.util": {
@@ -286,7 +297,6 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "ulid_to_bytes_or_none": "2024.8.0",
     },
     "homeassistant.util.yaml": {
-        "dump": "0.0.0",
         "load_yaml": "0.0.0",
     },
 }

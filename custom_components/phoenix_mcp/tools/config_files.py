@@ -25,8 +25,7 @@ from ..tool_contracts import handler_arguments
 from ..helpers import content_hash
 from ..tool_input import str_arg
 from ..capability import effective_cap
-from ..esphome_yaml import mask_yaml_text, masked_yaml_data
-from ..policy_engine import is_sensitive_key
+from ..esphome_yaml import config_credential_key, folded_path_parts, links_to_secrets_yaml, mask_yaml_text, masked_yaml_data
 from ..tool_common import _read_text_capped, _tool_error, _tool_success, _usable_path_arg, fitted_offset_page, offset_page
 from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
@@ -138,14 +137,14 @@ def _yaml_read_path_ok(rel: str) -> bool:
     Run against BOTH the caller's argument and the realpath-resolved result, so a
     symlink cannot rename its way past the extension or secrets.yaml rule.
     """
-    parts = [p for p in rel.replace(os.sep, "/").split("/") if p not in ("", ".")]
+    parts = folded_path_parts(rel.replace(os.sep, "/"))
     if not parts:
         return False
     if any(p.startswith(".") for p in parts):
         return False  # .storage, .cloud, and any other hidden directory
-    if parts[0].lower() == "esphome":
+    if parts[0] == "esphome":
         return False  # dedicated tool applies entity scope and credential masking
-    name = parts[-1].lower()
+    name = parts[-1]
     return "secret" not in name and name.endswith((".yaml", ".yml"))
 
 
@@ -170,7 +169,7 @@ def _resolve_yaml_read_path(hass: HomeAssistant, file_arg: Any) -> tuple[str, st
     if candidate != config_dir and not candidate.startswith(config_dir + os.sep):
         return None
     rel = os.path.relpath(candidate, config_dir)
-    if not _yaml_read_path_ok(rel):
+    if not _yaml_read_path_ok(rel) or (os.path.isfile(candidate) and links_to_secrets_yaml(candidate, config_dir)):
         return None
     return candidate, rel
 
@@ -252,7 +251,7 @@ async def _tool_get_yaml_config(
         )
     if key is not None:
         body["key_found"] = found
-        if any(is_sensitive_key(part) for part in key.strip().split(".")):
+        if any(config_credential_key(part) for part in key.strip().split(".")):
             # The fragment is the bare value, with no key left for the text to reveal it by.
             body["content"] = "<redacted>" if found else ""
         else:

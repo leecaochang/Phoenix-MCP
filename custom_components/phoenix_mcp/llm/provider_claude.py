@@ -12,7 +12,7 @@ from ..conversation_log import record_rejected_tool
 from ..catalog_text import LocalizedReason
 from .accounts import ProviderConfig
 from .base import (
-    _apply_claude_options, _bounded_catalog, _cache_marked, _CHAT_TIMEOUT, _CLAUDE_NO_ADAPTIVE,
+    _apply_claude_options, _ArgumentText, _bounded_catalog, _cache_marked, _CHAT_TIMEOUT, _CLAUDE_NO_ADAPTIVE,
     _CLAUDE_TRANSIENT_ERRORS, _created_map, _error_body, _http_failure, _http_failure_code,
     _IMAGE_PROBE_TIMEOUT, _invalid_tool_calls, _is_expired, _json_error_hint,
     _LEGACY_MAX_TOKENS, _MODEL_LIST_MAX_PAGES, _model_result_text, _norm, _norm_stop,
@@ -27,6 +27,12 @@ from ..provider_constants import (
     AGENT_CHAT_ANTHROPIC_VERSION, AGENT_CHAT_EFFORT_LEVEL_ORDER, AGENT_CHAT_MINIMAX_MODELS,
     AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS, AGENT_CHAT_TOOL_SEARCH_BLOCKS,
 )
+
+
+def _tool_text(tool_json: dict[int, _ArgumentText], idx: int) -> str:
+    """The argument text one tool_use block streamed, joined once."""
+    received = tool_json.get(idx)
+    return received.text() if received is not None else ""
 
 
 class ClaudeProvider:
@@ -305,7 +311,10 @@ class ClaudeProvider:
     async def _parse(self, resp: Any) -> AsyncIterator[dict]:
         # Assemble content blocks by index into an assistant message.
         blocks: dict[int, dict] = {}
-        tool_json: dict[int, str] = {}
+        tool_json: dict[int, _ArgumentText] = {}
+        # Streamed text, thinking and signature pieces per (block, field), joined once when the
+        # block stops, so a long block is not copied on every delta.
+        pieces: dict[tuple[int, str], list[str]] = {}
         order: list[int] = []
         stop_reason = "end_turn"
         saw_stop = False
@@ -340,7 +349,7 @@ class ClaudeProvider:
                                              reason="Tool arguments must be a JSON object.")
                         raise _ProviderResponseError()
                     blocks[idx] = {"type": "tool_use", "id": cb.get("id"), "name": cb.get("name"), "input": {}}
-                    tool_json[idx] = json.dumps(initial_input) if initial_input else ""
+                    tool_json[idx] = _ArgumentText(json.dumps(initial_input) if initial_input else "")
                 elif cb.get("type") == "thinking":
                     blocks[idx] = {"type": "thinking", "thinking": "", "signature": ""}
                 elif cb.get("type") == "redacted_thinking":
@@ -353,7 +362,7 @@ class ClaudeProvider:
                     if not isinstance(initial_input, dict) or not isinstance(cb.get("id"), str):
                         raise _ProviderResponseError()
                     blocks[idx] = {"type": "server_tool_use", "id": cb["id"], "name": cb.get("name"), "input": {}}
-                    tool_json[idx] = json.dumps(initial_input) if initial_input else ""
+                    tool_json[idx] = _ArgumentText(json.dumps(initial_input) if initial_input else "")
                 elif cb.get("type") == "tool_search_tool_result":
                     # Its result arrives whole and goes back unchanged; its tool references load the tools.
                     blocks[idx] = json.loads(json.dumps(cb))
@@ -366,29 +375,37 @@ class ClaudeProvider:
                     raise _ProviderResponseError()
                 dtype = delta.get("type")
                 if dtype == "text_delta":
-                    blocks.setdefault(idx, {"type": "text", "text": ""})
-                    blocks[idx]["text"] = blocks[idx].get("text", "") + delta.get("text", "")
-                    yield _norm(EV_TEXT, text=delta.get("text", ""))
+                    text = delta.get("text", "")
+                    if not isinstance(text, str):
+                        raise _ProviderResponseError()
+                    pieces.setdefault((idx, "text"), []).append(text)
+                    yield _norm(EV_TEXT, text=text)
                 elif dtype == "thinking_delta":
                     if not isinstance(delta.get("thinking", ""), str) or blocks[idx].get("type") != "thinking":
                         raise _ProviderResponseError()
-                    blocks[idx]["thinking"] += delta.get("thinking", "")
+                    pieces.setdefault((idx, "thinking"), []).append(delta.get("thinking", ""))
                     yield _norm(EV_THINKING, text=delta.get("thinking", ""))
                 elif dtype == "signature_delta":
                     if not isinstance(delta.get("signature"), str) or blocks[idx].get("type") != "thinking":
                         raise _ProviderResponseError()
-                    blocks[idx]["signature"] += delta["signature"]
+                    pieces.setdefault((idx, "signature"), []).append(delta["signature"])
                 elif dtype == "input_json_delta":
-                    tool_json[idx] = tool_json.get(idx, "") + delta.get("partial_json", "")
+                    partial = delta.get("partial_json", "")
+                    if not isinstance(partial, str):
+                        raise _ProviderResponseError()
+                    tool_json.setdefault(idx, _ArgumentText()).append(partial)
             elif etype == "content_block_stop":
                 idx = ev.get("index", 0)
                 if idx not in open_blocks:
                     raise _ProviderResponseError()
                 open_blocks.remove(idx)
                 blk = blocks.get(idx)
+                for field in ("text", "thinking", "signature"):
+                    if (joined := pieces.pop((idx, field), None)) is not None:
+                        blocks[idx][field] = str(blocks[idx].get(field, "")) + "".join(joined)
                 if blk and blk.get("type") == "server_tool_use":
                     try:
-                        server_input = json.loads(tool_json.get(idx) or "{}")
+                        server_input = json.loads(_tool_text(tool_json, idx) or "{}")
                     except json.JSONDecodeError:
                         raise _ProviderResponseError() from None
                     if not isinstance(server_input, dict):
@@ -396,7 +413,7 @@ class ClaudeProvider:
                     blk["input"] = server_input
                 if blk and blk.get("type") == "tool_use":
                     parsed_tools.append(_norm(EV_TOOL, id=blk["id"], name=blk["name"],
-                                              input=tool_json.get(idx) or "{}", _block_index=idx))
+                                              input=_tool_text(tool_json, idx) or "{}", _block_index=idx))
             elif etype == "message_start":
                 usage = (ev.get("message") or {}).get("usage") or {}
                 if usage:
@@ -432,7 +449,7 @@ class ClaudeProvider:
         if not saw_stop or not saw_reason or open_blocks:
             for idx, block in blocks.items():
                 if block.get("type") == "tool_use":
-                    record_rejected_tool(block.get("id"), block.get("name"), tool_json.get(idx, ""),
+                    record_rejected_tool(block.get("id"), block.get("name"), _tool_text(tool_json, idx),
                                          reason="The provider response ended before the tool call was complete.",
                                          finish_reason=stop_reason if saw_reason else None)
             raise _ProviderResponseError("provider_incomplete", retryable=stop_reason != "max_tokens")

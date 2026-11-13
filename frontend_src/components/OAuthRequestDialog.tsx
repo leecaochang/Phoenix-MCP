@@ -2,16 +2,21 @@
 // browser to /phoenix-mcp/oauth/<request id>, behind Home Assistant's own login, and this
 // dialog shows who is asking and where it returns to. Approving binds the sign-in to one
 // access key whose sign-in window is open; the browser then goes back to the app. The
-// endpoint also lands here with "closed", "invalid" or "busy" when it parked nothing.
+// endpoint also lands here with "invalid" for a malformed request. A closed window or a
+// full queue gets a request ID that names nothing, so callers cannot tell a window is open;
+// this dialog then asks whether any window is open to say which it was.
 import { useCallback, useEffect, useId, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
+import { localeClock } from "../i18n/format";
 import type { OAuthSignInRequest } from "../types";
 import { ActionButton, DisplayModeContext } from "../ui/ActionButton";
 import { announceOAuthChange, countdown, useNow, useOAuthChanges } from "./AccessKeyOAuth";
 import { Modal } from "./Modal";
 
 const PAGES = new Set(["closed", "invalid", "busy"]);
+// The spoken warning comes once, this long before the request or its window ends.
+const ENDING_SOON_MS = 60_000;
 
 /** The request ID or landing page named by the current address, or null. */
 export function oauthRequestLink(): string | null {
@@ -81,10 +86,17 @@ export function OAuthRequestDialog({ link, onClose }: { link: string; onClose: (
   useEffect(() => {
     if (phase.kind !== "loading") return;
     let live = true;
-    fetchRequest().catch((e: unknown) => {
+    fetchRequest().catch(async (e: unknown) => {
       if (!live) return;
-      setPhase({ kind: "message", text: (e as { status?: number } | null)?.status === 404
-        ? t("oauth.requestExpired") : e instanceof Error ? e.message : t("oauth.loadFailed") });
+      if ((e as { status?: number } | null)?.status !== 404) {
+        setPhase({ kind: "message", text: e instanceof Error ? e.message : t("oauth.loadFailed") });
+        return;
+      }
+      // Nothing was parked under this ID: no window was open, or the request ended.
+      const anyOpen = await api.getOAuthSummary()
+        .then((summary) => Object.values(summary.keys).some((k) => k.window_open_until !== null))
+        .catch(() => true);
+      if (live) setPhase({ kind: "message", text: anyOpen ? t("oauth.requestExpired") : t("oauth.closedPage") });
     });
     return () => { live = false; };
   }, [fetchRequest, phase.kind]);
@@ -102,6 +114,7 @@ export function OAuthRequestDialog({ link, onClose }: { link: string; onClose: (
     : null;
   const now = useNow(expiresAt !== null);
   const expired = expiresAt !== null && expiresAt <= now;
+  const endingSoon = !expired && expiresAt !== null && expiresAt - now <= ENDING_SOON_MS;
 
   async function approve() {
     if (!request || !chosen) return;
@@ -149,7 +162,7 @@ export function OAuthRequestDialog({ link, onClose }: { link: string; onClose: (
               <dt>{t("oauth.appName")}</dt>
               <dd>{request.client_name ? t("oauth.claimedName", { name: appName }) : appName}</dd>
               <dt>{t("oauth.appHost")}</dt>
-              <dd><code>{request.client_host}</code></dd>
+              <dd><code>{request.client_id}</code></dd>
               <dt>{t("oauth.returnHost")}</dt>
               <dd><code>{request.redirect_host}</code></dd>
             </dl>
@@ -173,10 +186,16 @@ export function OAuthRequestDialog({ link, onClose }: { link: string; onClose: (
                 ))}
               </fieldset>
             )}
+            {/* The ticking countdown is for the eye; a screen reader gets the end time once and one warning. */}
             <p className="wizard-hint" aria-hidden="true">
               {expired ? t("oauth.requestExpired") : t("oauth.requestExpires", { time: countdown((expiresAt ?? now) - now) })}
             </p>
-            {expired && <span role="status" className="sr-only">{t("oauth.requestExpired")}</span>}
+            {expiresAt !== null && Number.isFinite(expiresAt) && (
+              <p className="sr-only">{t("oauth.requestEndsAt", { time: localeClock(expiresAt) })}</p>
+            )}
+            <span role="status" className="sr-only">
+              {expired ? t("oauth.requestExpired") : endingSoon ? t("oauth.requestEndingSoon") : ""}
+            </span>
             {error && <p role="alert" className="banner banner-error">{error}</p>}
           </>
         )}

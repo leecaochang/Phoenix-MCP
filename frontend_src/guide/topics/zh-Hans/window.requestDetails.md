@@ -7,7 +7,7 @@
 
 ## {{label:approvals.colRequest}} {#request}
 
-访问密钥、工具、能力、请求发出以及过期或决定的时间，以及其状态。已决定的请求还会显示结束原因。
+访问密钥、通过 OAuth 登录的应用发出请求时的该应用、工具、能力、请求发出以及过期或决定的时间，以及其状态。已决定的请求还会显示结束原因。
 
 ## {{label:approvals.detailTabArgs}} {#raw-args}
 

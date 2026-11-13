@@ -10,6 +10,7 @@ from typing import Any
 from aiohttp import web
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr_mod, entity_registry as er_mod
+from homeassistant.loader import async_get_integrations
 
 from ..const import DOMAIN
 from ..data import PhoenixData
@@ -398,9 +399,6 @@ class PhoenixAdminMesaIntegrationOptionsView(PhoenixView):
         )
         names: dict[str, str] = {}
         try:
-            # Local: inside a guard for releases that lack it.
-            from homeassistant.loader import async_get_integrations
-
             for dom, integ in (await async_get_integrations(self.hass, domains)).items():
                 if not isinstance(integ, BaseException):
                     names[dom] = getattr(integ, "name", None) or dom

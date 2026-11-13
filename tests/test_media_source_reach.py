@@ -10,13 +10,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import homeassistant
 import pytest
 import voluptuous as vol
 from homeassistant.components import ai_task as core_ai_task
-from homeassistant.components.ai_task import services as core_services, task as core_task
+from homeassistant.components.ai_task import task as core_task
 from homeassistant.components.ai_task.const import DATA_COMPONENT, AITaskEntityFeature
 from homeassistant.components.ai_task.entity import AITaskEntity
 from homeassistant.components.ai_task.task import GenDataTaskResult
@@ -37,7 +39,9 @@ from custom_components.phoenix_mcp.access_key_store import (
 from custom_components.phoenix_mcp.const import (
     AI_TASK_GENERATED_IMAGES_KEPT,
     DOMAIN,
-    MEDIA_SOURCE_LIBRARY_DOMAINS,
+    MEDIA_SOURCE_ENTITY_DOMAINS,
+    MEDIA_SOURCE_OPEN_DOMAINS,
+    MEDIA_SOURCE_RECORDING_DOMAINS,
     MESA_MODE_ADVISORY,
     MESA_MODE_OFF,
 )
@@ -140,7 +144,8 @@ async def test_core_reads_an_attachment_without_checking_a_userless_caller(hass,
         "task_name": "t", "instructions": "i", "entity_id": TASK, "attachments": [attachment]},
         blocking=True, return_response=True)
     assert resolved == [[attachment]] and len(entity.tasks) == 1
-    assert entity.contexts[0].user_id is None
+    # HA 2026.7 hands the entity no context at all; later releases hand it the userless one.
+    assert entity.contexts[0] is None or entity.contexts[0].user_id is None
 
 
 async def test_a_readable_camera_attachment_reaches_the_task(hass, other_vendor):
@@ -479,6 +484,18 @@ def test_core_still_names_the_attachment_field_and_its_scheme():
     assert json.dumps(sorted(AITaskEntityFeature.__members__))
 
 
+def _image_handler_module():
+    """Return the Core module whose generate_image handler calls async_generate_image.
+
+    Core moved the service handlers from the package into ``ai_task.services`` in 2026.10.
+    """
+    try:
+        from homeassistant.components.ai_task import services  # Local: absent before 2026.10
+    except ImportError:
+        return core_ai_task
+    return services
+
+
 def _generated(index: int) -> str:
     return f"media-source://ai_task/image/2026-11-11_0000{index:02d}_sketch.png"
 
@@ -489,7 +506,7 @@ async def _generate_image(hass, data, key, media_id: str) -> tuple:
     call = {"service": {"domain": "ai_task", "name": "generate_image",
                         "data": {"task_name": "sketch", "instructions": "Draw a house"}},
             "targets": [{"kind": "entity", "ids": [TASK]}]}
-    with patch.object(core_services, "async_generate_image", produced):
+    with patch.object(_image_handler_module(), "async_generate_image", produced):
         result = await _call_tool("call_service", call, key, hass, data)
     assert produced.await_count == 1, result
     return result
@@ -585,8 +602,27 @@ def _send(media_id: str) -> dict:
         "targets": [{"kind": "entity", "ids": [SENDER]}]}
 
 
-def test_every_library_source_has_a_sample_id():
-    assert set(_LIBRARY_IDS) == MEDIA_SOURCE_LIBRARY_DOMAINS - {"ai_task"}
+def test_every_private_core_source_has_a_sample_id():
+    """Every core source not judged open, a picture or a recording one is private, ai_task aside."""
+    core = {path.parent.name for path in (Path(homeassistant.__file__).parent / "components").glob("*/media_source.py")}
+    private = core - MEDIA_SOURCE_OPEN_DOMAINS - MEDIA_SOURCE_ENTITY_DOMAINS - MEDIA_SOURCE_RECORDING_DOMAINS
+    assert set(_LIBRARY_IDS) == private - {"ai_task"}
+
+
+@pytest.mark.parametrize("media_id", [
+    "media-source://frigate/event/clip/1700000000.123-abcdef",
+    "media-source://frigate/recordings/front_door/2026-11-13/03",
+    "media-source://some_photo_vault/album/7",
+    "media-source://",
+])
+async def test_a_source_nobody_judged_needs_the_camera_capability(hass, sender, media_id):
+    """A custom integration's source, such as Frigate's clips, is private until judged open."""
+    data, _ = _environment(hass)
+    refused = await _call_tool("call_service", _send(media_id), _key({SENDER: "GREEN"}, cap_camera_read="deny"), hass, data)
+    assert refused[1] == "denied", refused
+    assert sender == []
+    sent = await _call_tool("call_service", _send(media_id), _key({SENDER: "GREEN"}), hass, data)
+    assert sent[1] == "allowed", sent
 
 
 @pytest.mark.parametrize("capability", ["deny", "confirm"])

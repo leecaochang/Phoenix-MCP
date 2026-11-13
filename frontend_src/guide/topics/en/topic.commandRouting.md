@@ -23,6 +23,19 @@ It only applies to plain text messages. Messages for Home Companion keys always 
 
 The first message in a conversation can go to the decision provider. A follow-up only goes there with a TypeSafe / JEV model, in a language the model supports. Otherwise it goes to your AI model.
 
+## Actions the decision provider never runs {#risky-actions}
+
+The decision provider picks the action from your words. Phoenix checks that you named the device, but it can't check the action. So the decision provider never runs these actions:
+
+- Unlocking or opening a lock
+- Opening or toggling a cover, garage door or valve
+- Turning on or toggling a siren
+- Disarming or triggering an alarm
+
+Phoenix asks you to say these commands plainly instead, like "unlock the front door", so sentence matching handles them.
+
+When the decision provider runs any other command, the reply names the action that ran, so you hear what happened.
+
 ## Limits {#limits}
 
 The decision provider has a time limit for each request, and an optional hourly limit. If either is reached, the command goes to your AI model, so nothing goes unanswered.

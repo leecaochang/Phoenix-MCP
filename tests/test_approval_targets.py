@@ -198,8 +198,12 @@ async def test_private_binding_cannot_be_supplied_and_legacy_approval_refuses(ha
 
     access_key, data, area, first, _second, calls = target_runtime
     args = {'service': {'domain': 'cover', 'name': 'open_cover'}, 'targets': [{'kind': 'area', 'ids': [area.id]}]}
-    result, outcome, _ = await _call_tool('call_service', {**args, APPROVAL_TARGETS_KEY: {}}, access_key, hass, data)
-    assert outcome == 'invalid_request', result
+    for planted in ({}, {'version': 1, 'entity_ids': [first.entity_id], 'fingerprint': 'f' * 64}):
+        result, outcome, _ = await _call_tool(
+            'call_service', {**args, APPROVAL_TARGETS_KEY: planted}, access_key, hass, data)
+        assert outcome == 'invalid_request', result
+        # Dispatch names the binding itself, before any tool contract sees an unknown argument.
+        assert 'server-owned' in result['content'][0]['text']
     assert not data.store.get_pending_approvals()
     result, outcome, _ = await async_execute_approved_tool('call_service', {
         'domain': 'cover', 'service': 'open_cover', 'entity_id': [first.entity_id],

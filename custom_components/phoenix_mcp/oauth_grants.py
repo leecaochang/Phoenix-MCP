@@ -4,6 +4,9 @@ A sign-in holds only SHA-256 hashes of its tokens. It is valid while its key is 
 OAuth sign-in switched on, and carries the generation the sign-in was issued under; rotation
 and switching OAuth off advance that generation in the key's own save, so validity never
 waits for a row here to be deleted. Deleting dead rows is cleanup.
+
+Every refresh token a sign-in issues carries the same family tag, stored only as a hash, so
+a redeemed token stays recognisable as reuse after it fell off the bounded retired list.
 """
 
 from __future__ import annotations
@@ -24,7 +27,8 @@ from .access_key_store import _parse_dt, hmac_compare
 from .const import (
     OAUTH_ACCESS_TOKEN_PREFIX, OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_MAX_GRANTS,
     OAUTH_MAX_GRANTS_PER_ACCESS_KEY, OAUTH_REFRESH_GRACE_SECONDS, OAUTH_REFRESH_SIBLINGS_MAX,
-    OAUTH_REFRESH_TOKEN_PREFIX, OAUTH_RETIRED_TOKENS_MAX, OAUTH_SECRET_HEX_LENGTH,
+    OAUTH_REFRESH_FAMILY_HEX_LENGTH, OAUTH_REFRESH_TOKEN_PREFIX, OAUTH_RETIRED_TOKENS_MAX,
+    OAUTH_SECRET_HEX_LENGTH,
 )
 from .durable_storage import DurableStorageError, DurableStore
 
@@ -44,22 +48,43 @@ def secret_hash(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def _new_family() -> str:
+    return secrets.token_hex(OAUTH_REFRESH_FAMILY_HEX_LENGTH // 2)
+
+
+def _family_of(raw_refresh: str) -> str:
+    """The family tag a refresh token carries right after its prefix."""
+    start = len(OAUTH_REFRESH_TOKEN_PREFIX)
+    return raw_refresh[start:start + OAUTH_REFRESH_FAMILY_HEX_LENGTH]
+
+
+def _mint_refresh(family: str) -> tuple[str, str]:
+    """A new refresh token of ``family`` and its hash; as long as any other secret."""
+    raw = (OAUTH_REFRESH_TOKEN_PREFIX + family
+           + secrets.token_hex((OAUTH_SECRET_HEX_LENGTH - OAUTH_REFRESH_FAMILY_HEX_LENGTH) // 2))
+    return raw, secret_hash(raw)
+
+
 @dataclass
 class _HashUntil:
-    """A token hash and the moment it stops being accepted."""
+    """A token hash and the moment it stops being accepted.
+
+    ``spent`` marks a redeemed refresh token that already gave its one grace-time sibling.
+    """
 
     token_hash: str
     until: datetime
+    spent: bool = False
 
     def to_dict(self) -> dict:
-        return {"hash": self.token_hash, "until": self.until.isoformat()}
+        return {"hash": self.token_hash, "until": self.until.isoformat(), **({"spent": True} if self.spent else {})}
 
     @classmethod
     def from_dict(cls, raw: Any) -> _HashUntil | None:
         if not isinstance(raw, dict) or not isinstance(raw.get("hash"), str):
             return None
         until = _parse_dt(raw.get("until")) if isinstance(raw.get("until"), str) else None
-        return cls(raw["hash"], until) if until is not None else None
+        return cls(raw["hash"], until, raw.get("spent") is True) if until is not None else None
 
 
 @dataclass
@@ -80,8 +105,11 @@ class OAuthGrant:
     # Refresh tokens any one of which may be redeemed next (normally one; a retried
     # refresh inside the grace adds a sibling).
     refresh_hashes: list[str] = field(default_factory=list)
-    # Redeemed refresh tokens: usable again until their grace ends, then proof of reuse.
+    # Redeemed refresh tokens: one more use each until their grace ends, then proof of reuse.
     retired_refresh: list[_HashUntil] = field(default_factory=list)
+    # Hash of the family tag in every refresh token issued since; empty for a sign-in
+    # stored before tags, until its next refresh.
+    family_hash: str = ""
 
     def to_admin_dict(self) -> dict:
         """What the panel shows: never a hash."""
@@ -107,6 +135,7 @@ class OAuthGrant:
             "access_tokens": [t.to_dict() for t in self.access_tokens],
             "refresh_hashes": list(self.refresh_hashes),
             "retired_refresh": [t.to_dict() for t in self.retired_refresh],
+            "family_hash": self.family_hash,
         }
 
     @classmethod
@@ -130,6 +159,7 @@ class OAuthGrant:
             access_tokens=[t for t in map(_HashUntil.from_dict, raw.get("access_tokens") or []) if t],
             refresh_hashes=[h for h in raw.get("refresh_hashes") or [] if isinstance(h, str)],
             retired_refresh=[t for t in map(_HashUntil.from_dict, raw.get("retired_refresh") or []) if t],
+            family_hash=raw["family_hash"] if isinstance(raw.get("family_hash"), str) else "",
         )
 
     def is_live(self, access_key: AccessKeyRecord | None) -> bool:
@@ -212,18 +242,30 @@ class OAuthGrantStore:
         return sum(1 for g in self._grants.values()
                    if g.access_key_id == access_key_id and g.generation == generation)
 
-    def find_by_access_hash(self, token_hash: str, now: datetime | None = None) -> OAuthGrant | None:
-        """The sign-in whose unexpired access token has this hash, compared in constant time."""
+    def find_access_token(self, token_hash: str, now: datetime | None = None) -> tuple[OAuthGrant, datetime] | None:
+        """The sign-in whose unexpired access token has this hash, and when that token ends.
+
+        Compared in constant time.
+        """
         now = now or utcnow()
-        found: OAuthGrant | None = None
+        found: tuple[OAuthGrant, datetime] | None = None
         for grant in self._grants.values():
             for token in grant.access_tokens:
                 if hmac_compare(token.token_hash, token_hash) and now < token.until:
-                    found = grant
+                    found = (grant, token.until)
         return found
 
-    def _find_by_refresh_hash(self, token_hash: str) -> tuple[OAuthGrant | None, str]:
-        """The sign-in that knows this refresh hash and how: current, retired, or none."""
+    def find_by_access_hash(self, token_hash: str, now: datetime | None = None) -> OAuthGrant | None:
+        """The sign-in whose unexpired access token has this hash, compared in constant time."""
+        found = self.find_access_token(token_hash, now)
+        return found[0] if found is not None else None
+
+    def _find_by_refresh_hash(self, token_hash: str, family_hash: str = "") -> tuple[OAuthGrant | None, str]:
+        """The sign-in that knows this refresh token and how: current, retired, family, or none.
+
+        "family" is a token that carries a sign-in's family tag but is no longer listed: an
+        old one, so its use is reuse.
+        """
         found: tuple[OAuthGrant | None, str] = (None, "none")
         for grant in self._grants.values():
             for current in grant.refresh_hashes:
@@ -232,6 +274,9 @@ class OAuthGrantStore:
             for retired in grant.retired_refresh:
                 if hmac_compare(retired.token_hash, token_hash) and found[1] == "none":
                     found = (grant, "retired")
+            if (family_hash and grant.family_hash and hmac_compare(grant.family_hash, family_hash)
+                    and found[1] == "none"):
+                found = (grant, "family")
         return found
 
     def grant_for_refresh(self, token_hash: str) -> OAuthGrant | None:
@@ -259,8 +304,9 @@ class OAuthGrantStore:
             if len(self._grants) >= OAUTH_MAX_GRANTS:
                 raise GrantLimitError("total")
             now = utcnow()
+            family = _new_family()
             access_raw, access_hash = mint_secret(OAUTH_ACCESS_TOKEN_PREFIX)
-            refresh_raw, refresh_hash = mint_secret(OAUTH_REFRESH_TOKEN_PREFIX)
+            refresh_raw, refresh_hash = _mint_refresh(family)
             grant = OAuthGrant(
                 id=str(uuid.uuid4()),
                 access_key_id=access_key.id,
@@ -273,6 +319,7 @@ class OAuthGrantStore:
                 last_used_at=now,
                 access_tokens=[_HashUntil(access_hash, now + timedelta(seconds=OAUTH_ACCESS_TOKEN_TTL_SECONDS))],
                 refresh_hashes=[refresh_hash],
+                family_hash=secret_hash(family),
             )
             grants = self._copy()
             grants[grant.id] = grant
@@ -280,17 +327,20 @@ class OAuthGrantStore:
             return IssuedTokens(grant.id, access_raw, refresh_raw, OAUTH_ACCESS_TOKEN_TTL_SECONDS)
 
     async def async_refresh(
-        self, token_hash: str, client_id: str | None, access_key_of: Any,
+        self, raw_token: str, client_id: str | None, access_key_of: Any,
     ) -> tuple[RefreshOutcome, IssuedTokens | None, OAuthGrant | None]:
         """Redeem a refresh token for new tokens.
 
-        ``access_key_of(grant)`` returns the bound key or None; a dead sign-in is unknown.
-        A current token rotates; a redeemed one inside its grace adds a sibling; one past
-        its grace ends the sign-in ("reused"). Raises DurableStorageError when the result
-        could not be saved, leaving the old tokens in force.
+        ``access_key_of(grant)`` returns the bound key or None; a dead sign-in is unknown,
+        returned with the sign-in so the refusal can be recorded. A current token rotates; a
+        redeemed one may add one sibling inside its grace while fewer than
+        OAUTH_REFRESH_SIBLINGS_MAX tokens are current. Any other use of a redeemed token, or
+        of an older token of the sign-in's family, ends the sign-in ("reused"). Raises
+        DurableStorageError when the result could not be saved, leaving the old tokens in force.
         """
+        token_hash = secret_hash(raw_token)
         async with self.lock:
-            grant, how = self._find_by_refresh_hash(token_hash)
+            grant, how = self._find_by_refresh_hash(token_hash, secret_hash(_family_of(raw_token)))
             if grant is None:
                 return "unknown", None, None
             if client_id is not None and client_id != grant.client_id:
@@ -300,27 +350,41 @@ class OAuthGrantStore:
             now = utcnow()
             grants = self._copy()
             working = grants[grant.id]
+            retired = None
             if how == "retired":
                 retired = next(t for t in working.retired_refresh if hmac_compare(t.token_hash, token_hash))
-                if now >= retired.until:
-                    del grants[grant.id]
-                    await self._async_commit(grants)
-                    return "reused", None, grant
+                if (now >= retired.until or retired.spent
+                        or len(working.refresh_hashes) >= OAUTH_REFRESH_SIBLINGS_MAX):
+                    how = "family"
+            if how == "family":
+                del grants[grant.id]
+                await self._async_commit(grants)
+                return "reused", None, grant
+            if working.family_hash:
+                family = _family_of(raw_token)
+            else:  # a sign-in stored before family tags gets one now
+                family = _new_family()
+                working.family_hash = secret_hash(family)
             grace_until = now + timedelta(seconds=OAUTH_REFRESH_GRACE_SECONDS)
             access_raw, access_hash = mint_secret(OAUTH_ACCESS_TOKEN_PREFIX)
-            refresh_raw, refresh_hash = mint_secret(OAUTH_REFRESH_TOKEN_PREFIX)
-            if how == "current":
+            refresh_raw, refresh_hash = _mint_refresh(family)
+            access_tokens = [t for t in working.access_tokens if now < t.until]
+            if retired is None:
                 working.retired_refresh.extend(_HashUntil(h, grace_until) for h in working.refresh_hashes)
                 working.refresh_hashes = [refresh_hash]
+                # Older access tokens keep only the grace, so a request already in flight finishes.
+                access_tokens = [
+                    _HashUntil(t.token_hash, min(t.until, grace_until)) for t in access_tokens
+                ][-OAUTH_REFRESH_SIBLINGS_MAX:]
             else:
-                working.refresh_hashes = (working.refresh_hashes + [refresh_hash])[-OAUTH_REFRESH_SIBLINGS_MAX:]
+                # A sibling neither shortens nor drops a token already issued: the app whose
+                # refresh it repeats may be the one that holds them.
+                retired.spent = True
+                working.refresh_hashes.append(refresh_hash)
+            # A redeemed hash cut from this list stays known through the family tag.
             working.retired_refresh = working.retired_refresh[-OAUTH_RETIRED_TOKENS_MAX:]
-            # Older access tokens keep only the grace, so a request already in flight finishes.
             working.access_tokens = [
-                _HashUntil(t.token_hash, min(t.until, grace_until)) for t in working.access_tokens if now < t.until
-            ][-OAUTH_REFRESH_SIBLINGS_MAX:]
-            working.access_tokens.append(
-                _HashUntil(access_hash, now + timedelta(seconds=OAUTH_ACCESS_TOKEN_TTL_SECONDS)))
+                *access_tokens, _HashUntil(access_hash, now + timedelta(seconds=OAUTH_ACCESS_TOKEN_TTL_SECONDS))]
             working.last_used_at = now
             await self._async_commit(grants)
             return "issued", IssuedTokens(grant.id, access_raw, refresh_raw, OAUTH_ACCESS_TOKEN_TTL_SECONDS), working
@@ -355,6 +419,8 @@ class OAuthGrantStore:
             return len(dead)
 
     async def async_clear(self) -> None:
-        """Delete every sign-in (wipe and integration removal)."""
+        """Delete every sign-in and the file that held them (integration removal)."""
         async with self.lock:
-            await self._async_commit({})
+            if self._store is not None:
+                await self._store.async_remove()
+            self._grants = {}

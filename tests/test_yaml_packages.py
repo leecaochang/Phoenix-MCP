@@ -523,12 +523,14 @@ def test_a_nested_include_of_secrets_yaml_is_refused(tmp_path):
     assert not result.ok and result.message == yi.MSG_SECRETS.format(domain="script")
 
 
-def test_the_fallback_editor_readers_refuse_secrets_yaml(tmp_path):
-    from custom_components.phoenix_mcp.tools import authoring
-
+def test_the_fallback_editor_writer_refuses_secrets_yaml(tmp_path):
+    """With no configuration.yaml, an editor file that resolves to secrets.yaml is neither read nor written."""
     write(tmp_path, "secrets.yaml", f"db_password:\n  sequence: {SECRET}\n")
-    os.symlink(tmp_path / "secrets.yaml", tmp_path / "scripts.yaml")
-    for reader in (authoring._read_scripts_yaml, authoring._read_automations_yaml, authoring._read_scenes_yaml):
-        with pytest.raises(yi.SecretsFileError):
-            reader(str(tmp_path / "scripts.yaml"))
+    before = (tmp_path / "secrets.yaml").read_bytes()
+    for domain, name in (("script", "scripts.yaml"), ("automation", "automations.yaml"), ("scene", "scenes.yaml")):
+        os.symlink(tmp_path / "secrets.yaml", tmp_path / name)
+        for mode in ("create", "edit", "delete"):
+            result = yi.write_entry(str(tmp_path), domain, "db_password", mode=mode, config={"alias": "x"})
+            assert not result.ok and result.error_kind == "io_error" and SECRET not in (result.message or "")
+    assert (tmp_path / "secrets.yaml").read_bytes() == before
     assert yi.read_entry(str(tmp_path), "script", "db_password") is None

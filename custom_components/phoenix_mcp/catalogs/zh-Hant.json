@@ -28,6 +28,7 @@
       "approvalReasonString": "reason 必須是字串。",
       "approvalRecordFailed": "執行前無法記錄此核准。未執行任何操作，請重試。",
       "approvalAccessKeyInactive": "此存取金鑰已不再有效，因此此請求無法執行。未執行任何操作。",
+      "approvalCredentialEnded": "存取金鑰已輪換或應用程式的登入已結束，因此此請求無法執行。未執行任何操作。",
       "archivedAccessKeyNotFound": "未找到已歸檔的存取金鑰。",
       "assistExposurePassThroughOnly": "use_assist_exposure 僅適用於 pass_through 存取金鑰。",
       "assistPipelineFailed": "無法建立 Assist 流水線。",
@@ -671,8 +672,8 @@
       "dashboard_resource.create.title": "新增儀表板資源 {url}",
       "dashboard_resource.update.title": "更改儀表板資源 {url}",
       "dashboard_resource.delete.title": "移除儀表板資源 {url}",
-      "dashboard_resource.create.body": "每個開啟儀表板的瀏覽器都會載入 {url}。JavaScript 檔案會以該使用者的 Home Assistant 存取權限執行，因此請只核准您信任的檔案。",
-      "dashboard_resource.update.body": "這將更改每個瀏覽器開啟儀表板時載入的檔案。請在下方比較目前檔案和擬議檔案。",
+      "dashboard_resource.create.body": "每個開啟儀表板的瀏覽器，以及開啟 Phoenix MCP 面板的管理員瀏覽器，都會載入 {url}。JavaScript 檔案會以該使用者的 Home Assistant 存取權限執行，因此請只核准您信任的檔案。",
+      "dashboard_resource.update.body": "這將更改每個瀏覽器開啟儀表板時、以及管理員瀏覽器開啟 Phoenix MCP 面板時載入的檔案。請在下方比較目前檔案和擬議檔案。",
       "dashboard_resource.delete.body": "儀表板將不再載入 {url}。來自該檔案的卡片在重新新增之前會顯示錯誤。",
       "edit_energy_config.fallback.body": "這將更新 Home Assistant 儀表板設定。",
       "edit_energy_config.fallback.title": "更改能源儀表板設定",
@@ -801,7 +802,11 @@
         "target_out_of_scope": "目標超出範圍",
         "access_key_expired": "存取金鑰已過期",
         "access_key_inactive": "存取金鑰處於非活動狀態",
-        "access_key_revoked": "存取金鑰已撤銷"
+        "access_key_revoked": "存取金鑰已撤銷",
+        "access_key_rotated": "輪換存取金鑰時已取消",
+        "oauth_sign_in_removed": "移除應用程式的登入時已取消",
+        "oauth_turned_off": "關閉 OAuth 登入時已取消",
+        "oauth_sign_in_ended": "應用程式的登入已結束，因此已取消"
       },
       "reasonExecutionFailedDetail": "執行失敗：{detail}",
       "reject": "拒絕",
@@ -1127,8 +1132,8 @@
       "energyDashboard": "能源儀表板",
       "cardNoun": "卡片",
       "previewErrorHead": {
-        "one": "此預覽中的一張卡片回報了設定錯誤。如有需要，請複製下方訊息並貼給智慧體，讓它修正該卡片。",
-        "other": "此預覽中的卡片回報了設定錯誤。如有需要，請複製下方訊息並貼給智慧體，讓它修正這些卡片。"
+        "one": "此預覽中有 {count} 張卡片回報了設定錯誤。如有需要，請複製下方訊息並貼給智慧體，讓它修正這些卡片。",
+        "other": "此預覽中有 {count} 張卡片回報了設定錯誤。如有需要，請複製下方訊息並貼給智慧體，讓它修正這些卡片。"
       },
       "previewTextAlternative": "預覽將卡片顯示為圖片。選擇「{diff}」即可以文字閱讀此變更。",
       "byAdmin": "管理員"
@@ -1587,7 +1592,8 @@
       "importReplaceHelp": "新增檔案中的策略，替換相同目標的現有策略。此操作無法撤銷。",
       "viewAutomationsHelp": "顯示或隱藏 MESA 只能部分檢查的自動化，因為它們使用了模板或藍圖。",
       "openOrphanHelp": "在策略編輯器中開啟此策略，您可以在那裡刪除它。它涵蓋的對象已不存在。",
-      "dismissNoticeHelp": "在此瀏覽器中隱藏此提示。「恢復已忽略的提示」可將其恢復。"
+      "dismissNoticeHelp": "在此瀏覽器中隱藏此提示。「恢復已忽略的提示」可將其恢復。",
+      "comboMatchCount": "符合項目：{count}"
     },
     "mesaSuggestion": {
       "baseline_note": "「禁止」與該域的內建基線一致，因此該策略只是把這一意圖寫明。如果希望改為在管理員核准後允許智慧體控制，請在儲存前於「策略編輯器」中選擇「確認」；核准在 MESA 處於「強制」時生效。",
@@ -3164,11 +3170,13 @@
       "chooseKeyHelp": "選擇此應用程式將獲得其權限的存取金鑰。",
       "keyAtCap": "{name}（登入數已達上限）",
       "requestExpires": "此請求將在 {time} 後結束",
+      "requestEndsAt": "此請求將於 {time} 結束。",
+      "requestEndingSoon": "核准此請求的剩餘時間不到一分鐘。",
       "requestExpired": "此登入請求已結束。請從應用程式重新開始。",
       "approve": "核准",
       "approveHelp": "讓此應用程式使用所選存取金鑰，並將登入交回應用程式。",
       "deny": "拒絕存取",
-      "denyHelp": "拒絕此登入並通知應用程式。",
+      "denyHelp": "拒絕此登入，並在應用程式位址已驗證時通知應用程式。",
       "close": "關閉",
       "approvedLeaving": "已核准。正在返回應用程式…",
       "deniedLeaving": "已拒絕存取。正在返回應用程式…",
@@ -3213,6 +3221,9 @@
     "local_unauthorized": "此存取金鑰已不再獲得授權。",
     "local_state_matched": "Home Assistant 回報已達到要求的狀態。",
     "local_state_unconfirmed": "命令已傳送。Home Assistant 尚未確認要求的狀態。",
+    "local_operation_matched": "操作：{operation}。Home Assistant 回報已達到要求的狀態。",
+    "local_operation_unconfirmed": "操作已傳送：{operation}。Home Assistant 尚未確認要求的狀態。",
+    "decision_operation_unconfirmed": "我無法確認要執行的操作，因此沒有執行此命令。請清楚地再說一遍，說明操作和裝置。",
     "local_summary_count": "在我有權存取且已向 Assist 公開的實體中，狀態為 {state} 的有 {matched} 個，共 {total} 個。狀態未知或無法使用的有 {unknown} 個。",
     "local_summary_total": "我有權存取且已向 Assist 公開的實體共有 {total} 個。狀態未知或無法使用的有 {unknown} 個。",
     "local_summary_breakdown": "我有權存取且已向 Assist 公開的實體共有 {total} 個。{summary}。",

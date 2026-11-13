@@ -73,6 +73,7 @@ from ..policy_engine import (
     resolve_registry_access,
 )
 from ..access_key_store import AccessKeyRecord
+from ..authoring_validation import async_template_refusal
 from ..template_scope import HelperScopeError, template_entities, validate_template_selectors
 
 _LOGGER = logging.getLogger(__name__)
@@ -1352,6 +1353,9 @@ async def _tool_create_helper(
         if error := _helper_flow_steps_error(steps):
             return _tool_error(error), "invalid_request", "create_helper"
         flow_steps = cast(list[dict[str, Any]], steps)
+        # The flow's schema compiles templates on the event loop: the worker checks them first.
+        if refusal := await async_template_refusal([step.get("data") for step in flow_steps], hass, data):
+            return _tool_error(refusal), "invalid_request", "create_helper"
         status, detail = await _prepare_config_flow_helper(
             hass, str(helper_type), flow_steps, access_key
         )
@@ -2991,6 +2995,9 @@ async def _tool_set_helper_settings(
     if conflict is not None:
         return conflict
     if entry.domain == "template":
+        # The settings form compiles templates on the event loop: the worker checks them first.
+        if template_refusal := await async_template_refusal(args["settings"], hass, data):
+            return _tool_error(template_refusal), "invalid_request", tool
         refusal = await _preflight_template_settings(hass, entry, args["settings"], access_key)
         if refusal is not None:
             return refusal

@@ -446,11 +446,14 @@ async def _apply_settings_side_effects(
     """Run the live re-syncs a settings change implies, in order.
 
     Keyed on what moved. Returns whether a torn-down voice assistant is still in Home
-    Assistant.
+    Assistant. A runtime retired by a reload during the request changes nothing live: the
+    saved settings reach its successor, whose registrations its closures would undo.
     """
     voice_assistant_kept = False
     recorder(data)
     await data.conversations.async_save()
+    if hass.data.get(DOMAIN) is not data or data.shutting_down:
+        return voice_assistant_kept
 
     if "audit_log_maxlen" in patchable:
         data.audit.resize(patchable["audit_log_maxlen"])
@@ -499,7 +502,7 @@ async def _apply_settings_side_effects(
 
     # Add/remove the Phoenix MCP AI Task entity to match its config (it exists only while
     # fully configured), so it appears in HA's AI Task picker only when usable.
-    if data.async_sync_ai_task is not None and (
+    if data.async_sync_ai_task is not None and hass.data.get(DOMAIN) is data and (
         "kill_switch" in patchable or "decision_provider_id" in patchable
         or any(k.startswith("ai_task_") for k in patchable)
     ):

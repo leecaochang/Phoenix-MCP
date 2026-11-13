@@ -546,6 +546,7 @@ class PhoenixAgentCliProvidersView(PhoenixView):
                     instance_id, models, provider.model_created, checked_at,
                     [m for m in models if (capabilities.get(m) or {}).get("tools") is not False]
                     if capabilities else None,
+                    getattr(provider, "model_remote", ()),
                 )
         except Exception:  # capability discovery is best effort
             _LOGGER.debug("Initial Agent Chat capability discovery failed", exc_info=True)
@@ -788,7 +789,8 @@ async def async_refresh_catalog(hass: HomeAssistant, instance_id: str, *, force:
         # automatic mode never lands on one (an undeclared capability stays eligible).
         eligible = [m for m in models if (capabilities.get(m) or {}).get("tools") is not False]
         await store.set_capabilities(instance_id, capabilities, checked_at)
-    return await store.set_catalog(instance_id, models, provider.model_created, checked_at, eligible)
+    return await store.set_catalog(instance_id, models, provider.model_created, checked_at, eligible,
+                                   getattr(provider, "model_remote", ()))
 
 
 async def async_refresh_all_catalogs(hass: HomeAssistant) -> None:
@@ -853,6 +855,7 @@ class PhoenixAgentCliRefreshView(PhoenixView):
                 instance_id, models, getattr(provider, "model_created", {}), checked_at,
                 [m for m in models if (capabilities.get(m) or {}).get("tools") is not False]
                 if capabilities else None,
+                getattr(provider, "model_remote", ()),
             )
         if self.hass.data.get(DOMAIN) is not None:
             _audit_admin(self.hass, request, rid, f"provider_refresh:{instance_id}")

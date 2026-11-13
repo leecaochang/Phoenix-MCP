@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from "react";
 import type { ApprovalRecord } from "../types";
 import { BeforeAfter, RemovedPane } from "./DiffView";
-import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, singleCardPreviewConfig, storedPreviewMode, useHuiCardReady, wrapCardPreviewConfig } from "./DashboardPreview";
+import { collectPreviewViews, DashboardPreview, SegmentedToggle, singleCardPreviewConfig, useHuiCardReady, wrapCardPreviewConfig } from "./DashboardPreview";
 import { ActionPreview, MesaPreviewBlock } from "./ActionPreview";
 import { diffSummary } from "../utils/approval_text";
 import { ENERGY_SOURCE_LABEL_KEYS } from "../utils/approval_summary";
@@ -42,20 +42,17 @@ export function ApprovalChange({ record }: {
   const diff = record.diff || {};
   const kind = diff.kind || "system_action";
   const huiReady = useHuiCardReady();
-  // Diff vs Preview is a remembered preference (storedPreviewMode), so an
-  // operator who chose Preview once gets it on every later record too.
-  const [mode, setModeState] = useState<"diff" | "preview">(() => storedPreviewMode());
-  const setMode = (m: "diff" | "preview") => {
-    rememberPreviewMode(m);
-    setModeState(m);
-  };
+  // Every request opens on the text diff. Drawing the Preview runs the card's
+  // own code in this administrator's session, so it happens only when the
+  // approver asks for it on this request, never from a remembered choice.
+  const [mode, setMode] = useState<"diff" | "preview">("diff");
   // A card op previews Before (the card being removed/replaced) or After (the
   // card being added/that replaced it); a whole-layout write only ever has an
   // After to show (see below). Defaults to whichever side a delete has.
   const showsBeforeFirst = record.tool_name === "delete_dashboard_card" || isRemovePatch(record);
   const [side, setSide] = useState<"before" | "after">(showsBeforeFirst ? "before" : "after");
   useEffect(() => {
-    setModeState(storedPreviewMode());
+    setMode("diff");
     setSide(showsBeforeFirst ? "before" : "after");
   }, [record.id, record.tool_name, showsBeforeFirst]);
 

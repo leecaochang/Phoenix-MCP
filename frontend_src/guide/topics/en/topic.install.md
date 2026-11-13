@@ -37,7 +37,7 @@ The panel speaks 16 languages. By default it follows your Home Assistant profile
 
 ## Removing Phoenix MCP {#removing}
 
-Deleting the integration revokes every access key, cancels requests waiting for approval, and erases every AI provider account and its API key. It also unlinks Phoenix from Assist, the voice agent, AI Task and the decision provider.
+Deleting the integration revokes every access key, cancels requests waiting for approval, and erases every AI provider account and its API key. It also unlinks Phoenix from Assist, the voice agent, AI Task and the decision provider. Any log level an agent raised for a set time goes back straight away.
 
 Everything else stays in Home Assistant's storage: settings such as the kill switch and MESA mode, the audit log, Conversation Log, MESA profiles, change history and recovery copies. If you add Phoenix again, it picks them up, and the revoked keys are listed in Archived Access Keys.
 

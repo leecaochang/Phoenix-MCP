@@ -12,7 +12,7 @@ import logging
 import re
 from typing import Any, AsyncIterator, Awaitable, Callable, NoReturn
 
-from aiohttp import ClientError, ClientSession, ClientTimeout
+from aiohttp import ClientError, ClientSession, ClientTimeout, SocketTimeoutError
 from homeassistant.util import dt as dt_util
 from homeassistant.util.dt import utcnow
 
@@ -25,6 +25,7 @@ from ..provider_constants import (
     AGENT_CHAT_EFFORT_LEVEL_ORDER, AGENT_CHAT_EFFORT_LEVELS, AGENT_CHAT_LEARNABLE_OPTIONS,
     AGENT_CHAT_LOAD_TOOLS_NAME, AGENT_CHAT_MAX_CATALOG_MODELS, AGENT_CHAT_MAX_JSON_BYTES,
     AGENT_CHAT_MAX_MODEL_ID_LENGTH, AGENT_CHAT_MAX_SSE_BUFFER_BYTES, AGENT_CHAT_MAX_STREAM_BYTES,
+    AGENT_CHAT_MAX_TOOL_ARGUMENT_CHARS,
     AGENT_CHAT_PROVIDER_DETAIL_CHARS, AGENT_CHAT_PROVIDER_ERROR_BYTES,
     AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS, AGENT_CHAT_TOOL_LOADING_DEFAULT, AGENT_CHAT_TOOL_LOADING_MODES,
     AGENT_CHAT_TOOL_SEARCH_BLOCKS,
@@ -49,6 +50,8 @@ _IMAGE_PROBE_TIMEOUT = ClientTimeout(total=90, connect=5, sock_connect=5)
 _REPLAY_REASONING_KINDS = frozenset({"deepseek", "zai", "mimo", "tencent", "kimi", "qwen", "fireworks", "opencode", "infron"})
 # Upper bound on catalogue pages followed, so a misbehaving provider cannot loop forever.
 _MODEL_LIST_MAX_PAGES = 10
+# Stream lines read between turns given to the event loop (see _sse_lines).
+_SSE_YIELD_EVERY_LINES = 256
 
 
 async def _read_json(resp: Any) -> Any:
@@ -531,7 +534,8 @@ def _rate_limit_headers(headers: Any, fields: tuple[tuple[str, str], ...]) -> di
     out: dict[str, int] = {}
     for header, field in fields:
         value = raw.get(header)
-        if value is None or not value.isascii() or not value.isdecimal():
+        # The length check comes first: int() refuses more than 4,300 digits with ValueError.
+        if value is None or len(value) > 16 or not value.isascii() or not value.isdecimal():
             continue
         parsed = int(value)
         # Preserve exact integers in the browser rather than silently rounding
@@ -595,29 +599,126 @@ async def _error_body(resp: Any) -> str:
 async def _sse_lines(resp: Any) -> AsyncIterator[str]:
     """Yield decoded lines from a streaming HTTP response, buffering split frames.
 
-    Exceeding the between-newline or the whole-response byte cap raises ClientError, which each
-    provider's stream_turn turns into a clean chat error.
+    Exceeding the between-newline or the whole-response byte cap raises ClientError, and a stream
+    sending only comment lines for the read bound raises SocketTimeoutError, as a silent one does;
+    each provider's stream_turn turns either into a clean chat error.
     """
-    # Both caps guard memory against a faulty or hostile provider. One stops a stream that never
-    # sends a newline; the other stops unlimited small frames that parsers append into text blocks
-    # and tool JSON. A real response is well under both, and a turn is bounded at cap x
-    # AGENT_CHAT_MAX_ITERATIONS.
-    buffer = ""
+    # Both caps bound memory only. One stops a stream that never sends a newline; the other stops
+    # unlimited small frames. Parsing time stays linear because every parser accumulates fragments
+    # in lists, and the loop gets a turn every _SSE_YIELD_EVERY_LINES lines, since aiohttp hands
+    # over an already buffered response without suspending.
+    pending: list[str] = []
+    pending_size = 0
     total = 0
+    lines = 0
     decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
+    clock = asyncio.get_running_loop().time
+    last_data = clock()
     async for chunk in resp.content.iter_chunked(2048):
         total += len(chunk)
         if total > AGENT_CHAT_MAX_STREAM_BYTES:
             raise ClientError("Provider stream exceeded the maximum total size.")
-        buffer += decoder.decode(chunk)
-        if len(buffer) > AGENT_CHAT_MAX_SSE_BUFFER_BYTES:
+        parts = decoder.decode(chunk).split("\n")
+        if pending_size + len(parts[0]) > AGENT_CHAT_MAX_SSE_BUFFER_BYTES:
             raise ClientError("Provider stream frame exceeded the maximum size.")
-        while "\n" in buffer:
-            line, buffer = buffer.split("\n", 1)
-            yield line.rstrip("\r")
-    buffer += decoder.decode(b"", final=True)
-    if buffer:
-        yield buffer.rstrip("\r")
+        if len(parts) > 1:
+            parts[0] = "".join(pending) + parts[0]
+            pending, pending_size = [], 0
+            for line in parts[:-1]:
+                line = line.rstrip("\r")
+                # A gateway's keep-alive comment is not data: it must not hold a stalled reply open.
+                if line and not line.startswith(":"):
+                    last_data = clock()
+                lines += 1
+                if lines % _SSE_YIELD_EVERY_LINES == 0:
+                    await asyncio.sleep(0)
+                yield line
+        if parts[-1]:
+            pending.append(parts[-1])
+            pending_size += len(parts[-1])
+        if clock() - last_data > AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS:
+            raise SocketTimeoutError("Provider stream sent no data within the read bound.")
+    tail = "".join(pending) + decoder.decode(b"", final=True)
+    if tail:
+        yield tail.rstrip("\r")
+
+
+class _ParseBudget:
+    """Characters a stream may still spend re-reading Gemini's argument text (see _ArgumentText)."""
+
+    def __init__(self) -> None:
+        self.chars = AGENT_CHAT_MAX_TOOL_ARGUMENT_CHARS
+
+    def spend(self, size: int) -> bool:
+        if size > self.chars:
+            return False
+        self.chars -= size
+        return True
+
+
+class _ArgumentText:
+    """One streamed tool call's argument text, kept as parts and joined once.
+
+    Growing past AGENT_CHAT_MAX_TOOL_ARGUMENT_CHARS raises _ProviderResponseError at once, since
+    the dispatcher would refuse the call anyway.
+    """
+
+    def __init__(self, initial: str = "") -> None:
+        self._parts: list[str] = [initial] if initial else []
+        self._size = len(initial)
+        # The object the text is known to hold exactly, after a whole-object fragment replaced it.
+        self._whole: Any = None
+
+    def __bool__(self) -> bool:
+        return self._size > 0
+
+    def append(self, fragment: str) -> None:
+        if self._size + len(fragment) > AGENT_CHAT_MAX_TOOL_ARGUMENT_CHARS:
+            raise _ProviderResponseError("bad_tool_call", retryable=False)
+        self._parts.append(fragment)
+        self._size += len(fragment)
+        self._whole = None
+
+    def text(self) -> str:
+        if len(self._parts) > 1:
+            self._parts = ["".join(self._parts)]
+        return self._parts[0] if self._parts else ""
+
+    def merge_whole(self, fragment: str, budget: _ParseBudget) -> None:
+        """Merge one Gemini fragment: a complete object replaces a complete object, else append.
+
+        `{}` never replaces real arguments. Re-reading text that grew by appends spends `budget`;
+        once it is spent, fragments append, so a hostile stream cannot make this quadratic.
+        """
+        # Gemini's OpenAI-compatible stream resends a call's arguments as complete JSON, `{}` and
+        # then the full object, which plain concatenation would turn into `{}{...}`.
+        try:
+            new = json.loads(fragment)
+        except ValueError:
+            new = None
+        if not self._size:
+            self._replace(fragment, new)
+            return
+        if not isinstance(new, dict):
+            self.append(fragment)
+            return
+        old = self._whole
+        if old is None and budget.spend(self._size):
+            try:
+                old = json.loads(self.text())
+            except ValueError:
+                old = None
+        if not isinstance(old, dict):
+            self.append(fragment)
+        elif not old or new:
+            self._replace(fragment, new)
+
+    def _replace(self, fragment: str, parsed: Any) -> None:
+        if len(fragment) > AGENT_CHAT_MAX_TOOL_ARGUMENT_CHARS:
+            raise _ProviderResponseError("bad_tool_call", retryable=False)
+        self._parts = [fragment] if fragment else []
+        self._size = len(fragment)
+        self._whole = parsed
 
 
 _THINK_OPEN = "<think>"
@@ -857,25 +958,6 @@ def _invalid_tool_calls(
         for call_id, name, _args, error in calls
     ]
     return _norm(EV_INVALID_TOOLS, code="bad_tool_call", assistant_msg=assistant_msg, results=results)
-
-
-def _merged_whole_arguments(current: str, fragment: str) -> str:
-    """Merge one Gemini tool-call arguments fragment into what the call has so far.
-
-    A complete object replaces a complete object, except that `{}` never replaces real arguments;
-    anything else is appended, so genuine deltas still concatenate.
-    """
-    # Gemini's OpenAI-compatible stream resends a call's arguments as complete JSON, `{}` and then
-    # the full object, which plain concatenation would turn into `{}{...}`.
-    if not current:
-        return fragment
-    try:
-        old, new = json.loads(current), json.loads(fragment)
-    except ValueError:
-        return current + fragment
-    if isinstance(old, dict) and isinstance(new, dict):
-        return current if old and not new else fragment
-    return current + fragment
 
 
 def _gemini_tool_slot(calls: dict[int, dict], fragment: dict) -> int:

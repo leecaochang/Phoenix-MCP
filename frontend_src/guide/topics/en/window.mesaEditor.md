@@ -5,7 +5,7 @@ The profile you chose in [{{label:workspace.mesaProfiles}}](guide:window.mesaPro
 
 ## What it covers {#target}
 
-For a new profile, choose what it covers from the list. Targets that already have a profile of this kind aren't offered. Once a profile is saved, its target can't change.
+For a new profile, choose what it covers from the list. Type part of its name or ID to narrow the list; capitals and accents don't matter. Screen readers announce how many match. Targets that already have a profile of this kind aren't offered. Once a profile is saved, its target can't change.
 
 ## {{label:mesa.semanticTags}} {#tags}
 

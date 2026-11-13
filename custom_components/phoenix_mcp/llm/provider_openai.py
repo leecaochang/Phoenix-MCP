@@ -13,18 +13,19 @@ from ..conversation_log import record_rejected_tool
 from ..catalog_text import LocalizedReason
 from .accounts import PROVIDER_DEFINITIONS, ProviderConfig
 from .base import (
-    _bounded_catalog, _CHAT_TIMEOUT, _created_map, _error_body, _FINISH_FAILURES,
+    _ArgumentText, _bounded_catalog, _CHAT_TIMEOUT, _created_map, _error_body, _FINISH_FAILURES,
     _gemini_tool_slot, _http_failure, _http_failure_code, _IMAGE_PROBE_TIMEOUT,
     _invalid_tool_calls, _invalid_tools_error, _is_expired, _json_error_hint,
-    _merged_whole_arguments, _MISTRAL_RATE_LIMIT_HEADER_FIELDS, _model_result_text, _norm,
+    _MISTRAL_RATE_LIMIT_HEADER_FIELDS, _model_result_text, _norm,
     _infron_capabilities, _norm_stop, _ollama_capabilities, _openrouter_capabilities, _parse_provider_error,
-    _PROBE_TIMEOUT, _provider_object, _provider_tool, _ProviderResponseError, _raise_stream_error,
+    _ParseBudget, _PROBE_TIMEOUT, _provider_object, _provider_tool, _ProviderResponseError, _raise_stream_error,
     _rate_limit_headers, _read_json, _REFUSAL_STATUSES, _refused_option,
     _REPLAY_REASONING_KINDS, _RETRY_AFTER_HEADER_FIELDS, _retry_transient, _RETRYABLE_STATUSES,
     _silent_stream_error, _sse_lines, _ThinkSplitter, _tool_call_problem,
     _total_provider_response, _usage_int, _valid_tool_call, EV_DONE, EV_ERROR, EV_INVALID_TOOLS,
     EV_TEXT, EV_THINKING, EV_TOOL, EV_USAGE,
 )
+from ..model_selection import ollama_cloud_model
 from ..provider_constants import (
     AGENT_CHAT_DEEPSEEK_MAX_TOKENS, AGENT_CHAT_NVIDIA_MAX_TOKENS, AGENT_CHAT_OPENCODE_CHAT_MODELS,
     AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL, AGENT_CHAT_OPENCODE_LEGACY_CHAT_EXCEPTIONS,
@@ -140,6 +141,16 @@ def _filter_infron_models(data: list[dict]) -> list[str]:
         and "openai" in (m.get("supported_endpoint_types") or [])
         and not m.get("deprecated") and not m.get("is_display_only")
     ) or sorted(str(m["id"]) for m in rows)
+
+
+def _ollama_remote_models(rows: Any) -> set[str]:
+    """Names on a local Ollama server's /api/tags that run on ollama.com: a cloud tag or a remote host."""
+    out: set[str] = set()
+    for row in rows if isinstance(rows, list) else []:
+        name = row.get("name") or row.get("model") if isinstance(row, dict) else None
+        if isinstance(name, str) and (ollama_cloud_model(name) or row.get("remote_host") or row.get("remote_model")):
+            out.add(name)
+    return out
 
 
 def _filter_mistral_models(data: list[dict]) -> list[str]:
@@ -271,6 +282,8 @@ class OpenAICompatProvider:
         self.definition = PROVIDER_DEFINITIONS[cfg.kind]
         # Filled by list_models: creation time per listed id, for model selection.
         self.model_created: dict[str, float] = {}
+        # Filled by list_models on a local Ollama server: listed models that run on ollama.com.
+        self.model_remote: set[str] = set()
 
     @property
     def _is_ollama(self) -> bool:
@@ -460,6 +473,8 @@ class OpenAICompatProvider:
                         return []
                     body = await _read_json(resp)
                 self.model_created = _created_map(body.get("models", []))
+                if self._is_ollama_local:
+                    self.model_remote = _ollama_remote_models(body.get("models", []))
                 return [m.get("name") or m.get("model") for m in body.get("models", [])
                         if (m.get("name") or m.get("model"))]
             async with session.get(self._models_url(), headers=self._headers(),
@@ -939,11 +954,7 @@ class OpenAICompatProvider:
             # ordinary string deltas for the answer. Materialize those as
             # TextChunk content after the retained thinking blocks.
             stream.text_parts.append(content)
-            if stream.mistral_content_parts[-1].get("type") == "text":
-                old_text = str(stream.mistral_content_parts[-1].get("text", ""))
-                stream.mistral_content_parts[-1]["text"] = old_text + content
-            else:
-                stream.mistral_content_parts.append({"type": "text", "text": content})
+            _extend_mistral_text(stream, content)
             yield _norm(EV_TEXT, text=content)
         elif isinstance(content, str) and content:
             yield from _segment_events(stream.think.feed(content), stream, show_thinking)
@@ -955,6 +966,9 @@ class OpenAICompatProvider:
         # turn ("invalid message content type: <nil>"). An empty string is valid
         # for OpenAI/DeepSeek/Gemini too, so this is safe across all of them.
         answer_text = "".join(stream.text_parts)
+        for block, parts in stream.mistral_text_runs:
+            block["text"] = "".join(parts)
+        stream.mistral_text_runs.clear()
         if self._mistral_content and stream.mistral_content_parts:
             assistant_content: str | list[dict] = stream.mistral_content_parts
         else:
@@ -993,11 +1007,15 @@ class _ChatStream:
         # requires these chunks to be replayed in the assistant message on the
         # next turn, even when verbose output is hidden in Phoenix.
         self.mistral_content_parts: list[dict] = []
-        # tool calls accumulated by index: {index: {"id","name","args"}}
+        # A text block of mistral_content_parts still growing, with its pieces, joined once at
+        # the end so a long answer is not copied on every delta.
+        self.mistral_text_runs: list[tuple[dict, list[str]]] = []
+        # tool calls accumulated by index: {index: {"id","name","args": _ArgumentText}}
         self.calls: dict[int, dict] = {}
         # Gemini's compatibility layer deviates from OpenAI streaming for tool
-        # calls (see _merged_whole_arguments and _gemini_tool_slot).
+        # calls (see _ArgumentText.merge_whole and _gemini_tool_slot).
         self.gemini = gemini
+        self.parse_budget = _ParseBudget()
         self.pending_extra: dict | None = None
         self.finish = "stop"
         # Whether the stream ever reported WHY it ended. Every provider sends a
@@ -1108,6 +1126,19 @@ def _mistral_block_events(content: list, stream: _ChatStream, show_thinking: boo
             yield _norm(EV_TEXT, text=seg)
 
 
+def _extend_mistral_text(stream: _ChatStream, content: str) -> None:
+    """Add a plain string delta to the last text block, or open one after a structured block."""
+    last = stream.mistral_content_parts[-1]
+    if stream.mistral_text_runs and stream.mistral_text_runs[-1][0] is last:
+        stream.mistral_text_runs[-1][1].append(content)
+    elif last.get("type") == "text":
+        stream.mistral_text_runs.append((last, [str(last.get("text", "")), content]))
+    else:
+        block = {"type": "text", "text": ""}
+        stream.mistral_content_parts.append(block)
+        stream.mistral_text_runs.append((block, [content]))
+
+
 def _merge_tool_fragments(delta: dict, stream: _ChatStream) -> None:
     """Fold a delta's tool call fragments into `stream.calls`, refusing a bad shape."""
     # OpenAI-compatible servers serialize an unset field as null.
@@ -1130,7 +1161,7 @@ def _merge_tool_fragment(tc: Any, stream: _ChatStream) -> None:
     idx = _gemini_tool_slot(stream.calls, tc) if stream.gemini else tc.get("index", 0)
     if type(idx) is not int or idx < 0:
         raise _ProviderResponseError()
-    slot = stream.calls.setdefault(idx, {"id": None, "name": None, "args": ""})
+    slot = stream.calls.setdefault(idx, {"id": None, "name": None, "args": _ArgumentText()})
     if tc.get("id"):
         slot["id"] = tc["id"]
     if stream.gemini:
@@ -1155,8 +1186,10 @@ def _merge_tool_fragment(tc: Any, stream: _ChatStream) -> None:
             record_rejected_tool(slot["id"], slot["name"], fn["arguments"],
                                  reason="The provider must send tool arguments as JSON text.")
             raise _ProviderResponseError()
-        slot["args"] = (_merged_whole_arguments(slot["args"], fn["arguments"]) if stream.gemini
-                        else slot["args"] + fn["arguments"])
+        if stream.gemini:
+            slot["args"].merge_whole(fn["arguments"], stream.parse_budget)
+        else:
+            slot["args"].append(fn["arguments"])
 
 
 # Finish reasons a provider documents under another name: xAI's end_turn and
@@ -1191,12 +1224,13 @@ def _checked_tool_calls(stream: _ChatStream) -> tuple[list[dict], list[dict], li
     checked: list[_CheckedCall] = []
     for idx in sorted(stream.calls):
         slot = stream.calls[idx]
-        args_str = slot["args"] or "{}"
+        received = slot["args"].text()
+        args_str = received or "{}"
         hint = None
         try:
             parsed = json.loads(args_str)
             if not _valid_tool_call(slot["id"], slot["name"], parsed):
-                record_rejected_tool(slot["id"], slot["name"], slot["args"],
+                record_rejected_tool(slot["id"], slot["name"], received,
                                      reason=_tool_call_problem(slot["id"], slot["name"]),
                                      finish_reason=stream.finish if stream.saw_finish else None)
                 raise _ProviderResponseError(retryable=stream.finish != "length")
@@ -1207,7 +1241,7 @@ def _checked_tool_calls(stream: _ChatStream) -> tuple[list[dict], list[dict], li
             reason = ("The output length limit interrupted the tool arguments." if stream.finish == "length"
                       else "The stream ended before the tool arguments were complete." if not stream.saw_finish
                       else "Tool arguments are not valid JSON.")
-            record_rejected_tool(slot["id"], slot["name"], slot["args"], reason=reason,
+            record_rejected_tool(slot["id"], slot["name"], received, reason=reason,
                                  finish_reason=stream.finish if stream.saw_finish else None, error=exc)
         checked.append((slot["id"], slot["name"], parsed, hint))
         assistant_tool_calls.append({
@@ -1281,7 +1315,7 @@ def _refuse_unusable_end(stream: _ChatStream, parsed_tools: list[dict]) -> None:
     """Refuse a stream that never finished, ended oddly, or whose calls cannot run."""
     if not stream.saw_finish:
         for slot in stream.calls.values():
-            record_rejected_tool(slot["id"], slot["name"], slot["args"],
+            record_rejected_tool(slot["id"], slot["name"], slot["args"].text(),
                                  reason="The provider response ended before the tool call was complete.")
         raise _ProviderResponseError("provider_incomplete")
     if stream.finish not in ("stop", "tool_calls", "length"):

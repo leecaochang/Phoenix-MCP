@@ -39,14 +39,14 @@ Paneeli tukee tällä hetkellä englantia, espanjaa, ranskaa, italiaa, saksaa, h
 
 ## Dokumentaatio
 
-Käyttöohje on rakennettu paneeliin: avaa **Phoenix MCP** -paneeli ja valitse **Ohje**-valikosta **Opas**. Se selittää jokaisen ikkunan ja asetuksen, mitä agentit voivat tehdä, käyttöoikeudet, ominaisuudet, MESA:n ja tietoturvan. Se seuraa valintojasi, ja voit hakea siitä.
+Käyttöohje on rakennettu paneeliin: avaa **Phoenix MCP** -paneeli ja valitse **Ohje**-valikosta **Opas**. Se selittää jokaisen ikkunan ja asetuksen, mitä agentit voivat tehdä, käyttöoikeudet, ominaisuudet, MESA:n ja tietoturvan. Se seuraa valintojasi, ja voit hakea siitä. Opas on kirjoitettu englanniksi, yksinkertaistetuksi kiinaksi ja perinteiseksi kiinaksi. Muilla kielillä vain sen tervetulosivu on käännetty, ja muut sivut näkyvät englanniksi.
 
 Ensimmäinen kertasi täällä? Avaa alla olevan käyttöönoton jälkeen **Phoenix MCP** -paneeli ja valitse **Määritä agentti**. Ohjattu toiminto opastaa sinua luomaan käyttöavaimen, valitsemaan, mitä se saa tehdä, ja yhdistämään Agent Chatin tai oman sovelluksesi.
 
 ## Vaatimukset
 
 - Home Assistant 2026.7.0 tai uudempi.
-- Yksi Phoenix MCP -instanssi jokaista Home Assistant -asennusta kohden. Home Assistant asentaa riippuvuudet `Babel>=2.18.0` ja `jsonschema>=4.26.0` puolestasi.
+- Yksi Phoenix MCP -instanssi jokaista Home Assistant -asennusta kohden. Home Assistant asentaa riippuvuudet `Babel>=2.18.0` ja `jsonschema>=4.26.0` puolestasi. Home Assistant Core -asennuksessa se asentaa myös niiden integraatioiden vaatimukset, joiden jälkeen Phoenix MCP käynnistyy, kuten ZHA, Bluetooth ja ESPHome, vaikka et käyttäisi niitä.
 
 ## Asennus Markkinapaikasta
 

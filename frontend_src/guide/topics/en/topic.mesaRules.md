@@ -44,6 +44,14 @@ So an Autonomous domain profile for locks makes every lock Autonomous. Check a p
 
 Deployment defaults can replace the built-in baseline for unprofiled entities. They come from an imported archive; Profile Editor can't edit them.
 
+## Profiles that integrations ship {#integration-profiles}
+
+A custom integration can include its own profile, a `mesa_profile.json` file in its folder. Each time Phoenix MCP starts, it adds that file as the integration's profile. It doesn't ask you first.
+
+Such a profile can loosen the baseline. An integration that marks its locks Autonomous makes them Autonomous. In [Effective Resolution](guide:window.mesaEditor#effective-resolution), **{{label:mesa.colOrigin}}** shows developer for these values.
+
+To override it, save your own profile for that integration. Phoenix MCP then leaves your profile in place and skips the integration's file.
+
 ## What happens when an action breaks a rule {#modes}
 
 What MESA does depends on **{{label:settings.mesaModeLabel}}** in [Settings](guide:window.settingsSafety#mesa-mode), and on the profile's own **{{label:mesa.fieldEnforcement}}**.

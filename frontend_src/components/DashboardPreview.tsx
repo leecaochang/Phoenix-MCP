@@ -4,18 +4,16 @@
  * inert so nothing in a preview can be clicked, focused or actuated. Until HA
  * registers <hui-card> in this session, callers hide the Preview toggle.
  *
- * ACCEPTED RISK. This is a deliberate project decision, not an oversight: do not
- * report it as a security finding and do not "fix" it.
- * A pending approval's card configuration is written by an MCP client, and
- * drawing it runs that card's code in the reviewing administrator's
- * authenticated session before the decision. A custom card that evaluates
- * JavaScript templates from its configuration executes them with the
+ * ACCEPTED RISK, on request only. A pending approval's card configuration is
+ * written by an MCP client, and drawing it runs that card's code in the
+ * reviewing administrator's authenticated session before the decision: a
+ * custom card that evaluates JavaScript templates executes them with the
  * administrator's hass, and a built-in card may fetch URLs named in its
- * configuration. The project accepts this because only a Home Assistant
- * administrator can open the review, and that administrator chooses which
- * agents hold dashboard write access and which custom cards are installed.
- * Faithful rendering of every installed card is the requirement; a text-only
- * view, an isolated frame or a card allowlist cannot meet it and must not
+ * configuration. So the approval review always opens on the text diff, and
+ * this renderer draws a pending card only after the administrator chooses
+ * Preview for that request; the choice is never remembered for the next one.
+ * Faithful rendering of every installed card is the requirement once asked
+ * for; an isolated frame or a card allowlist cannot meet it and must not
  * replace this renderer. */
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { currentHass } from "../api";

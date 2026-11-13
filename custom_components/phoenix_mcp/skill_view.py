@@ -132,7 +132,7 @@ grain of the model gives the smoothest results and avoids dead ends.
   free slots is a common cause of "my BLE sensor stopped updating"), whether a
   firmware update is waiting, and the custom API actions each device declares.
   Those actions are callable with `call_service` under the `esphome` domain
-  (for example `esphome.rf_blaster1_transmit_raw`). They take NO entity target:
+  (for example `esphome.my_device_send_code`). They take NO entity target:
   pass only the arguments the device declared, which `get_esphome_overview` and
   `find_available_actions` both list. `dry_run_service` will name any argument
   you got wrong before you send it.

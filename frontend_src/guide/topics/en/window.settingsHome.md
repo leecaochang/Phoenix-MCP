@@ -35,6 +35,8 @@ Makes Phoenix's assistant the one Home Assistant uses by default. Turning it off
 
 The access key that decides what the agent may do. You can only choose an active key. The list updates when you create or revoke a key. If the key is revoked or expires, it's cleared here.
 
+Choosing another key, or turning the agent off, also stops a conversation still running with the old key.
+
 A Home Companion key hands conversations to the companion, and hides **{{label:routing.enableVoice}}**.
 
 ### {{label:settings.providerAccount}} {#voice-provider}
@@ -43,7 +45,9 @@ The account whose model answers. Decision provider accounts aren't listed. Add a
 
 ### {{label:settings.model}} {#voice-model}
 
-The model that answers. Choose the account first. If the provider retires the model, Phoenix switches to its successor.
+The model that answers. Choose the account first. If the provider retires the model, Phoenix switches to its [successor](guide:window.settingsProviders#change-model).
+
+The agent waits up to 30 seconds for the model to start answering, except on a local Ollama server. After that, it waits up to 3 minutes for anything new, and up to 10 minutes for each reply.
 
 ### {{label:routing.enableVoice}} {#voice-commands}
 
@@ -95,7 +99,7 @@ The account whose model runs the tasks.
 
 ### {{label:settings.model}} {#ai-task-model}
 
-The model that runs the tasks.
+The model that runs the tasks. A task fails if one reply from the model takes over 10 minutes, or sends nothing new for 3 minutes.
 
 ### {{label:settings.conversationStyle}} {#ai-task-style}
 

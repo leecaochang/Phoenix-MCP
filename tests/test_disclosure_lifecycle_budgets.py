@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from homeassistant.core import callback
+
 import asyncio
 import json
 from types import SimpleNamespace
@@ -153,7 +155,7 @@ async def test_rate_limit_event_bus_is_throttled_independently_of_notifications(
     other, _ = await access_key_store.async_create_access_key("other-events", "admin")
     access_key_store.get_settings().notify_on_rate_limit = False
     events = []
-    hass.bus.async_listen("phoenix_mcp_rate_limited", events.append)
+    hass.bus.async_listen("phoenix_mcp_rate_limited", callback(lambda event: events.append(event)))
     data = SimpleNamespace(store=access_key_store, rate_limit_notified={})
     with patch("custom_components.phoenix_mcp.helpers.time.monotonic", return_value=0):
         for _ in range(100):

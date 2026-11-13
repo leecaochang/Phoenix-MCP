@@ -7,7 +7,7 @@
 
 ## {{label:approvals.colRequest}} {#request}
 
-存取金鑰、工具、能力、請求發出以及過期或決定的時間，以及其狀態。已決定的請求還會顯示結束原因。
+存取金鑰、工具、能力、請求發出以及過期或決定的時間，以及其狀態。請求由透過 OAuth 登入的應用程式發出時，也會顯示該應用程式。已決定的請求還會顯示結束原因。
 
 ## {{label:approvals.detailTabArgs}} {#raw-args}
 

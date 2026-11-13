@@ -113,7 +113,7 @@ async def test_an_unchanged_debug_level_is_a_fresh_raise_only_while_not_captured
     capture = DebugCapture()
     hass.data[DEBUG_CAPTURE_RUNTIME_KEY] = capture
     if capturing:
-        capture.domains.add("mqtt")
+        capture.start("mqtt", access_key.id)
     with patch("custom_components.phoenix_mcp.tools.logs._visible_logger_domains", return_value={"mqtt"}), patch(
         "custom_components.phoenix_mcp.tools.logs.loader.async_get_integration", new=AsyncMock()
     ), patch("custom_components.phoenix_mcp.tools.logs._gate", new=AsyncMock(return_value=None)) as gate:
@@ -165,7 +165,7 @@ async def test_set_uses_integration_logger_set_and_returns_verbose_warnings():
         )
     assert outcome == "allowed"
     assert body["affected_loggers"] == ["custom_components.demo", "homeassistant.components.demo"]
-    assert len(body["warnings"]) == 2
+    assert len(body["warnings"]) == 3 and "Only this access key can read" in body["warnings"][2]
     manager.async_set.assert_awaited_once()
 
 

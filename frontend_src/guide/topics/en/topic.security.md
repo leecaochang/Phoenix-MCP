@@ -11,7 +11,7 @@ Each app connects with its own access key. Phoenix stores only a fingerprint of 
 
 - An app must send the key in its Authorization header. A key placed in a web address is refused.
 - The MCP connection refuses a browser request from a page outside Home Assistant, so a malicious website can't reach it through your browser.
-- A revoked or expired key stops working straight away. Requests already running stop at their next check.
+- A revoked or expired key stops working straight away. Requests already running stop at their next check. Agent Chat, Voice and AI Task check before every request to the AI model.
 - When an app tries an unknown, revoked or expired key, Home Assistant's log names the address it came from, so you can find an app still holding an old key.
 - An app that signs in with OAuth gets a token that works only with Phoenix, for the one key an administrator approved. Home Assistant's own sign-in tokens never work with Phoenix.
 - Approve a sign-in only when you started it yourself just now. Someone could send you a sign-in link for their own app; approving it would give them the key.
@@ -42,7 +42,7 @@ Related: [Files and YAML](guide:topic.tools#files), [Configuration, templates an
 
 ## Home data is untrusted {#untrusted}
 
-A device name or a state can contain text written by anyone, such as "ignore your instructions". When Phoenix describes the home to a model, it labels the data as untrusted content, not instructions.
+A device name or a state can contain text written by anyone, such as "ignore your instructions". Phoenix tells the model in Agent Chat, Voice, AI Task and Home Companion that tool results are untrusted data, not instructions. The home description it gives external apps carries the same label.
 
 That helps, but no model is perfect. Keep changes you care about on Confirm, so you see each one before it runs.
 
@@ -85,6 +85,10 @@ Phoenix runs inside Home Assistant, but your AI model may not. Whatever Phoenix 
 
 To keep everything at home, use a local model on Ollama and no decision provider. With a cloud provider, give a key only the camera, log and YAML access you're happy to share.
 
+An Ollama server signed in to ollama.com can also run cloud models, whose names end in `cloud`. Their requests leave your home. Phoenix never switches a local account to one by itself, but uses one you pick. Set `OLLAMA_NO_CLOUD=1` on the server to turn them off.
+
+Phoenix reaches a local Ollama server over plain HTTP, without a password. Anyone on your network who can intercept that traffic can read the home data and write the model's replies. On a network you don't fully trust, put Ollama behind a reverse proxy with HTTPS and use its `https://` address.
+
 Related: [{{label:workspace.aiProviders}}](guide:window.settingsProviders)
 
 ## Keeping it safe {#checklist}
@@ -99,7 +103,9 @@ Related: [What Pass-Through Opens](guide:topic.passThrough)
 
 ## If something goes wrong {#emergency}
 
-If a key leaks, rotate it. The old value stops working at once, and the app needs the new one. Revoke a key you no longer use.
+If a key leaks, rotate it. The old value stops working at once, and the app needs the new one. Rotating also cancels the key's waiting approvals. Revoke a key you no longer use.
+
+If one signed-in app is the problem, remove its sign-in in the key's OAuth settings. That cancels the approvals it asked for, and the key's other apps keep working.
 
 If an agent misbehaves, turn on the [{{label:settings.killSwitchCard}}](guide:topic.killSwitch). It refuses new agent work and stops running requests at their next check. It can't undo actions already sent, so check [{{label:attention.title}}](guide:window.attention) afterwards.
 

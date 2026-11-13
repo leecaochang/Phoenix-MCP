@@ -181,8 +181,10 @@ def test_a_retired_free_model_with_no_free_replacement_is_kept_not_charged():
     assert effective_model("infron", "gone/model:free", paid, ["gone/model:free"]) == ("gone/model:free", "")
 
 
-def test_a_retired_paid_model_may_still_move_to_the_best_overall():
-    assert successor("infron", "gone/model", CATALOG) == "anthropic/claude-opus-5.5"
+def test_a_retired_paid_model_moves_only_within_its_tier():
+    # No family and no named tier: kept (and shown as gone), never the most expensive model overall.
+    assert successor("infron", "gone/model", CATALOG) == ""
+    assert successor("infron", "openai/gpt-5-old", CATALOG) == "openai/gpt-6-luna"
 
 
 def _reply(reasoning: str = "", tokens: int = 0) -> _Response:

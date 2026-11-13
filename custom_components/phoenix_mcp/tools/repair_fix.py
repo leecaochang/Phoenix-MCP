@@ -14,6 +14,7 @@ import json
 import logging
 from typing import Any
 
+from homeassistant.components.repairs import repairs_flow_manager
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import issue_registry as ir
@@ -209,7 +210,7 @@ async def _execute_fix_repair(
         ), "denied", _TOOL
     if any(decision.decision == "deny" for decision in decisions):
         return _tool_error("MESA now blocks this repair's integration. Nothing was run."), "denied", _TOOL
-    manager = (hass.data.get("repairs") or {}).get("flow_manager")
+    manager = repairs_flow_manager(hass)
     if manager is None:
         return _tool_error("Home Assistant's Repairs integration is not loaded."), "invalid_request", _TOOL
     outcome = await async_drive_flow(

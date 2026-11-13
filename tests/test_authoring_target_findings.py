@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -164,7 +164,7 @@ def _key(tree: PermissionTree) -> AccessKeyRecord:
 ])
 async def test_validate_tool_reports_the_two_live_cases(home, cfg_type, config):
     key = _key(PermissionTree(domains={"input_select": PermissionNode(state="GREEN")}))
-    result, outcome, _ = await discovery._tool_validate_automation_or_script({"type": cfg_type, "config": config}, key, home)
+    result, outcome, _ = await discovery._tool_validate_automation_or_script({"type": cfg_type, "config": config}, key, home, MagicMock())
     body = json.loads(result["content"][0]["text"])
     assert outcome == "allowed" and body["valid"] is True
     assert len(body["warnings"]) == 2
@@ -173,6 +173,6 @@ async def test_validate_tool_reports_the_two_live_cases(home, cfg_type, config):
 
 async def test_validate_tool_does_not_name_an_out_of_scope_target(home):
     key = _key(PermissionTree(domains={"input_boolean": PermissionNode(state="GREEN")}))
-    result, _, _ = await discovery._tool_validate_automation_or_script({"type": "automation", "config": _automation(WRONG)}, key, home)
+    result, _, _ = await discovery._tool_validate_automation_or_script({"type": "automation", "config": _automation(WRONG)}, key, home, MagicMock())
     body = json.loads(result["content"][0]["text"])
     assert "warnings" not in body and body["referenced_entities"] == [{"entity_id": MODE, "exists": False, "accessible": False}]

@@ -32,11 +32,11 @@
   --phx-mono:         ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --phx-border:       #e1e1e1;
   --phx-divider:      #ececec;
-  --phx-success:      #257343;
+  --phx-success:      #226c3e;
   --phx-success-bg:   rgba(37,115,67,0.10);
   --phx-error:        #ad333a;
   --phx-error-bg:     rgba(173,51,58,0.10);
-  --phx-warning:      #865c00;
+  --phx-warning:      #805800;
   --phx-warning-bg:   rgba(134,92,0,0.10);
   --phx-info:         #5e5e5e;
   --phx-info-bg:      rgba(0,0,0,0.06);
@@ -2876,7 +2876,8 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   z-index: var(--phx-z-agentcli);
   display: flex;
   flex-direction: column;
-  min-width: 320px;
+  /* A 320 px viewport keeps the whole window inside its 8 px margins. */
+  min-width: min(320px, calc(100vw - 16px));
   min-height: 280px;
   background: var(--phx-agentcli-surface);
   border: 1px solid var(--phx-border);

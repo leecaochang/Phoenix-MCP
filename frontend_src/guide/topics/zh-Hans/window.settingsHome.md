@@ -35,6 +35,8 @@
 
 决定智能体可以做什么的访问密钥。你只能选择有效的密钥。创建或吊销密钥后，列表会随之更新。如果密钥被吊销或过期，它会在此处被清除。
 
+选择其他密钥或关闭智能体，也会停止仍在使用旧密钥运行的对话。
+
 Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{label:routing.enableVoice}}**。
 
 ### {{label:settings.providerAccount}} {#voice-provider}
@@ -43,7 +45,9 @@ Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{la
 
 ### {{label:settings.model}} {#voice-model}
 
-负责回答的模型。请先选择账户。如果提供商停用该模型，Phoenix 会切换到其后续模型。
+负责回答的模型。请先选择账户。如果提供商停用该模型，Phoenix 会切换到其[后续模型](guide:window.settingsProviders#change-model)。
+
+智能体最多等待 30 秒让模型开始回答，本地 Ollama 服务器除外。之后它最多等待 3 分钟接收新内容，每次回复最多等待 10 分钟。
 
 ### {{label:routing.enableVoice}} {#voice-commands}
 
@@ -95,7 +99,7 @@ Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{la
 
 ### {{label:settings.model}} {#ai-task-model}
 
-运行任务的模型。
+运行任务的模型。如果模型的一次回复超过 10 分钟，或 3 分钟内没有新内容，任务就会失败。
 
 ### {{label:settings.conversationStyle}} {#ai-task-style}
 

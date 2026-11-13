@@ -208,21 +208,21 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
     assert metrics == {
         "read_only": {
             "tool_count": 56,
-            "canonical_bytes": 67466,
-            "claude_bytes": 61827,
-            "openai_bytes": 63451,
+            "canonical_bytes": 67917,
+            "claude_bytes": 62278,
+            "openai_bytes": 63902,
         },
         "write_capable": {
             "tool_count": 102,
-            "canonical_bytes": 132309,
-            "claude_bytes": 121317,
-            "openai_bytes": 124275,
+            "canonical_bytes": 133316,
+            "claude_bytes": 122324,
+            "openai_bytes": 125282,
         },
         "announce_all": {
             "tool_count": 172,
-            "canonical_bytes": 211467,
-            "claude_bytes": 193333,
-            "openai_bytes": 198321,
+            "canonical_bytes": 212785,
+            "claude_bytes": 194651,
+            "openai_bytes": 199639,
         },
     }
     assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 172
@@ -769,6 +769,16 @@ def _announced(name: str, access_key: AccessKeyRecord) -> bool:
     from custom_components.phoenix_mcp.capability import access_key_has_write_scope
 
     return tool_catalog._tool_is_announced(_by_name()[name], access_key, access_key_has_write_scope(access_key), None)
+
+
+@pytest.mark.parametrize("level", ["domains", "devices", "entities"])
+@pytest.mark.parametrize(("state", "listed"), [("YELLOW", False), ("GREEN", True)])
+def test_control_tools_are_listed_only_for_a_key_with_a_green_grant(level, state, listed):
+    """A read-only key is not offered call_service or a control tool, at any level of its tree."""
+    tree = PermissionTree(**{level: {"light.desk" if level == "entities" else "light": PermissionNode(state=state)}})
+    access_key = _announcement_key(tree=tree, cap_physical_control="allow")
+    assert _announced("call_service", access_key) is listed
+    assert _announced(_public_name("HassTurnOn"), access_key) is listed
 
 
 async def _summary_tools(access_key: AccessKeyRecord) -> dict:

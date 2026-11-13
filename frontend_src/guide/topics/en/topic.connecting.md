@@ -62,11 +62,13 @@ VS Code takes at most 128 tools in one request. A key with many capabilities can
 
 The app then uses the key you approved it for, with the key's permissions, capabilities, approvals and rate limit. Its requests show in the audit log under that key.
 
-The app must reach Home Assistant over HTTPS from the internet, at the address Phoenix shows. A home network or VPN address won't work for hosted apps.
+The app must reach Home Assistant over HTTPS from the internet, at the address Phoenix shows. A home network or VPN address won't work for hosted apps. Behind a reverse proxy or tunnel, Home Assistant must trust the proxy, so it knows the request arrived over HTTPS; plain HTTP never offers sign-in.
+
+The app must find the sign-in from the server address itself (protected resource metadata, RFC 9728), as current MCP apps do. An app that knows only the older 2025-03-26 sign-in reaches Home Assistant's own sign-in instead, and Phoenix refuses what that gives it.
 
 ### Approving a sign-in {#oauth-approve}
 
-Phoenix shows the app's name as the app gives it, the site that identified it, and where it returns to. Check those match the app you just connected.
+Phoenix shows the app's name as the app gives it, the full address that identified it, and where it returns to. Check those match the app you just connected.
 
 Choose the key the app gets, then select **{{label:oauth.approve}}**. Only keys with OAuth on and a sign-in period open are offered. Your browser goes back to the app, which is then connected.
 
@@ -96,13 +98,13 @@ Apps that support skills can also install the Phoenix MCP skill, a longer guide 
 
 Apps that sign in to Home Assistant itself can also reach Phoenix's tools through Home Assistant's Model Context Protocol integration. For most apps, [OAuth sign-in](guide:#oauth) is simpler and keeps them to one key. Before 2026.11 it was called MCP Server. They use the key bound to [Assist Tool Provider](guide:topic.homeAssistantFeatures#assist-tool-provider).
 
-On 2026.11, use /api/mcp/phoenix_mcp, which needs an administrator's sign-in. Home Assistant 2026.7 doesn't have that address, and other versions before 2026.11 may not, so use /api/mcp there.
+From 2026.8, use /api/mcp/phoenix_mcp, which needs an administrator's sign-in. Home Assistant 2026.7 doesn't have that address, so use /api/mcp there.
 
-The /api/mcp address follows that integration's Require an administrator account option. New entries turn it on, older entries keep it off, and 2026.7 has no such option. Someone who isn't an administrator gets only household tools, within their own Home Assistant rights.
+From 2026.10, the /api/mcp address follows that integration's Require an administrator account option. New entries turn it on, older entries keep it off. Before 2026.10 there is no such option, so anyone signed in to Home Assistant can use /api/mcp. Someone who isn't an administrator gets only household tools, within their own Home Assistant rights.
 
 On that route the key's rate limit doesn't apply, the audit log shows the calls as Assist, and the app gets Phoenix's instructions only if it asks for them.
 
-From 2026.11, check that integration's options. A new entry has Expose all AI tools on, which serves every set of tools, Phoenix's included. Turn it off and choose Phoenix MCP (scoped) under AI tools. The Read-only option leaves an app only the tools marked read-only, but it doesn't replace the key's capabilities.
+From 2026.10, check that integration's options. A new entry has Expose all AI tools on, which serves every set of tools, Phoenix's included. Turn it off and choose Phoenix MCP (scoped) under AI tools. From 2026.11, the Read-only option leaves an app only the tools marked read-only, but it doesn't replace the key's capabilities.
 
 Tools from Home Assistant's other APIs don't pass through Phoenix on that route, so the key, approvals, MESA and the audit log don't cover them. When two APIs offer the same tool name, Home Assistant adds a prefix such as `phoenix-mcp__`.
 

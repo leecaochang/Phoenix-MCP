@@ -22,12 +22,13 @@ from unittest.mock import DEFAULT, AsyncMock, MagicMock, patch
 from aiohttp import web
 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import entity_registry as er, translation
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant.common import MockConfigEntry
 from pytest_homeassistant.test_util.aiohttp import AiohttpClientMockResponse
 
 from custom_components.phoenix_mcp import mcp_transport, mesa_tools, tool_defs
+from custom_components.phoenix_mcp.catalog_text import voice_text
 from custom_components.phoenix_mcp.access_key_store import (
     AccessKeyRecord,
     AccessKeyStore,
@@ -845,3 +846,11 @@ def qualify_test_decision_model(monkeypatch) -> None:
         **decision_provider.DECISION_SEQUENTIAL_EXECUTION_MODELS,
         ("typesafe", DECISION_TYPESAFE_BASE_URL, "test-model"): frozenset({"test-model"}),
     }))
+
+
+async def decision_write_reply(hass, domain: str, service: str, *, matched: bool, language: str = "en") -> str:
+    """The reply after a decision-chosen write: HA's own translated name of the service that ran."""
+    labels = await translation.async_get_translations(hass, language, "services", {domain})
+    operation = labels[f"component.{domain}.services.{service}.name"]
+    return voice_text(language, "local_operation_matched" if matched else "local_operation_unconfirmed",
+                      operation=operation)

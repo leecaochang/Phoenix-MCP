@@ -24,7 +24,7 @@ import pytest
 
 from custom_components.phoenix_mcp import mcp_transport, tool_dispatch
 from custom_components.phoenix_mcp.access_key_store import AccessKeyStore, GlobalSettings
-from custom_components.phoenix_mcp.audit import AuditLog
+from custom_components.phoenix_mcp.audit import AUDIT_REFUSAL_ROWS_PER_WINDOW, AuditLog
 from custom_components.phoenix_mcp.const import (
     ACCESS_KEY_LENGTH,
     ACCESS_KEY_PREFIX,
@@ -1527,3 +1527,292 @@ async def test_a_client_opening_sessions_at_once_is_not_refused_for_its_handshak
     assert not mcp_transport._is_handshake_notification({"jsonrpc": "2.0", "id": 1, "method": "notifications/initialized"})
     assert not mcp_transport._is_handshake_notification([{"jsonrpc": "2.0", "method": "notifications/initialized"}])
     assert not mcp_transport._is_handshake_notification({"jsonrpc": "2.0", "method": "tools/list"})
+
+
+# --- one reply per request, refused notifications, repeated headers and keys -------
+
+
+@pytest.mark.parametrize("method", ["notifications/initialized", "initialized"])
+@pytest.mark.parametrize("accept", [{}, SSE_ACCEPT], ids=["json", "sse"])
+async def test_an_initialized_message_with_an_id_is_refused_and_completes_nothing(env, method, accept):
+    """A request is owed one reply; an id-bearing initialized gets -32600, never a silent 202."""
+    client, data = env
+    _, raw = await _key(data)
+    opened = await client.post(ROUTE, headers=_headers(raw), json=INITIALIZE)
+    session_id = opened.headers["Mcp-Session-Id"]
+    headers = _headers(raw, **{"Mcp-Session-Id": session_id}, **accept)
+    response = await client.post(ROUTE, headers=headers, json={"jsonrpc": "2.0", "id": 7, "method": method})
+    assert response.status == 200
+    assert response.content_type == "application/json"
+    answer = await response.json()
+    assert answer["id"] == 7 and answer["error"]["code"] == -32600
+    assert data.mcp_sessions[session_id]["initialized"] is False
+    assert _audit_rows(data)[0] == (method, ROUTE, "invalid_request")
+
+
+@pytest.mark.parametrize("accept", [{}, SSE_ACCEPT], ids=["json", "sse"])
+async def test_an_initialized_message_with_an_id_in_a_batch_gets_its_own_error(env, accept):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    response = await client.post(ROUTE, headers={**headers, **accept}, json=[
+        {"jsonrpc": "2.0", "id": 7, "method": "notifications/initialized"}])
+    assert response.status == 200
+    text = await response.text()
+    assert "data: []" not in text
+    answer = json.loads(text.split("data: ", 1)[1]) if accept else json.loads(text)
+    assert [(row["id"], row["error"]["code"]) for row in answer] == [(7, -32600)]
+
+
+async def test_a_stream_never_writes_an_empty_batch_array(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    with patch.object(mcp_transport, "_dispatch_streamable_batch", AsyncMock(return_value=[])):
+        response = await client.post(ROUTE, headers={**headers, **SSE_ACCEPT}, json=[PING])
+    assert response.status == 200
+    assert "data:" not in await response.text()
+
+
+@pytest.mark.parametrize("accept", [{}, SSE_ACCEPT], ids=["json", "sse"])
+@pytest.mark.parametrize("item", [
+    {"jsonrpc": "2.0", "method": "tools/list"},
+    {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "get_state", "arguments": {}}},
+    {"jsonrpc": "2.0", "method": "ping"},
+], ids=["tools-list", "tools-call", "ping"])
+async def test_a_batch_of_requests_sent_as_notifications_answers_like_the_single_message(env, item, accept):
+    """Alone the message answers 400; a batch of only such messages answers 400 too, and runs nothing."""
+    client, data = env
+    _, _, headers = await _session(client, data)
+    with patch.object(mcp_transport, "_dispatch_mcp") as dispatch:
+        alone = await client.post(ROUTE, headers={**headers, **accept}, json=item)
+        batched = await client.post(ROUTE, headers={**headers, **accept}, json=[item, item])
+    assert alone.status == 400
+    assert batched.status == 400
+    assert await batched.read() == b""
+    dispatch.assert_not_called()
+    assert _audit_rows(data)[:2] == [(item["method"], "mcp:notification", "invalid_request")] * 2
+
+
+async def test_a_refused_notification_beside_a_request_adds_no_entry(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    response = await client.post(ROUTE, headers=headers, json=[{"jsonrpc": "2.0", "method": "tools/list"}, PING])
+    assert response.status == 200
+    assert [row["id"] for row in await response.json()] == [1]
+
+
+@pytest.mark.parametrize("name,values", [
+    ("Mcp-Name", ["get_capability_summary", "call_service"]),
+    ("Mcp-Method", ["tools/call", "tools/list"]),
+    ("MCP-Protocol-Version", [MODERN, MODERN]),
+])
+async def test_a_repeated_mirrored_header_is_refused(env, name, values):
+    """A gateway reading the other copy would judge a different request from the one that runs."""
+    client, data = env
+    _, raw = await _key(data)
+    headers = _modern_headers(raw, "tools/call", "get_capability_summary")
+    headers.pop(name)
+    pairs = list(headers.items()) + [(name, value) for value in values]
+    with patch.object(mcp_transport, "_dispatch_mcp") as dispatch:
+        response = await client.post(ROUTE, headers=pairs, json=_modern("tools/call", name="get_capability_summary"))
+    assert response.status == 400
+    answer = await response.json()
+    assert answer["error"]["code"] == -32020 and name in answer["error"]["message"]
+    assert answer["id"] == 1
+    dispatch.assert_not_called()
+    assert _audit_rows(data) == [("tools/call", ROUTE, "invalid_request")]
+
+
+async def test_a_repeated_session_header_is_refused_on_a_legacy_request(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    pairs = list(headers.items()) + [("Mcp-Session-Id", headers["Mcp-Session-Id"])]
+    response = await client.post(ROUTE, headers=pairs, json=PING)
+    assert response.status == 400
+    assert (await response.json())["error"]["code"] == -32600
+    single = await client.post(ROUTE, headers=headers, json=PING)
+    assert single.status == 200
+
+
+@pytest.mark.parametrize("body", [
+    b'{"jsonrpc":"2.0","id":1,"method":"tools/call","method":"ping"}',
+    b'{"jsonrpc":"2.0","id":1,"id":2,"method":"ping"}',
+    b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_state","name":"get_config","arguments":{}}}',
+    b'[{"jsonrpc":"2.0","id":1,"method":"ping","method":"tools/list"}]',
+], ids=["method", "id", "nested-name", "batch-item"])
+async def test_a_repeated_json_key_is_a_parse_error(env, body):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    with patch.object(mcp_transport, "_dispatch_mcp") as dispatch:
+        response = await client.post(ROUTE, headers={**headers, "Content-Type": "application/json"}, data=body)
+    assert response.status == 400
+    assert (await response.json())["error"]["code"] == -32700
+    dispatch.assert_not_called()
+
+
+async def test_the_same_key_in_sibling_objects_is_ordinary_json(env):
+    client, data = env
+    _, _, headers = await _session(client, data)
+    body = b'[{"jsonrpc":"2.0","id":1,"method":"ping","params":{"a":{"x":1},"b":{"x":2}}},{"jsonrpc":"2.0","id":2,"method":"ping"}]'
+    response = await client.post(ROUTE, headers={**headers, "Content-Type": "application/json"}, data=body)
+    assert response.status == 200
+    assert [row["id"] for row in await response.json()] == [1, 2]
+
+
+@pytest.mark.parametrize("meta,detail", [
+    ({"io.modelcontextprotocol/clientCapabilities": None}, "client capabilities"),
+    ({"io.modelcontextprotocol/clientCapabilities": []}, "client capabilities"),
+    ({"io.modelcontextprotocol/clientCapabilities": "all"}, "client capabilities"),
+    ({"io.modelcontextprotocol/clientInfo": []}, "clientInfo"),
+    ({"io.modelcontextprotocol/clientInfo": {"version": "1"}}, "clientInfo"),
+    ({"io.modelcontextprotocol/clientInfo": {"name": "client"}}, "clientInfo"),
+    ({"io.modelcontextprotocol/clientInfo": {"name": "client", "version": 1}}, "clientInfo"),
+    ({"io.modelcontextprotocol/clientInfo": {"name": 1, "version": "1"}}, "clientInfo"),
+], ids=["caps-missing", "caps-list", "caps-text", "info-list", "info-no-name", "info-no-version",
+        "info-number-version", "info-number-name"])
+async def test_modern_client_metadata_must_have_its_shape(env, meta, detail):
+    client, data = env
+    _, raw = await _key(data)
+    body = _modern("tools/list")
+    merged = {**body["params"]["_meta"], **meta}
+    body["params"]["_meta"] = {name: value for name, value in merged.items() if value is not None}
+    with patch.object(mcp_transport, "_dispatch_mcp") as dispatch:
+        response = await client.post(ROUTE, headers=_modern_headers(raw, "tools/list"), json=body)
+    assert response.status == 400
+    answer = await response.json()
+    assert answer["error"]["code"] == -32602 and detail in answer["error"]["message"]
+    dispatch.assert_not_called()
+
+
+async def test_modern_client_info_may_be_left_out(env):
+    client, data = env
+    _, raw = await _key(data)
+    body = _modern("tools/list")
+    del body["params"]["_meta"]["io.modelcontextprotocol/clientInfo"]
+    response = await client.post(ROUTE, headers=_modern_headers(raw, "tools/list"), json=body)
+    assert response.status == 200
+    assert "tools" in (await response.json())["result"]
+
+
+# --- an open stream ends with its authority ---------------------------------------
+
+
+async def _end_authority(ending: str, hass, data, key) -> None:
+    if ending == "revoked":
+        key.revoked = True
+    elif ending == "kill-switch":
+        data.store.get_settings().kill_switch = True
+    elif ending == "runtime-removed":
+        hass.data.pop(DOMAIN)
+    else:
+        assert await data.store.async_rotate_access_key(key.id) is not None
+
+
+async def _read_frames(response, count: int) -> list[dict]:
+    """Read SSE frames until ``count`` data messages have arrived."""
+    messages: list[dict] = []
+    async with asyncio.timeout(3):
+        while len(messages) < count:
+            line = await response.content.readline()
+            assert line, "the stream ended early"
+            if line.startswith(b"data: "):
+                messages.append(json.loads(line[len(b"data: "):]))
+    return messages
+
+
+@pytest.mark.parametrize("ending", ["revoked", "kill-switch", "runtime-removed", "rotated"])
+@pytest.mark.parametrize("modern", [False, True], ids=["legacy", "modern"])
+async def test_a_stream_closes_once_its_authority_ends(env, hass, monkeypatch, ending, modern):
+    """Progress stops at the next keepalive; modern dispatch is cancelled, legacy runs on detached."""
+    monkeypatch.setattr(mcp_transport, "MCP_SSE_KEEPALIVE_SECONDS", 0.02)
+    client, data = env
+    if modern:
+        key, raw = await _key(data)
+        headers = {**_modern_headers(raw, "tools/call", "get_state"), **SSE_ACCEPT}
+        call = _modern("tools/call", name="get_state", arguments={})
+        call["params"]["_meta"]["progressToken"] = "p"
+    else:
+        key, raw, headers = await _session(client, data)
+        headers = {**headers, **SSE_ACCEPT}
+        call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "get_state", "arguments": {}, "_meta": {"progressToken": "p"}}}
+    release, cancelled, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    async def held(_method, msg_id, *_args, **_kwargs):
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        finished.set()
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"content": []}}, "tools/call", "get_state", "allowed"
+
+    with patch.object(mcp_transport, "_dispatch_mcp", held):
+        response = await client.post(ROUTE, headers=headers, json=call)
+        assert response.status == 200
+        [first] = await _read_frames(response, 1)
+        assert first["method"] == "notifications/progress"
+        await _end_authority(ending, hass, data, key)
+        async with asyncio.timeout(3):
+            rest = (await response.read()).decode()
+        frames = [json.loads(line[len("data: "):]) for line in rest.splitlines() if line.startswith("data: ")]
+        # At most the frame already on its way when the authority ended.
+        assert [frame.get("method") for frame in frames].count("notifications/progress") <= 1
+        reply = frames[-1]
+        assert reply["id"] == 1
+        assert reply["error"]["code"] == (MCP_AUTHORITY_CHANGED_ERROR if modern else -32000)
+        assert "withheld" in reply["error"]["message"]
+        assert "result" not in reply
+        if modern:
+            assert cancelled.is_set()
+        else:
+            assert not cancelled.is_set()
+            release.set()
+            async with asyncio.timeout(3):
+                await finished.wait()
+
+
+async def test_a_stream_with_its_authority_intact_keeps_its_progress(env, monkeypatch):
+    monkeypatch.setattr(mcp_transport, "MCP_SSE_KEEPALIVE_SECONDS", 0.02)
+    client, data = env
+    _, _, headers = await _session(client, data)
+    release = asyncio.Event()
+
+    async def held(_method, msg_id, *_args, **_kwargs):
+        await release.wait()
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"content": []}}, "tools/call", "get_state", "allowed"
+
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "get_state", "arguments": {}, "_meta": {"progressToken": "p"}}}
+    with patch.object(mcp_transport, "_dispatch_mcp", held):
+        response = await client.post(ROUTE, headers={**headers, **SSE_ACCEPT}, json=call)
+        frames = await _read_frames(response, 3)
+        release.set()
+        rest = (await response.read()).decode()
+    assert all(frame["method"] == "notifications/progress" for frame in frames)
+    assert '"result"' in rest
+
+
+# --- a key's refused requests cannot empty the audit log ---------------------------
+
+
+async def test_a_key_flooding_refused_requests_keeps_the_approval_trail_and_the_saved_copy(env):
+    """The audited flood through the real route: rate-limited and malformed requests from one key."""
+    client, data = env
+    data.audit.resize(100)
+    settings = data.store.get_settings()
+    for method, key_id in (("call_service", "approver"), ("approval/approved", "admin"), ("approval/executed", "approver")):
+        data.audit.record(request_id="approval-1", access_key_id=key_id, access_key_name="admin:owner",
+                          method=method, resource="approval-1", client_ip="",
+                          outcome="pending_approval" if method == "call_service" else "allowed", settings=settings)
+    key, raw = await _key(data)
+    key.rate_limit_requests, key.rate_limit_burst = 1, 1
+    statuses = [(await client.post(ROUTE, headers=_headers(raw), data=b"{}")).status for _ in range(150)]
+    assert statuses.count(429) >= 140
+    await data.audit.async_save()
+    loaded = AuditLog(store=data.audit._store, maxlen=100)
+    await loaded.async_load()
+    for log in (data.audit, loaded):
+        assert log.count(resource="approval-1") == 3
+        assert log.count(access_key_id=key.id) == AUDIT_REFUSAL_ROWS_PER_WINDOW + 1
+        summary = log.query(access_key_id=key.id, limit=1)[0]
+        assert json.loads(summary.payload)["folded_refusals"]["requests"] == 150 - AUDIT_REFUSAL_ROWS_PER_WINDOW

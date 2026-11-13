@@ -17,6 +17,8 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
 
+# These tests drive the real subprocess seam, not the shared in-process worker.
+REAL_TEMPLATE_WORKER = True
 
 def _env():
     access_key = AccessKeyRecord(id='template', name='template', access_key_hash='hash', created_at=utcnow(), created_by='admin', pass_through=True)
@@ -414,7 +416,56 @@ def test_coverage_records_disposable_worker_without_importing_it_in_parent(tmp_p
     child_only = {
         _line_of('phase = "resource_limits"'),
         _line_of('limits = runpy.run_path(str(Path(__file__).with_name("template_limits.py")))'),
-        _line_of('resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))'),
+        _line_of('resource.setrlimit(resource.RLIMIT_CPU, (startup_seconds, startup_seconds))'),
         _line_of('main()'),
     }
     assert child_only <= measured
+
+
+async def test_a_key_revoked_before_the_spawn_starts_no_worker(hass):
+    from custom_components.phoenix_mcp.request_authority import AuthorityChangedError
+    access_key, data = _env()
+
+    def revoked():
+        raise AuthorityChangedError('Permissions changed.')
+
+    with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock()) as spawn, \
+            patch.object(template_render, 'check_request_authority', revoked):
+        with pytest.raises(AuthorityChangedError):
+            await template_render.async_render_template_for_access_key('{{ 1 }}', access_key, hass, data)
+    spawn.assert_not_called()
+    assert data.template_slots._value == TEMPLATE_WORKER_CONCURRENCY
+
+
+async def test_a_key_revoked_during_the_render_gets_no_output(hass):
+    from custom_components.phoenix_mcp.request_authority import AuthorityChangedError
+    access_key, data = _env()
+    process = MagicMock(returncode=0)
+    process.communicate = AsyncMock(return_value=(b'secret-output', b''))
+    process.wait = AsyncMock()
+    calls = 0
+
+    def check():
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise AuthorityChangedError('Permissions changed.')
+
+    with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)), \
+            patch.object(template_render, 'check_request_authority', check):
+        with pytest.raises(AuthorityChangedError):
+            await template_render.async_render_template_for_access_key('{{ 1 }}', access_key, hass, data)
+    process.wait.assert_awaited_once()
+    # Before the spawn, after the exchange, and again after the worker is reaped.
+    assert calls == 3
+
+
+async def test_a_snapshot_over_the_input_cap_starts_no_worker(hass):
+    access_key, data = _env()
+    for n in range(20):
+        hass.states.async_set(f'sensor.bulk_{n}', 'x' * 200)
+    with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock()) as spawn, \
+            patch.object(template_render, 'TEMPLATE_WORKER_INPUT_BYTES', 2048):
+        with pytest.raises(template_render.TemplateRenderError, match='too large'):
+            await template_render.async_render_template_for_access_key('ok', access_key, hass, data)
+    spawn.assert_not_called()

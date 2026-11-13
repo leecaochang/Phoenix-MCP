@@ -43,6 +43,7 @@ from ..policy_engine import (
     resolve_device_registry_access, resolve_read, resolve_registry_access,
 )
 from ..recorder_queries import iso_utc
+from ..redaction import redact_inaccessible_entity_ids_in_text, service_not_entity
 from ..request_authority import check_request_authority, request_authority, write_boundary
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _tool_error, _tool_success, longest_fitting
 from ..tool_contracts import normalize_tool_args
@@ -242,7 +243,7 @@ _LOG_DETAIL_KEYS = ("detail_ref", "detail_field", "message_index", "detail_offse
 
 
 def _integration_debug_query(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
-    """Read captured INFO/DEBUG records of the integrations this access key can see."""
+    """Read captured INFO/DEBUG records this access key raised, of integrations it can see."""
 
     tool = "get_logs"
     if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
@@ -271,7 +272,8 @@ def _integration_debug_query(args: dict, access_key: AccessKeyRecord, hass: Home
                                          "has_more": False, "next_cursor": None, "entries": []})), "allowed", tool
     entries: list[dict[str, Any]] = []
     has_more = False
-    for sequence, created, level, logger, message, truncated in capture.newest(domains, int(cursor) if cursor else None):
+    rows = capture.newest(domains, int(cursor) if cursor else None, access_key.id)
+    for sequence, created, level, logger, message, truncated, _owners in rows:
         safe = _strict_phoenix_log_text(message, access_key, hass)
         # Search sees only scrubbed text, so it can never probe a redacted value.
         if search and search.casefold() not in safe.casefold():
@@ -283,12 +285,13 @@ def _integration_debug_query(args: dict, access_key: AccessKeyRecord, hass: Home
                         "level": level, "integration": integration_domain(logger), "logger": logger,
                         "message": safe, "truncated": truncated})
     body = {
-        "source": {**source, "status": "available", "retained": len(capture.records),
+        "source": {**source, "status": "available", "retained": capture.retained_for(access_key.id),
                    "capturing_since": capture.attached_at.isoformat(),
-                   "capturing": sorted(capture.domains & domains),
-                   "note": "Only records below WARNING appear here, from integrations whose level "
-                           "set_integration_log_level raised to INFO or DEBUG since Home Assistant started. "
-                           "WARNING and above are in source system_log."},
+                   "capturing": sorted(capture.domains_for(access_key.id) & domains),
+                   "note": "Only records below WARNING appear here, from integrations this access key "
+                           "raised to INFO or DEBUG with set_integration_log_level since Home Assistant "
+                           "started, and only those written while it held the raise. Other access keys "
+                           "cannot read them. WARNING and above are in source system_log."},
         "count": len(entries), "has_more": has_more,
         "next_cursor": str(entries[-1]["sequence"]) if has_more and entries else None,
         "entries": entries,
@@ -370,14 +373,23 @@ def _logbook_context_scoped(entry: dict, access_key: AccessKeyRecord, hass: Home
     """Keep what caused a logbook row only when the access key may see the cause.
 
     A hidden cause loses all its context fields: a name would disclose it and a redaction marker
-    would confirm it. A user ID is never returned.
+    would confirm it. A user ID is never returned. Every other text field has the entity IDs the
+    key may not read replaced, as an automation row names its trigger (`triggered by state of
+    lock.door`); a service name stays.
     """
     cause = entry.get("context_entity_id")
     hidden = cause is not None and resolve_read(cause, access_key, hass) not in (Permission.READ, Permission.WRITE)
+    keep = service_not_entity(hass)
     return {
-        key: value for key, value in entry.items()
+        key: redact_inaccessible_entity_ids_in_text(value, access_key, hass, keep=keep)
+        if isinstance(value, str) and key not in _LOGBOOK_ID_FIELDS else value
+        for key, value in entry.items()
         if key != "context_user_id" and not (hidden and key.startswith("context_"))
     }
+
+
+# Fields holding one ID that the row filter has already judged.
+_LOGBOOK_ID_FIELDS = frozenset({"entity_id", "context_entity_id", "device_id", "context_device_id"})
 
 
 async def _tool_get_logbook(
@@ -724,6 +736,8 @@ def _log_control_warnings(level: str) -> list[str]:
     return [
         "Verbose logging can increase disk use.",
         "Third-party integration logs may contain sensitive output outside Phoenix's control.",
+        "Only this access key can read the captured INFO and DEBUG records, until the level is "
+        "lowered, the override ends or the key is revoked.",
     ]
 
 
@@ -782,15 +796,18 @@ async def _validated_log_control_context(
     return domain, level, persistence, duration, loggers, before, fingerprint
 
 
-def _capture_resumes(hass: HomeAssistant, domain: str, after: IntegrationOverride | None) -> bool:
-    """Whether setting an unchanged INFO or DEBUG level would start capturing its records.
+def _capture_resumes(
+    hass: HomeAssistant, domain: str, after: IntegrationOverride | None, owner: str,
+) -> bool:
+    """Whether setting an unchanged INFO or DEBUG level would start capturing its records for `owner`.
 
     The capture is held in memory, so a restart or reload ends it while a lasting override
-    stays. Asking again for the same level is then a fresh raise, gated like any other.
+    stays, and it belongs to the keys that raised it. Asking again for the same level is then a
+    fresh raise, gated like any other.
     """
     capture = hass.data.get(DEBUG_CAPTURE_RUNTIME_KEY)
     return (after is not None and after.level in ("DEBUG", "INFO")
-            and capture is not None and domain not in capture.domains)
+            and capture is not None and not capture.captures_for(domain, owner))
 
 
 async def _tool_set_integration_log_level(
@@ -811,7 +828,7 @@ async def _tool_set_integration_log_level(
     after = None if level == "NOTSET" else IntegrationOverride(level, persistence)
     manager = data.logger_control
     assert manager is not None
-    if duration is None and before == after and manager.active(domain) is None and not _capture_resumes(hass, domain, after):
+    if duration is None and before == after and manager.active(domain) is None and not _capture_resumes(hass, domain, after, access_key.id):
         return _tool_success(json.dumps({
             "integration": domain, "changed": False, "setting": _override_dict(before)
         })), "allowed", f"integration:{domain}"
@@ -851,7 +868,7 @@ async def _execute_set_integration_log_level(
     after = None if level == "NOTSET" else IntegrationOverride(level, persistence)
     manager = data.logger_control
     assert manager is not None
-    if duration is None and before == after and manager.active(domain) is None and not _capture_resumes(hass, domain, after):
+    if duration is None and before == after and manager.active(domain) is None and not _capture_resumes(hass, domain, after, access_key.id):
         return _tool_success(json.dumps({
             "integration": domain, "changed": False, "setting": _override_dict(before)
         })), "allowed", f"integration:{domain}"
@@ -870,14 +887,14 @@ async def _execute_set_integration_log_level(
         _LOGGER.exception("set_integration_log_level failed for %s", domain)
         return _tool_error("Failed to update integration log level."), "invalid_request", f"integration:{domain}"
     # Only a level Phoenix itself raised is captured for source integration_debug.
-    async_update_debug_capture(hass, domain, current.level if current else None)
+    async_update_debug_capture(hass, domain, current.level if current else None, access_key.id)
     timed = manager.active(domain)
     capture = hass.data.get(DEBUG_CAPTURE_RUNTIME_KEY)
     return _tool_success(json.dumps({
         "integration": domain,
         # A same-level request that only resumed the capture leaves the level unchanged.
         "changed": before != current or duration is not None,
-        "capturing_debug_records": capture is not None and domain in capture.domains,
+        "capturing_debug_records": capture is not None and capture.captures_for(domain, access_key.id),
         "before": _override_dict(before),
         "after": _override_dict(current),
         "affected_loggers": sorted(loggers),

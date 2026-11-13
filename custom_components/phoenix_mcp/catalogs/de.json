@@ -87,7 +87,11 @@
         "phoenix_mcp_restarted": "Beim Neustart von Home Assistant abgebrochen",
         "phoenix_mcp_data_wiped": "Beim Löschen der Phoenix-MCP-Daten abgebrochen",
         "integration_removed": "Beim Entfernen von Phoenix MCP abgebrochen",
-        "recovery_review_replaced": "Konfiguration geändert; durch eine neue Prüfung ersetzt"
+        "recovery_review_replaced": "Konfiguration geändert; durch eine neue Prüfung ersetzt",
+        "access_key_rotated": "Beim Rotieren des Zugriffsschlüssels abgebrochen",
+        "oauth_sign_in_removed": "Beim Entfernen der Anmeldung der App abgebrochen",
+        "oauth_turned_off": "Beim Ausschalten der OAuth-Anmeldung abgebrochen",
+        "oauth_sign_in_ended": "Abgebrochen, weil die Anmeldung der App beendet war"
       },
       "reasonExecutionFailedDetail": "Ausführung fehlgeschlagen: {detail}",
       "reject": "Ablehnen",
@@ -1154,7 +1158,8 @@
       "importReplaceHelp": "Die Profile der Datei hinzufügen und vorhandene für dieselben Ziele ersetzen. Dies lässt sich nicht rückgängig machen.",
       "viewAutomationsHelp": "Die Automationen ein- oder ausblenden, die MESA nur teilweise prüfen konnte, weil sie Templates oder Blueprints verwenden.",
       "openOrphanHelp": "Dieses Profil im Profileditor öffnen, wo Sie es löschen können. Was es abdeckte, existiert nicht mehr.",
-      "dismissNoticeHelp": "Diesen Hinweis in diesem Browser ausblenden. Verworfene Hinweise wiederherstellen holt ihn zurück."
+      "dismissNoticeHelp": "Diesen Hinweis in diesem Browser ausblenden. Verworfene Hinweise wiederherstellen holt ihn zurück.",
+      "comboMatchCount": "Treffer: {count}"
     },
     "settings": {
       "addProviderFirst": "Fügen Sie zuerst unter KI-Anbieter ein Anbieterkonto hinzu.",
@@ -1659,6 +1664,7 @@
       "approvalReasonString": "reason muss eine Zeichenfolge sein.",
       "approvalRecordFailed": "Diese Genehmigung konnte vor der Ausführung nicht aufgezeichnet werden. Es wurde nichts ausgeführt; versuchen Sie es erneut.",
       "approvalAccessKeyInactive": "Der Zugriffsschlüssel ist nicht mehr aktiv, daher kann diese Anfrage nicht ausgeführt werden. Es wurde nichts ausgeführt.",
+      "approvalCredentialEnded": "Der Zugriffsschlüssel wurde rotiert oder die Anmeldung der App ist beendet, daher kann diese Anfrage nicht ausgeführt werden. Es wurde nichts ausgeführt.",
       "assistExposurePassThroughOnly": "use_assist_exposure ist nur für pass_through-Zugriffsschlüssel gültig.",
       "assistPipelineFailed": "Die Assist-Pipeline konnte nicht erstellt werden.",
       "assistPipelineUnavailable": "Assist-Pipelines sind in diesem Home Assistant nicht verfügbar.",
@@ -2098,8 +2104,8 @@
       "dashboard_resource.create.title": "Dashboard-Ressource {url} hinzufügen",
       "dashboard_resource.update.title": "Dashboard-Ressource {url} ändern",
       "dashboard_resource.delete.title": "Dashboard-Ressource {url} entfernen",
-      "dashboard_resource.create.body": "Jeder Browser, der ein Dashboard öffnet, lädt {url}. Eine JavaScript-Datei wird mit dem Home Assistant-Zugriff der jeweiligen Person ausgeführt; genehmigen Sie daher nur eine Datei, der Sie vertrauen.",
-      "dashboard_resource.update.body": "Dadurch wird eine Datei geändert, die jeder Browser beim Öffnen eines Dashboards lädt. Vergleichen Sie unten die aktuelle und die vorgeschlagene Datei.",
+      "dashboard_resource.create.body": "Jeder Browser, der ein Dashboard öffnet, lädt {url}, ebenso der Browser eines Administrators, der das Phoenix MCP-Bedienfeld öffnet. Eine JavaScript-Datei wird mit dem Home Assistant-Zugriff der jeweiligen Person ausgeführt; genehmigen Sie daher nur eine Datei, der Sie vertrauen.",
+      "dashboard_resource.update.body": "Dadurch wird eine Datei geändert, die jeder Browser beim Öffnen eines Dashboards lädt, ebenso der Browser eines Administrators beim Öffnen des Phoenix MCP-Bedienfelds. Vergleichen Sie unten die aktuelle und die vorgeschlagene Datei.",
       "dashboard_resource.delete.body": "Dashboards laden {url} nicht mehr. Karten aus dieser Datei zeigen einen Fehler an, bis sie wieder hinzugefügt wird.",
       "edit_energy_config.fallback.body": "Dadurch wird die Dashboard-Konfiguration von Home Assistant aktualisiert.",
       "edit_energy_config.fallback.title": "Konfiguration des Energie-Dashboards ändern",
@@ -2341,8 +2347,8 @@
       "energyDashboard": "Energie-Dashboard",
       "cardNoun": "Karte",
       "previewErrorHead": {
-        "one": "Eine Karte in dieser Vorschau hat einen Konfigurationsfehler gemeldet. Kopieren Sie bei Bedarf die folgende Meldung und fügen Sie sie beim Agenten ein, damit er die Karte korrigieren kann.",
-        "other": "Karten in dieser Vorschau haben Konfigurationsfehler gemeldet. Kopieren Sie bei Bedarf die folgende Meldung und fügen Sie sie beim Agenten ein, damit er die Karten korrigieren kann."
+        "one": "{count} Karte in dieser Vorschau hat einen Konfigurationsfehler gemeldet. Kopieren Sie bei Bedarf die folgende Meldung und fügen Sie sie beim Agenten ein, damit er die Karte korrigieren kann.",
+        "other": "{count} Karten in dieser Vorschau haben Konfigurationsfehler gemeldet. Kopieren Sie bei Bedarf die folgende Meldung und fügen Sie sie beim Agenten ein, damit er die Karten korrigieren kann."
       },
       "previewTextAlternative": "Die Vorschau zeigt die Karten als Bilder. Wählen Sie {diff}, um die Änderung als Text zu lesen.",
       "byAdmin": "Administrator"
@@ -3158,11 +3164,13 @@
       "chooseKeyHelp": "Den Zugriffsschlüssel wählen, dessen Berechtigungen diese App erhält.",
       "keyAtCap": "{name}, der bereits die höchstzulässige Zahl an Anmeldungen hat",
       "requestExpires": "Diese Anfrage endet in {time}",
+      "requestEndsAt": "Diese Anfrage endet um {time}.",
+      "requestEndingSoon": "Es bleibt weniger als eine Minute, um diese Anfrage zu genehmigen.",
       "requestExpired": "Diese Anmeldeanfrage ist beendet. Beginnen Sie in der App von vorn.",
       "approve": "Genehmigen",
       "approveHelp": "Diese App den gewählten Zugriffsschlüssel nutzen lassen und die Anmeldung an die App zurückgeben.",
       "deny": "Verweigern",
-      "denyHelp": "Diese Anmeldung ablehnen und die App benachrichtigen.",
+      "denyHelp": "Diese Anmeldung ablehnen und die App benachrichtigen, wenn ihre Adresse bestätigt ist.",
       "close": "Schließen",
       "approvedLeaving": "Genehmigt. Zurück zur App...",
       "deniedLeaving": "Verweigert. Zurück zur App...",
@@ -3213,6 +3221,9 @@
     "local_unauthorized": "Dieser Zugriffsschlüssel ist nicht mehr autorisiert.",
     "local_state_matched": "Home Assistant meldet den gewünschten Zustand.",
     "local_state_unconfirmed": "Befehl gesendet. Home Assistant hat den gewünschten Zustand noch nicht bestätigt.",
+    "local_operation_matched": "Aktion: {operation}. Home Assistant meldet den gewünschten Zustand.",
+    "local_operation_unconfirmed": "Aktion gesendet: {operation}. Home Assistant hat den gewünschten Zustand noch nicht bestätigt.",
+    "decision_operation_unconfirmed": "Ich habe den Befehl nicht ausgeführt, weil ich die Aktion nicht bestätigen konnte. Bitte sag ihn noch einmal deutlich und nenne Aktion und Gerät.",
     "local_summary_count": "Für Assist freigegebene Entitäten, auf die ich zugreifen kann, mit dem Zustand {state}: {matched} von {total}. Unbekannt oder nicht verfügbar: {unknown}.",
     "local_summary_total": "Für Assist freigegebene Entitäten, auf die ich zugreifen kann: {total}. Unbekannt oder nicht verfügbar: {unknown}.",
     "local_summary_breakdown": "Für Assist freigegebene Entitäten, auf die ich zugreifen kann: {total}. {summary}.",

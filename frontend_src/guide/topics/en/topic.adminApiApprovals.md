@@ -31,6 +31,7 @@ Use these to review, approve, reject or cancel the actions agents are waiting on
 | `closure_reason` | Why it ended without running, or why its run failed. Values below. |
 | `result` | The tool's result after an approve. |
 | `request_id`, `client_ip` | The agent request that asked. |
+| `oauth_app` | `name` and `host` of the app whose OAuth sign-in asked, or `null` for a request sent with the key itself. |
 | `household_request`, `ha_user_id` | The household request flag, and the Home Assistant user behind the request. |
 | `execution_started_at` | When an approve started running the action. |
 
@@ -44,6 +45,8 @@ phoenix_mcp_data_wiped     execution_interrupted
 execution_failed           agent_chat_ended
 agent_chat_wait_timed_out  integration_removed
 recovery_review_replaced   phoenix_mcp_restarted
+access_key_rotated         oauth_sign_in_removed
+oauth_turned_off           oauth_sign_in_ended
 ```
 
 Related: [Approvals](guide:window.approvals), [How it can end](guide:topic.approvalLifecycle#outcomes)
@@ -98,6 +101,7 @@ The response is `200` with the updated record:
 | 409 | `conflict` | `adminError.approvalExpired` | It was past `expires_at`, so this call closed it as `expired`. Nothing ran. |
 | 409 | `conflict` | `adminError.approvalAlreadyResolved` | Another request finished it first. |
 | 404 | `not_found` | `adminError.approvalAccessKeyInactive` | The access key is no longer active. Phoenix closes the approval as `cancelled`, reason `access_key_inactive`. |
+| 404 | `not_found` | `adminError.approvalCredentialEnded` | The key was rotated since the request, or the OAuth sign-in that asked has ended. Phoenix closes the approval as `cancelled`, reason `access_key_rotated` or `oauth_sign_in_ended`. |
 | 403 | `forbidden` | `adminError.approvalCapabilityDenied` | The capability is now set to Deny for this key. Phoenix closes the approval as `failed`, reason `capability_denied`. |
 | 503 | `service_unavailable` | `adminError.killSwitchEngaged` | The kill switch is on. Phoenix closes the approval as `cancelled`, reason `kill_switch`. |
 | 503 | `service_unavailable` | `adminError.approvalRecordFailed` | Phoenix couldn't save the execution marker. Nothing ran and the approval is still pending. |
@@ -105,7 +109,7 @@ The response is `200` with the updated record:
 | 500 | `internal_error` | `adminError.approvalExecutionUncertain` | The run raised an error. Phoenix closes the approval as `failed`, reason `execution_interrupted`, and won't offer it again. |
 | 500 | `internal_error` | `adminError.approvalOutcomeNotSaved` | The action finished, but Phoenix couldn't save its result. Phoenix won't offer the approval again and later closes it as `failed`, reason `execution_interrupted`. Its `approval/executed` or `approval/failed` audit row, with `finalization: "not_saved"`, says what happened. |
 
-Three of those errors sound temporary but close the approval for good: `approvalAccessKeyInactive`, `approvalCapabilityDenied` and `killSwitchEngaged`. Fixing the condition afterwards doesn't bring it back.
+Four of those errors sound temporary but close the approval for good: `approvalAccessKeyInactive`, `approvalCredentialEnded`, `approvalCapabilityDenied` and `killSwitchEngaged`. Fixing the condition afterwards doesn't bring it back.
 
 ### Approve several {#batch-approve}
 

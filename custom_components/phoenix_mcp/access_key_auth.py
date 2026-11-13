@@ -14,12 +14,13 @@ from homeassistant.util.dt import utcnow
 
 from .access_key_store import access_key_name_slug
 from .approvals import (
-    REASON_ACCESS_KEY_EXPIRED, async_cancel_approvals_for_access_key, dismiss_approval_notification,
-    fire_approval_resolved_event,
+    REASON_ACCESS_KEY_EXPIRED, async_cancel_approvals_for_access_key, audit_closed_approvals,
+    dismiss_approval_notification, fire_approval_resolved_event,
 )
 from .const import (
     ACCESS_KEY_LENGTH, ACCESS_KEY_PREFIX, OAUTH_ACCESS_TOKEN_LENGTH, OAUTH_ACCESS_TOKEN_PREFIX,
-    OAUTH_GRANT_REQUEST_KEY, REFUSED_KEY_LOG_WINDOW_SECONDS, REFUSED_KEY_TRACKED_ADDRESSES_MAX,
+    OAUTH_GRANT_REQUEST_KEY, OAUTH_REFRESH_TOKEN_PREFIX, OAUTH_TOKEN_UNTIL_REQUEST_KEY, REFUSED_KEY_LOG_WINDOW_SECONDS,
+    REFUSED_KEY_TRACKED_ADDRESSES_MAX,
 )
 from .helpers import (
     build_error_response, cancel_expiry_timer, fire_rate_limit_events, get_client_ip, log_request,
@@ -46,6 +47,18 @@ def unauthorized_response(request_id: str, challenge: str = 'Bearer realm="Phoen
     response = build_error_response("unauthorized", "Unauthorized.", 401, request_id)
     response.headers["WWW-Authenticate"] = challenge
     return response
+
+
+# What a Phoenix key or token starts with; one in a web address ends up in proxy and browser logs.
+_SECRET_PREFIXES = (ACCESS_KEY_PREFIX, OAUTH_ACCESS_TOKEN_PREFIX, OAUTH_REFRESH_TOKEN_PREFIX)
+
+
+def _secret_in_query(request: web.Request) -> bool:
+    """Whether the query names a token parameter or carries a Phoenix secret under any name."""
+    if "token" in request.query or "access_token" in request.query:
+        return True
+    return any(prefix in part.lower() for name, value in request.query.items()
+               for part in (name, value) for prefix in _SECRET_PREFIXES)
 
 
 async def async_get_authenticated_access_key(
@@ -78,9 +91,8 @@ async def async_get_authenticated_access_key(
 
     _401 = unauthorized_response(request_id, bearer_challenge(hass, data, request))
 
-    for key in ("token", "access_token"):
-        if key in request.query:
-            return _401
+    if _secret_in_query(request):
+        return _401
 
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
@@ -175,17 +187,19 @@ def _access_key_for_oauth_token(data: PhoenixData, request: web.Request, present
     """The access key an OAuth access token presents, or None when it presents nothing.
 
     The lookup in Phoenix's own sign-in store is the audience check: no other server's
-    token can be found there. The sign-in it names is left on the request for
-    RequestAuthority, which rechecks it at every authority boundary.
+    token can be found there. The sign-in it names, and when the token ends, are left on the
+    request for RequestAuthority, which rechecks both at every authority boundary.
     """
-    grant = data.oauth_grants.find_by_access_hash(secret_hash(presented))
-    if grant is None:
+    found = data.oauth_grants.find_access_token(secret_hash(presented))
+    if found is None:
         return None
+    grant, until = found
     access_key = data.store.get_access_key_by_id(grant.access_key_id)
     if access_key is None or not grant.is_live(access_key):
         return None
     data.oauth_grants.touch(grant.id, utcnow())
     request[OAUTH_GRANT_REQUEST_KEY] = grant.id
+    request[OAUTH_TOKEN_UNTIL_REQUEST_KEY] = until
     return access_key
 
 
@@ -270,6 +284,7 @@ async def async_archive_expired_access_key(
     for approval in changed_approvals:
         dismiss_approval_notification(hass, approval.id)
         fire_approval_resolved_event(hass, approval)
+    audit_closed_approvals(data.audit, data.store.get_settings(), changed_approvals)
     # Advisory leases the access key still held; in-memory, so outside the store lock.
     release_access_key_leases(data, current.id)
     if data.async_sync_voice_agent is not None:

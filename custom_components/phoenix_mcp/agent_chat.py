@@ -17,10 +17,11 @@ from .agent_recovery import recovery_turn
 from .agent_turn import (
     _after_dispatch_failure, _AGENT_CHAT_ADDENDUM, _agentcli_time_context,
     _agentcli_time_guidance, _clip_display, _consume_model_stream,
-    _conversation_behavior_prompt, _DETAIL_INSTRUCTIONS, _home_focus_output_contract,
-    _kill_switch_on, _review_stop_error, _run_headless_turn, _run_tool_batch,
-    _STYLE_INSTRUCTIONS, _with_time_context, HeadlessUsage, TURN_AUTHORITY_LOST, TURN_EXHAUSTED,
-    TURN_OUTCOME_UNKNOWN, TURN_OUTPUT_LIMIT, TURN_PROVIDER_ERROR, TURN_TRUNCATED,
+    _conversation_behavior_prompt, _current_dispatch_access_key, _DETAIL_INSTRUCTIONS,
+    _home_focus_output_contract, _kill_switch_on, _review_stop_error, _run_headless_turn,
+    _run_tool_batch, _STYLE_INSTRUCTIONS, _with_time_context, HeadlessUsage, TURN_AUTHORITY_LOST,
+    TURN_EXHAUSTED, TURN_OUTCOME_UNKNOWN, TURN_OUTPUT_LIMIT, TURN_PROVIDER_ERROR, TURN_TRUNCATED,
+    UNTRUSTED_TOOL_DATA,
 )
 from .approvals import get_approval
 from .const import (
@@ -29,7 +30,7 @@ from .const import (
 )
 from .conversation_log import flush_assistant, recorded_chat
 from .data import PhoenixData
-from .catalog_text import voice_text
+from .catalog_text import spoken_sentences, voice_text
 from .home_companion import is_companion, internal_turn
 from .home_companion_turn import async_delegate
 from .llm.base import (
@@ -50,6 +51,13 @@ from .tool_loading import without_tool_search
 from .tool_dispatch import _build_instructions
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _authority_stop(data: PhoenixData) -> dict:
+    """The error that ends an Agent Chat turn whose key may no longer act, naming the kill switch."""
+    if _kill_switch_on(data):
+        return {"code": "kill_switch", "message": "The kill switch is on, so the agent stopped. Nothing more was run."}
+    return {"code": "unauthorized", "message": "This access key is no longer authorized."}
 
 
 @recorded_chat
@@ -147,6 +155,7 @@ async def async_run_agent_turn(
             conversation_style, detail_level, home_focused=home_focused,
         )
         + _AGENT_CHAT_ADDENDUM
+        + UNTRUSTED_TOOL_DATA
         + _home_focus_output_contract(home_focused)
         + (loader.directory() if loader is not None else "")
         + (search.note() if search is not None else "")
@@ -227,6 +236,13 @@ async def async_run_agent_turn(
         iterations += 1
         if cancel.is_set():
             await emit("error", {"code": "cancelled", "message": "Cancelled."})
+            break
+        if _current_dispatch_access_key(data, access_key_id) is None:
+            # Checked before every model call, so the kill switch or a revoked key sends the
+            # provider nothing more, not even the tool results already read.
+            await emit("error", _authority_stop(data))
+            turn_errored = True
+            stop_reason = "error"
             break
         step += 1
         if loader is not None:
@@ -357,12 +373,7 @@ async def async_run_agent_turn(
         # turn rather than looping into more denied dispatches.
         if authority_lost:
             # The kill switch is not the key's fault; say which one stopped the turn.
-            if _kill_switch_on(data):
-                await emit("error", {"code": "kill_switch",
-                                     "message": "The kill switch is on, so the agent stopped. Nothing more was run."})
-            else:
-                await emit("error", {"code": "unauthorized",
-                                     "message": "This access key is no longer authorized."})
+            await emit("error", _authority_stop(data))
             break
         if stop_turn:
             # Defence in depth: every path setting stop_turn is already handled, and this
@@ -421,11 +432,13 @@ async def async_run_voice_turn(
     max_iterations: int = AGENT_CHAT_MAX_ITERATIONS,
     include_review_hint: bool = False,
     language: object = None,
+    still_bound: Callable[[], bool] | None = None,
 ) -> str:
     """Run one conversation-agent turn to completion; return the spoken answer.
     Headless through _run_headless_turn. ``include_review_hint`` adds where to approve, as a
     sentence since one string is both shown and spoken; pass False for a satellite.
     ``language`` is the conversation's, for VOICE_TEMPLATES; None means English.
+    ``still_bound`` is the Voice binding, rechecked throughout the turn.
     """
     if is_companion(access_key) and not internal_turn(access_key):
         report = await async_delegate(hass, data, access_key, user_text, language, base_url)
@@ -451,6 +464,7 @@ async def async_run_voice_turn(
             _build_instructions(access_key, data, base_url, hass)
             + behavior
             + _VOICE_ADDENDUM
+            + UNTRUSTED_TOOL_DATA
             + _home_focus_output_contract(home_focused)
         ),
         seed=user_text, client_ip=VOICE_AGENT_CLIENT_IP, max_iterations=max_iterations,
@@ -459,6 +473,7 @@ async def async_run_voice_turn(
         # reading the whole prompt on the operator's own hardware, which can take
         # minutes; only the silent-stream bound applies there.
         first_reply_seconds=None if getattr(provider, "kind", "") == "ollama" else VOICE_FIRST_REPLY_SECONDS,
+        still_bound=still_bound,
     )
     voice_result(turn.outcome, bool(turn.review_urls), bool(turn.text.strip()))
     # Never raise at a microphone: every ending becomes something sayable, in the
@@ -478,9 +493,10 @@ async def async_run_voice_turn(
     if turn.outcome == TURN_OUTPUT_LIMIT:
         return turn.text.strip() or voice_text(language, "output_limit")
     if turn.outcome == TURN_AUTHORITY_LOST:
-        # The closing round usually produces a sentence ("I could not do that");
-        # say it. The fallback covers a model that asked for tools again instead.
-        return turn.text.strip() or voice_text(language, "access_key_unavailable")
+        # A closing round after a refused call can produce a sentence ("I could not do that");
+        # say it. A key that may no longer act gets no closing round.
+        return turn.text.strip() or voice_text(
+            language, "unavailable" if _kill_switch_on(data) else "access_key_unavailable")
     if turn.outcome == TURN_EXHAUSTED:
         # By construction there is no partial answer here: the round that runs out
         # of steps is a tool round, which has already reset the text.
@@ -495,7 +511,7 @@ async def async_run_voice_turn(
         answer = turn.text.strip() or voice_text(language, "could_not_complete")
     if turn.outcome == TURN_TRUNCATED and turn.text.strip():
         # Said out loud, because a cut-off answer is acted on as a whole one.
-        answer = f"{answer} {voice_text(language, 'answer_truncated')}"
+        answer = spoken_sentences([answer, voice_text(language, 'answer_truncated')], language)
     if include_review_hint and turn.review_urls:
         answer = f"{answer}\n\n{voice_text(language, 'approval_link')}"
     return answer
@@ -543,11 +559,12 @@ async def async_run_ai_task(
     *,
     structure_json: dict | None = None,
     max_iterations: int = AGENT_CHAT_MAX_ITERATIONS,
+    still_bound: Callable[[], bool] | None = None,
 ) -> str:
     """Run one AI Task (ai_task.generate_data) to completion; return the final text.
     Headless, with the same gated loop as Voice; a confirm gate is fed back as
     "queued_for_approval". With ``structure_json`` the model is told to emit matching JSON,
-    which the caller parses.
+    which the caller parses. ``still_bound`` is the AI Task binding, rechecked throughout.
     """
     companion_authority = None
     if is_companion(access_key):
@@ -571,7 +588,7 @@ async def async_run_ai_task(
             settings.ai_task_conversation_style,
             settings.ai_task_detail_level,
         )
-    system += _AI_TASK_ADDENDUM
+    system += _AI_TASK_ADDENDUM + UNTRUSTED_TOOL_DATA
     if structure_json is None:
         system += _ai_task_free_text_output_contract(
             settings.ai_task_conversation_style,
@@ -584,7 +601,7 @@ async def async_run_ai_task(
         hass, data, access_key, provider, session, base_url,
         system=system, seed=instructions, client_ip=AI_TASK_CLIENT_IP,
         max_iterations=1 if companion_authority is not None else max_iterations, routing_surface="ai_task", routing_language=hass.config.language,
-        response_only=companion_authority is not None,
+        response_only=companion_authority is not None, still_bound=still_bound,
     )
     if companion_authority is not None and companion_authority.current(hass) is None:
         raise AiTaskError(voice_text(hass.config.language, "access_key_unavailable"))
@@ -602,8 +619,8 @@ async def async_run_ai_task(
         raise AiTaskError("the model produced too much output this turn")
     if turn.outcome == TURN_AUTHORITY_LOST:
         raise AiTaskError(
-            "the access key lost authority mid-task (revoked, expired, or the kill "
-            "switch); at least one tool call was refused, so the result is unsound"
+            "the access key lost authority mid-task (revoked, expired, no longer bound to the "
+            "AI Task entity, or the kill switch), so the task stopped and the result is unsound"
         )
     if turn.outcome == TURN_EXHAUSTED:
         raise AiTaskError(

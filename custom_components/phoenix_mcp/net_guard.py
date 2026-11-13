@@ -21,7 +21,8 @@ def ip_is_blocked(
 
     IPv4-carrying IPv6 is judged by its IPv4, and Teredo by its client as well as itself.
     Remote providers must be globally routable; a local server is refused only metadata
-    addresses. Loopback comes first: ::1 counts as reserved.
+    addresses. Loopback comes first: ::1 counts as reserved. Deprecated site-local fec0::/10
+    is private, though Python counts it as global.
     """
     if isinstance(ip, ipaddress.IPv6Address):
         if carried := ip.ipv4_mapped or ip.sixtofour:
@@ -33,5 +34,5 @@ def ip_is_blocked(
     return (
         ip in METADATA_ADDRESSES
         or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified
-        or (not allow_private and not ip.is_global)
+        or (not allow_private and (not ip.is_global or getattr(ip, "is_site_local", False)))
     )

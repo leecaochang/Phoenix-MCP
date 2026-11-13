@@ -384,15 +384,64 @@ async def test_tools_in_a_final_round_are_recorded_as_rejected(hass: HomeAssista
                                      reason="No tools are permitted in the final response round.", stage="round_limit")
 
 
+def _valid_for_first_call(data: MagicMock) -> None:
+    """The key passes the first model call's check, then is revoked."""
+    data.store.get_access_key_by_id.return_value.is_valid.side_effect = [True] + [False] * 20
+
+
 async def test_lost_authority_stops_a_repeat_request_before_its_preflight(hass: HomeAssistant):
     data = _data()
-    data.store.get_access_key_by_id.return_value.is_valid.return_value = False
+    _valid_for_first_call(data)
     provider = _Provider([_tool("get_state"), _done("tool_use")], [_tool("get_state"), _done("tool_use")],
                          [_text("unused"), _done()])
     with patch.object(agent_turn, "preflight_control_calls", return_value=None) as preflight:
         result = await _run(hass, data, provider, max_iterations=5)
     assert result.outcome == agent_turn.TURN_AUTHORITY_LOST
-    assert provider.requests == 2 and preflight.call_count == 1
+    assert provider.requests == 1 and preflight.call_count == 1
+
+
+async def test_a_key_lost_before_a_model_call_sends_the_provider_nothing(hass: HomeAssistant):
+    data = _data()
+    data.store.get_access_key_by_id.return_value.is_valid.return_value = False
+    provider = _Provider([_text("never"), _done()])
+    result = await _run(hass, data, provider)
+    assert (result.outcome, result.text, provider.requests) == (agent_turn.TURN_AUTHORITY_LOST, "", 0)
+
+
+@pytest.mark.parametrize("bound", [[False], [True, False, False]])
+async def test_an_unbound_surface_stops_the_turn_and_its_dispatch(hass: HomeAssistant, bound):
+    """Switching the surface off or rebinding it is authority lost, before a call or a dispatch."""
+    answers = iter(bound)
+    dispatch = _answered()
+    provider = _Provider([_tool("get_state"), _done("tool_use")], [_text("unused"), _done()])
+    with patch.object(agent_turn, "dispatch_agent_tool", dispatch), \
+            patch.object(agent_turn, "record_rejected_tool") as rejected:
+        result = await _run(hass, _data(), provider, still_bound=lambda: next(answers, False))
+    assert result.outcome == agent_turn.TURN_AUTHORITY_LOST
+    dispatch.assert_not_awaited()
+    assert provider.requests == (0 if bound == [False] else 1)
+    if provider.requests:
+        assert rejected.call_args.kwargs["stage"] == "authority_guard"
+
+
+async def test_the_kill_switch_cancels_a_model_call_mid_stream(hass: HomeAssistant):
+    """A stuck call ends within the poll interval once the switch is on, and keeps nothing it streamed."""
+    data = _data()
+    gate = asyncio.Event()
+
+    class _Stuck(_Provider):
+        async def stream_turn(self, session, *, system_prompt, messages, tools, options):
+            self.requests += 1
+            yield _text("partial")
+            data.store.get_settings.return_value = GlobalSettings(kill_switch=True)
+            gate.set()
+            await asyncio.sleep(3600)
+            yield _done()
+
+    with patch.object(agent_turn, "_HEADLESS_AUTHORITY_POLL_SECONDS", 0.01):
+        result = await asyncio.wait_for(_run(hass, data, _Stuck()), timeout=5)
+    assert gate.is_set()
+    assert (result.outcome, result.text) == (agent_turn.TURN_AUTHORITY_LOST, "")
 
 
 async def test_a_companion_never_hands_a_malformed_call_back_after_a_write(hass: HomeAssistant, companion_turn):
@@ -521,12 +570,13 @@ async def test_a_refused_proposal_after_a_write_ends_the_turn_as_incomplete(hass
 
 async def test_a_call_after_authority_was_lost_is_recorded_as_refused(hass: HomeAssistant):
     data = _data()
-    data.store.get_access_key_by_id.return_value.is_valid.return_value = False
+    _valid_for_first_call(data)
     provider = _Provider([_tool("get_state", a=1), _done("tool_use")], [_text("No longer allowed."), _done()])
     dispatch = _answered()
     with patch.object(agent_turn, "record_rejected_tool") as rejected, patch.object(agent_turn, "dispatch_agent_tool", dispatch):
         result = await _run(hass, data, provider)
-    assert (result.outcome, result.text) == (agent_turn.TURN_AUTHORITY_LOST, "No longer allowed.")
+    # No closing round: the provider never hears from a key that may no longer act.
+    assert (result.outcome, result.text, provider.requests) == (agent_turn.TURN_AUTHORITY_LOST, "", 1)
     dispatch.assert_not_awaited()
     rejected.assert_called_once_with("call", "get_state", {"a": 1}, stage="authority_guard",
                                      reason="This access key is no longer authorized; the tool was not run.")
@@ -540,7 +590,8 @@ async def test_a_dispatch_runs_under_the_freshly_resolved_key(hass: HomeAssistan
             patch.object(agent_turn, "dispatch_agent_tool", dispatch):
         await _run(hass, _data(), provider)
     assert dispatch.await_args.kwargs["access_key"] is fresh
-    resolve.assert_called_once()
+    # Before each of the two model calls, and once for the dispatch between them.
+    assert resolve.call_count == 3
 
 
 @pytest.mark.parametrize("outcome", ["denied", "invalid_request"])
@@ -621,7 +672,7 @@ async def test_every_ending_keeps_the_declined_focus(hass: HomeAssistant):
         truncated = await _run(hass, _data(), _Provider([*marked, _done("max_tokens")]), **run)
         failed = await _run(hass, _data(), _Provider([*marked, _tool("get_state"), _done("tool_use")], [failure]), **run)
         lost_data = _data()
-        lost_data.store.get_access_key_by_id.return_value.is_valid.return_value = False
+        _valid_for_first_call(lost_data)
         lost = await _run(hass, lost_data, _Provider([*marked, _tool("get_state"), _done("tool_use")],
                                                      [_text("Gone."), _done()]), **run)
         with patch.object(agent_turn, "AGENT_CHAT_MAX_TURN_OUTPUT_BYTES", 8):

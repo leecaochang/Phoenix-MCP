@@ -476,11 +476,19 @@ async def _async_generate_ai_task_data(
     structure_json = _structure_to_json(structure)
     provider = build_provider(cfg)
     session = async_get_clientsession(hass)
+    key_id = access_key.id
+
+    def still_bound() -> bool:
+        # The binding is the grant: switching the AI Task entity off or rebinding it stops this key.
+        current = data.store.get_settings()
+        return bool(current.ai_task_enabled and current.ai_task_access_key_id == key_id)
+
     try:
         text = await async_run_ai_task(
             hass, data, access_key, provider, session, _base_url(hass), instructions,
             structure_json=structure_json,
             max_iterations=data.store.get_settings().agentcli_max_iterations,
+            still_bound=still_bound,
         )
     except AiTaskError as err:
         raise HomeAssistantError(f"The Phoenix MCP AI Task could not be completed: {err}") from err

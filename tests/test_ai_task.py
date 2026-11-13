@@ -549,15 +549,20 @@ async def test_ai_task_raises_on_a_truncated_result():
 
 @pytest.mark.asyncio
 async def test_ai_task_stops_after_one_round_when_authority_is_lost():
-    """A dead access key buys one closing round here too, not max_iterations of them."""
+    """A dead access key stops the task before its next model call, not after max_iterations."""
     access_key = _make_access_key()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok("should not run")
     stream = _staged_stream([_tool_ev("call_service", "t1"), _done("tool_use")])
+    resolved = []
+
+    def first_call_only(*_args):
+        resolved.append(None)
+        return access_key if len(resolved) == 1 else None
     with patch.object(agent_turn, "_stream_turn_resilient", stream), \
          patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
-         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=None), \
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", side_effect=first_call_only), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=dispatch), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
         with pytest.raises(AiTaskError):

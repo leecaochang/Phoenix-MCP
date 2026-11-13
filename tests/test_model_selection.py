@@ -36,11 +36,43 @@ def test_empty_and_duplicate_catalogues():
     assert rank_models("x", ["a-1", "a-1", "", "a-2"]) == ["a-2", "a-1"]
 
 
-def test_successor_stays_in_family_then_falls_back():
+def test_successor_stays_in_family_then_tier_and_never_crosses_tiers():
     models = ["deepseek-flash", "deepseek-v4-pro"]
     assert successor("deepseek", "deepseek-v4-flash", models) == "deepseek-flash"
-    assert successor("deepseek", "something-unrelated", models) == "deepseek-flash"
     assert successor("deepseek", "anything", []) == ""
+    # No family and no named tier: the retired id stays rather than a guess.
+    assert successor("deepseek", "something-unrelated", models) == ""
+    # No family left: the newest of the retired model's own tier, never the best overall.
+    tiers = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-0"]
+    assert successor("claude", "claude-3-haiku-legacy", tiers) == "claude-haiku-5-0"
+    assert successor("claude", "claude-haiku-4-5", ["claude-opus-5-5", "claude-sonnet-5-5"]) == ""
+    assert successor("openrouter", "meta-llama/llama-3.1-8b-instruct",
+                     ["anthropic/claude-opus-5", "meta-llama/llama-4-scout"]) == ""
+
+
+def test_a_free_model_still_moves_to_another_free_one():
+    models = ["vendor/model-a:free", "vendor/other-b:free", "anthropic/claude-opus-5"]
+    assert successor("openrouter", "vendor/gone-c:free", models) in {"vendor/model-a:free", "vendor/other-b:free"}
+    assert successor("openrouter", "vendor/gone-c:free", ["anthropic/claude-opus-5"]) == ""
+
+
+def test_a_local_ollama_account_never_chooses_a_cloud_model():
+    catalogue = ["llama3.1:8b", "qwen3:14b", "gpt-oss:120b-cloud", "glm-4.6:cloud"]
+    created = {"llama3.1:8b": 1.0, "qwen3:14b": 2.0, "gpt-oss:120b-cloud": 3.0, "glm-4.6:cloud": 4.0}
+    assert effective_model("ollama", "", catalogue, [], created) == ("qwen3:14b", "")
+    # A cloud model aliased to a plain name is excluded by what the server reported.
+    assert effective_model("ollama", "", ["llama3.1:8b", "mine"], [], {"mine": 9.0}, excluded=["mine"]) \
+        == ("llama3.1:8b", "")
+    # A retired local model with no family left stays (and shows as gone) instead of going to the cloud.
+    seen = ["qwen3:14b"]
+    assert effective_model("ollama", "qwen3:14b", ["llama3.1:8b", "gpt-oss:120b-cloud"], seen, created) \
+        == ("qwen3:14b", "")
+    assert effective_model("ollama", "qwen3:14b", ["qwen3.5:14b", "qwen3.5:14b-cloud"], seen) \
+        == ("qwen3.5:14b", "qwen3:14b")
+    # An explicit pick of a cloud model the server lists is the operator's choice.
+    assert effective_model("ollama", "glm-4.6:cloud", catalogue, ["glm-4.6:cloud"]) == ("glm-4.6:cloud", "")
+    # The cloud kind is not the local one: its models are all cloud models.
+    assert effective_model("ollama_cloud", "", ["gpt-oss:120b-cloud"], []) == ("gpt-oss:120b-cloud", "")
 
 
 def test_automatic_mode_follows_the_catalogue():

@@ -17,7 +17,11 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 
 从提供商提供的模型中选择。无法使用工具的模型会灰显，因为 Phoenix 需要工具来执行操作。
 
-**{{label:settings.agentcliModelAuto}}** 使用适合代理工作的当前模型，跳过预览版和已宣布停用的模型。如果你自己选择模型，Phoenix 会一直保留它，直到提供商停用它。之后会切换到提供商指定的后续模型，否则切换到同系列中最新的模型。名称以 `:free` 结尾的模型只会切换到另一个免费模型。
+**{{label:settings.agentcliModelAuto}}** 使用适合代理工作的当前模型，跳过预览版和已宣布停用的模型。如果你自己选择模型，Phoenix 会一直保留它，直到提供商停用它。
+
+之后会切换到提供商指定的后续模型。没有的话，切换到同系列中最新的模型，再没有就切换到同一档次中最新的模型，例如另一个 Haiku 模型。
+
+如果都没有，Phoenix 会保留已停用的模型并显示警告，请另选一个模型。名称以 `:free` 结尾的模型只会切换到另一个免费模型。在本地 Ollama 服务器上，Phoenix 只在同一系列内切换，**{{label:settings.agentcliModelAuto}}** 也从不选择云端模型。
 
 当 **{{label:settings.agentcliVerifyOptions}}** 开启时，保存时还会检查模型支持哪些选项。这会消耗少量 API 额度。
 
@@ -72,7 +76,7 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 - OpenCode：Zen 或 Console 路径。你只能在其中一条路径上添加密钥。
 - Z.ai：Standard API、Coding Plan 或 China。同一个密钥可以为每个方案各保存一次。
 - Qwen：除了 API 密钥，还需要你的工作区基础 URL，即一个公开的 HTTPS 地址。
-- Ollama（本地）：你的 Ollama 服务器地址。Home Assistant 会连接它，因此请使用 Home Assistant 主机可以访问的地址。
+- Ollama（本地）：你的 Ollama 服务器地址。Home Assistant 会连接它，因此请使用 Home Assistant 主机可以访问的地址。普通 `http://` 流量不加密；请参阅[哪些数据会离开你的家](guide:topic.security#leaves-home)。
 
 有些方案只供编程工具使用：Z.ai 的 Coding Plan、Xiaomi MiMo 的 Token Plan，以及阿里云的 Coding Plan 和 Token Plan。它们的条款禁止在 Home Assistant 这类应用中使用，提供商可能会限流或封禁密钥。选择这些方案时 Phoenix 会给出警告。语音、AI Task 和 Agent Chat 请使用提供商的按量付费 API。
 

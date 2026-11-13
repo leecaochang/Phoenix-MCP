@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime
 import functools
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, TypeVar
+
+from homeassistant.util.dt import utcnow
 
 from .const import DOMAIN
 
@@ -78,9 +81,14 @@ class RequestAuthority:
     # Set when an OAuth sign-in presented the key: removing that sign-in, switching
     # OAuth off or rotating the key then ends the request like a revoked key.
     oauth_grant_id: str | None = None
+    # When the OAuth access token that presented the key stops being accepted; the
+    # request ends with it.
+    oauth_token_until: datetime | None = None
 
     def current_access_key(self) -> AccessKeyRecord:
         data = self.data
+        if self.oauth_token_until is not None and utcnow() >= self.oauth_token_until:
+            raise AuthorityChangedError("Unauthorized.")
         if (self.hass.data.get(DOMAIN) is not data or not data.ready
                 or data.shutting_down or data.store.get_settings().kill_switch):
             raise AuthorityChangedError("Service unavailable.")

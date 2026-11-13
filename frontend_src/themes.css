@@ -305,8 +305,8 @@
   --phx-toolbar-btn-bg: transparent;
   --phx-toolbar-btn-border: transparent;
   --phx-toolbar-btn-fg: #ffffff;
-  --phx-toolbar-btn-hover: rgba(255,255,255,0.16);
-  --phx-toolbar-btn-active: rgba(255,255,255,0.24);
+  --phx-toolbar-btn-hover: rgba(255,255,255,0.1);
+  --phx-toolbar-btn-active: rgba(255,255,255,0.18);
   --phx-toolbar-muted: rgba(255,255,255,0.75);
   --phx-toolbar-current-bg: #ffffff;
   --phx-toolbar-current-fg: #2b579a;

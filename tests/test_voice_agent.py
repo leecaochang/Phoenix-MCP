@@ -278,6 +278,16 @@ async def test_voice_turn_appends_review_hint_only_when_requested():
 
 
 @pytest.mark.asyncio
+def _key_until_first_dispatch(access_key):
+    """A key resolver that admits the first model call, then reports the key gone."""
+    calls = []
+
+    def resolve(*_args):
+        calls.append(None)
+        return access_key if len(calls) == 1 else None
+    return resolve
+
+
 async def test_voice_turn_authority_loss_skips_side_effect():
     access_key = _make_access_key()
     data = _make_data()
@@ -287,16 +297,33 @@ async def test_voice_turn_authority_loss_skips_side_effect():
         [_tool_ev("call_service", "t1"), _done("tool_use")],
         [{"type": EV_TEXT, "text": "I could not do that."}, _done("end_turn")],
     )
-    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+    with patch.object(agent_turn, "_stream_turn_resilient", side_effect=stream) as streamed, \
          patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
-         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=None), \
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key",
+                       side_effect=_key_until_first_dispatch(access_key)), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=dispatch), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "unlock")
 
     assert dispatch.calls == []  # no side effect ran
-    assert text == "I could not do that."
+    # A dead key gets no closing model call: the speaker hears Phoenix's own sentence.
+    assert streamed.call_count == 1
+    assert text == voice_text(None, "access_key_unavailable")
     assert provider.tool_result_batches[0][0]["is_error"] is True
+
+
+@pytest.mark.asyncio
+async def test_voice_turn_under_the_kill_switch_says_voice_is_unavailable():
+    access_key = _make_access_key()
+    data = _make_data(kill_switch=True)
+    stream = _staged_stream([{"type": EV_TEXT, "text": "never sent"}, _done("end_turn")])
+    with patch.object(agent_turn, "_stream_turn_resilient", side_effect=stream) as streamed, \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
+        text = await async_run_voice_turn(MagicMock(), data, access_key, _MockProvider(), MagicMock(),
+                                          "http://h", "hi")
+    assert streamed.call_count == 0
+    assert text == voice_text(None, "unavailable")
 
 
 @pytest.mark.asyncio
@@ -347,12 +374,10 @@ async def test_voice_turn_output_budget_speaks_when_there_is_no_partial_text():
 
 @pytest.mark.asyncio
 async def test_voice_turn_stops_after_one_round_when_authority_is_lost():
-    """A dead access key buys exactly one more model call, not max_iterations of them.
+    """A dead access key stops the turn before its next model call, not after max_iterations.
 
-    The round that discovers the loss still feeds the refusals back, so the model
-    gets a turn to tell the user what happened. If it asks for tools AGAIN instead
-    of answering, every call would be refused identically, so the loop stops rather
-    than spending its remaining rounds re-reporting one refusal.
+    The round that discovers the loss feeds the refusals back; asking for tools again would be
+    refused identically, and the key may no longer reach the provider, so the loop stops.
     """
     access_key = _make_access_key()
     data = _make_data()
@@ -362,7 +387,8 @@ async def test_voice_turn_stops_after_one_round_when_authority_is_lost():
     stream = _staged_stream([_tool_ev("call_service", "t1"), _done("tool_use")])
     with patch.object(agent_turn, "_stream_turn_resilient", stream), \
          patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
-         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key", return_value=None), \
+         patch_readers("custom_components.phoenix_mcp.agent_turn._current_dispatch_access_key",
+                       side_effect=_key_until_first_dispatch(access_key)), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp", side_effect=dispatch), \
          patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
         await async_run_voice_turn(
@@ -680,6 +706,7 @@ _FULL_CFG = dict(
 
 def test_sync_registers_only_when_fully_configured():
     hass, entry = MagicMock(), MagicMock()
+    hass.data = {}
     with patch.object(voice_agent._conversation, "async_set_agent") as set_agent, \
          patch.object(voice_agent._conversation, "async_unset_agent") as unset_agent:
         voice_agent.async_sync_voice_agent(hass, entry, _make_data(**_FULL_CFG))
@@ -707,7 +734,7 @@ def test_sync_registers_configured_agent_before_runtime_ready_on_restart():
     data.ready = False
     with patch.object(voice_agent._conversation, "async_set_agent") as set_agent, \
          patch.object(voice_agent._conversation, "async_unset_agent") as unset_agent:
-        voice_agent.async_sync_voice_agent(MagicMock(), MagicMock(), data)
+        voice_agent.async_sync_voice_agent(MagicMock(data={}), MagicMock(), data)
     set_agent.assert_called_once()
     unset_agent.assert_not_called()
 

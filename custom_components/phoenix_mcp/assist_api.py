@@ -380,10 +380,14 @@ class PhoenixAssistAPI(_llm.API):
 def async_register_assist_api(hass: HomeAssistant, data: Any) -> None:
     """Register the single stable-id Phoenix MCP Assist API, if supported and not already up.
 
-    Idempotent: a second call while registered is a no-op. Never raises; a failed
-    registration is logged and the bridge stays absent.
+    Idempotent: a second call while registered is a no-op, and so is one for a runtime that
+    is shutting down or retired. Never raises; a failed registration is logged and the
+    bridge stays absent.
     """
     if not _ASSIST_API_SUPPORTED or data.assist_api_unregister is not None:
+        return
+    current = hass.data.get(DOMAIN)
+    if getattr(data, "shutting_down", False) or (current is not None and current is not data):
         return
     try:
         data.assist_api_unregister = _llm.async_register_api(hass, PhoenixAssistAPI(hass, data))

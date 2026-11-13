@@ -27,7 +27,7 @@ from .routing_tables import (
     DECISION_EXECUTION_CATEGORIES, DECISION_FOLLOWUP_EXECUTION_MODELS, DECISION_NUMERIC_CATEGORIES,
     DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_REFERENCE_EXECUTION_MODELS,
     DECISION_REFERENCE_INTENTS, DECISION_REFERENCE_LANGUAGES, DECISION_TARGET_INTENTS,
-    DECISION_TEMPORAL_CATEGORIES,
+    DECISION_PROVIDER_REFUSED_CATEGORIES, DECISION_TEMPORAL_CATEGORIES,
 )
 
 
@@ -41,6 +41,8 @@ def _decision_plan_current(plan: dict, hass: HomeAssistant, data: Any, access_ke
 
     settings = data.store.get_settings()
     category = plan["decision_category"]
+    if category in DECISION_PROVIDER_REFUSED_CATEGORIES:
+        return False
     if (plan["proposal"]["intent"] not in COMMAND_ROUTING_READ_INTENTS and "reference_review" not in plan
             and plan.get("decision_target_evidence") != _digest(plan["proposal"])):
         return False

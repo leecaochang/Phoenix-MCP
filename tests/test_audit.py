@@ -12,6 +12,8 @@ from homeassistant.util.dt import parse_datetime, utcnow
 
 from custom_components.phoenix_mcp.audit import (
     AUDIT_PAYLOAD_SCAN_CHARS,
+    AUDIT_REFUSAL_ROWS_PER_WINDOW,
+    AUDIT_REFUSAL_WINDOW,
     MAX_AUDIT_FIELD_LEN,
     MAX_AUDIT_PAYLOAD_BYTES,
     MAX_QUERY_LIMIT,
@@ -1012,3 +1014,172 @@ async def test_loading_scrubs_payloads_off_the_event_loop():
     await log.async_load()
     assert threads and threads[0] is not threading.current_thread()
     assert len(log) == 1
+
+
+# ---------------------------------------------------------------------------
+# A key's refusals cannot push the trail or other keys' rows out
+# ---------------------------------------------------------------------------
+
+
+def _lifecycle(log: AuditLog, approval_id: str, access_key_id: str = "tok-approver") -> None:
+    """One approval's queue, decision and execution rows, as a real approval writes them."""
+    _record(log, outcome="pending_approval", access_key_id=access_key_id, method="call_service", resource=approval_id)
+    _record(log, access_key_id="admin", access_key_name="admin:owner", method="approval/approved", resource=approval_id)
+    _record(log, access_key_id=access_key_id, method="approval/executed", resource=approval_id)
+
+
+def _folded(entry: AuditEntry) -> dict | None:
+    return json.loads(entry.payload).get("folded_refusals") if entry.payload else None
+
+
+class TestRefusalFolding:
+    @pytest.mark.parametrize("outcome", ["rate_limited", "denied", "invalid_request", "not_found", "not_implemented"])
+    def test_refusals_past_the_allowance_are_counted_on_one_row(self, outcome):
+        log = AuditLog()
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 500):
+            _record(log, outcome=outcome)
+        assert len(log) == AUDIT_REFUSAL_ROWS_PER_WINDOW + 1
+        summary = log.query(limit=1)[0]
+        assert summary.outcome == outcome
+        assert _folded(summary) == {"requests": 500, "outcomes": {outcome: 500}, "window_seconds": 60}
+
+    def test_one_summary_counts_every_kind_of_refusal(self):
+        log = AuditLog()
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW):
+            _record(log, outcome="denied")
+        for outcome in ("rate_limited", "invalid_request", "rate_limited"):
+            _record(log, outcome=outcome)
+        assert _folded(log.query(limit=1)[0])["outcomes"] == {"invalid_request": 1, "rate_limited": 2}
+
+    def test_allowed_requests_are_never_folded(self):
+        log = AuditLog()
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 5):
+            _record(log, outcome="denied")
+        for _ in range(10):
+            _record(log)
+        assert log.count(outcome="allowed") == 10
+
+    def test_each_key_has_its_own_allowance(self):
+        log = AuditLog()
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 100):
+            _record(log, outcome="rate_limited", access_key_id="flooder")
+        for _ in range(5):
+            _record(log, outcome="denied", access_key_id="other")
+        assert log.count(access_key_id="other") == 5
+        assert log.count(access_key_id="flooder") == AUDIT_REFUSAL_ROWS_PER_WINDOW + 1
+
+    def test_a_new_window_gives_a_new_allowance(self):
+        log = AuditLog()
+        start = utcnow()
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 10):
+            _record(log, outcome="denied", timestamp=start)
+        later = start + AUDIT_REFUSAL_WINDOW
+        for _ in range(3):
+            _record(log, outcome="denied", timestamp=later)
+        assert log.count(since=later) == 3
+        assert all(_folded(entry) is None for entry in log.query(since=later))
+
+    def test_administrator_and_approval_refusals_are_never_folded(self):
+        log = AuditLog()
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 20):
+            _record(log, outcome="denied", access_key_id="admin", access_key_name="admin:owner", method="access_key/patch")
+            _record(log, outcome="denied", method="approval/rejected")
+        assert len(log) == 2 * (AUDIT_REFUSAL_ROWS_PER_WINDOW + 20)
+        assert all(_folded(entry) is None for entry in log.query(limit=MAX_QUERY_LIMIT))
+
+    def test_a_refusal_the_settings_hide_uses_none_of_the_allowance(self):
+        log = AuditLog()
+        hidden = _settings(log_rate_limited=False)
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW * 2):
+            _record(log, outcome="rate_limited", settings=hidden)
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW):
+            _record(log, outcome="denied")
+        assert len(log) == AUDIT_REFUSAL_ROWS_PER_WINDOW
+        assert all(_folded(entry) is None for entry in log.query(limit=MAX_QUERY_LIMIT))
+
+
+class TestTrailRing:
+    def test_a_flood_of_refusals_keeps_the_approval_trail_and_other_keys(self):
+        """The audited flood: 10,050 refused requests from one key after a real approval."""
+        log = AuditLog()
+        _lifecycle(log, "approval-1")
+        _record(log, outcome="denied", access_key_id="prober", resource="lock.front_door")
+        for _ in range(10_050):
+            _record(log, outcome="rate_limited", access_key_id="flooder", method="POST")
+        assert [e.method for e in log.query(resource="approval-1")] == [
+            "approval/executed", "approval/approved", "call_service"]
+        assert log.count(resource="lock.front_door") == 1
+        assert log.count(access_key_id="flooder") == AUDIT_REFUSAL_ROWS_PER_WINDOW + 1
+
+    def test_a_flood_of_allowed_requests_keeps_the_approval_trail(self):
+        log = AuditLog(maxlen=100)
+        _lifecycle(log, "approval-1")
+        for _ in range(1_000):
+            _record(log, access_key_id="busy")
+        assert len(log) == 103
+        assert log.count(resource="approval-1") == 3
+        assert log.count(access_key_id="busy") == 100
+
+    def test_rows_of_both_rings_read_newest_first_in_the_order_they_were_written(self):
+        log = AuditLog()
+        _record(log, resource="first")
+        _lifecycle(log, "middle")
+        _record(log, resource="last")
+        assert [e.resource for e in log.query()] == ["last", "middle", "middle", "middle", "first"]
+
+    def test_resizing_bounds_both_rings(self):
+        log = AuditLog()
+        for index in range(20):
+            _lifecycle(log, f"approval-{index}")
+            _record(log, resource=f"read-{index}")
+        log.resize(5)
+        assert len(log) == 10
+        assert log.count(resource="approval-19") == 3
+
+    def test_clearing_empties_both_rings_and_the_refusal_windows(self):
+        log = AuditLog()
+        _lifecycle(log, "approval-1")
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 1):
+            _record(log, outcome="denied")
+        log.clear()
+        assert len(log) == 0
+        _record(log, outcome="denied")
+        assert _folded(log.query()[0]) is None
+
+
+async def test_the_saved_log_keeps_the_trail_and_the_latest_refusal_count(hass):
+    from homeassistant.helpers.storage import Store
+
+    backing = Store(hass, 1, "phoenix_test_trail_audit")
+    log = AuditLog(store=backing)
+    _lifecycle(log, "approval-1")
+    for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 10):
+        _record(log, outcome="rate_limited", access_key_id="flooder")
+    await log.async_save()
+    for _ in range(5):
+        _record(log, outcome="rate_limited", access_key_id="flooder")
+    await log.async_save()
+
+    loaded = AuditLog(store=backing)
+    await loaded.async_load()
+    assert _folded(loaded.query(access_key_id="flooder", limit=1)[0])["requests"] == 15
+    assert [e.to_dict() for e in loaded.query(limit=200)] == [e.to_dict() for e in log.query(limit=200)]
+    _record(loaded, resource="after-load")
+    assert loaded.query(limit=1)[0].resource == "after-load"
+
+
+async def test_the_saved_log_keeps_the_trail_past_a_flood(hass):
+    from homeassistant.helpers.storage import Store
+
+    backing = Store(hass, 1, "phoenix_test_trail_flood_audit")
+    log = AuditLog(store=backing, maxlen=100)
+    _lifecycle(log, "approval-1")
+    for _ in range(200):
+        _record(log, access_key_id="busy")
+    await log.async_save()
+
+    loaded = AuditLog(store=backing, maxlen=100)
+    await loaded.async_load()
+    assert [e.method for e in loaded.query(resource="approval-1")] == [
+        "approval/executed", "approval/approved", "call_service"]
+    assert len(loaded) == 103

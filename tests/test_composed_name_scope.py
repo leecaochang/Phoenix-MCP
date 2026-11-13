@@ -1,6 +1,6 @@
 """A composed name carries a parent device's name only for a key that can read that parent.
 
-From Home Assistant 2026.11 the name of an entity on a child device starts with its main
+From Home Assistant 2026.10 the name of an entity on a child device starts with its main
 parent. A key granted the entity alone gets not found for that parent, so neither the name,
 the search that matches it, nor a resolved alias may give the parent away.
 """
@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import uuid
 
 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+from homeassistant.const import MAJOR_VERSION, MINOR_VERSION
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
@@ -65,6 +66,10 @@ def home(hass):
                                         original_name="Lamp", has_entity_name=True)
     hass.states.async_set(relay.entity_id, "on", {"friendly_name": PLAIN})
     hass.states.async_set(lamp.entity_id, "on", {"friendly_name": f"{PARENT} Lamp"})
+    if (MAJOR_VERSION, MINOR_VERSION) < (2026, 10):
+        # Nothing to hide: this release names the entity without its parent.
+        assert er.async_get_full_entity_name(hass, relay) == PLAIN
+        pytest.skip("Home Assistant composes a child device's entity name with its parent from 2026.10.")
     assert er.async_get_full_entity_name(hass, relay) == COMPOSED
     return SimpleNamespace(parent=parent, child=child, relay=relay.entity_id, lamp=lamp.entity_id)
 

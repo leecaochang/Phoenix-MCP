@@ -59,10 +59,11 @@
 - `tts.speak` 还需要对其指定的每个音箱有 W。普通播放只需要 W。
 - 操作数据中以 `media-source://camera/<entity_id>` 或 `media-source://image/<entity_id>` 指定的摄像头或图像，需要 {{label:caps.cap_camera_read.label}} 和对它的 R，与获取静态图像相同。
 - 以 `media-source://` ID 指定的 Nest、UniFi Protect、Reolink、motionEye 或 Netatmo 录像，需要 {{label:caps.cap_camera_read.label}} 和对该集成每个摄像头的 R。只要有一个摄像头不可见，全部录像都会被拒绝。
-- Google Photos、Immich、iCloud、Synology Photos、System Bridge、Xbox 和上传的图像需要 {{label:caps.cap_camera_read.label}}，直通模式下也是如此。它涵盖所有条目，因此只在你愿意全部共享时授予。
+- Google Photos、Immich、iCloud、Synology Photos、System Bridge、Xbox、上传的图像以及此处未列出的任何媒体源（例如 Frigate 的）需要 {{label:caps.cap_camera_read.label}}，直通模式下也是如此。它涵盖所有条目，因此只在你愿意全部共享时授予。
 - 密钥自己用 AI 任务生成的图像、本地媒体、电台、语音朗读、Jellyfin 和 DLNA 服务器不需要额外权限。
 - AI 任务的附件只能是摄像头、图像，或同一密钥自上次重启以来用 `ai_task.generate_image` 生成的图片。
-- ESPHome 设备操作只需要设备上的 W。MESA 不检查它们，也不检查重新加载或重启。
+- ESPHome 设备操作需要对设备能操作的一切拥有 W，例如它的开关、按钮和锁。它们必须在设备的每个实体上通过 MESA。MESA 不检查重新加载或重启。
+- 当目标是脚本时，`homeassistant.turn_on`、`turn_off` 和 `toggle` 不接受数据。请使用 `script.turn_on` 传递脚本的输入。
 - 搜索或列出 Music Assistant 音乐库需要服务响应数据，以及某个 Music Assistant 实体（例如音箱）上的 R。这些操作不会播放任何内容，所以 MESA 也不检查它们。
 - `update.install` 必须在设备的每个实体上通过 MESA。在 ESPHome 设备上还需要 ESPHome 固件刷写。
 - 在脚本或自动化的输入中指定的实体需要与目标相同的访问权限，MESA 也会检查它。只要有一个不满足，就不会运行。
@@ -101,7 +102,9 @@
 
 保存自动化之前，智能体可以检查触发器是否会触发（最多等待 30 秒），或条件当前是否成立。测试不会保存任何内容，触发器在测试后即被移除。
 
-触发器或条件涉及的每个实体都必须是密钥可读取的。这包括模板中的实体、所指定设备、区域、楼层或标签下的每个实体，以及设备触发器所属设备的每个实体。模板必须直接指定实体，例如 `states('sensor.x')`。
+触发器或条件涉及的每个实体都必须是密钥可读取的。这包括条件模板中的实体、所指定设备、区域、楼层或标签下的每个实体，以及设备触发器所属设备的每个实体。没有任何内容的设备、区域、楼层或标签会像不存在一样被拒绝。
+
+条件中的模板与模板渲染在同一个单独的受限进程中运行，作用于密钥可读取状态的副本，并且必须直接指定实体，例如 `states('sensor.x')`。触发器中的模板会被拒绝，因为 Home Assistant 会在每次变化时运行它们。要检查模板触发器，请把它的模板作为条件来测试。
 
 事件、MQTT、Webhook 和对话触发器会被拒绝，因为任何密钥的范围都无法限制它们涉及的内容。
 
@@ -185,6 +188,8 @@
 
 智能体可以读取它们能读取的实体的 MESA 策略，并查看策略为何如此解析。它们还可以在可写入的实体上取得短期租约，最长 30 秒。租约告诉其他人智能体正在那里工作；它不授予任何权限。
 
+策略的原因或限制提到密钥无法读取的实体时，智能体看到的是 `<redacted-entity>`，也看不到该限制关注的状态。
+
 允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
 
 相关：[MESA 如何决定](guide:topic.mesaRules)
@@ -193,13 +198,17 @@
 
 - 读取配置涵盖 Home Assistant 的基本设置、能源设置、太阳能预测和蓝图。
 - 管理能源仪表盘会更改能源设置的一部分。它不能为某一类型添加第二个来源，也会拒绝更改已有多个来源的类型。
-- 模板渲染会在单独的受限进程中渲染模板。它作用于密钥可读取状态的副本，最长 5 秒。
+- 模板渲染会在单独的受限进程中渲染模板。它作用于密钥可读取状态的副本，最长 10 秒，包括启动该进程的时间。
 - 读取系统日志涵盖警告和错误、日志簿和通知。故障日志和捕获的调试记录还需要诊断。
 - 集成日志级别会更改集成的日志量，例如开启调试日志。更改可以在 5 到 120 分钟后结束、持续到下次重启，或一直保留到清除。
 
-代理只能读取由代理调高日志级别的集成的调试记录，直到级别调回或 Home Assistant 重启。你自己开启的调试日志，代理读取不到。
+只有调高某个集成日志级别的密钥才能读取它的调试记录，而且只能读取此后写下的记录。级别调回、Home Assistant 重启或你吊销该密钥时，捕获即停止。你自己开启的调试日志，代理读取不到。
+
+在日志和日志簿文本中，例如触发自动化的原因，密钥无法读取的实体 ID 显示为 `<redacted-entity>`。
 
 需要 Home Assistant 本身的模板函数，例如区域或设备查找，不会返回任何内容。
+
+新建或更改的自动化、脚本或模板辅助元素中的模板，以及智能体验证的配置中的模板，都会先在同一个进程中试运行。之后 Home Assistant 才会检查它们。运行太久或使该进程停止的模板会被拒绝，因此它无法让 Home Assistant 卡住或停止。
 
 允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)、[{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write)、[{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render)、[{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read)、[{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)
 
@@ -209,7 +218,7 @@
 
 - 搜索与发现会搜索和描述实体、区域及其关联方式，比较它们，并找出可用的操作。
 - 读取注册表会列出区域、楼层、地点、设备、标签、自动化、脚本、场景和辅助元素。
-- 自动化跟踪会读取自动化的运行方式。
+- 自动化跟踪会读取自动化的运行方式。检查过密钥无法读取的实体的步骤不显示任何值。自动化的设置和 webhook 的请求还需要 {{label:caps.cap_automation_write.label}} 或 {{label:caps.cap_script_write.label}}。
 - 诊断会检查配置并读取系统健康状况、修复项、无线电网络和 ESPHome 概览。
 
 只有在 YAML 配置不为拒绝访问时，配置检查才会指出文件和行号。
@@ -220,7 +229,7 @@
 
 读取文件让智能体读取 www、themes 和 custom_templates 文件夹中的文本文件，每个最大 1 MiB。文件夹列表分页返回，默认每页 500 项，最多 1000 项。它不能写入这些文件。
 
-YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文件、esphome 文件夹和隐藏文件除外。
+YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文件、esphome 文件夹和隐藏文件除外。文件名含有普通英文字母以外字符的文件也会被拒绝。
 
 名称暗示机密的值以及提到机密的注释显示为 `<redacted>`，但使用普通名称的密码可见。有 YAML 错误的文件不会显示，智能体只会得到需要修复的行号。没有工具会写入 YAML 配置。
 
@@ -233,6 +242,8 @@ YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文�
 使用 ESPHome Device Builder 加载项时，它们还可以校验、编译、读取设备日志、分析内存并检查连接。没有该加载项时，只能读取和搜索。
 
 secrets.yaml 中的值无论出现在哪里都会被遮蔽，即使在网址或注释中。密钥无法读取的实体 ID 显示为 `<redacted-entity>`，在文件中以及 Device Builder 的输出和日志中都是如此。任何智能体都不能读取或安装名称含 secret 的文件。
+
+密码或密钥使用的替换变量也会被遮蔽，文件定义但自己从不使用的替换变量同样如此，因为某个包可能把它用作密钥。
 
 Phoenix 根据文件名、文件声明的设备名称以及任何 `use_address` 或静态 IP 确定文件所属的设备。仅限部分设备的密钥只能读取这些设备的文件。声明了自己的名称且不匹配任何设备的文件只受能力限制。
 

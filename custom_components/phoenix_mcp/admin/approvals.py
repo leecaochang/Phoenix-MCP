@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import hmac
 import json
 import logging
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -14,9 +15,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import utcnow
 
 from ..approvals import (
-    REASON_ACCESS_KEY_INACTIVE, REASON_ADMIN_CANCELLED, REASON_CAPABILITY_DENIED,
-    REASON_EXECUTION_INTERRUPTED, REASON_KILL_SWITCH, STATUS_APPROVED, STATUS_CANCELLED,
-    STATUS_EXPIRED, STATUS_FAILED, async_clear_execution_marker, async_mark_execution_started,
+    REASON_ACCESS_KEY_INACTIVE, REASON_ACCESS_KEY_ROTATED, REASON_ADMIN_CANCELLED,
+    REASON_CAPABILITY_DENIED, REASON_EXECUTION_INTERRUPTED, REASON_KILL_SWITCH,
+    REASON_OAUTH_SIGN_IN_ENDED, STATUS_APPROVED, STATUS_CANCELLED, STATUS_EXPIRED, STATUS_FAILED,
+    async_clear_execution_marker, async_mark_execution_started, credential_generation,
     async_update_approval_status, create_approval_notification, dismiss_approval_notification,
     fire_approval_claim_event, fire_approval_resolved_event, get_approval, list_approvals,
 )
@@ -318,6 +320,7 @@ async def _resolve_approval(
         outcome="denied",
         client_ip="",
         settings=data.store.get_settings(),
+        payload={"approval_id": approval_id},
     )
     return _ok(updated.to_dict(), request_id=rid)
 
@@ -365,7 +368,7 @@ class _ApprovalAttempt:
             outcome=outcome,
             client_ip="",
             settings=self.settings,
-            payload={"reason": reason} if reason else None,
+            payload={"approval_id": self.approval_id, **({"reason": reason} if reason else {})},
             ha_user_id=self.user.id,
         )
 
@@ -399,10 +402,23 @@ def _refuse_unclaimable_record(attempt: _ApprovalAttempt) -> web.Response | None
     return None
 
 
+def _ended_credential(record: PendingApproval, access_key: AccessKeyRecord, data: PhoenixData) -> str | None:
+    """The closure reason when the secret or OAuth sign-in that queued ``record`` has ended, else None.
+
+    A record without these fields (queued by a raw key, or saved before they existed) is the key's own.
+    """
+    generation = record.credential_generation
+    if generation is not None and not hmac.compare_digest(generation, credential_generation(access_key)):
+        return REASON_ACCESS_KEY_ROTATED
+    if record.sign_in_id is not None and not data.oauth_grants.is_live(record.sign_in_id, access_key):
+        return REASON_OAUTH_SIGN_IN_ENDED
+    return None
+
+
 async def _close_without_authority(
     attempt: _ApprovalAttempt, access_key: AccessKeyRecord | None,
 ) -> _ClosedApproval | None:
-    """Close a request its key, capability or the kill switch no longer allows, else None.
+    """Close a request its key, credential, sign-in, capability or the kill switch no longer allows, else None.
 
     Caller holds ``store.async_lock``.
     """
@@ -418,6 +434,18 @@ async def _close_without_authority(
         return _ClosedApproval(closed_record, "approval/cancelled", REASON_ACCESS_KEY_INACTIVE, _err(
             "not_found", "Access key no longer active.", 404, rid,
             key="approvalAccessKeyInactive",
+        ))
+    ended = None if recovery_request else _ended_credential(record, access_key, data)
+    if ended is not None:
+        closed_record = await async_update_approval_status(
+            data.store, approval_id,
+            status=STATUS_CANCELLED,
+            approved_by_user_id=user.id,
+            closure_reason=ended,
+        )
+        return _ClosedApproval(closed_record, "approval/cancelled", ended, _err(
+            "not_found", "The credential that asked for this has ended, so nothing was run.", 404, rid,
+            key="approvalCredentialEnded",
         ))
     if not recovery_request and record.cap_name != MESA_CONFIRM_CAP and effective_cap(access_key, record.cap_name) == "deny":
         # The MESA sentinel cap is re-evaluated by its executor instead.
@@ -510,8 +538,11 @@ async def _dispatch_approved_action(
     hass, data, record = attempt.hass, attempt.data, attempt.record
     # Approved executors must retain the admitted access key and policy epoch
     # across their own waits, just like ordinary MCP dispatch.
+    # The queuing sign-in rides along, so ending it stops the action at its next check.
     authority_ctx = request_authority.set(
-        None if attempt.recovery_request else RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
+        None if attempt.recovery_request else RequestAuthority(
+            hass, data, access_key.id, access_key.access_key_hash, oauth_grant_id=record.sign_in_id,
+        )
     )
     policy_ctx = policy_version.set(access_key.settings_version)
     try:
@@ -557,8 +588,10 @@ async def _finalize_execution(attempt: _ApprovalAttempt, tool_result: dict, outc
         _record_execution_audit()
 
     def _record_execution_audit(payload: dict | None = None) -> None:
+        # The queuing request's ID and app, so this row joins the request it carries out;
+        # the approving administrator's request is on the approval/approved row.
         data.audit.record(
-            request_id=rid,
+            request_id=record.request_id or rid,
             access_key_id=record.access_key_id,
             access_key_name=record.access_key_name,
             method="approval/failed" if is_error else "approval/executed",
@@ -566,8 +599,9 @@ async def _finalize_execution(attempt: _ApprovalAttempt, tool_result: dict, outc
             outcome=audit_outcome,
             client_ip="",
             settings=settings,
-            payload=payload,
+            payload={"approval_id": approval_id, "admin_request_id": rid, **(payload or {})},
             ha_user_id=record.ha_user_id,
+            oauth_app=record.oauth_app,
         )
 
     try:

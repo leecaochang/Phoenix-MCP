@@ -1497,15 +1497,9 @@ async def _async_device_removal_hook(hass: HomeAssistant, entry: Any) -> Any | N
     Loading is the authoritative check, repeated in the executor, since HA's support cache can be
     uninitialized.
     """
-    # The async component getter is newer than Phoenix's minimum HA version, so the synchronous
-    # getter used by Home Assistant 2025.2 stays as a fallback.
     try:
         integration = await loader.async_get_integration(hass, entry.domain)
-        async_get_component = getattr(integration, "async_get_component", None)
-        if callable(async_get_component):
-            component = await async_get_component()
-        else:
-            component = integration.get_component()
+        component = await integration.async_get_component()
     except (ImportError, loader.IntegrationNotFound):
         return None
     except Exception:  # a broken integration must fail closed

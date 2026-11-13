@@ -28,15 +28,24 @@ fail_under = 88
 [tool.phoenix-coverage-floors]
 # Per-module floors over statements and branches, checked in CI by
 # scripts/check_coverage_floors.py from coverage.py's JSON report. These modules
-# hold the authority, approval and restore decisions, so a drop in one must not
-# be averaged away. Keep each just below its measured figure and never lower one
-# to pass.
+# hold the authority, authentication, transport, approval and restore decisions,
+# so a drop in one must not be averaged away. Keep each just below its measured
+# figure and never lower one to pass.
+"access_key_auth.py" = 89
 "access_key_store.py" = 94
+"admin/oauth.py" = 83
 "approvals.py" = 96
 "helpers.py" = 89
+"mcp_transport.py" = 96
 "mesa.py" = 93
+"net_guard.py" = 98
+"oauth_client_metadata.py" = 47
+"oauth_flow.py" = 83
+"oauth_grants.py" = 77
+"oauth_views.py" = 74
 "policy_engine.py" = 94
 "request_authority.py" = 99
+"skill_view.py" = 98
 "tools/recovery.py" = 70
 
 [tool.mypy]

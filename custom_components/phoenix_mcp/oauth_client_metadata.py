@@ -23,6 +23,7 @@ from aiohttp.abc import AbstractResolver, ResolveResult
 from aiohttp.resolver import ThreadedResolver
 
 from .const import OAUTH_CLIENT_METADATA_MAX_BYTES, OAUTH_CLIENT_METADATA_TIMEOUT_SECONDS, OAUTH_CLIENT_NAME_MAX_LENGTH
+from .helpers import read_bounded_body
 from .net_guard import ip_is_blocked
 from .oauth_flow import ClientVerdict, redirect_matches
 
@@ -96,7 +97,8 @@ async def async_fetch_client_verdict(client_id: str, redirect_uri: str) -> Clien
             ) as response:
                 if response.status != 200:
                     return ClientVerdict(False, problem="oauthClientDocumentUnavailable")
-                body = await response.content.read(OAUTH_CLIENT_METADATA_MAX_BYTES + 1)
+                body = await read_bounded_body(
+                    response.content, OAUTH_CLIENT_METADATA_MAX_BYTES, OAUTH_CLIENT_METADATA_TIMEOUT_SECONDS)
                 if len(body) > OAUTH_CLIENT_METADATA_MAX_BYTES:
                     return ClientVerdict(False, problem="oauthClientDocumentTooLarge")
     except _BlockedAddressError:

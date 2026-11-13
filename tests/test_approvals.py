@@ -616,6 +616,9 @@ class TestExpiredAccessKeyCancelsApprovals:
         assert get_approval(store, record.id).status == STATUS_CANCELLED
         assert get_approval(store, record.id).closure_reason == "access_key_expired"
         dismiss.assert_called_once_with(hass, record.id)
+        row = data.audit.record.call_args_list[0].kwargs
+        assert (row["method"], row["request_id"], row["access_key_id"]) == ("approval/cancelled", "r", "tok-exp")
+        assert row["payload"] == {"approval_id": record.id, "reason": "access_key_expired"}
         resolved = [
             c.args[1] for c in hass.bus.async_fire.call_args_list
             if c.args[0] == "phoenix_mcp_approval_resolved"

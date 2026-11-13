@@ -26,9 +26,7 @@ WRITERS = {
     ("yaml_includes", "_automation_write_checked"): "rewrites automations.yaml when configuration.yaml cannot be read",
     ("yaml_includes", "perform_delete"): "splices an entry out of the domain's editor file",
     ("yaml_includes", "_create_append"): "appends a new entry to the domain's editor file",
-    ("tools.authoring", "_write_automations_yaml"): "automations.yaml when configuration.yaml cannot be read",
-    ("tools.authoring", "_write_scripts_yaml"): "scripts.yaml when configuration.yaml cannot be read",
-    ("tools.authoring", "_write_scenes_yaml"): "scenes.yaml when configuration.yaml cannot be read",
+    ("yaml_includes", "_fallback_write"): "rewrites a domain's editor file when configuration.yaml cannot be read",
 }
 
 FILE_WRITERS = {"write_utf8_file_atomic", "write_utf8_file"}

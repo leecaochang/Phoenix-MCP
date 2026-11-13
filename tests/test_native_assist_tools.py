@@ -17,6 +17,7 @@ import homeassistant
 import pytest
 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 from homeassistant.components.media_player import MediaPlayerEntityFeature
+from homeassistant.const import MAJOR_VERSION, MINOR_VERSION
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import llm as ha_llm
 from homeassistant.helpers.llm import Tool
@@ -57,6 +58,12 @@ NOT_FORWARDED: dict[str, str] = {
     "humidifier__HassHumidifierMode": "call_service on the humidifier domain, under the key's gates",
     "lawn_mower__HassLawnMowerStartMowing": "call_service on the lawn_mower domain, under the key's gates",
     "lawn_mower__HassLawnMowerDock": "call_service on the lawn_mower domain, under the key's gates",
+}
+
+# Device control tools of NOT_FORWARDED that a supported release before the listed one lacks.
+ADDED_IN: dict[str, tuple[int, int]] = {
+    "media_player__search_media": (2026, 10),
+    "media_player__play_media": (2026, 10),
 }
 
 # Families whose names come from the home's own configuration, one tool per item.
@@ -125,7 +132,9 @@ async def test_every_device_control_tool_is_forwarded_or_explained(hass: HomeAss
     assert not untriaged, (
         "Home Assistant's Device control API offers tools Phoenix MCP neither forwards nor explains; "
         f"forward them or add a reason to NOT_FORWARDED: {untriaged}")
-    stale = sorted(name for name in NOT_FORWARDED if name not in names)
+    installed = (MAJOR_VERSION, MINOR_VERSION)
+    stale = sorted(name for name in NOT_FORWARDED
+                   if name not in names and installed >= ADDED_IN.get(name, (0, 0)))
     assert not stale, f"NOT_FORWARDED names tools Device control no longer offers: {stale}"
     assert all(reason.strip() for reason in [*NOT_FORWARDED.values(), *NOT_FORWARDED_FAMILIES.values()])
 
