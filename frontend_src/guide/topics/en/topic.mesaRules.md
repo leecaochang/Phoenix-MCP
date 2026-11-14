@@ -10,7 +10,7 @@ MESA is an open specification. Phoenix includes mesa-core, its reference impleme
 A profile covers one of these levels. When an agent acts on an entity, MESA gathers every profile that covers it, most specific first:
 
 - **{{label:mesa.scopeLabelEntity}}**: the entity itself.
-- **{{label:mesa.scopeLabelDevice}}**: the device the entity belongs to, including entities the device gains later.
+- **{{label:mesa.scopeLabelDevice}}**: the device the entity belongs to, including entities the device gains later. It also covers the device's entities that are disabled in Home Assistant.
 - **{{label:mesa.scopeLabelParentDevice}}**: for a device that's part of a larger one, the larger device's profile. A hub that a device connects through doesn't count.
 - **{{label:mesa.scopeLabelArea}}**: the entity's area, or else its device's area.
 - **{{label:mesa.scopeLabelIntegration}}**: the integration that created the entity, such as hue.
@@ -82,7 +82,7 @@ It checks:
 - Renaming, enabling, disabling and removing entities and devices, and moving them out of a profiled area.
 - Integration and helper changes, areas and floors.
 - Calendar and to-do changes, and notifications.
-- Zigbee device changes, raw Z-Wave and ISY commands, `update.install` and ESPHome firmware installs. These must pass on every entity of the device and its child devices.
+- Zigbee device changes, raw Z-Wave and ISY commands, `update.install`, ESPHome firmware installs and ESPHome device actions. These must pass on every entity of the device and its child devices.
 - An ESPHome file whose device Phoenix can't work out. This only warns in {{label:settings.mesaModeAdvisory}}, and is refused in {{label:settings.mesaModeEnforced}} once any ESPHome device is set up.
 
 Phoenix can't work out the device of a file that takes its name from a package or a substitution, or of a new file the Device Builder doesn't list.
@@ -91,7 +91,7 @@ It doesn't check:
 
 - Changes to automations, scripts, blueprints, scenes, dashboards, dashboard resources, labels, categories or the Energy setup.
 - Backups, restarts, YAML reloads and log levels.
-- ESPHome device actions and builds, and opening a Zigbee network to new devices.
+- ESPHome builds, and opening a Zigbee network to new devices.
 
 Reading a state isn't checked, except camera images. Automations and scripts run inside Home Assistant, so their actions aren't checked again. To control when an agent starts one, give the automation or script its own profile.
 

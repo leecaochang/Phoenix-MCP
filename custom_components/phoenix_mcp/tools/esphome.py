@@ -65,7 +65,8 @@ from ..helpers import content_hash
 from ..catalog_text import diff_summary_fields as _summary
 from ..capability import effective_cap
 from ..redaction import (
-    redact_entity_ids_outside, redact_inaccessible_entity_ids_in_text, redact_diagnostics, visible_entity_ids,
+    entity_domains, redact_entity_ids_outside, redact_inaccessible_entity_ids_in_text, redact_diagnostics,
+    visible_entity_ids,
 )
 from ..request_authority import check_request_authority, mark_dispatch_started, write_boundary
 from ..policy_engine import (
@@ -84,6 +85,7 @@ from ..esphome_builder import (
 )
 from ..esphome_yaml import (
     DeclaredDevice,
+    PackageSource,
     apply_line_splice,
     declared_components,
     declared_device,
@@ -492,6 +494,26 @@ def _locate_esphome_files(hass: HomeAssistant, file_args: list[Any]) -> dict[str
     return found
 
 
+def _esphome_packages(hass: HomeAssistant, file: str) -> PackageSource:
+    """How a device file's local packages are read for masking, through the same jail as the file.
+
+    `file` is the file's realpath or ESPHome-relative path. The reader blocks: executor only.
+    """
+    root = os.path.realpath(os.path.join(hass.config.config_dir, _ESPHOME_DIR))
+    rel = os.path.relpath(file, root) if os.path.isabs(file) else file
+
+    def read(package_rel: str) -> str | None:
+        resolved = _resolve_esphome_path(hass, package_rel)
+        if resolved is None:
+            return None
+        try:
+            return _read_text_capped(resolved[0])
+        except (OSError, ValueError):
+            return None
+
+    return PackageSource(rel.replace(os.sep, "/"), read)
+
+
 def _read_esphome_secrets(hass: HomeAssistant) -> tuple[set[str], set[str] | None]:
     """Read the ESPHome secrets.yaml internally: (values, key names); no tool returns either.
 
@@ -729,20 +751,19 @@ class _EntityView(NamedTuple):
 
 def _esphome_entity_view(access_key: AccessKeyRecord, hass: HomeAssistant) -> _EntityView:
     """The key's visible entity IDs and every domain in use. Event loop only."""
-    known = {*hass.states.async_entity_ids(), *er.async_get(hass).entities.keys()}
-    return _EntityView(visible_entity_ids(access_key, hass), frozenset(eid.split(".", 1)[0] for eid in known))
+    return _EntityView(visible_entity_ids(access_key, hass), entity_domains(hass))
 
 
 def _esphome_hide_entities(text: str, view: _EntityView, hass: HomeAssistant) -> str:
     """Device YAML with hidden entity IDs replaced. A lambda's it.printf is no entity reference."""
-    return redact_entity_ids_outside(text, view.visible, hass, domains=view.domains)
+    return redact_entity_ids_outside(text, view.visible, hass, domains=view.domains, chain_domains=view.domains)
 
 
 def _esphome_masked_text(
-    hass: HomeAssistant, text: str, secret_values: set[str], view: _EntityView
+    hass: HomeAssistant, text: str, secret_values: set[str], view: _EntityView, rel: str
 ) -> tuple[str, list[str]]:
-    """A device file as a key reads it: (masked text, redacted paths). Executor only."""
-    masked, paths = redact_esphome_text(text, secret_values)
+    """A device file at rel as a key reads it: (masked text, redacted paths). Executor only."""
+    masked, paths = redact_esphome_text(text, secret_values, _esphome_packages(hass, rel))
     return _esphome_hide_entities(masked, view, hass), [_esphome_hide_entities(path, view, hass) for path in paths]
 
 
@@ -769,7 +790,7 @@ def _esphome_search(
         try:
             raw = _read_text_capped(resolved[0])
             scanned += len(raw.encode("utf-8"))
-            masked = _esphome_masked_text(hass, raw, values, view)[0]
+            masked = _esphome_masked_text(hass, raw, values, view, row["file"])[0]
         except (OSError, ValueError, yaml_includes.YamlParseError):
             incomplete = True
             continue
@@ -882,7 +903,7 @@ async def _tool_get_esphome_yaml(
 
     try:
         redacted, redacted_paths = await hass.async_add_executor_job(
-            _esphome_masked_text, hass, raw, secret_values, _esphome_entity_view(access_key, hass)
+            _esphome_masked_text, hass, raw, secret_values, _esphome_entity_view(access_key, hass), rel
         )
     except yaml_includes.YamlParseError as err:
         # Fail closed: a file whose credentials cannot be located must not be
@@ -976,7 +997,7 @@ def _esphome_scrub_values(hass: HomeAssistant, path: str) -> set[str]:
     secret_values, _keys = _read_esphome_secrets(hass)
     values = set(secret_values or set())
     try:
-        values |= inline_secret_values(_read_text_capped(path), values)
+        values |= inline_secret_values(_read_text_capped(path), values, _esphome_packages(hass, path))
     except (OSError, ValueError, yaml_includes.YamlParseError):
         _LOGGER.debug("ESPHome scrub could not read inline credentials", exc_info=True)
     return values
@@ -1000,7 +1021,7 @@ def _esphome_builder_text(text: str, values: set[str], view: _EntityView, hass: 
     """Builder free text as a key reads it: secrets scrubbed, then entity IDs it may not read hidden."""
     return redact_entity_ids_outside(
         scrub_secret_values(text, values), view.visible, hass, domains=view.domains,
-        keep=lambda eid: eid.rsplit(".", 1)[1] in _BUILD_FILE_SUFFIXES)
+        keep=lambda eid: eid.rsplit(".", 1)[1] in _BUILD_FILE_SUFFIXES, chain_domains=view.domains)
 
 
 def _esphome_output_scrub(values: set[str], view: _EntityView, hass: HomeAssistant) -> Callable[[str], str]:
@@ -1095,7 +1116,7 @@ def _esphome_read_for_migration(hass: HomeAssistant, path: str) -> tuple[str | N
     except (OSError, ValueError):
         return None, secret_values, values
     try:
-        values |= inline_secret_values(raw, secret_values)
+        values |= inline_secret_values(raw, secret_values, _esphome_packages(hass, path))
     except yaml_includes.YamlParseError:
         return None, secret_values, values
     return raw, secret_values, values
@@ -1135,9 +1156,9 @@ def _esphome_migration_diff(
     try:
         migrated = apply_line_splice(
             raw, int(yaml_diff["fromLine"]), int(yaml_diff["toLine"]), str(yaml_diff["replacement"]))
-        before, before_paths = _esphome_masked_text(hass, raw, secret_values, view)
-        known = secret_values | inline_secret_values(raw, secret_values)
-        after, after_paths = _esphome_masked_text(hass, migrated, known, view)
+        before, before_paths = _esphome_masked_text(hass, raw, secret_values, view, rel)
+        known = secret_values | inline_secret_values(raw, secret_values, _esphome_packages(hass, rel))
+        after, after_paths = _esphome_masked_text(hass, migrated, known, view, rel)
     except (KeyError, TypeError, ValueError, yaml_includes.YamlParseError):
         return None
     if len(after_paths) < len(before_paths):
@@ -1536,7 +1557,7 @@ def _esphome_read_with_secrets(hass: HomeAssistant, path: str) -> tuple[str, set
     raw = _read_text_capped(path)
     values = set(secret_values)
     try:
-        values |= inline_secret_values(raw, secret_values)
+        values |= inline_secret_values(raw, secret_values, _esphome_packages(hass, path))
     except yaml_includes.YamlParseError:
         pass
     return raw, secret_values, values
@@ -1560,6 +1581,7 @@ def _esphome_same_slice(local: str, reported: str) -> bool:
 
 def _esphome_automation_rows(
     hass: HomeAssistant, raw: str, secret_values: set[str], values: set[str], parsed: Any, view: _EntityView,
+    rel: str,
 ) -> tuple[list[dict], list[str]]:
     """Project automations/parse rows, with YAML cut from Phoenix's own masked read. Executor only.
 
@@ -1599,7 +1621,8 @@ def _esphome_automation_rows(
             if local is None or not isinstance(reported, str) or not _esphome_same_slice(local, reported):
                 row["yaml_withheld"] = "The file changed while it was being read; ask again."
             elif not parse_failed:
-                masked = _esphome_hide_entities(redact_esphome_slice(raw, secret_values, first, last), view, hass)
+                masked = _esphome_hide_entities(redact_esphome_slice(
+                    raw, secret_values, first, last, _esphome_packages(hass, rel)), view, hass)
                 if len(masked) > ESPHOME_AUTOMATION_YAML_MAX_CHARS:
                     masked = masked[:ESPHOME_AUTOMATION_YAML_MAX_CHARS]
                     row["yaml_truncated"] = True
@@ -1634,7 +1657,8 @@ async def _esphome_existing_automations(
     except BuilderError as err:
         return _builder_refusal(err, f"esphome:{rel}")
     rows, warnings = await hass.async_add_executor_job(
-        _esphome_automation_rows, hass, raw, secret_values, values, res.result, _esphome_entity_view(access_key, hass))
+        _esphome_automation_rows, hass, raw, secret_values, values, res.result, _esphome_entity_view(access_key, hass),
+        rel)
     for row in rows:
         for key in ("label", "error"):
             if key in row:
@@ -2941,21 +2965,21 @@ def _esphome_history_names(hass: HomeAssistant, names: list[Any]) -> list[str]:
     return out
 
 
-def _esphome_mask_version(hass: HomeAssistant, text: str, view: _EntityView) -> tuple[str, list[str]]:
+def _esphome_mask_version(hass: HomeAssistant, text: str, view: _EntityView, rel: str) -> tuple[str, list[str]]:
     """Mask one historical version whole. Executor only; raises on oversize or unparseable text."""
     # A scrub alone would not do: an old version can carry a credential since rotated out of
     # secrets.yaml and every current file.
     if len(text.encode("utf-8")) > MAX_FILE_BYTES:
         raise ValueError("version too large")
     secret_values, _keys = _read_esphome_secrets(hass)
-    return _esphome_masked_text(hass, text, set(secret_values or set()), view)
+    return _esphome_masked_text(hass, text, set(secret_values or set()), view, rel)
 
 
-def _esphome_mask_current(hass: HomeAssistant, path: str, view: _EntityView) -> str:
+def _esphome_mask_current(hass: HomeAssistant, path: str, view: _EntityView, rel: str) -> str:
     """The current file, masked; "" when it no longer exists. Executor only."""
     if not os.path.isfile(path):
         return ""
-    return _esphome_mask_version(hass, _read_text_capped(path), view)[0]
+    return _esphome_mask_version(hass, _read_text_capped(path), view, rel)[0]
 
 
 async def _esphome_versions(hass: HomeAssistant, url: str, rel: str) -> list[dict] | None:
@@ -3061,7 +3085,7 @@ async def _tool_get_esphome_history(
                             "it; read the version before it."), "not_found", f"esphome:{rel}")
     entities = _esphome_entity_view(access_key, hass)
     try:
-        masked_old, paths = await hass.async_add_executor_job(_esphome_mask_version, hass, old, entities)
+        masked_old, paths = await hass.async_add_executor_job(_esphome_mask_version, hass, old, entities, rel)
         if view == "content":
             body = {"file": rel, "sha": sha, "content": masked_old, "redacted_paths": paths}
             return _tool_success(_esphome_scrubbed_json(body, values)), "allowed", f"esphome:{rel}"
@@ -3070,10 +3094,10 @@ async def _tool_get_esphome_history(
             if newer is None:
                 return (_tool_error("The file does not exist at the compare_to version."),
                         "not_found", f"esphome:{rel}")
-            masked_new = (await hass.async_add_executor_job(_esphome_mask_version, hass, newer, entities))[0]
+            masked_new = (await hass.async_add_executor_job(_esphome_mask_version, hass, newer, entities, rel))[0]
             label = f"{rel}@{compare_to[:7]}"
         else:
-            masked_new = await hass.async_add_executor_job(_esphome_mask_current, hass, path, entities)
+            masked_new = await hass.async_add_executor_job(_esphome_mask_current, hass, path, entities, rel)
             label = f"{rel} (current)" if exists else f"{rel} (deleted)"
     except (OSError, ValueError, yaml_includes.YamlParseError):
         return (_tool_error("That version could not be parsed, so its credentials cannot be masked; "

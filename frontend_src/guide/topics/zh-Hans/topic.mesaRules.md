@@ -10,7 +10,7 @@ MESA 是一项开放规范。Phoenix 内置了它的参考实现 mesa-core，你
 策略按以下层级覆盖对象。智能体对实体执行操作时，MESA 会收集所有覆盖它的策略，最具体的在前：
 
 - **{{label:mesa.scopeLabelEntity}}**：实体本身。
-- **{{label:mesa.scopeLabelDevice}}**：实体所属的设备，包括该设备之后获得的实体。
+- **{{label:mesa.scopeLabelDevice}}**：实体所属的设备，包括该设备之后获得的实体。它也覆盖该设备在 Home Assistant 中被停用的实体。
 - **{{label:mesa.scopeLabelParentDevice}}**：对于属于更大设备一部分的设备，使用更大设备的策略。设备连接所经过的集线器不算。
 - **{{label:mesa.scopeLabelArea}}**：实体所在的区域，否则是其设备所在的区域。
 - **{{label:mesa.scopeLabelIntegration}}**：创建该实体的集成，例如 hue。
@@ -82,7 +82,7 @@ MESA 对每个来源的处理都相同：MCP 客户端、Agent Chat、语音智�
 - 重命名、启用、停用和移除实体与设备，以及把它们移出设有策略的区域。
 - 集成和辅助元素更改、区域和楼层。
 - 日历和待办事项更改，以及通知。
-- Zigbee 设备更改、原始 Z-Wave 和 ISY 命令、`update.install` 和 ESPHome 固件安装。设备及其子设备的每个实体都必须通过检查。
+- Zigbee 设备更改、原始 Z-Wave 和 ISY 命令、`update.install`、ESPHome 固件安装和 ESPHome 设备操作。设备及其子设备的每个实体都必须通过检查。
 - Phoenix 无法确定对应设备的 ESPHome 文件。在{{label:settings.mesaModeAdvisory}}下只会警告；只要已设置任何 ESPHome 设备，在{{label:settings.mesaModeEnforced}}下就会拒绝。
 
 Phoenix 无法确定名称来自包或替换变量的文件，以及 Device Builder 未列出的新文件所属的设备。
@@ -91,7 +91,7 @@ Phoenix 无法确定名称来自包或替换变量的文件，以及 Device Buil
 
 - 对自动化、脚本、蓝图、场景、仪表盘、仪表盘资源、标签、类别或能源设置的更改。
 - 备份、重启、YAML 重新加载和日志级别。
-- ESPHome 设备操作和构建，以及向新设备开放 Zigbee 网络。
+- ESPHome 构建，以及向新设备开放 Zigbee 网络。
 
 读取状态不会被检查，摄像头图像除外。自动化和脚本在 Home Assistant 内部运行，因此它们的操作不会被再次检查。要控制智能体何时启动自动化或脚本，请为它们设置自己的策略。
 

@@ -15,8 +15,10 @@ import fnmatch
 import json
 import os
 import re
+import threading
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -309,6 +311,32 @@ def is_secrets_file(path: str) -> bool:
 
 class SecretsFileError(yaml.YAMLError):
     """Raised instead of reading secrets.yaml, whose values no read may return."""
+
+
+class WriteAbandonedError(Exception):
+    """Raised instead of replacing a file once the request that started the write gave up on it."""
+
+
+# The abandon flag of the write job this worker thread runs, set by `_abandonable`.
+_WRITE_JOB = threading.local()
+
+
+@contextmanager
+def _abandonable(abandoned: threading.Event | None) -> Iterator[None]:
+    """Bind a write job's abandon flag to this worker thread for the length of the job."""
+    previous = getattr(_WRITE_JOB, "abandoned", None)
+    _WRITE_JOB.abandoned = abandoned
+    try:
+        yield
+    finally:
+        _WRITE_JOB.abandoned = previous
+
+
+def _refuse_if_abandoned() -> None:
+    """Raise WriteAbandonedError when this thread's write job was given up. Call just before a replace."""
+    abandoned = getattr(_WRITE_JOB, "abandoned", None)
+    if abandoned is not None and abandoned.is_set():
+        raise WriteAbandonedError
 
 
 def load_tagged(path: str) -> Any:
@@ -1426,6 +1454,7 @@ def _write_entry_files(located: LocatedEntry, domain: str, config: dict, config_
             ok=False, error_kind="io_error",
             message="Phoenix MCP could not verify the edited file would remain intact; nothing was written.",
         )
+    _refuse_if_abandoned()
     write_utf8_file_atomic(located.ref_file, new_text)
     return OpResult(ok=True, before=encoded_before, file=located.ref_file)
 
@@ -1471,16 +1500,18 @@ def automation_identity_conflict(
 def automation_write(
     config_dir: str, entry_id: str, config: dict, create: bool,
     expected_hash: str | None = None, dry_run: bool = False,
-    generated_id: bool = False, reviewed_hash: str | None = None,
+    generated_id: bool = False, reviewed_hash: str | None = None, abandoned: threading.Event | None = None,
 ) -> OpResult:
     """Check and write an automation in one worker job under the domain lock.
 
     A dry run is advisory; the committing call locates and checks again. reviewed_hash is
-    what an approval's review showed, compared with the entry located here.
+    what an approval's review showed, compared with the entry located here. Once `abandoned`
+    is set the job raises WriteAbandonedError instead of replacing the file.
     """
     try:
-        return _automation_write_checked(
-            config_dir, entry_id, config, create, expected_hash, dry_run, generated_id, reviewed_hash)
+        with _abandonable(abandoned):
+            return _automation_write_checked(
+                config_dir, entry_id, config, create, expected_hash, dry_run, generated_id, reviewed_hash)
     except (OSError, UnicodeError, yaml.YAMLError):
         return OpResult(ok=False, error_kind="io_error", message="Cannot safely read or write the automation configuration. Check the YAML files and filesystem permissions before retrying.")
 
@@ -1517,6 +1548,7 @@ def _automation_write_checked(
                 items.append(config)
             else:
                 items[matches[0]] = config
+            _refuse_if_abandoned()
             write_utf8_file_atomic(path, in_existing_line_ending(path, dump_tagged(items)))
         return OpResult(ok=True, before=current, file=path)
     try:
@@ -1620,6 +1652,7 @@ def perform_delete(
             ok=False, error_kind="io_error",
             message="Phoenix MCP could not verify the edited file would remain intact; nothing was written.",
         )
+    _refuse_if_abandoned()
     write_utf8_file_atomic(located.ref_file, new_text)
     return OpResult(ok=True, before=encoded_before, file=located.ref_file)
 
@@ -1723,6 +1756,7 @@ def _create_append(path: str, shape: str, entry_id: str, config: dict) -> OpResu
             ok=False, error_kind="io_error",
             message="Phoenix MCP could not produce a valid config file for the new entry; nothing was written.",
         )
+    _refuse_if_abandoned()
     write_utf8_file_atomic(path, new_text)
     return OpResult(ok=True, file=path)
 
@@ -1736,23 +1770,25 @@ _MSG_EXISTS = {
 
 def write_entry(
     config_dir: str, domain: str, entry_id: str, *, mode: str, config: dict | None = None,
-    checks: tuple[HashCheck, ...] = (),
+    checks: tuple[HashCheck, ...] = (), abandoned: threading.Event | None = None,
 ) -> OpResult:
     """Create, edit or delete one entry in a single worker job, routed or through the fallback.
 
     mode is "create", "edit" or "delete". Checks are compared with the entry as this call finds
-    it. A delete's first check, when given, is its reviewed hash.
+    it. A delete's first check, when given, is its reviewed hash. Once `abandoned` is set the job
+    raises WriteAbandonedError instead of replacing the file.
     """
     try:
-        if mode == "create":
-            op = perform_create(config_dir, domain, entry_id, config or {})
-        elif mode == "edit":
-            op = perform_edit(config_dir, domain, entry_id, config or {}, checks=checks)
-        else:
-            op = _checked_delete(config_dir, domain, entry_id, checks)
-        if not op.fallback:
-            return op
-        return _fallback_write(config_dir, domain, entry_id, mode, config, checks)
+        with _abandonable(abandoned):
+            if mode == "create":
+                op = perform_create(config_dir, domain, entry_id, config or {})
+            elif mode == "edit":
+                op = perform_edit(config_dir, domain, entry_id, config or {}, checks=checks)
+            else:
+                op = _checked_delete(config_dir, domain, entry_id, checks)
+            if not op.fallback:
+                return op
+            return _fallback_write(config_dir, domain, entry_id, mode, config, checks)
     except (OSError, UnicodeError, yaml.YAMLError):
         return OpResult(ok=False, error_kind="io_error", message=(
             f"Cannot safely read or write the {domain} configuration. Check the YAML files and "
@@ -1829,6 +1865,7 @@ def _fallback_write(
         del items[entry_id]
     else:
         items[entry_id] = config
+    _refuse_if_abandoned()
     write_utf8_file_atomic(path, in_existing_line_ending(path, dump_tagged(items)))
     return OpResult(ok=True, before=current, file=path)
 

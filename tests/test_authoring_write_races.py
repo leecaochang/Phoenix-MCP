@@ -152,12 +152,72 @@ class TestCancelledWrite:
                 assert not release.is_set()
         finally:
             release.set()
-        # The stalled thread's own file replace still lands; the job that would record it is gone.
+        # A thread stalled inside the replace itself still lands it; the job that would record it is gone.
         async with asyncio.timeout(3):
             while "Alpha edited" not in (config_dir / "scripts.yaml").read_text():
                 await asyncio.sleep(0.01)
         await asyncio.sleep(0.1)
         await hass.async_block_till_done()
+        assert data.versions.list_for("script", "alpha") == []
+        assert len(data.versions.list_for("script", "beta")) == 1
+
+    async def test_an_abandoned_write_replaces_no_file_after_its_bound(self, hass, config_dir):
+        """A thread stalled before its replace finds the flag set: the later edit survives, no version."""
+        _routed(config_dir)
+        data = _data()
+        real_verify = yaml_includes._verify_splice
+        started, release, finished = threading.Event(), threading.Event(), threading.Event()
+        raised: list[BaseException] = []
+
+        def stalled_verify(*args, **kwargs):
+            if not started.is_set():
+                started.set()
+                release.wait(5)
+                try:
+                    return real_verify(*args, **kwargs)
+                finally:
+                    finished.set()
+            return real_verify(*args, **kwargs)
+
+        real_write_entry = yaml_includes.write_entry
+
+        def recording_write_entry(*args, **kwargs):
+            try:
+                return real_write_entry(*args, **kwargs)
+            except BaseException as err:
+                raised.append(err)
+                raise
+
+        try:
+            with patch.object(yaml_includes, "_verify_splice", new=stalled_verify), \
+                    patch.object(yaml_includes, "write_entry", new=recording_write_entry), \
+                    patch.object(authoring, "_CANCELLED_WRITE_WAIT_SECONDS", 0.3):
+                one = asyncio.ensure_future(authoring._execute_edit_script(
+                    {"script_id": "alpha", "config": {"alias": "Alpha edited", "sequence": [{"delay": 2}]}},
+                    _key(), hass, data))
+                while not started.is_set():
+                    await asyncio.sleep(0.01)
+                one.cancel()
+                two = asyncio.ensure_future(authoring._execute_edit_script(
+                    {"script_id": "beta", "config": {"alias": "Beta edited", "sequence": [{"delay": 3}]}},
+                    _key(), hass, data))
+                async with asyncio.timeout(3):
+                    with pytest.raises(asyncio.CancelledError):
+                        await one
+                    result = await two
+                assert result[1] == "allowed", result
+                assert "Beta edited" in (config_dir / "scripts.yaml").read_text()
+                release.set()
+                async with asyncio.timeout(3):
+                    while not finished.is_set() or not raised:
+                        await asyncio.sleep(0.01)
+        finally:
+            release.set()
+        await asyncio.sleep(0.1)
+        await hass.async_block_till_done()
+        assert isinstance(raised[0], yaml_includes.WriteAbandonedError)
+        final = (config_dir / "scripts.yaml").read_text()
+        assert "Beta edited" in final and "Alpha edited" not in final
         assert data.versions.list_for("script", "alpha") == []
         assert len(data.versions.list_for("script", "beta")) == 1
 

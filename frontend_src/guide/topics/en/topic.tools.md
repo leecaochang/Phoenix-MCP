@@ -240,7 +240,7 @@ Agents read and search ESPHome device configuration, with passwords, keys, every
 
 A value from secrets.yaml is masked wherever it appears, even inside a web address or a comment. Entity IDs the key can't read show as `<redacted-entity>`, in files and in the Device Builder's output and logs. No agent can read or install a file with secret in its name.
 
-So is a substitution a password or key uses, directly or through another substitution. One that only a package uses isn't masked unless its name says password or key, so keep such values in secrets.yaml.
+So is a substitution a password or key uses, directly or through another substitution, in the file or in a local package it includes. If the file uses a remote package, every substitution no local file uses is masked too.
 
 Phoenix works out a file's device from the file name, the device name it states and any `use_address` or static IP. A key limited to some devices reads only their files. A file that states its own name and matches no device follows the capability alone.
 

@@ -460,6 +460,24 @@ class TestDeviceYamlRead:
         assert "ssid: !secret wifi_ssid" in body["content"]
         assert "baud_rate: 9600" in body["content"]
 
+    async def test_a_local_package_is_read_through_the_jail(self, hass, esphome_dir):
+        (esphome_dir / "common").mkdir()
+        (esphome_dir / "common" / "wifi.yaml").write_text("wifi:\n  password: ${net_word}\n")
+        (esphome_dir.parent / "outside.yaml").write_text("wifi:\n  ssid: ${room}\n")
+        head = "substitutions:\n  net_word: hunter2hunter2\n  room: Kitchen\npackages:\n"
+        (esphome_dir / "pkg.yaml").write_text(head + "  wifi: !include common/wifi.yaml\n")
+        # Outside the folder, or secrets.yaml itself, is never read: it counts as a remote package.
+        (esphome_dir / "far.yaml").write_text(head + "  a: !include common/wifi.yaml\n  b: !include ../outside.yaml\n")
+        (esphome_dir / "sec.yaml").write_text(head + "  a: !include common/wifi.yaml\n  b: !include secrets.yaml\n")
+        shown = {}
+        for name in ("pkg.yaml", "far.yaml", "sec.yaml"):
+            content, outcome, _ = await _call("get_esphome_yaml", {"file": name}, _yaml_access_key(), hass)
+            assert outcome == "allowed"
+            shown[name] = _json(content)["content"]
+            assert "hunter2hunter2" not in shown[name]
+        assert "room: Kitchen" in shown["pkg.yaml"]
+        assert "Kitchen" not in shown["far.yaml"] and "Kitchen" not in shown["sec.yaml"]
+
     async def test_defined_secrets_exposes_names_never_values(self, hass, esphome_dir):
         content, _, _ = await _call(
             "get_esphome_yaml", {"file": "rf-blaster1.yaml"}, _yaml_access_key(), hass)
@@ -1155,7 +1173,7 @@ class TestAutomationRowsAndMigrationDiff:
         parsed = [{"from_line": 1, "to_line": 3, "raw_yaml": self.RAW, "label": "a housepassword1",
                    "location": {"id": "x" * 505 + "housepassword1"}}]
         rows, _warnings = esphome._esphome_automation_rows(
-            hass, self.RAW, set(), {"housepassword1"}, parsed, self.VIEW)
+            hass, self.RAW, set(), {"housepassword1"}, parsed, self.VIEW, "rf-blaster1.yaml")
         assert "vault_door" not in rows[0]["yaml"] and "<redacted-entity>" in rows[0]["yaml"]
         assert rows[0]["label"] == "a <redacted>"
         assert "house" not in rows[0]["location"]["id"]

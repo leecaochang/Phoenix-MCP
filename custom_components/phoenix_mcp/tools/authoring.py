@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import re
+import threading
 import uuid
 from functools import partial
 from collections.abc import Awaitable, Callable, Iterator
@@ -158,15 +159,17 @@ _T = TypeVar("_T")
 _CANCELLED_WRITE_WAIT_SECONDS = 60.0
 
 
-async def _locked_write(lock: asyncio.Lock, work: Callable[[], Awaitable[_T]]) -> _T:
+async def _locked_write(lock: asyncio.Lock, work: Callable[[threading.Event], Awaitable[_T]]) -> _T:
     """Run work under lock to its end, even when the caller is cancelled meanwhile.
 
-    A cancelled request keeps the lock until work finishes, at most _CANCELLED_WRITE_WAIT_SECONDS;
-    work still running then is cancelled before it records a version, the lock released and the
-    stall logged. The cancellation is raised either way; further cancellations do not shorten it.
+    A cancelled request keeps the lock until work finishes, at most _CANCELLED_WRITE_WAIT_SECONDS.
+    Work still running then has its abandon flag set, so its worker replaces no file, and is
+    cancelled before it records a version; the lock is released and the stall logged. The
+    cancellation is raised either way; further cancellations do not shorten it.
     """
+    abandoned = threading.Event()
     async with lock:
-        task = asyncio.ensure_future(work())
+        task = asyncio.ensure_future(work(abandoned))
         try:
             return await asyncio.shield(task)
         except asyncio.CancelledError:
@@ -180,12 +183,20 @@ async def _locked_write(lock: asyncio.Lock, work: Callable[[], Awaitable[_T]]) -
             except asyncio.CancelledError:
                 pass
         if not task.done():
-            # Its executor thread cannot be stopped, but the job stops here, so it records no version.
+            # Its executor thread cannot be stopped: the flag keeps it from replacing the file unless
+            # it is already inside the replace, and the job stops here, so it records no version.
+            abandoned.set()
             task.cancel()
             _LOGGER.warning("A cancelled configuration write did not finish within %ss; its lock is released "
-                            "and the file write may still complete", _CANCELLED_WRITE_WAIT_SECONDS)
+                            "and the write is abandoned", _CANCELLED_WRITE_WAIT_SECONDS)
         elif not task.cancelled() and task.exception() is not None:
             _LOGGER.debug("A write finished with an error after its request was cancelled", exc_info=task.exception())
+        raise asyncio.CancelledError
+
+
+def _raise_if_abandoned(abandoned: threading.Event) -> None:
+    """Raise CancelledError when _locked_write gave up on this write. Call before recording a version."""
+    if abandoned.is_set():
         raise asyncio.CancelledError
 
 
@@ -693,14 +704,16 @@ async def _execute_create_automation(
     if invalid is not None:
         return invalid
 
-    async def write() -> tuple[dict, str, str] | None:
+    async def write(abandoned: threading.Event) -> tuple[dict, str, str] | None:
         check_request_authority()
-        op = await hass.async_add_executor_job(
+        op = await hass.async_add_executor_job(partial(
             yaml_includes.automation_write, hass.config.config_dir, automation_id,
             config, True, args.get("expected_hash"), False, not bool(args.get("automation_id")),
-        )
+            abandoned=abandoned,
+        ))
         if not op.ok:
             return _automation_op_error(op, "create_automation")
+        _raise_if_abandoned(abandoned)
         await _record_version(
             data, access_key, resource_type="automation", resource_id=automation_id,
             action="create", before=None, after=config, alias=config.get("alias"),
@@ -779,14 +792,16 @@ async def _execute_edit_automation(
     if invalid is not None:
         return invalid
 
-    async def write() -> tuple[dict, str, str] | None:
+    async def write(abandoned: threading.Event) -> tuple[dict, str, str] | None:
         check_request_authority()
         op = await hass.async_add_executor_job(partial(
             yaml_includes.automation_write, hass.config.config_dir, automation_id,
             config, False, args.get("expected_hash"), reviewed_hash=checks[1][0] if len(checks) > 1 else None,
+            abandoned=abandoned,
         ))
         if not op.ok:
             return _automation_op_error(op, "edit_automation")
+        _raise_if_abandoned(abandoned)
         await _record_version(
             data, access_key, resource_type="automation", resource_id=automation_id,
             action="edit", before=op.before, after=config, alias=config.get("alias"),
@@ -901,7 +916,7 @@ async def _locked_delete(
     """
     lock = {"automation": _get_automation_lock, "script": _get_script_lock, "scene": _get_scene_lock}[domain](hass)
 
-    async def delete() -> tuple[dict, str, str] | None:
+    async def delete(abandoned: threading.Event) -> tuple[dict, str, str] | None:
         check_request_authority()
         current = await _read_config_entry(hass, domain, item_id)
         check_request_authority()
@@ -912,10 +927,11 @@ async def _locked_delete(
             return _tool_error(missing), "denied", tool_name
         op = await hass.async_add_executor_job(partial(
             yaml_includes.write_entry, hass.config.config_dir, domain, item_id, mode="delete",
-            checks=((args[_DELETE_EXPECTED_HASH], yaml_includes.MSG_EXPECTED_HASH_STALE),),
+            checks=((args[_DELETE_EXPECTED_HASH], yaml_includes.MSG_EXPECTED_HASH_STALE),), abandoned=abandoned,
         ))
         if not op.ok:
             return _entry_op_error(op, tool_name)
+        _raise_if_abandoned(abandoned)
         await _record_version(
             data, access_key, resource_type=domain, resource_id=item_id,
             action="delete", before=op.before, after=None,
@@ -1069,13 +1085,15 @@ async def _execute_create_script(
     if invalid is not None:
         return invalid
 
-    async def write() -> tuple[dict, str, str] | None:
+    async def write(abandoned: threading.Event) -> tuple[dict, str, str] | None:
         check_request_authority()
         op = await hass.async_add_executor_job(partial(
             yaml_includes.write_entry, hass.config.config_dir, "script", script_id, mode="create", config=config,
+            abandoned=abandoned,
         ))
         if not op.ok:
             return _entry_op_error(op, "create_script")
+        _raise_if_abandoned(abandoned)
         await _record_version(
             data, access_key, resource_type="script", resource_id=script_id,
             action="create", before=None, after=config, alias=config.get("alias"),
@@ -1150,14 +1168,15 @@ async def _execute_edit_script(
     if invalid is not None:
         return invalid
 
-    async def write() -> tuple[dict, str, str] | None:
+    async def write(abandoned: threading.Event) -> tuple[dict, str, str] | None:
         check_request_authority()
         op = await hass.async_add_executor_job(partial(
             yaml_includes.write_entry, hass.config.config_dir, "script", script_id,
-            mode="edit", config=config, checks=checks,
+            mode="edit", config=config, checks=checks, abandoned=abandoned,
         ))
         if not op.ok:
             return _entry_op_error(op, "edit_script")
+        _raise_if_abandoned(abandoned)
         await _record_version(
             data, access_key, resource_type="script", resource_id=script_id,
             action="edit", before=op.before, after=config, alias=config.get("alias"),
@@ -1810,7 +1829,7 @@ async def _scene_write(
     config = {k: v for k, v in config.items() if k != "id"}
     config["id"] = scene_id
 
-    async def write() -> tuple[dict, str, str] | None:
+    async def write(abandoned: threading.Event) -> tuple[dict, str, str] | None:
         check_request_authority()
         write_checks = checks
         if replace:
@@ -1822,10 +1841,11 @@ async def _scene_write(
             write_checks = (*checks, (content_hash(current), yaml_includes.MSG_CHANGED_WHILE_WRITING))
         op = await hass.async_add_executor_job(partial(
             yaml_includes.write_entry, hass.config.config_dir, "scene", scene_id,
-            mode="edit" if replace else "create", config=config, checks=write_checks,
+            mode="edit" if replace else "create", config=config, checks=write_checks, abandoned=abandoned,
         ))
         if not op.ok:
             return _entry_op_error(op, tool_name)
+        _raise_if_abandoned(abandoned)
         await _record_version(
             data, access_key, resource_type="scene", resource_id=scene_id,
             action="edit" if replace else "create",

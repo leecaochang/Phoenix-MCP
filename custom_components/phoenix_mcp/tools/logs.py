@@ -43,7 +43,7 @@ from ..policy_engine import (
     resolve_device_registry_access, resolve_read, resolve_registry_access,
 )
 from ..recorder_queries import iso_utc
-from ..redaction import redact_inaccessible_entity_ids_in_text, service_not_entity
+from ..redaction import entity_domains, redact_inaccessible_entity_ids_in_text, service_not_entity
 from ..request_authority import check_request_authority, request_authority, write_boundary
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _tool_error, _tool_success, longest_fitting
 from ..tool_contracts import normalize_tool_args
@@ -369,12 +369,6 @@ def _logbook_entry_visible(
     return permission in (Permission.READ, Permission.WRITE)
 
 
-def _logbook_entity_domains(hass: HomeAssistant) -> frozenset[str]:
-    """Every domain with a state or a registry entry: a dotted word outside them names no entity."""
-    domains = {state.domain for state in hass.states.async_all()}
-    return frozenset(domains | {entry.domain for entry in er.async_get(hass).entities.values()})
-
-
 def _logbook_context_scoped(
     entry: dict, access_key: AccessKeyRecord, hass: HomeAssistant, domains: frozenset[str],
 ) -> dict:
@@ -537,7 +531,7 @@ async def _tool_get_logbook(
         ), "invalid_request", "get_logbook"
     entity_permissions = dict(zip(entity_ids, requested_permissions[:len(entity_ids)]))
     device_permissions = dict(zip(device_ids, requested_permissions[len(entity_ids):]))
-    domains = _logbook_entity_domains(hass)
+    domains = entity_domains(hass)
     scoped = [
         entry
         for entry in result

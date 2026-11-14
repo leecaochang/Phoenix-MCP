@@ -26,6 +26,9 @@ ESPHOME_YAML_INVENTORY_MAX_ENTRIES = 1_000
 # unknown, which refuses a scoped key. Parsed results are kept per file version.
 ESPHOME_YAML_SCOPE_MAX_BYTES = 16_777_216
 ESPHOME_DECLARED_CACHE_ENTRIES = 1_024
+# Local package files read to trace one device file's substitutions, nested ones included.
+# Past it the rest count as unreadable, which masks every substitution the read ones leave unused.
+ESPHOME_PACKAGE_MAX_FILES = 32
 ESPHOME_BUILDER_METADATA_MAX_CHARS = 512
 ESPHOME_BUILDER_DEVICE_STATES = frozenset({"online", "offline", "unknown"})
 

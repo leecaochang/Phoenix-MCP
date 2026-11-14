@@ -1221,6 +1221,40 @@ async def test_a_disabled_actuator_still_counts_and_a_domain_grant_covers_it(has
     assert len(ran) == 1
 
 
+@pytest.mark.parametrize(("device_mode", "outcome"), [
+    ("autonomous", "allowed"), ("prohibited", "denied"), (None, "pending_approval")])
+async def test_a_device_profile_covers_an_entity_disabled_in_home_assistant(
+        hass, esphome_entries, device_mode, outcome):
+    """A device action reaches a disabled entity; the device's MESA profile judges it like the others.
+
+    The enabled entities carry their own autonomous profiles, so the disabled one alone decides.
+    """
+    data, pending, ran = await _gate_device(hass, esphome_entries, "enforced")
+    registry = er.async_get(hass)
+    # The registries look the fixture's stand-in entry up by id; it is enabled, like the real one.
+    esphome_entries[0].disabled_by = None
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=esphome_entries[0].entry_id, identifiers={("esphome", "gate")}, name="Gate")
+    for entity_id in (_SENSOR, _RELAY, _PULSE):
+        registry.async_update_entity(entity_id, device_id=device.id)
+    registry.async_update_entity(_PULSE, disabled_by=er.RegistryEntryDisabler.USER)
+    hass.states.async_remove(_PULSE)
+    for entity_id in (_SENSOR, _RELAY):
+        data.mesa.store.set(entity_id, _profile(entity_id, "autonomous"))
+    if device_mode is not None:
+        data.mesa.store.set_device_profile(device.id, _profile(device.id, device_mode))
+    key = _key({_SENSOR: "GREEN", _RELAY: "GREEN"}, cap_physical_control="allow")
+    key.permissions.domains["button"] = PermissionNode(state="GREEN")
+    preview = _body(await _call_tool("dry_run_service", _ACTION, key, hass, data))
+    assert preview["predicted_outcome"] == outcome, preview
+    result = await _call_tool("call_service", _ACTION, key, hass, data, request_id="rid")
+    assert result[1] == outcome, result
+    assert len(ran) == (outcome == "allowed")
+    if outcome == "pending_approval":
+        assert preview["mesa"]["confirm"] == [_PULSE]
+        assert _PULSE in pending[0]["args"][APPROVAL_TARGETS_KEY]["entity_ids"]
+
+
 async def test_a_device_refusal_names_no_reason_to_a_key_without_any_of_it(hass, esphome_entries):
     data, _, ran = await _gate_device(hass, esphome_entries)
     key = _key({}, cap_physical_control="allow")

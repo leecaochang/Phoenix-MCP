@@ -7,8 +7,8 @@ and formatting survives. Device files feed three layers into one span set: curat
 credential-looking keys at any depth, and values matching secrets.yaml. Every scalar below a
 credential-named key is masked, and every other scalar is scanned for URLs, tokens, quoted
 assignments and the text of the credentials found, which a file can repeat under a neutral key.
-In a device file a substitution goes with a credential that refers to it, and so does one the
-file defines but never uses, since a package elsewhere may use it as one.
+In a device file a substitution goes with a credential that refers to it, here or in a local
+package file; with a package that cannot be read locally, so does one no readable file uses.
 A comment naming or quoting a credential goes with the comments touching it, since a commented-out
 block spans lines. The output is for reading: no tool writes it to a file.
 
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
 import difflib
+import posixpath
 import os
 import re
 import unicodedata
@@ -29,6 +30,7 @@ from typing import Any, NamedTuple
 import yaml
 
 from .const import REDACTION_SENTINEL
+from .esphome_constants import ESPHOME_PACKAGE_MAX_FILES
 from .policy_engine import is_credential_key
 from .redaction import redact_secrets_in_text
 from .yaml_includes import (
@@ -512,6 +514,150 @@ def _credential_substitutions(
     return hidden
 
 
+class PackageSource(NamedTuple):
+    """Where a device file sits in the ESPHome folder, and how to read a local package beside it.
+
+    `read` takes an ESPHome-relative path and returns the file's text, or None when the jailed
+    reader refuses it, it is missing or it is too large.
+    """
+
+    rel: str
+    read: Callable[[str], str | None]
+
+
+_INCLUDE_TAG = "!include"
+# A package given as a string with a scheme, `github://owner/repo/file.yaml@ref`, is fetched.
+_REMOTE_PACKAGE_RE = re.compile(r"^[A-Za-z][\w+.-]*:")
+
+
+def _package_paths(root: Any) -> tuple[list[str], bool]:
+    """Local files a document pulls in, as written, and whether every source it pulls in is local.
+
+    `!include` anywhere and a plain string under `packages:` name a local file. A remote package
+    (a scheme string or a mapping with `url:`), another `!include_` tag, or a path that is not
+    plain text cannot be read here.
+    """
+    paths: list[str] = []
+    local = True
+    seen: set[int] = set()
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        tag = getattr(node, "tag", None)
+        if isinstance(tag, str) and tag.startswith(_INCLUDE_TAG):
+            target = node if isinstance(node, yaml.ScalarNode) else next(
+                (value for key, value in getattr(node, "value", ())
+                 if isinstance(key, yaml.ScalarNode) and key.value == "file"), None)
+            if tag == _INCLUDE_TAG and isinstance(target, yaml.ScalarNode) and target.value:
+                paths.append(target.value)
+            else:
+                local = False
+        if isinstance(node, yaml.MappingNode):
+            stack.extend(child for pair in node.value for child in pair)
+        elif isinstance(node, yaml.SequenceNode):
+            stack.extend(node.value)
+    packages = next((value for key, value in root.value
+                     if isinstance(key, yaml.ScalarNode) and key.value == "packages"), None
+                    ) if isinstance(root, yaml.MappingNode) else None
+    if isinstance(packages, yaml.MappingNode):
+        entries = [value for _key, value in packages.value]
+    else:
+        entries = packages.value if isinstance(packages, yaml.SequenceNode) else []
+    for entry in entries:
+        if isinstance(entry, yaml.ScalarNode) and entry.tag == _YAML_STR_TAG:
+            if _REMOTE_PACKAGE_RE.match(entry.value) or not entry.value:
+                local = False
+            else:
+                paths.append(entry.value)
+        elif isinstance(entry, yaml.MappingNode) and any(
+                isinstance(key, yaml.ScalarNode) and key.value == "url" for key, _value in entry.value):
+            local = False
+    return paths, local
+
+
+def _package_items(
+    root: Any, packages: PackageSource | None,
+) -> tuple[list[tuple[str, tuple[str, ...], Any]], bool]:
+    """The scalars of every local package a device file pulls in, nested ones included.
+
+    Also returns whether every package was read. Paths resolve against the including file's
+    folder, as ESPHome resolves them; whatever the reader refuses or cannot parse is unread.
+    """
+    items: list[tuple[str, tuple[str, ...], Any]] = []
+    complete = True
+    pending = [(packages.rel if packages else "", root)]
+    read = {pending[0][0]}
+    while pending:
+        base, node = pending.pop()
+        paths, local = _package_paths(node)
+        complete = complete and local
+        for path in paths:
+            if packages is None or posixpath.isabs(path):
+                complete = False
+                continue
+            rel = posixpath.normpath(posixpath.join(posixpath.dirname(base), path))
+            if rel in read:
+                continue
+            if len(read) > ESPHOME_PACKAGE_MAX_FILES:
+                complete = False
+                continue
+            read.add(rel)
+            text = packages.read(rel)
+            try:
+                package = _compose(text) if text is not None else None
+            except YamlParseError:
+                text = None
+            if text is None:
+                complete = False
+                continue
+            if package is None:
+                continue
+            try:
+                items.extend(_walk(package, (), _device_secret_key))
+            except RecursionError:
+                complete = False
+                continue
+            pending.append((rel, package))
+    return items, complete
+
+
+def _unused_substitutions(items: list[tuple[str, tuple[str, ...], Any]]) -> set[str]:
+    """Substitutions and vars no scalar uses, directly or through another substitution."""
+    defined: dict[str, set[str]] = {}
+    used: set[str] = set()
+    for _dotted, path, node in items:
+        refers = {first or second for first, second in _SUBSTITUTION_RE.findall(node.value)}
+        name = _substitution_name(path) if path[-1:] != (_KEY_SEGMENT,) else None
+        if name is None:
+            used |= refers
+        else:
+            defined.setdefault(name, set()).update(refers)
+    pending = list(used)
+    while pending:
+        for refer in defined.get(pending.pop(), ()):
+            if refer not in used:
+                used.add(refer)
+                pending.append(refer)
+    return set(defined) - used
+
+
+def _masked_substitutions(
+    items: list[tuple[str, tuple[str, ...], Any]], root: Any, packages: PackageSource | None,
+) -> set[str]:
+    """Substitutions of a device file to mask, traced through the local packages it pulls in.
+
+    With a package that cannot be read, every substitution no read file uses goes too, as the
+    unread one may use it as a credential.
+    """
+    package_items, complete = _package_items(root, packages)
+    pool = items + package_items
+    hidden = _credential_substitutions(pool, _device_secret_path)
+    return hidden if complete else hidden | _unused_substitutions(pool)
+
+
 class _Partition(NamedTuple):
     """A document's scalars, split by whether they are a credential whole."""
 
@@ -529,13 +675,17 @@ def _partition(
     secret_path: Callable[[tuple[str, ...]], bool],
     secret_key: Callable[[str], bool],
     secret_values: Collection[str],
+    packages: PackageSource | None = None,
 ) -> _Partition:
-    """Split a document's scalars, collecting the text of every whole credential."""
+    """Split a document's scalars, collecting the text of every whole credential.
+
+    `packages` reads a device file's local packages; without it every package counts as unread.
+    """
     credentials, others = [], []
     values = set(secret_values)
     names: set[str] = set()
     items = list(_walk(root, (), secret_key))
-    hidden = _credential_substitutions(items, secret_path) if secret_path is _device_secret_path else set()
+    hidden = _masked_substitutions(items, root, packages) if secret_path is _device_secret_path else set()
     for item in items:
         _dotted, path, node = item
         if path[-1:] == (_KEY_SEGMENT,):
@@ -565,12 +715,13 @@ def _scan_scalars(
     secret_path: Callable[[tuple[str, ...]], bool],
     secret_key: Callable[[str], bool],
     secret_values: Collection[str],
+    packages: PackageSource | None = None,
 ) -> _Scan:
     """Every scalar to change: whole for a credential, or with its embedded credential replaced."""
     root = _compose(text)
     if root is None:
         return _Scan([], set(secret_values), set(secret_values))
-    found = _partition(text, root, secret_path, secret_key, secret_values)
+    found = _partition(text, root, secret_path, secret_key, secret_values, packages)
     spans: list[Span] = [(*_node_span(text, node), dotted, None) for dotted, _path, node in found.credentials]
     values = set(found.values)
     hits = _value_hits([node.value for _dotted, _path, node in found.others], found.searchable)
@@ -673,20 +824,21 @@ def _splice(text: str, spans: list[Span], placeholder: Callable[[str], str]) -> 
     return "".join(parts)
 
 
-def _secret_spans(text: str, secret_values: Collection[str]) -> list[Span]:
+def _secret_spans(text: str, secret_values: Collection[str], packages: PackageSource | None) -> list[Span]:
     """Every span of a device file to change, unioning all three detection layers."""
-    scan = _scan_scalars(text, _device_secret_path, _device_secret_key, secret_values)
+    scan = _scan_scalars(text, _device_secret_path, _device_secret_key, secret_values, packages)
     return scan.spans + _comment_spans(text, scan.spans, _device_secret_key, scan.searchable)
 
 
 def redact_esphome_text(
-    text: str, secret_values: set[str] | None = None
+    text: str, secret_values: set[str] | None = None, packages: PackageSource | None = None,
 ) -> tuple[str, list[str]]:
     """Return (redacted_text, sorted redacted paths).
 
-    Raises YamlParseError, failing closed: an unparsed file's credentials cannot be located.
+    `packages` reads the file's local packages; without it none is read. Raises YamlParseError,
+    failing closed: an unparsed file's credentials cannot be located.
     """
-    spans = _secret_spans(text, secret_values or set())
+    spans = _secret_spans(text, secret_values or set(), packages)
     return _splice(text, spans, placeholder_for), sorted(span[2] for span in spans if span[2])
 
 
@@ -746,7 +898,8 @@ def _line_offsets(text: str, first_line: int, last_line: int) -> tuple[int, int]
 
 
 def redact_esphome_slice(
-    text: str, secret_values: set[str] | None, first_line: int, last_line: int
+    text: str, secret_values: set[str] | None, first_line: int, last_line: int,
+    packages: PackageSource | None = None,
 ) -> str:
     """Return lines first..last of a device file with every credential masked.
 
@@ -755,7 +908,7 @@ def redact_esphome_slice(
     """
     start, end = _line_offsets(text, first_line, last_line)
     clipped: list[Span] = []
-    for span_start, span_end, dotted, replacement in _secret_spans(text, secret_values or set()):
+    for span_start, span_end, dotted, replacement in _secret_spans(text, secret_values or set(), packages):
         if span_end <= start or span_start >= end:
             continue
         cut_start, cut_end = max(span_start, start), min(span_end, end)
@@ -955,14 +1108,16 @@ def masked_unified_diff(
     return diff[:max_chars], True
 
 
-def inline_secret_values(text: str, secret_values: set[str] | None = None) -> set[str]:
+def inline_secret_values(
+    text: str, secret_values: set[str] | None = None, packages: PackageSource | None = None,
+) -> set[str]:
     """Return the credential text a device file carries, for scrubbing free text.
 
     Same three layers as masking; validation output can quote them. A credential is collected
     decoded, as written and line by line, and one inside a larger value as the matched text alone.
     Values under MIN_CROSS_CHECK_LENGTH are dropped, as the scrub is a blind substring replace.
     """
-    scan = _scan_scalars(text, _device_secret_path, _device_secret_key, secret_values or set())
+    scan = _scan_scalars(text, _device_secret_path, _device_secret_key, secret_values or set(), packages)
     return {value for value in scan.values if len(value) >= MIN_CROSS_CHECK_LENGTH}
 
 

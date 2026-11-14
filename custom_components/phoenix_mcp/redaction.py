@@ -445,12 +445,25 @@ def entity_exists(hass: HomeAssistant, entity_id: str) -> bool:
     return hass.states.get(entity_id) is not None or er.async_get(hass).async_get(entity_id) is not None
 
 
-def _chain_windows(parts: list[str], hass: HomeAssistant) -> Iterator[int]:
+def entity_domains(hass: HomeAssistant) -> frozenset[str]:
+    """Every domain with a state or a registry entry: a dotted word outside them names no entity.
+
+    Event loop only.
+    """
+    domains = {state.domain for state in hass.states.async_all()}
+    return frozenset(domains | {entry.domain for entry in er.async_get(hass).entities.values()})
+
+
+def _chain_windows(
+    parts: list[str], hass: HomeAssistant, domains: Callable[[], Collection[str]],
+) -> Iterator[int]:
     """Start indexes of the two-part windows of a longer chain that may name an entity.
 
-    The window after a `states` part is always one (template access), and any other window
-    when that entity exists, as in lock.door.state or a logger named after an automation; a
-    platform name alone (event.data.get) is not one. Windows never overlap.
+    The leading window is one when its domain has an entity on this home, whether or not that
+    entity exists, as in lock.door.state, so a missing entity reads like a hidden one; a word
+    outside every entity domain (router.local, event.data.get) is not one. The window after a
+    `states` part is always one (template access), and a later window when that entity exists,
+    as in a logger named after an automation. Windows never overlap.
     """
     index = 0
     while index < len(parts) - 1:
@@ -459,6 +472,7 @@ def _chain_windows(parts: list[str], hass: HomeAssistant) -> Iterator[int]:
             _ID_PART_RE.fullmatch(domain) is not None and _ID_PART_RE.fullmatch(object_id) is not None
             and not (domain.isdecimal() and object_id.isdecimal())
             and ((index > 0 and parts[index - 1] == "states")
+                 or (index == 0 and domain in domains())
                  or entity_exists(hass, f"{domain}.{object_id}")))
         if candidate:
             yield index
@@ -475,11 +489,22 @@ def visible_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> froz
                      if resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE))
 
 
-def _redact_entity_ids(text: str, hass: HomeAssistant, is_visible: Callable[[str], bool], sentinel: str) -> str:
+def _redact_entity_ids(
+    text: str, hass: HomeAssistant, is_visible: Callable[[str], bool], sentinel: str,
+    domains: Collection[str] | None = None,
+) -> str:
     """Replace each entity ID that `is_visible` rejects, bare or inside a dotted chain.
 
-    Decimal literals are not entity IDs. A chain that cannot be judged goes whole.
+    Decimal literals are not entity IDs. A chain that cannot be judged goes whole. `domains` are
+    the entity domains for _chain_windows; without them they are read here, on the event loop.
     """
+    known: list[Collection[str]] = [] if domains is None else [domains]
+
+    def _domains() -> Collection[str]:
+        if not known:
+            known.append(entity_domains(hass))
+        return known[0]
+
     def _bare(entity_id: str) -> str:
         if _ID_PART_RE.fullmatch(entity_id.replace(".", "_", 1)) is None:
             return entity_id
@@ -496,7 +521,7 @@ def _redact_entity_ids(text: str, hass: HomeAssistant, is_visible: Callable[[str
             if len(parts) == 2:
                 return _bare(chain)
             out = list(parts)
-            for index in reversed(list(_chain_windows(parts, hass))):
+            for index in reversed(list(_chain_windows(parts, hass, _domains))):
                 entity_id = f"{parts[index]}.{parts[index + 1]}"
                 if not is_visible(entity_id):
                     out[index:index + 2] = [sentinel]
@@ -573,16 +598,18 @@ def instance_entity_domains(hass: HomeAssistant) -> frozenset[str]:
 def redact_entity_ids_outside(
     text: str, visible: frozenset[str], hass: HomeAssistant, *, sentinel: str = "<redacted-entity>",
     domains: Collection[str] | None = None, keep: Callable[[str], bool] | None = None,
+    chain_domains: Collection[str] | None = None,
 ) -> str:
     """The worker-thread form: redact against visible_entity_ids computed on the loop.
 
     With `domains`, a token outside them is not an entity ID and stays; so does one `keep` admits.
+    `chain_domains`, from entity_domains on the loop, decide which dotted chains may name one.
     """
     return _redact_entity_ids(
         text, hass,
         lambda eid: ((domains is not None and eid.split(".", 1)[0] not in domains) or eid.lower() in visible
                      or (keep is not None and keep(eid))),
-        sentinel)
+        sentinel, chain_domains)
 
 
 def entity_hint_for_agent(

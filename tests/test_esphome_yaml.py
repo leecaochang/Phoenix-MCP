@@ -8,6 +8,7 @@ import pytest
 
 from custom_components.phoenix_mcp.esphome_yaml import (
     DeclaredDevice,
+    PackageSource,
     declared_device,
     esphome_rel_path_ok,
     inline_secret_values,
@@ -702,3 +703,83 @@ class TestWhatTheShapesCannotTellApart:
     def test_a_url_fragment_or_matrix_parameter_is_masked(self, mark):
         masked, _ = redact_esphome_text(f"url: https://x.y/a{mark}aes_key=abc123\n")
         assert masked == f"url: https://x.y/a{mark}aes_key=<redacted>\n"
+
+
+def _packages(files: dict[str, str], rel: str = "dev.yaml") -> PackageSource:
+    """A package source over in-memory files; a missing path reads as refused."""
+    return PackageSource(rel, files.get)
+
+
+class TestSubstitutionsThroughPackages:
+    """A device file's substitutions are traced through the local packages it pulls in."""
+
+    MAIN = (
+        "substitutions:\n  net_word: hunter2hunter2\n  room: Kitchen\n"
+        "packages:\n  wifi: !include common/wifi.yaml\nesphome:\n  name: x\n"
+    )
+
+    def test_a_local_package_using_a_substitution_as_a_password_masks_it(self):
+        source = _packages({"common/wifi.yaml": "wifi:\n  password: ${net_word}\n"})
+        masked, paths = redact_esphome_text(self.MAIN, None, source)
+        assert "hunter2hunter2" not in masked
+        assert paths == ["substitutions.net_word"]
+        # Every package was read, so an ordinary substitution nobody uses stays.
+        assert "room: Kitchen" in masked
+        assert "hunter2hunter2" in inline_secret_values(self.MAIN, None, source)
+
+    def test_a_local_package_unused_value_stays_readable(self):
+        source = _packages({"common/wifi.yaml": "wifi:\n  ssid: ${net_word}\n"})
+        masked, paths = redact_esphome_text(self.MAIN, None, source)
+        assert "net_word: hunter2hunter2" in masked and paths == []
+
+    @pytest.mark.parametrize("package", [
+        # Through another substitution the package defines, and through include vars.
+        "substitutions:\n  inner: ${net_word}\nwifi:\n  password: ${inner}\n",
+        "packages:\n  deeper: !include\n    file: ../deep/ota.yaml\n    vars:\n      word: ${net_word}\n",
+    ], ids=["chained", "nested_vars"])
+    def test_a_package_reference_through_another_name_masks_it(self, package):
+        source = _packages({
+            "common/wifi.yaml": package,
+            "deep/ota.yaml": "ota:\n  - platform: esphome\n    password: ${word}\n",
+        })
+        assert "hunter2hunter2" not in redact_esphome_text(self.MAIN, None, source)[0]
+
+    @pytest.mark.parametrize("packages", [
+        "packages:\n  remote: github://owner/repo/wifi.yaml@main\n",
+        "packages:\n  remote:\n    url: https://github.com/owner/repo\n    files: [wifi.yaml]\n",
+        "packages:\n  - !include ../../outside.yaml\n",
+        "packages:\n  missing: !include nowhere.yaml\n",
+        "packages:\n  all: !include_dir_named common\n",
+    ], ids=["shorthand", "url", "outside", "missing", "include_dir"])
+    def test_an_unreadable_package_masks_every_substitution_no_file_uses(self, packages):
+        doc = (
+            "substitutions:\n  room: Kitchen\n  device_name: porch\n  link_word: kitchenword9\n"
+            f"{packages}esphome:\n  name: ${{device_name}}\n"
+        )
+        files = {"common/wifi.yaml": "wifi:\n  ssid: x\n", "outside.yaml": "wifi:\n  ssid: x\n"}
+        masked, paths = redact_esphome_text(doc, None, _packages(files, "sub/dev.yaml"))
+        assert "Kitchen" not in masked and "kitchenword9" not in masked
+        assert {"substitutions.room", "substitutions.link_word"} <= set(paths)
+        # One the file uses itself is not sent anywhere else for that.
+        assert "device_name: porch" in masked
+
+    def test_no_package_source_reads_no_package(self):
+        masked, _paths = redact_esphome_text(self.MAIN)
+        assert "Kitchen" not in masked
+
+    def test_a_plain_file_keeps_its_unused_ordinary_substitutions(self):
+        doc = "substitutions:\n  room: Kitchen\n  board: esp32dev\nesphome:\n  name: x\n"
+        assert redact_esphome_text(doc, None, _packages({}))[0] == doc
+        assert redact_esphome_text(doc)[0] == doc
+
+    def test_a_package_including_itself_is_read_once(self):
+        files = {"common/wifi.yaml": "packages:\n  again: !include wifi.yaml\nwifi:\n  password: ${net_word}\n"}
+        masked, _paths = redact_esphome_text(self.MAIN, None, _packages(files))
+        assert "hunter2hunter2" not in masked and "room: Kitchen" in masked
+
+    def test_past_the_file_budget_the_rest_count_as_unread(self, monkeypatch):
+        from custom_components.phoenix_mcp import esphome_yaml
+        monkeypatch.setattr(esphome_yaml, "ESPHOME_PACKAGE_MAX_FILES", 1)
+        files = {"common/wifi.yaml": "packages:\n  b: !include b.yaml\n", "common/b.yaml": "x: 1\n"}
+        masked, _paths = redact_esphome_text(self.MAIN, None, _packages(files))
+        assert "Kitchen" not in masked

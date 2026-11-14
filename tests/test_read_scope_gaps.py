@@ -21,10 +21,11 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
 from custom_components.phoenix_mcp.esphome_yaml import (
-    esphome_rel_path_ok, inline_secret_values, mask_yaml_text, redact_esphome_text,
+    PackageSource, esphome_rel_path_ok, inline_secret_values, mask_yaml_text, redact_esphome_text,
 )
 from custom_components.phoenix_mcp.redaction import (
-    _scrub_log_text, redact_entity_ids_outside, redact_inaccessible_entity_ids_in_text, redact_secrets_in_text,
+    _scrub_log_text, entity_domains, redact_entity_ids_outside, redact_inaccessible_entity_ids_in_text,
+    redact_secrets_in_text,
 )
 from custom_components.phoenix_mcp.tool_dispatch import _call_tool
 
@@ -72,6 +73,35 @@ async def test_a_dotted_reference_to_a_hidden_entity_is_redacted(hass, text):
 async def test_readable_and_non_entity_chains_stay(hass, text):
     _home(hass)
     assert redact_inaccessible_entity_ids_in_text(text, _key(), hass) == text
+
+
+@pytest.mark.parametrize("chain", ["lock.smart_lock.state", "lock.no_such_lock.state", "light.no_such_light.attributes.x"])
+async def test_a_missing_entity_in_a_chain_reads_like_a_hidden_one(hass, chain):
+    """A key that writes text and reads it back learns nothing from which chains come back."""
+    _home(hass)
+    key = _key()
+    tail = chain.split(".", 2)[2]
+    expected = f"note <redacted-entity>.{tail} end"
+    assert redact_inaccessible_entity_ids_in_text(f"note {chain} end", key, hass) == expected
+    worker = redact_entity_ids_outside(
+        f"note {chain} end", frozenset({"light.hall"}), hass, chain_domains=entity_domains(hass))
+    assert worker == expected
+
+
+@pytest.mark.parametrize("text", [
+    "router.local.lan", "backup.tar.gz", "version 6.3b2.1", "entity_id = event.data.get('entity_id')",
+    "light.hall.attributes.brightness",
+])
+async def test_a_chain_outside_every_entity_domain_or_readable_stays(hass, text):
+    _home(hass)
+    assert redact_inaccessible_entity_ids_in_text(text, _key(), hass) == text
+    assert redact_entity_ids_outside(text, frozenset({"light.hall"}), hass, chain_domains=entity_domains(hass)) == text
+
+
+async def test_a_chain_in_a_domain_with_entities_is_judged_like_an_entity(hass):
+    _home(hass)
+    hass.states.async_set("event.doorbell", "unknown")
+    assert redact_inaccessible_entity_ids_in_text("event.data.get", _key(), hass) == "<redacted-entity>.get"
 
 
 @pytest.mark.parametrize(("text", "secret"), [
@@ -168,16 +198,19 @@ def test_a_substitution_behind_a_credential_is_masked():
         "packages:\n  common: !include\n    file: common.yaml\n    vars:\n      friendly: Kitchen Plug\n"
         "      ota_password: hunter22\n"
     )
-    masked, paths = redact_esphome_text(doc)
+    # The package is read, and uses each of these as an ordinary value.
+    source = PackageSource("dev.yaml", {
+        "common.yaml": "sensor:\n  - name: ${friendly} ${pkg_only}\n    pin: ${relay_pin}\n"}.get)
+    masked, paths = redact_esphome_text(doc, None, source)
     for secret in (_KEY, "otaotaota9", "partpartpart", "hunter22", "hunter33word"):
         assert secret not in masked
-    # A substitution or package variable no credential refers to stays, though this file never uses it.
+    # A substitution or package variable no credential refers to stays.
     for kept in ("name: rf-blaster1", "pkg_only: used-by-a-package", "relay_pin: GPIO12", "friendly: Kitchen Plug"):
         assert kept in masked
     assert {"substitutions.enc", "substitutions.ota_word", "substitutions.part"} <= set(paths)
     # The values join the scrub of Builder output too; the readable ones do not.
-    assert _KEY in inline_secret_values(doc)
-    assert not {"used-by-a-package", "Kitchen Plug", "rf-blaster1"} & inline_secret_values(doc)
+    assert _KEY in inline_secret_values(doc, None, source)
+    assert not {"used-by-a-package", "Kitchen Plug", "rf-blaster1"} & inline_secret_values(doc, None, source)
 
 
 def test_folded_names_and_hidden_characters_are_refused():

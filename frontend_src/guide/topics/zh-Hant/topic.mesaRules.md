@@ -10,7 +10,7 @@ MESA 是一項開放規範。Phoenix 內建了它的參考實作 mesa-core，你
 策略按以下層級涵蓋對象。智慧體對實體執行操作時，MESA 會收集所有涵蓋它的策略，最具體的在前：
 
 - **{{label:mesa.scopeLabelEntity}}**：實體本身。
-- **{{label:mesa.scopeLabelDevice}}**：實體所屬的裝置，包括該裝置之後取得的實體。
+- **{{label:mesa.scopeLabelDevice}}**：實體所屬的裝置，包括該裝置之後取得的實體。它也涵蓋該裝置在 Home Assistant 中被停用的實體。
 - **{{label:mesa.scopeLabelParentDevice}}**：對於屬於更大裝置一部分的裝置，使用更大裝置的策略。裝置連線所經過的集線器不算。
 - **{{label:mesa.scopeLabelArea}}**：實體所在的分區，否則是其裝置所在的分區。
 - **{{label:mesa.scopeLabelIntegration}}**：建立該實體的整合，例如 hue。
@@ -82,7 +82,7 @@ MESA 對每個來源的處理都相同：MCP 用戶端、Agent Chat、語音智�
 - 重新命名、啟用、停用和移除實體與裝置，以及把它們移出設有策略的分區。
 - 整合和輔助項目變更、分區和樓層。
 - 行事曆和待辦事項變更，以及通知。
-- Zigbee 裝置變更、原始 Z-Wave 和 ISY 命令、`update.install` 和 ESPHome 韌體安裝。裝置及其子裝置的每個實體都必須通過檢查。
+- Zigbee 裝置變更、原始 Z-Wave 和 ISY 命令、`update.install`、ESPHome 韌體安裝和 ESPHome 裝置操作。裝置及其子裝置的每個實體都必須通過檢查。
 - Phoenix 無法確定對應裝置的 ESPHome 檔案。在{{label:settings.mesaModeAdvisory}}下只會警告；只要已設定任何 ESPHome 裝置，在{{label:settings.mesaModeEnforced}}下就會拒絕。
 
 Phoenix 無法確定名稱來自套件或替換變數的檔案，以及 Device Builder 未列出的新檔案所屬的裝置。
@@ -91,7 +91,7 @@ Phoenix 無法確定名稱來自套件或替換變數的檔案，以及 Device B
 
 - 對自動化、腳本、藍圖、場景、儀表板、儀表板資源、標籤、類別或能源設定的變更。
 - 備份、重新啟動、YAML 重新載入和日誌層級。
-- ESPHome 裝置操作和建置，以及向新裝置開放 Zigbee 網路。
+- ESPHome 建置，以及向新裝置開放 Zigbee 網路。
 
 讀取狀態不會被檢查，攝影機影像除外。自動化和腳本在 Home Assistant 內部執行，因此它們的操作不會被再次檢查。若要控制智慧體何時啟動自動化或腳本，請為它們設定自己的策略。
 
