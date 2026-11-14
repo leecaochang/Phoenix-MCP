@@ -5,6 +5,11 @@ import pytest
 
 from custom_components.phoenix_mcp.home_companion_response import ResponseEvidence, build_report
 from custom_components.phoenix_mcp.const import HOME_COMPANION_MAX_REPORT_ENTITIES, HOME_COMPANION_MAX_REPORT_NAMES
+from custom_components.phoenix_mcp.const import (
+    CONVERSATION_STYLES, ENGLISH_ONLY_CONVERSATION_STYLES, HOME_COMPANION_ACCEPTED_TEMPLATES,
+    HOME_COMPANION_CHARACTER_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES,
+)
+from custom_components.phoenix_mcp.catalog_templates import VOICE_TEMPLATES
 
 
 def result(body, *, error=False):
@@ -126,12 +131,17 @@ def test_styles_change_prose_without_changing_execution_facts(detail):
     evidence.observe('intent__HassTurnOn','allowed',receipt(),{})
     state(evidence)
     reports = [build_report('completed','invented',evidence,'en',style=style,detail=detail)
-               for style in ['direct','warm','calm_guide','lively','technical']]
-    assert len({r['message'] for r in reports})==(1 if detail=='concise' else 5)
+               for style in sorted(CONVERSATION_STYLES)]
+    # At concise a plain style says the shared power sentence; a character says its own.
+    plain = len(CONVERSATION_STYLES) - len(ENGLISH_ONLY_CONVERSATION_STYLES)
+    assert len({r['message'] for r in reports})==(1 + len(ENGLISH_ONLY_CONVERSATION_STYLES) if detail=='concise'
+                                                    else len(CONVERSATION_STYLES))
     facts = [{k:v for k,v in r.items() if k!='message'} for r in reports]
     assert all(f==facts[0] for f in facts)
     assert all('light.one' in r['message'] for r in reports)
-    assert all(('Turned on' if detail=='concise' else 'accepted') in r['message'] for r in reports)
+    plain_reports = [r for s, r in zip(sorted(CONVERSATION_STYLES), reports) if s not in ENGLISH_ONLY_CONVERSATION_STYLES]
+    assert len(plain_reports) == plain
+    assert all(('Turned on' if detail=='concise' else 'accepted') in r['message'] for r in plain_reports)
 
 
 def test_zero_count_is_valid_and_does_not_claim_home_wide_visibility():
@@ -143,7 +153,7 @@ def test_zero_count_is_valid_and_does_not_claim_home_wide_visibility():
     assert 'permitted scope' in report['message'] and 'entire house' not in report['message']
 
 
-@pytest.mark.parametrize('style', ['direct', 'warm', 'calm_guide', 'lively', 'technical'])
+@pytest.mark.parametrize('style', sorted(CONVERSATION_STYLES))
 def test_count_detail_describes_scope_instead_of_one_arbitrary_search_row(style):
     evidence = ResponseEvidence()
     evidence.observe('search_entities', 'allowed', result({
@@ -158,7 +168,9 @@ def test_count_detail_describes_scope_instead_of_one_arbitrary_search_row(style)
     assert all('Tall Lamp' not in report['message'] and '999' not in report['message'] for report in reports)
     assert 'groups' not in reports[0]['message']
     assert 'groups' in reports[1]['message']
-    assert 'physical devices' in reports[2]['message']
+    # The scope caveat, in the style's own words when it is a character.
+    scope = HOME_COMPANION_CHARACTER_TEMPLATES.get(style, {}).get('companion_count_scope', 'companion_count_scope')
+    assert VOICE_TEMPLATES[scope] in reports[2]['message']
     assert len(reports[0]['message']) < len(reports[1]['message']) < len(reports[2]['message'])
 
 
@@ -356,3 +368,56 @@ def test_a_broad_search_is_never_answered_by_its_first_rows(rows):
         assert f'Lamp {rows - 1}: on' in report['message'] and 'game room' not in report['message']
     else:
         assert report['message']=='The game room light is off.'
+
+
+@pytest.mark.parametrize('style', sorted(ENGLISH_ONLY_CONVERSATION_STYLES))
+def test_character_styles_speak_direct_outside_english(style):
+    """A character voice exists only in English; another language hears the Direct sentence."""
+    evidence = ResponseEvidence()
+    evidence.observe('intent__HassTurnOn','allowed',receipt(),{})
+    state(evidence)
+    english = build_report('completed', 'x', evidence, 'en', style=style, detail='balanced')['message']
+    direct = build_report('completed', 'x', evidence, 'en', style='direct', detail='balanced')['message']
+    assert english != direct
+    for language in ('de', 'ja', 'zh-Hans'):
+        assert (build_report('completed', 'x', evidence, language, style=style, detail='balanced')['message']
+                == build_report('completed', 'x', evidence, language, style='direct', detail='balanced')['message'])
+
+
+@pytest.mark.parametrize('style', sorted(ENGLISH_ONLY_CONVERSATION_STYLES))
+def test_character_follow_up_sentences_stay_in_character(style):
+    """At every detail level a character says its own follow-ups; the facts stay the same."""
+    voiced = HOME_COMPANION_CHARACTER_TEMPLATES[style]
+    assert set(voiced) == {'companion_power_on', 'companion_power_off', 'companion_verified',
+                           'companion_count_groups', 'companion_count_scope', 'companion_readings'}
+    for key, own in voiced.items():
+        assert own in VOICE_TEMPLATES and VOICE_TEMPLATES[own] != VOICE_TEMPLATES[key]
+    evidence = ResponseEvidence()
+    evidence.observe('search_entities', 'allowed', result({
+        'entities': [{'entity_id': 'light.tall', 'friendly_name': 'Tall Lamp'}],
+        'count': 1, 'total': 44, 'truncated': True,
+    }), {'domain': 'light', 'limit': 1})
+    assert evidence.select_read_answer({'kind': 'count', 'source': 0})
+    detailed = build_report('completed', 'x', evidence, 'en', style=style, detail='detailed')['message']
+    assert VOICE_TEMPLATES['companion_count_groups'] not in detailed
+    assert VOICE_TEMPLATES['companion_count_scope'] not in detailed
+    assert ': 44' in detailed
+    german = build_report('completed', 'x', evidence, 'de', style=style, detail='detailed')
+    assert german == build_report('completed', 'x', evidence, 'de', style='direct', detail='detailed')
+
+
+def test_every_style_has_both_spoken_templates():
+    for style in CONVERSATION_STYLES:
+        for table in (HOME_COMPANION_ACCEPTED_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES):
+            assert table[style] in VOICE_TEMPLATES
+
+
+@pytest.mark.parametrize('style', sorted(ENGLISH_ONLY_CONVERSATION_STYLES))
+def test_character_reads_out_readings_in_its_own_words(style):
+    evidence = ResponseEvidence()
+    state(evidence, unit_of_measurement='W')
+    plain = build_report('completed', 'x', evidence, 'en', style='direct')['message']
+    voiced = build_report('completed', 'x', evidence, 'en', style=style)['message']
+    assert 'light.one: on W' in plain and 'light.one: on W' in voiced
+    assert voiced != plain
+    assert voiced.startswith(VOICE_TEMPLATES[HOME_COMPANION_CHARACTER_TEMPLATES[style]['companion_readings']].split('{readings}')[0])

@@ -719,6 +719,28 @@ async def test_run_ai_task_free_text_uses_selected_style_and_detail():
 
 
 @pytest.mark.asyncio
+async def test_run_ai_task_explanatory_free_text_keeps_its_explanation():
+    """An operator who picks Explanatory for AI Task gets the explanation in the text."""
+    access_key = _make_access_key()
+    data = _make_data(ai_task_conversation_style="explanatory", ai_task_detail_level="balanced")
+    capture: dict = {}
+    stream = _staged_stream(
+        [{"type": llm_base.EV_TEXT, "text": "result"}, _done("end_turn")],
+        capture=capture,
+    )
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
+        await async_run_ai_task(
+            MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h", "instr",
+        )
+    contract = capture["system_prompt"].split("AI Task free-text output contract")[1]
+    assert "How this worked:" in contract
+    assert "does not count as extra commentary" in contract
+    assert "Return only the requested data" not in contract
+
+
+@pytest.mark.asyncio
 async def test_run_ai_task_pending_becomes_queued_without_blocking():
     access_key = _make_access_key()
     data = _make_data()

@@ -11,9 +11,10 @@ from typing import Any
 
 from homeassistant.util.color import color_name_to_rgb
 
-from .const import HOME_COMPANION_CONTROL_TOOLS, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_MAX_REPORT_ENTITIES, HOME_COMPANION_MAX_REPORT_NAMES, HOME_COMPANION_MAX_CALLS, CONVERSATION_STYLES, DETAIL_LEVELS, HOME_COMPANION_ACCEPTED_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES, HOME_COMPANION_VERIFIED_TEMPLATES, HOME_COMPANION_COUNT_KIND_TEMPLATES, HOME_COMPANION_POWER_TEMPLATES, HOME_COMPANION_ACTION_KIND_TEMPLATES, HOME_COMPANION_EXCEPTION_TEMPLATES, HOME_COMPANION_STATE_READ_TOOLS
+from .const import HOME_COMPANION_CONTROL_TOOLS, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_MAX_REPORT_ENTITIES, HOME_COMPANION_MAX_REPORT_NAMES, HOME_COMPANION_MAX_CALLS, CONVERSATION_STYLES, DETAIL_LEVELS, ENGLISH_ONLY_CONVERSATION_STYLES, HOME_COMPANION_ACCEPTED_TEMPLATES, HOME_COMPANION_CHARACTER_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES, HOME_COMPANION_VERIFIED_TEMPLATES, HOME_COMPANION_COUNT_KIND_TEMPLATES, HOME_COMPANION_POWER_TEMPLATES, HOME_COMPANION_ACTION_KIND_TEMPLATES, HOME_COMPANION_EXCEPTION_TEMPLATES, HOME_COMPANION_STATE_READ_TOOLS
 from .routing.command_display import reading_text
 from .catalog_text import spoken_list, spoken_sentences, voice_text
+from .locales import canonical_language
 
 
 def _body(result: dict | None) -> Any:
@@ -260,10 +261,17 @@ def _verification_exceptions(evidence: ResponseEvidence, unmatched: set[str], la
     return parts
 
 
+def _voiced(key: str, style: str) -> str:
+    """The character style's own version of a plain spoken sentence, when it has one."""
+    return HOME_COMPANION_CHARACTER_TEMPLATES.get(style, {}).get(key, key)
+
+
 def build_report(status: str, model_message: str, evidence: ResponseEvidence, language: object,
                  *, recovery_required: bool = False, style: str = "direct", detail: str = "balanced") -> dict:
     """Choose execution claims and required next steps independently of model prose."""
     style = style if style in CONVERSATION_STYLES else 'direct'
+    if style in ENGLISH_ONLY_CONVERSATION_STYLES and canonical_language(language) != 'en':
+        style = 'direct'
     detail = detail if detail in DETAIL_LEVELS else 'concise'
     labels = list(dict.fromkeys((evidence.targets if evidence.attempts else evidence.candidates).values()))[:HOME_COMPANION_MAX_REPORT_NAMES]
     execution, verification, next_step = 'not_attempted', 'not_verified', 'none'
@@ -300,14 +308,16 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
         if evidence.verified:
             verification = 'confirmed'
             if detail == 'concise' and power in ({'on'}, {'off'}):
-                parts = [voice_text(language, HOME_COMPANION_POWER_TEMPLATES[next(iter(power))],
+                parts = [voice_text(language, _voiced(HOME_COMPANION_POWER_TEMPLATES[next(iter(power))], style),
                                     names=_target_phrase(evidence, matched, language))] if not partial else parts
             else:
-                parts.append(voice_text(language, HOME_COMPANION_VERIFIED_TEMPLATES[detail]))
+                parts.append(voice_text(language, _voiced('companion_verified', style)
+                                         if style in ENGLISH_ONLY_CONVERSATION_STYLES
+                                         else HOME_COMPANION_VERIFIED_TEMPLATES[detail]))
         else:
             next_step = 'check_state'
             if detail == 'concise' and matched and not partial and power in ({'on'}, {'off'}):
-                parts = [voice_text(language, HOME_COMPANION_POWER_TEMPLATES[next(iter(power))],
+                parts = [voice_text(language, _voiced(HOME_COMPANION_POWER_TEMPLATES[next(iter(power))], style),
                                     names=_target_phrase(evidence, matched, language))]
             elif matched:
                 parts.append(voice_text(language, 'companion_verification_progress', count=len(matched), total=len(all_targets)))
@@ -354,13 +364,13 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
             kind = voice_text(language, HOME_COMPANION_COUNT_KIND_TEMPLATES[evidence.selected_kind])
             parts.append(voice_text(language, HOME_COMPANION_COUNT_TEMPLATES[style], count=evidence.selected_count, kind=kind))
             if detail != 'concise':
-                parts.append(voice_text(language, 'companion_count_groups'))
+                parts.append(voice_text(language, _voiced('companion_count_groups', style)))
             if detail == 'detailed':
-                parts.append(voice_text(language, 'companion_count_scope'))
+                parts.append(voice_text(language, _voiced('companion_count_scope', style)))
         elif (evidence.chosen or 0 < len(evidence.readings) <= HOME_COMPANION_MAX_REPORT_NAMES) and not evidence.model_answer:
             # Search rows answer only when every one fits the reply; the first few of a broad
             # search are an arbitrary subset, so the model, which read them all, answers instead.
-            parts.append(voice_text(language, 'companion_readings', readings='; '.join(
+            parts.append(voice_text(language, _voiced('companion_readings', style), readings='; '.join(
                 list((evidence.chosen or evidence.readings).values())[:HOME_COMPANION_MAX_REPORT_NAMES])))
         else:
             # Interpretation of successful history/statistics reads remains model-authored;
@@ -370,7 +380,7 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
         if detail == 'detailed' and evidence.accepted:
             readings = [evidence.readings[eid] for eid in evidence.targets if eid in evidence.readings]
             if readings:
-                parts.append(voice_text(language, 'companion_readings', readings='; '.join(readings[:HOME_COMPANION_MAX_REPORT_NAMES])))
+                parts.append(voice_text(language, _voiced('companion_readings', style), readings='; '.join(readings[:HOME_COMPANION_MAX_REPORT_NAMES])))
             parts.append(voice_text(language, 'companion_receipt_limit'))
         if labels and ((evidence.accepted and execution != 'accepted') or status == 'clarification_needed'):
             parts.append(voice_text(language, 'companion_targets' if evidence.attempts else 'companion_candidates', names=spoken_list(labels, language)))

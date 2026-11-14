@@ -417,13 +417,39 @@ CONVERSATION_STYLE_WARM = "warm"
 CONVERSATION_STYLE_CALM_GUIDE = "calm_guide"
 CONVERSATION_STYLE_LIVELY = "lively"
 CONVERSATION_STYLE_TECHNICAL = "technical"
+CONVERSATION_STYLE_EXPLANATORY = "explanatory"
+CONVERSATION_STYLE_SARCASTIC = "sarcastic"
+CONVERSATION_STYLE_CAVEMAN = "caveman"
+CONVERSATION_STYLE_PIRATE = "pirate"
+CONVERSATION_STYLE_BUTLER = "butler"
+CONVERSATION_STYLE_SHAKESPEAREAN = "shakespearean"
+CONVERSATION_STYLE_DRAMA_QUEEN = "drama_queen"
+CONVERSATION_STYLE_GRUMPY_TEENAGER = "grumpy_teenager"
+CONVERSATION_STYLE_NATURE_DOCUMENTARY = "nature_documentary"
+CONVERSATION_STYLE_STARSHIP_COMPUTER = "starship_computer"
+CONVERSATION_STYLE_NOIR_DETECTIVE = "noir_detective"
+# Character voices that do not carry over into other languages: a reply in any
+# other language uses Direct instead, and their spoken sentences exist only in English.
+ENGLISH_ONLY_CONVERSATION_STYLES = frozenset({
+    CONVERSATION_STYLE_SARCASTIC,
+    CONVERSATION_STYLE_CAVEMAN,
+    CONVERSATION_STYLE_PIRATE,
+    CONVERSATION_STYLE_BUTLER,
+    CONVERSATION_STYLE_SHAKESPEAREAN,
+    CONVERSATION_STYLE_DRAMA_QUEEN,
+    CONVERSATION_STYLE_GRUMPY_TEENAGER,
+    CONVERSATION_STYLE_NATURE_DOCUMENTARY,
+    CONVERSATION_STYLE_STARSHIP_COMPUTER,
+    CONVERSATION_STYLE_NOIR_DETECTIVE,
+})
 CONVERSATION_STYLES = frozenset({
     CONVERSATION_STYLE_DIRECT,
     CONVERSATION_STYLE_WARM,
     CONVERSATION_STYLE_CALM_GUIDE,
     CONVERSATION_STYLE_LIVELY,
     CONVERSATION_STYLE_TECHNICAL,
-})
+    CONVERSATION_STYLE_EXPLANATORY,
+}) | ENGLISH_ONLY_CONVERSATION_STYLES
 DETAIL_LEVEL_CONCISE = "concise"
 DETAIL_LEVEL_BALANCED = "balanced"
 DETAIL_LEVEL_DETAILED = "detailed"
@@ -1517,21 +1543,29 @@ HOME_COMPANION_SENSOR_CLASSES = frozenset({
 })
 HOME_COMPANION_REPORT_STATUSES = frozenset({"completed", "partial", "clarification_needed", "pending_approval", "refused"})
 HOME_COMPANION_ACCEPTED_TEMPLATES = MappingProxyType({
-    "direct": "companion_accepted_direct", "warm": "companion_accepted_warm",
-    "calm_guide": "companion_accepted_calm_guide", "lively": "companion_accepted_lively",
-    "technical": "companion_accepted_technical",
+    style: f"companion_accepted_{style}" for style in CONVERSATION_STYLES
 })
 HOME_COMPANION_POWER_TEMPLATES = MappingProxyType({"on": "companion_power_on", "off": "companion_power_off"})
 HOME_COMPANION_ACTION_KIND_TEMPLATES = MappingProxyType({'light': 'companion_action_lights', 'fan': 'companion_action_fans', 'other': 'companion_action_devices'})
 HOME_COMPANION_EXCEPTION_TEMPLATES = MappingProxyType({'unavailable': 'companion_unavailable_targets', 'unverified': 'companion_unverified_targets'})
 HOME_COMPANION_COUNT_TEMPLATES = MappingProxyType({
-    "direct": "companion_count_direct", "warm": "companion_count_warm",
-    "calm_guide": "companion_count_calm_guide", "lively": "companion_count_lively",
-    "technical": "companion_count_technical",
+    style: f"companion_count_{style}" for style in CONVERSATION_STYLES
 })
 HOME_COMPANION_COUNT_KIND_TEMPLATES = MappingProxyType({
     "light": "companion_kind_light", "fan": "companion_kind_fan",
     "sensor": "companion_kind_sensor", "other": "companion_kind_other",
+})
+# Plain spoken sentences a character style says in its own voice: style, then plain key,
+# then the character's key. The serious ones (unavailable, unverified, refused, approvals)
+# stay plain in every style.
+HOME_COMPANION_CHARACTER_TEMPLATES = MappingProxyType({
+    style: MappingProxyType({
+        key: f"{key}_{style}" for key in (
+            "companion_power_on", "companion_power_off", "companion_verified",
+            "companion_count_groups", "companion_count_scope", "companion_readings",
+        )
+    })
+    for style in ENGLISH_ONLY_CONVERSATION_STYLES
 })
 HOME_COMPANION_VERIFIED_TEMPLATES = MappingProxyType({
     "concise": "companion_verified_short", "balanced": "companion_verified", "detailed": "companion_verified",

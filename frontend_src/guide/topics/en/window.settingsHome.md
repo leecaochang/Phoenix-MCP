@@ -59,6 +59,8 @@ Related: [How a command is routed](guide:topic.commandRouting)
 
 How replies sound, with the same choices as [Agent Chat](guide:window.settingsChat#chat-style). Default: {{label:settings.styleDirect}}.
 
+With {{label:settings.styleExplanatory}}, every spoken reply ends with an explanation, so replies take longer to hear.
+
 ### {{label:settings.detailLevel}} {#voice-detail}
 
 How much replies say. Default: {{label:settings.detailConcise}}.
@@ -103,7 +105,9 @@ The model that runs the tasks. A task fails if one reply from the model takes ov
 
 ### {{label:settings.conversationStyle}} {#ai-task-style}
 
-How text results sound. Default: {{label:settings.styleDirect}}.
+How text results sound, with the same choices as [Agent Chat](guide:window.settingsChat#chat-style). Default: {{label:settings.styleDirect}}.
+
+With {{label:settings.styleExplanatory}}, the explanation becomes part of the result. Automations that use the text get it too.
 
 ### {{label:settings.detailLevel}} {#ai-task-detail}
 

@@ -59,6 +59,8 @@ Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{la
 
 回复的语气，选项与 [Agent Chat](guide:window.settingsChat#chat-style) 相同。默认：{{label:settings.styleDirect}}。
 
+选择 {{label:settings.styleExplanatory}} 时，每条语音回复都以一段说明结尾，因此听完回复需要更长时间。
+
 ### {{label:settings.detailLevel}} {#voice-detail}
 
 回复说多少内容。默认：{{label:settings.detailConcise}}。
@@ -103,7 +105,9 @@ Home Companion 密钥会把对话交给 Home Companion 处理，并隐藏 **{{la
 
 ### {{label:settings.conversationStyle}} {#ai-task-style}
 
-文本结果的语气。默认：{{label:settings.styleDirect}}。
+文本结果的语气，选项与 [Agent Chat](guide:window.settingsChat#chat-style) 相同。默认：{{label:settings.styleDirect}}。
+
+选择 {{label:settings.styleExplanatory}} 时，说明会成为结果的一部分。使用该文本的自动化也会收到这段说明。
 
 ### {{label:settings.detailLevel}} {#ai-task-detail}
 

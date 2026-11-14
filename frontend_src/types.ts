@@ -132,7 +132,10 @@ export interface ArchivedAccessKeyRecord {
   last_used_at: string | null;
 }
 
-export type ConversationStyle = "direct" | "warm" | "calm_guide" | "lively" | "technical";
+export type ConversationStyle =
+  | "direct" | "warm" | "calm_guide" | "lively" | "technical" | "explanatory"
+  | "sarcastic" | "caveman" | "pirate" | "butler" | "shakespearean" | "drama_queen"
+  | "grumpy_teenager" | "nature_documentary" | "starship_computer" | "noir_detective";
 export type DetailLevel = "concise" | "balanced" | "detailed";
 
 export type ToolRoutingMode = "off" | "observe" | "advise";

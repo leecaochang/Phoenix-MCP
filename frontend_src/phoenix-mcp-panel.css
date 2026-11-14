@@ -1339,6 +1339,19 @@ select.input.agentcli-select { height: 28px; line-height: 26px; padding: 0 28px 
 .phx-select-check { display: inline-flex; flex: none; width: 14px; opacity: 0; transform: scale(0.7); transition: opacity 0.15s, transform 0.15s; }
 .phx-select-option.is-chosen .phx-select-check { opacity: 1; transform: none; }
 .phx-select-list.is-compact { font-size: 12px; }
+.phx-select-group {
+  padding: 8px 8px 2px;
+  border-top: 1px solid var(--phx-border);
+  margin-top: 4px;
+  color: var(--phx-text-2);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  user-select: none;
+}
 .phx-select-list.is-compact .phx-select-option { height: 26px; }
 .phx-select-chevron {
   position: fixed;
@@ -3136,6 +3149,10 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   overflow-wrap: anywhere;
 }
 /* Rendered Markdown in an assistant reply. */
+/* The message box keeps typed line breaks (pre-wrap); rendered Markdown has its own blocks,
+   and the newlines between them would otherwise each draw an empty line. */
+.agentcli-md { white-space: normal; }
+.agentcli-md pre { white-space: pre-wrap; }
 .agentcli-md > :first-child { margin-top: 0; }
 .agentcli-md > :last-child { margin-bottom: 0; }
 .agentcli-md p { margin: 0 0 8px; }

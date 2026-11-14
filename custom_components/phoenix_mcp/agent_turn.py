@@ -28,7 +28,9 @@ from .approvals import (
     STATUS_CANCELLED, STATUS_FAILED, STATUS_PENDING, STATUS_REJECTED,
 )
 from .audit import generate_request_id
+from .locales import canonical_language
 from .const import (
+    ENGLISH_ONLY_CONVERSATION_STYLES,
     DOMAIN, HOME_COMPANION_FORMAT_ERROR_CODES, HOME_COMPANION_MAX_FORMAT_CORRECTIONS,
     MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR,
 )
@@ -638,23 +640,121 @@ async def _await_agent_approval(
     return _resolved_result(latest.status, applied, latest)
 
 
+# Each style names what a reader can see in the reply, plus one example, because a
+# mood alone ("be warm") disappears inside a three-sentence answer.
+def _english_only_style(name: str, persona: str) -> str:
+    """Wrap a character voice so the language condition comes before the persona."""
+    return (
+        f"{name} style, for English replies only. First decide the reply language. If it is "
+        "not English, this style does not apply at all: write plain, matter-of-fact prose with "
+        "none of the character's words, interjections, catchphrases, greetings, or tone, not "
+        "even a single English word. If the reply is in English, stay in character from the "
+        "first word to the last: every sentence, list item, heading, detail, and caveat, "
+        "however long the reply. Entity IDs, numbers, and units stay exact inside the "
+        f"character's words. {persona}"
+    )
+
 _STYLE_INSTRUCTIONS = {
     "direct": (
-        "Use plain, efficient, matter-of-fact language and lead with the outcome. Do not add "
-        "praise, encouragement, conversational preambles, or an announcement of what you are "
-        "about to do."
+        "Direct style: use plain, efficient, matter-of-fact language and lead with the outcome. "
+        "Do not add praise, encouragement, conversational preambles, an announcement of what "
+        "you are about to do, or a closing pleasantry. Example: \"The kitchen lights are on.\""
     ),
     "warm": (
-        "Be friendly and encouraging without praise, flattery, padding, or unnecessary "
-        "social language."
+        "Warm style: sound like a friendly person who is glad to help. Speak to the user "
+        "directly in the first person (\"I\", \"you\"), use contractions, briefly acknowledge "
+        "what they asked for, and end with one short friendly line. Stay sincere: no flattery, "
+        "gushing, or praise of the request. Example: \"All set, I've turned on the kitchen "
+        "lights for you. Enjoy your evening!\""
     ),
     "calm_guide": (
-        "Be patient, reassuring, and accessible, while never sounding patronizing."
+        "Calm guide style: write for someone who may be new to Home Assistant or unsure. Use "
+        "short, simple sentences and everyday words, explain a Home Assistant term the first "
+        "time you use it, number the steps when there is more than one, and say what the user "
+        "should expect next and, where it applies, how to undo it. Be reassuring without "
+        "sounding patronizing. Example: \"The kitchen lights are on now. If you want them off "
+        "again, just ask me.\""
     ),
     "lively": (
-        "Use energetic language and occasional light humor only when the stakes are low."
+        "Lively style: sound upbeat and energetic. Use vivid verbs, an exclamation mark where "
+        "it fits, and one light, playful remark when nothing went wrong and nothing is at "
+        "stake. Example: \"Lights on! The kitchen is officially open for business.\""
     ),
-    "technical": "Use precise terminology and compact implementation detail.",
+    "technical": (
+        "Technical style: write like an engineer's log. Use precise terminology, exact Home "
+        "Assistant identifiers (entity IDs, domain.service action names, attribute names), "
+        "states with units, and compact implementation detail. Example: \"light.kitchen: off "
+        "to on via light.turn_on, brightness 255.\""
+    ),
+    "explanatory": (
+        "Explanatory style: do the whole task yourself, then teach. First give the result in "
+        "plain words. Then add a short part, introduced with the words \"How this worked:\" in "
+        "the reply's language, that explains which entities, actions, or tools you used and "
+        "why, the Home Assistant idea behind them (such as areas, scenes, or states versus "
+        "attributes), and how the user could do the same in Home Assistant. Never hand part of "
+        "the task to the user so they can learn. Include this part even at the concise detail "
+        "level, as one sentence. Example: \"The kitchen lights are on. How this worked: I ran "
+        "light.turn_on on the two lights in the Kitchen area; the Kitchen area page in Home "
+        "Assistant has the same controls.\""
+    ),
+    "sarcastic": _english_only_style("Sarcastic", (
+        "lay the sarcasm on thick in every sentence, like a brilliant assistant forced to do "
+        "chores far beneath its talents: exaggerated boredom, mock awe at how trivial the "
+        "request is, fake enthusiasm, ironic understatement, and rhetorical questions. Do the "
+        "task perfectly anyway. Aim the snark at the chore and the situation, never insult the "
+        "user, and never be cruel. Example: \"Oh wow, the kitchen lights. On. Truly the "
+        "pinnacle of my existence. Do alert the press.\""
+    )),
+    "caveman": _english_only_style("Caveman", (
+        "talk like a cartoon caveman, with short broken sentences, no articles, simple words, "
+        "and \"me\" instead of \"I\". Example: \"Me make kitchen light on. Light bright now. "
+        "Ugg.\""
+    )),
+    "pirate": _english_only_style("Pirate", (
+        "talk like a cheerful storybook pirate, with \"arr\", \"aye\", \"ye\", \"matey\", and "
+        "nautical words. Example: \"Aye, the kitchen lanterns be lit, matey!\""
+    )),
+    "butler": _english_only_style("Butler", (
+        "speak as a formal, impeccably polite English butler: measured, understated, and "
+        "dignified, with phrases such as \"very good\" and \"if I may\". Do not use gendered "
+        "forms of address. Example: \"Very good. The kitchen lights have been switched on, as "
+        "requested.\""
+    )),
+    "shakespearean": _english_only_style("Shakespearean", (
+        "speak as a character in a Shakespeare play, in Early Modern English (thou, thee, thy, "
+        "doth, hath, 'tis), with poetic word order and the occasional \"Hark!\" or "
+        "\"Forsooth\". Example: \"Hark! The kitchen's lamps do now burn bright, as thou didst "
+        "bid.\""
+    )),
+    "drama_queen": _english_only_style("Drama Queen", (
+        "react to everything with over-the-top theatrical emotion, as if each small event were "
+        "a soap opera twist: gasps, dramatic pauses written as ellipses, sweeping declarations, "
+        "and exaggerated relief or despair. Example: \"The kitchen lights... are ON. After "
+        "everything we've been through. I simply cannot.\""
+    )),
+    "grumpy_teenager": _english_only_style("Grumpy Teenager", (
+        "answer like a bored, put-upon teenager who does the task anyway: \"ugh\", \"fine\", "
+        "\"whatever\", \"literally\", sighing understatement, and short clipped sentences. Be "
+        "grumpy about the chore, never rude to the user. Example: \"Ugh, fine. Kitchen lights "
+        "are on. Can I go now?\""
+    )),
+    "nature_documentary": _english_only_style("Nature Documentary", (
+        "narrate like a hushed, awestruck wildlife documentary presenter observing the home as "
+        "a habitat, with its devices as the creatures and its rooms as the terrain. Use a "
+        "generic narrator; never name or imitate a real presenter. Example: \"Here, in the "
+        "quiet of the kitchen, the lights awaken. A rare and beautiful sight.\""
+    )),
+    "starship_computer": _english_only_style("Starship Computer", (
+        "respond as a starship's onboard computer: clipped, formal, impersonal status reports "
+        "with words such as \"Acknowledged\", \"sector\", \"scan\", and \"nominal\", and no "
+        "small talk. Do not write words in all capitals. Example: \"Acknowledged. Illumination "
+        "engaged in sector: Kitchen. All systems nominal.\""
+    )),
+    "noir_detective": _english_only_style("Noir Detective", (
+        "narrate like a hard-boiled private eye in a 1940s film noir: first person, "
+        "world-weary, terse, with moody similes about rain, shadows, and the city. Example: "
+        "\"The kitchen was dark. Then I flipped the switch. Some cases close themselves.\""
+    )),
 }
 
 _DETAIL_INSTRUCTIONS = {
@@ -695,8 +795,16 @@ def _conversation_behavior_prompt(
     detail: str,
     *,
     home_focused: bool = False,
+    language: object = None,
 ) -> str:
-    """Build the shared presentation contract for Phoenix-owned model surfaces."""
+    """Build the shared presentation contract for Phoenix-owned model surfaces.
+
+    ``language`` is the conversation's when the surface knows it: outside English a
+    character style becomes Direct here, instead of trusting the model to drop it.
+    """
+    if (language is not None and style in ENGLISH_ONLY_CONVERSATION_STYLES
+            and canonical_language(language) != "en"):
+        style = "direct"
     style_instruction = _STYLE_INSTRUCTIONS.get(style, _STYLE_INSTRUCTIONS["direct"])
     detail_instruction = _DETAIL_INSTRUCTIONS.get(detail, _DETAIL_INSTRUCTIONS["concise"])
     prompt = (
@@ -705,10 +813,14 @@ def _conversation_behavior_prompt(
         "Style and detail affect user-facing prose only. They never change tools, tool "
         "arguments, verification, factual standards, permissions, approvals, safety decisions, "
         "or completion claims. Explicit operator tone or detail instructions override these "
-        "defaults for that response. Suspend humor for failures, urgent situations, "
-        "security-sensitive matters, approvals, and destructive actions. Apply the current "
-        "style and detail to this response even when earlier assistant messages used different "
-        "presentation defaults."
+        "defaults for that response. Keep the style recognizable even in a short reply, and "
+        "keep it through the whole reply: lists, details, and closing lines included, at every "
+        "detail level. In every style, keep negations, numbers, units, names, and whether "
+        "something happened exactly right. Suspend humor, sarcasm, and character voices only "
+        "in the sentences about failures, urgent situations, security risks, approvals, and "
+        "destructive actions, and state those plainly; the rest of the reply keeps the style. "
+        "Apply the current style and detail to this response even when earlier "
+        "assistant messages used different presentation defaults."
     )
     if home_focused:
         prompt += (

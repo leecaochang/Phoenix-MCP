@@ -86,7 +86,7 @@ Phoenix 在寫入任何內容之前檢查每個值。第一個問題會拒絕整
 | `agentcli_global` | boolean | `true` | 在頁面下次完整載入時生效。參見[Agent Chat](guide:window.settingsChat#chat-global)。 |
 | `agentcli_memory_chars` | integer，0 到 960000 | 200000 | 鉗制。接受數字字串。參見[Agent Chat](guide:window.settingsChat#chat-memory)。 |
 | `agentcli_max_iterations` | integer，3 到 100 | 20 | 鉗制。參見[Agent Chat](guide:window.settingsChat#chat-steps)。 |
-| `agentcli_conversation_style` | `direct`、`warm`、`calm_guide`、`lively` 或 `technical` | `direct` | 參見[Agent Chat](guide:window.settingsChat#chat-style)。 |
+| `agentcli_conversation_style` | `direct`、`warm`、`calm_guide`、`lively`、`technical`、`explanatory`、`sarcastic`、`caveman`、`pirate`、`butler`、`shakespearean`、`drama_queen`、`grumpy_teenager`、`nature_documentary`、`starship_computer` 或 `noir_detective` | `direct` | 參見[Agent Chat](guide:window.settingsChat#chat-style)。 |
 | `agentcli_detail_level` | `concise`、`balanced` 或 `detailed` | `concise` | 參見[Agent Chat](guide:window.settingsChat#chat-detail)。 |
 | `agentcli_home_focused` | boolean | `false` | 偏好，不是安全控制。參見[Agent Chat](guide:window.settingsChat#chat-home-focused)。 |
 | `agentcli_routing_mode` | `off`、`auto`、`local` 或 `hybrid` | `off` | 面板只寫入 `off` 和 `auto`。`hybrid` 需要決策帳戶。參見[Agent Chat](guide:window.settingsChat#chat-commands)和[僅 API 設定](guide:#api-only)。 |

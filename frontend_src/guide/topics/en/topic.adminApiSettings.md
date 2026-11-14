@@ -86,7 +86,7 @@ The audit log records the change with the names of the changed settings, not the
 | `agentcli_global` | boolean | `true` | Takes effect on the next full page load. See [Agent Chat](guide:window.settingsChat#chat-global). |
 | `agentcli_memory_chars` | integer, 0 to 960000 | 200000 | Clamped. Numeric strings are accepted. See [Agent Chat](guide:window.settingsChat#chat-memory). |
 | `agentcli_max_iterations` | integer, 3 to 100 | 20 | Clamped. See [Agent Chat](guide:window.settingsChat#chat-steps). |
-| `agentcli_conversation_style` | `direct`, `warm`, `calm_guide`, `lively` or `technical` | `direct` | See [Agent Chat](guide:window.settingsChat#chat-style). |
+| `agentcli_conversation_style` | `direct`, `warm`, `calm_guide`, `lively`, `technical`, `explanatory`, `sarcastic`, `caveman`, `pirate`, `butler`, `shakespearean`, `drama_queen`, `grumpy_teenager`, `nature_documentary`, `starship_computer` or `noir_detective` | `direct` | See [Agent Chat](guide:window.settingsChat#chat-style). |
 | `agentcli_detail_level` | `concise`, `balanced` or `detailed` | `concise` | See [Agent Chat](guide:window.settingsChat#chat-detail). |
 | `agentcli_home_focused` | boolean | `false` | A preference, not a security control. See [Agent Chat](guide:window.settingsChat#chat-home-focused). |
 | `agentcli_routing_mode` | `off`, `auto`, `local` or `hybrid` | `off` | The panel writes only `off` and `auto`. `hybrid` needs a decision account. See [Agent Chat](guide:window.settingsChat#chat-commands) and [API-only settings](guide:#api-only). |

@@ -36,7 +36,9 @@ from custom_components.phoenix_mcp.approvals import (
 from custom_components.phoenix_mcp.provider_constants import (
     AGENT_CHAT_DEEPSEEK_MAX_TOKENS, AGENT_CHAT_PROVIDERS,
 )
-from custom_components.phoenix_mcp.const import MESA_APPROVED_EXECUTOR
+from custom_components.phoenix_mcp.const import (
+    CONVERSATION_STYLES, ENGLISH_ONLY_CONVERSATION_STYLES, MESA_APPROVED_EXECUTOR,
+)
 from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 from tests.runtime_fixtures import patch_readers
 
@@ -1914,10 +1916,21 @@ def _loop_data():
 
 @pytest.mark.parametrize(("style", "phrase"), [
     ("direct", "matter-of-fact"),
-    ("warm", "without praise, flattery"),
-    ("calm_guide", "never sounding patronizing"),
-    ("lively", "occasional light humor"),
+    ("warm", "first person"),
+    ("calm_guide", "number the steps"),
+    ("lively", "playful remark"),
     ("technical", "precise terminology"),
+    ("explanatory", "How this worked:"),
+    ("sarcastic", "lay the sarcasm on thick"),
+    ("caveman", "cartoon caveman"),
+    ("pirate", "storybook pirate"),
+    ("butler", "English butler"),
+    ("shakespearean", "Early Modern English"),
+    ("drama_queen", "soap opera twist"),
+    ("grumpy_teenager", "put-upon teenager"),
+    ("nature_documentary", "wildlife documentary"),
+    ("starship_computer", "onboard computer"),
+    ("noir_detective", "film noir"),
 ])
 @pytest.mark.parametrize(("detail", "detail_phrase"), [
     ("concise", "at most three short sentences"),
@@ -1932,9 +1945,43 @@ def test_conversation_behavior_prompt_presets_preserve_invariants(
     assert detail_phrase in prompt
     assert "never change tools, tool arguments" in prompt
     assert "Explicit operator tone or detail instructions override" in prompt
-    assert "Suspend humor for failures" in prompt
+    assert "Suspend humor, sarcasm, and character voices only" in prompt
+    assert "keep it through the whole reply" in prompt
+    assert "keep negations, numbers, units, names" in prompt
     assert "even when earlier assistant messages used different" in prompt
     assert agent_turn._HOME_FOCUS_INSTRUCTION not in prompt
+
+
+def test_every_stored_style_has_its_own_instruction():
+    assert set(agent_turn._STYLE_INSTRUCTIONS) == set(CONVERSATION_STYLES)
+    assert len(set(agent_turn._STYLE_INSTRUCTIONS.values())) == len(CONVERSATION_STYLES)
+    for style, text in agent_turn._STYLE_INSTRUCTIONS.items():
+        assert "Example:" in text
+        assert ("for English replies only" in text) == (style in ENGLISH_ONLY_CONVERSATION_STYLES)
+
+
+@pytest.mark.parametrize("style", sorted(ENGLISH_ONLY_CONVERSATION_STYLES))
+def test_character_style_becomes_direct_when_the_language_is_known_not_english(style):
+    direct = agent_turn._conversation_behavior_prompt("direct", "concise")
+    assert agent_turn._conversation_behavior_prompt(style, "concise", language="de") == direct
+    assert agent_turn._conversation_behavior_prompt(style, "concise", language="zh-Hans") == direct
+    kept = agent_turn._conversation_behavior_prompt(style, "concise", language="en-GB")
+    assert kept != direct and "for English replies only" in kept
+    # Agent Chat does not know the reply language, so the model gets the condition.
+    assert agent_turn._conversation_behavior_prompt(style, "concise") == kept
+
+
+def test_known_language_leaves_the_other_styles_alone():
+    for style in set(CONVERSATION_STYLES) - ENGLISH_ONLY_CONVERSATION_STYLES:
+        assert (agent_turn._conversation_behavior_prompt(style, "balanced", language="fr")
+                == agent_turn._conversation_behavior_prompt(style, "balanced"))
+
+
+def test_explanatory_finishes_the_task_instead_of_handing_it_over():
+    prompt = agent_turn._conversation_behavior_prompt("explanatory", "concise")
+    assert "do the whole task yourself" in prompt
+    assert "Never hand part of the task to the user" in prompt
+    assert "even at the concise detail level" in prompt
 
 
 def test_direct_concise_prompt_has_concrete_prose_guardrails():

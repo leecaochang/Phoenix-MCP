@@ -59,6 +59,8 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 回覆的語氣，選項與 [Agent Chat](guide:window.settingsChat#chat-style) 相同。預設：{{label:settings.styleDirect}}。
 
+選擇 {{label:settings.styleExplanatory}} 時，每則語音回覆都以一段說明結尾，因此聽完回覆需要更長時間。
+
 ### {{label:settings.detailLevel}} {#voice-detail}
 
 回覆說多少內容。預設：{{label:settings.detailConcise}}。
@@ -103,7 +105,9 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 ### {{label:settings.conversationStyle}} {#ai-task-style}
 
-文字結果的語氣。預設：{{label:settings.styleDirect}}。
+文字結果的語氣，選項與 [Agent Chat](guide:window.settingsChat#chat-style) 相同。預設：{{label:settings.styleDirect}}。
+
+選擇 {{label:settings.styleExplanatory}} 時，說明會成為結果的一部分。使用該文字的自動化也會收到這段說明。
 
 ### {{label:settings.detailLevel}} {#ai-task-detail}
 

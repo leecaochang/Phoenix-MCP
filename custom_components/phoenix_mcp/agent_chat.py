@@ -456,6 +456,7 @@ async def async_run_voice_turn(
         settings.voice_agent_conversation_style,
         settings.voice_agent_detail_level,
         home_focused=home_focused,
+        language=language or "en",
     )
 
     turn = await _run_headless_turn(
@@ -535,11 +536,18 @@ def _ai_task_free_text_output_contract(style: str, detail: str) -> str:
     """Repeat free-text presentation defaults at AI Task's final-output boundary."""
     style_instruction = _STYLE_INSTRUCTIONS.get(style, _STYLE_INSTRUCTIONS["direct"])
     detail_instruction = _DETAIL_INSTRUCTIONS.get(detail, _DETAIL_INSTRUCTIONS["balanced"])
+    if style == "explanatory":
+        # The operator chose to have the explanation in the generated text.
+        scope = ("Return the requested data first, then the explanation this style asks for; that "
+                 "explanation is wanted and does not count as extra commentary. Do not offer "
+                 "additional work Phoenix could do unless the task instructions request it.")
+    else:
+        scope = ("Return only the requested data. Do not mention tools, available entities, the "
+                 "task process, or additional work Phoenix could do unless the task instructions "
+                 "request it.")
     return (
         "\n\nAI Task free-text output contract: "
-        f"{style_instruction} {detail_instruction} "
-        "Return only the requested data. Do not mention tools, available entities, the task "
-        "process, or additional work Phoenix could do unless the task instructions request it."
+        f"{style_instruction} {detail_instruction} {scope}"
     )
 
 

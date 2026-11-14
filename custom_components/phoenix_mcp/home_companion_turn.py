@@ -146,7 +146,7 @@ async def run_request(arguments: dict, access_key: Any, hass: HomeAssistant, dat
             "clarification_needed or refused, and message in the requested language. Choose completed only when "
             "the whole task is finished. Language: " + arguments.get("language", "en")
         )
-        system += _conversation_behavior_prompt(turn.style, turn.detail)
+        system += _conversation_behavior_prompt(turn.style, turn.detail, language=turn.language)
         # Every ingress reaches this turn, so its model gets the notes the same way
         # whether a request came from an external client, Assist, Voice, Chat or AI Task.
         notes_block = access_key_notes_block(access_key, hass)

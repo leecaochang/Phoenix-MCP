@@ -23,7 +23,8 @@ const CLOSE_MS = 120;
 /** How far the pointer moves after opening before a release chooses. */
 const DRAG_SLOP = 4;
 
-interface Choice { value: string; label: string; disabled: boolean }
+/** `group` is the label of the `<optgroup>` holding the choice, shown as a heading above its first choice. */
+interface Choice { value: string; label: string; disabled: boolean; group: string | null }
 
 interface OpenState {
   select: HTMLSelectElement;
@@ -47,11 +48,15 @@ function servedBy(select: HTMLSelectElement, root: HTMLElement): boolean {
 }
 
 function choicesOf(select: HTMLSelectElement): Choice[] {
-  return [...select.options].map((option) => ({
-    value: option.value,
-    label: option.label || option.text,
-    disabled: option.disabled || (option.parentElement instanceof HTMLOptGroupElement && option.parentElement.disabled),
-  }));
+  return [...select.options].map((option) => {
+    const group = option.parentElement instanceof HTMLOptGroupElement ? option.parentElement : null;
+    return {
+      value: option.value,
+      label: option.label || option.text,
+      disabled: option.disabled || Boolean(group?.disabled),
+      group: group ? group.label : null,
+    };
+  });
 }
 
 /** A dropdown the list takes over: one of the panel's own, usable now. */
@@ -262,7 +267,11 @@ function SelectList({ state, closing, onClose, onChoose, keysRef }: {
           {/* One highlight glides to the choice under the pointer or keys. */}
           <span className="phx-select-highlight" aria-hidden="true"
             style={{ transform: `translateY(${activeRow?.offsetTop ?? active * rowHeightGuess}px)`, height: activeRow?.offsetHeight ?? rowHeightGuess, opacity: active >= 0 && !choices[active]?.disabled ? 1 : 0 }} />
-          {choices.map((choice, i) => (
+          {choices.map((choice, i) => [
+            // A heading is not a choice: it carries no option role, so every index stays a choice's.
+            choice.group !== null && choice.group !== choices[i - 1]?.group && (
+              <li key={`${i}:group`} role="presentation" className="phx-select-group">{choice.group}</li>
+            ),
             <li key={`${i}:${choice.value}`} id={`${id}-${i}`} role="option" data-index={i}
               aria-selected={i === chosen} aria-disabled={choice.disabled || undefined}
               className={`phx-select-option${i === chosen ? " is-chosen" : ""}`}
@@ -270,8 +279,8 @@ function SelectList({ state, closing, onClose, onChoose, keysRef }: {
               onClick={() => { if (!choice.disabled) onChoose(choice.value); }}>
               <span className="phx-select-label">{choice.label}</span>
               <span className="phx-select-check" aria-hidden="true"><Icon name="check" size={14} /></span>
-            </li>
-          ))}
+            </li>,
+          ])}
         </ul>
       </div>
       {chevron && (

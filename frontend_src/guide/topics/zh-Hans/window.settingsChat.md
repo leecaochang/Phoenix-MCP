@@ -41,7 +41,22 @@ Related: [长消息](guide:window.agentChat#memory-warning)
 
 ## {{label:settings.conversationStyle}} {#chat-style}
 
-回复的语气：{{label:settings.styleDirect}}（默认）、{{label:settings.styleWarm}}、{{label:settings.styleCalmGuide}}、{{label:settings.styleLively}} 或 {{label:settings.styleTechnical}}。这只改变措辞，不改变 Phoenix 的行为。
+回复的语气。这只改变措辞，不改变 Phoenix 的行为。默认是 {{label:settings.styleDirect}}。
+
+| 风格 | 效果 | 示例 |
+|---|---|---|
+| {{label:settings.styleDirect}} | 先给结果，没有问候语或结束语。 | 厨房灯已打开。 |
+| {{label:settings.styleWarm}} | 直接对您说话，回应您的请求，并以一句友好的话结尾。 | 都办好了，我已经帮您打开厨房灯。祝您晚上愉快！ |
+| {{label:settings.styleCalmGuide}} | 用简单的词语和编号步骤。解释术语，并说明接下来会发生什么。 | 厨房灯现在开着。如果想再关掉，直接告诉我就行。 |
+| {{label:settings.styleLively}} | 轻快，用词生动，在无关紧要时来一句俏皮话。 | 灯亮啦！厨房正式开张营业。 |
+| {{label:settings.styleTechnical}} | 实体 ID、动作名称、属性和单位。 | light.kitchen: off to on via light.turn_on, brightness 255. |
+| {{label:settings.styleExplanatory}} | 完成任务后，说明其中的原理，以及您如何自己操作。 | 厨房灯已打开。工作原理：我对厨房区域的两盏灯运行了 light.turn_on。 |
+
+{{label:settings.styleEnglishOnly}} 下的风格会扮演一个角色，例如 {{label:settings.stylePirate}}、{{label:settings.styleNoirDetective}} 或 {{label:settings.styleStarshipComputer}}。无论详细程度如何，角色都会在整条回复中保持腔调。角色只适用于英语。用其他语言回复时，会改用 {{label:settings.styleDirect}}。
+
+遇到失败、审批、安全问题和破坏性操作时，每种风格都不开玩笑，也不用角色腔调。数字、名称以及某件事是否已发生，都保持准确。
+
+选择 {{label:settings.detailConcise}} 时，回复最多三句短句，因此风格主要体现在用词上。回复与风格的贴合程度也取决于您的 AI 模型。
 
 ## {{label:settings.detailLevel}} {#chat-detail}
 

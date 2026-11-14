@@ -71,6 +71,14 @@ KEEP_ENGLISH_SECTIONS: tuple[str, ...] = ()
 # Individual keys that stay English, with the reason grouped so the next person
 # can tell a decision from an oversight. Absence from the locale file IS the
 # mechanism: HA falls back per key.
+# Character conversation styles and their catalog label suffixes (see KEEP_ENGLISH).
+_ENGLISH_ONLY_STYLE_LABELS = {
+    "sarcastic": "Sarcastic", "caveman": "Caveman", "pirate": "Pirate", "butler": "Butler",
+    "shakespearean": "Shakespearean", "drama_queen": "DramaQueen",
+    "grumpy_teenager": "GrumpyTeenager", "nature_documentary": "NatureDocumentary",
+    "starship_computer": "StarshipComputer", "noir_detective": "NoirDetective",
+}
+
 KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
     # The MESA enum values and the permission states (READ/WRITE/DENY/INHERIT) are
     # translated, not kept English. Home Assistant itself translates entity states
@@ -97,6 +105,15 @@ KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
         "panel.perms.letterYellow",
         "panel.perms.letterGreen",
         "panel.perms.letterRed",
+    ),
+    # Character conversation styles work only in English replies (owner decision): a
+    # reply in another language uses Direct, so their names and spoken sentences stay
+    # English. Their Help text is translated, so every reader learns that limit.
+    "English-only conversation styles": tuple(
+        [f"panel.settings.style{label}" for label in _ENGLISH_ONLY_STYLE_LABELS.values()]
+        + [f"voice.companion_{kind}_{style}" for style in _ENGLISH_ONLY_STYLE_LABELS
+           for kind in ("accepted", "count", "power_on", "power_off", "verified",
+                        "count_groups", "count_scope", "readings")]
     ),
 }
 

@@ -156,7 +156,7 @@ async def test_voice_focus_refusal_strips_marker_and_gives_localized_recovery():
     assert text.startswith("此对话处于居家专注模式")
     assert "This mode is for your home." not in text
     assert "answer anyway" not in text.lower()
-    assert "patient, reassuring" in capture["system_prompt"]
+    assert "Calm guide style" in capture["system_prompt"]
     assert "spoken-friendly" in capture["system_prompt"]
     assert capture["system_prompt"].rfind(marker) > capture["system_prompt"].rfind(
         "spoken-friendly"
@@ -807,7 +807,7 @@ def test_every_voice_template_is_reachable_from_the_modules_that_speak():
         HOME_COMPANION_ACCEPTED_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES,
         HOME_COMPANION_VERIFIED_TEMPLATES, HOME_COMPANION_COUNT_KIND_TEMPLATES,
         HOME_COMPANION_POWER_TEMPLATES, HOME_COMPANION_ACTION_KIND_TEMPLATES,
-        HOME_COMPANION_EXCEPTION_TEMPLATES,
+        HOME_COMPANION_EXCEPTION_TEMPLATES, HOME_COMPANION_CHARACTER_TEMPLATES,
     )
     from custom_components.phoenix_mcp.catalog_templates import VOICE_TEMPLATES
 
@@ -816,7 +816,8 @@ def test_every_voice_template_is_reachable_from_the_modules_that_speak():
                       set(HOME_COMPANION_COUNT_TEMPLATES.values()) |
                       set(HOME_COMPANION_VERIFIED_TEMPLATES.values()) | set(HOME_COMPANION_COUNT_KIND_TEMPLATES.values()) |
                       set(HOME_COMPANION_POWER_TEMPLATES.values()) | set(HOME_COMPANION_ACTION_KIND_TEMPLATES.values()) |
-                      set(HOME_COMPANION_EXCEPTION_TEMPLATES.values()))
+                      set(HOME_COMPANION_EXCEPTION_TEMPLATES.values()) |
+                      {key for voiced in HOME_COMPANION_CHARACTER_TEMPLATES.values() for key in voiced.values()})
     for mod in (voice_agent, agent_turn, agent_chat, command_clarification, command_display, command_execution, chat_routing, command_summary, home_companion_response):
         src = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
         for call in ast.walk(ast.parse(src)):

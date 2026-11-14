@@ -1,9 +1,15 @@
 import { BusyInput, BusySelect } from "./BusyButton";
 import type { ConversationStyle, DetailLevel } from "../types";
 import { t } from "../i18n";
+import { compareStrings } from "../i18n/format";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
 
-const STYLES: ConversationStyle[] = ["direct", "warm", "calm_guide", "lively", "technical"];
+const STYLES: ConversationStyle[] = ["direct", "warm", "calm_guide", "lively", "technical", "explanatory"];
+/** Character voices that work only in English replies; another language gets Direct. */
+const ENGLISH_ONLY_STYLES: ConversationStyle[] = [
+  "sarcastic", "caveman", "pirate", "butler", "shakespearean", "drama_queen",
+  "grumpy_teenager", "nature_documentary", "starship_computer", "noir_detective",
+];
 const DETAILS: DetailLevel[] = ["concise", "balanced", "detailed"];
 
 const STYLE_LABELS: Record<ConversationStyle, string> = {
@@ -12,6 +18,17 @@ const STYLE_LABELS: Record<ConversationStyle, string> = {
   calm_guide: "settings.styleCalmGuide",
   lively: "settings.styleLively",
   technical: "settings.styleTechnical",
+  explanatory: "settings.styleExplanatory",
+  sarcastic: "settings.styleSarcastic",
+  caveman: "settings.styleCaveman",
+  pirate: "settings.stylePirate",
+  butler: "settings.styleButler",
+  shakespearean: "settings.styleShakespearean",
+  drama_queen: "settings.styleDramaQueen",
+  grumpy_teenager: "settings.styleGrumpyTeenager",
+  nature_documentary: "settings.styleNatureDocumentary",
+  starship_computer: "settings.styleStarshipComputer",
+  noir_detective: "settings.styleNoirDetective",
 };
 
 const STYLE_HELP: Record<ConversationStyle, string> = {
@@ -20,6 +37,17 @@ const STYLE_HELP: Record<ConversationStyle, string> = {
   calm_guide: "settings.styleCalmGuideHelp",
   lively: "settings.styleLivelyHelp",
   technical: "settings.styleTechnicalHelp",
+  explanatory: "settings.styleExplanatoryHelp",
+  sarcastic: "settings.styleSarcasticHelp",
+  caveman: "settings.styleCavemanHelp",
+  pirate: "settings.stylePirateHelp",
+  butler: "settings.styleButlerHelp",
+  shakespearean: "settings.styleShakespeareanHelp",
+  drama_queen: "settings.styleDramaQueenHelp",
+  grumpy_teenager: "settings.styleGrumpyTeenagerHelp",
+  nature_documentary: "settings.styleNatureDocumentaryHelp",
+  starship_computer: "settings.styleStarshipComputerHelp",
+  noir_detective: "settings.styleNoirDetectiveHelp",
 };
 
 const DETAIL_LABELS: Record<DetailLevel, string> = {
@@ -33,6 +61,11 @@ const DETAIL_HELP: Record<DetailLevel, string> = {
   balanced: "settings.detailBalancedHelp",
   detailed: "settings.detailDetailedHelp",
 };
+
+/** Styles in the alphabetical order of their labels as the reader sees them. */
+function byLabel(styles: ConversationStyle[]): ConversationStyle[] {
+  return [...styles].sort((a, b) => compareStrings(t(STYLE_LABELS[a]), t(STYLE_LABELS[b])));
+}
 
 export function ConversationBehaviorControls({
   surface,
@@ -72,9 +105,14 @@ export function ConversationBehaviorControls({
           aria-label={t("settings.conversationStyleAria", { surface })}
           onChange={(event) => onStyleChange(event.target.value as ConversationStyle)}
         >
-          {STYLES.map((value) => (
+          {byLabel(STYLES).map((value) => (
             <option key={value} value={value}>{t(STYLE_LABELS[value])}</option>
           ))}
+          <optgroup label={t("settings.styleEnglishOnly")}>
+            {byLabel(ENGLISH_ONLY_STYLES).map((value) => (
+              <option key={value} value={value}>{t(STYLE_LABELS[value])}</option>
+            ))}
+          </optgroup>
         </BusySelect>
       </div>
       <div className="toggle-row toggle-row-stacked-control" {...helpRow(detailHelp)}>

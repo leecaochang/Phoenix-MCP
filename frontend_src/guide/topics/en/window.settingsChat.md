@@ -41,7 +41,22 @@ At the limit, Agent Chat asks whether to continue. The Voice Agent and AI Task u
 
 ## {{label:settings.conversationStyle}} {#chat-style}
 
-How replies sound: {{label:settings.styleDirect}} (default), {{label:settings.styleWarm}}, {{label:settings.styleCalmGuide}}, {{label:settings.styleLively}} or {{label:settings.styleTechnical}}. This changes the wording, not what Phoenix does.
+How replies sound. This changes the wording, not what Phoenix does. {{label:settings.styleDirect}} is the default.
+
+| Style | What you get | Example |
+|---|---|---|
+| {{label:settings.styleDirect}} | The result first, with no greeting or closing line. | The kitchen lights are on. |
+| {{label:settings.styleWarm}} | Speaks to you, acknowledges the request and ends with a friendly line. | All set, I've turned on the kitchen lights for you. Enjoy your evening! |
+| {{label:settings.styleCalmGuide}} | Simple words and numbered steps. Explains terms and says what happens next. | The kitchen lights are on now. If you want them off again, just ask me. |
+| {{label:settings.styleLively}} | Upbeat, with vivid words and a playful remark when nothing is at stake. | Lights on! The kitchen is officially open for business. |
+| {{label:settings.styleTechnical}} | Entity IDs, action names, attributes and units. | light.kitchen: off to on via light.turn_on, brightness 255. |
+| {{label:settings.styleExplanatory}} | Finishes the task, then explains how it worked and how to do it yourself. | The kitchen lights are on. How this worked: I ran light.turn_on on the two lights in the Kitchen area. |
+
+The styles under {{label:settings.styleEnglishOnly}} play a character, such as {{label:settings.stylePirate}}, {{label:settings.styleNoirDetective}} or {{label:settings.styleStarshipComputer}}. A character stays in voice for the whole reply, at every detail level. Characters work only in English. A reply in any other language uses {{label:settings.styleDirect}} instead.
+
+Every style drops jokes and character voices for failures, approvals, security questions and destructive actions. Numbers, names and whether something happened stay exact.
+
+With {{label:settings.detailConcise}}, replies are at most three short sentences, so the style shows mostly in word choice. How closely a reply follows the style also depends on your AI model.
 
 ## {{label:settings.detailLevel}} {#chat-detail}
 

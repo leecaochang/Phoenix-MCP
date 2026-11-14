@@ -181,3 +181,35 @@ it("keeps a form that closes on a click elsewhere open while its dropdown's list
   fireEvent.click(screen.getByRole("button", { name: "Elsewhere" }));
   expect(away).toHaveBeenCalledTimes(1);
 });
+
+it("heads a group's choices with its label and keeps arrow keys on the choices", () => {
+  const pick = vi.fn();
+  function Grouped() {
+    const [root, setRoot] = useState<HTMLDivElement | null>(null);
+    const [value, setValue] = useState("a");
+    return (
+      <div ref={setRoot}>
+        <SelectPopupHost root={root} />
+        <select className="input" aria-label="Letter" value={value} onChange={(e) => { setValue(e.target.value); pick(e.target.value); }}>
+          <option value="a">Alpha</option>
+          <optgroup label="More letters">
+            <option value="b">Bravo</option>
+            <option value="c">Charlie</option>
+          </optgroup>
+        </select>
+      </div>
+    );
+  }
+  render(<Grouped />);
+  fireEvent.pointerDown(select(), { button: 0, pointerType: "mouse" });
+  const list = screen.getByRole("listbox");
+  const heading = list.querySelector(".phx-select-group");
+  expect(heading?.textContent).toBe("More letters");
+  expect(list.querySelectorAll(".phx-select-group")).toHaveLength(1);
+  expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["Alpha", "Bravo", "Charlie"]);
+  // The heading sits between Alpha and Bravo and is never a stop for the keys.
+  expect(heading?.previousElementSibling?.textContent).toBe("Alpha");
+  fireEvent.keyDown(list, { key: "ArrowDown" });
+  fireEvent.keyDown(list, { key: "Enter" });
+  expect(pick).toHaveBeenCalledExactlyOnceWith("b");
+});
