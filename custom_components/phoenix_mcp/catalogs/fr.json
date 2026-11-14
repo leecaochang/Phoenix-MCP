@@ -1603,7 +1603,8 @@
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions est désormais l’entité par défaut",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions est désormais l’entité par défaut et remplace {name}",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions n’est plus l’entité par défaut",
-      "noneChoice": "Aucun"
+      "noneChoice": "Aucun",
+      "agentcliAccountId": "ID de compte"
     },
     "agentchat": {
       "accessKey": "Clé d’accès",
@@ -2166,7 +2167,8 @@
       "oauthNotEnabled": "Activez d’abord la connexion OAuth pour cette clé d’accès.",
       "oauthSignInNotFound": "Cette connexion n’existe plus.",
       "oauthSaveFailed": "La connexion n’a pas pu être supprimée. Réessayez.",
-      "oauthNoHttps": "Home Assistant n’a pas d’adresse HTTPS, les applications ne peuvent donc pas se connecter. Définissez d’abord une URL externe HTTPS."
+      "oauthNoHttps": "Home Assistant n’a pas d’adresse HTTPS, les applications ne peuvent donc pas se connecter. Définissez d’abord une URL externe HTTPS.",
+      "providerAccountIdInvalid": "Saisissez votre ID de compte de 32 caractères."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil rend donc cette intention explicite. Pour autoriser plutôt le contrôle de l'agent soumis à l'approbation de l'administrateur, choisissez Confirmer dans l'Éditeur de profil avant d'enregistrer ; l'approbation s'applique lorsque MESA est appliqué.",

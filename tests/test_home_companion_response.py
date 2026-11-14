@@ -4,7 +4,7 @@ import json
 import pytest
 
 from custom_components.phoenix_mcp.home_companion_response import ResponseEvidence, build_report
-from custom_components.phoenix_mcp.const import HOME_COMPANION_MAX_REPORT_ENTITIES
+from custom_components.phoenix_mcp.const import HOME_COMPANION_MAX_REPORT_ENTITIES, HOME_COMPANION_MAX_REPORT_NAMES
 
 
 def result(body, *, error=False):
@@ -341,3 +341,18 @@ def test_a_count_reference_answers_only_a_counting_question(history):
     report=build_report('completed','The gate sensor never triggered this week.',evidence,'en')
     assert ('never triggered' in report['message']) is history
     assert ('scope: 2.' in report['message']) is not history
+
+
+@pytest.mark.parametrize('rows', [HOME_COMPANION_MAX_REPORT_NAMES, HOME_COMPANION_MAX_REPORT_NAMES + 1, 200])
+def test_a_broad_search_is_never_answered_by_its_first_rows(rows):
+    # A search over every light, with no state read, cannot answer which one was asked about.
+    evidence=ResponseEvidence()
+    evidence.observe('search_entities','allowed',result({'entities':[
+        {'entity_id':f'light.l{index}','state':'on','friendly_name':f'Lamp {index}'} for index in range(rows)],
+        'total':rows}),{'domain':'light'})
+    report=build_report('completed','The game room light is off.',evidence,'en')
+    assert report['status']=='completed' and report['execution']=='not_attempted'
+    if rows <= HOME_COMPANION_MAX_REPORT_NAMES:
+        assert f'Lamp {rows - 1}: on' in report['message'] and 'game room' not in report['message']
+    else:
+        assert report['message']=='The game room light is off.'

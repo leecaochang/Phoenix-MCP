@@ -908,7 +908,7 @@ class OpenAICompatProvider:
 
     def _chunk_events(self, chunk: dict, stream: _ChatStream, show_thinking: bool) -> Iterator[dict]:
         """Fold one stream chunk into `stream`, yielding its events in the order they apply."""
-        usage = _usage_event(chunk)
+        usage = _usage_event(chunk, total_counts_output=self.kind == "gemini")
         if usage is not None:
             yield usage
         picked = _chunk_choice(chunk)
@@ -1044,8 +1044,13 @@ def _sse_payload(line: str) -> str:
     return line[5:].strip()
 
 
-def _usage_event(chunk: dict) -> dict | None:
-    """The usage event of one chunk, or None when it reports no tokens."""
+def _usage_event(chunk: dict, *, total_counts_output: bool = False) -> dict | None:
+    """The usage event of one chunk, or None when it reports no tokens.
+
+    Gemini's compatibility layer leaves thinking tokens, which Google bills as output,
+    out of completion_tokens and counts them only in total_tokens; with
+    ``total_counts_output`` the remainder of the total is output.
+    """
     # Usage must be read BEFORE the empty-choices skip: OpenAI's final
     # usage chunk (stream_options include_usage) carries choices: [].
     # Some backends (Gemini, Grok) volunteer usage on content chunks
@@ -1058,6 +1063,8 @@ def _usage_event(chunk: dict) -> dict | None:
         details = usage.get("prompt_tokens_details")
         cached = _usage_int(details.get("cached_tokens")) if isinstance(details, dict) else 0
         cached = cached or _usage_int(usage.get("prompt_cache_hit_tokens"))
+        if total_counts_output:
+            ct = max(ct, _usage_int(usage.get("total_tokens")) - pt)
         if pt or ct:
             return _norm(EV_USAGE, input_tokens=pt, output_tokens=ct, cache_read_tokens=cached)
     return None

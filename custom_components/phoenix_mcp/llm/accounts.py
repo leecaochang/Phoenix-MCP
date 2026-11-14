@@ -39,7 +39,10 @@ from ..provider_constants import (
     AGENT_CHAT_TOOL_LOADING_MODES, AGENT_CHAT_ZAI_BASE_URL,
     AGENT_CHAT_ZAI_CHINA_BASE_URL, AGENT_CHAT_ZAI_CODING_BASE_URL,
 )
-from ..routing.routing_tables import DECISION_TYPESAFE_BASE_URL, DECISION_TYPESAFE_MODEL
+from ..routing.routing_tables import (
+    DECISION_CLOUDFLARE_BASE_URL, DECISION_GEMINI_BASE_URL, DECISION_OPENCODE_BASE_URL,
+    DECISION_TYPESAFE_BASE_URL, DECISION_TYPESAFE_MODEL,
+)
 from ..time_text import parse_datetime
 
 
@@ -380,8 +383,9 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
             # No tool cap: OpenAI documents none for the Responses API.
             fields=(_region_field(_OPENAI_ENDPOINTS), _API_KEY_FIELD), endpoints=_OPENAI_ENDPOINTS,
         ),
-        _definition("gemini", "Gemini", AGENT_CHAT_GEMINI_BASE_URL, reasoning="gemini", model_filter="gemini",
-                    tool_stream="gemini", max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
+        # Gemini's compatibility layer reports streaming usage only when asked, as OpenAI's does.
+        _definition("gemini", "Gemini", AGENT_CHAT_GEMINI_BASE_URL, include_usage=True, reasoning="gemini",
+                    model_filter="gemini", tool_stream="gemini", max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
         _definition(
             "grok", "Grok", AGENT_CHAT_GROK_BASE_URL, include_usage=True,
             fields=(_region_field(_GROK_ENDPOINTS), _API_KEY_FIELD), endpoints=_GROK_ENDPOINTS,
@@ -450,6 +454,24 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
 PROVIDER_DEFINITIONS["typesafe"] = ProviderDefinition(
     kind="typesafe", label="TypeSafe / JEV", adapter="systemone",
     base_url=DECISION_TYPESAFE_BASE_URL, model=DECISION_TYPESAFE_MODEL,
+    fields=(_API_KEY_FIELD,), purpose="decision",
+)
+# Each is its own account, never the conversation account of the same vendor or its key.
+PROVIDER_DEFINITIONS["opencode_decision"] = ProviderDefinition(
+    kind="opencode_decision", label="OpenCode / System One", adapter="systemone",
+    base_url=DECISION_OPENCODE_BASE_URL, model="jev-1.13",
+    fields=(_API_KEY_FIELD,), purpose="decision",
+)
+PROVIDER_DEFINITIONS["cloudflare_decision"] = ProviderDefinition(
+    kind="cloudflare_decision", label="Cloudflare / Clef", adapter="systemone",
+    base_url=DECISION_CLOUDFLARE_BASE_URL, model="clef-flash",
+    fields=(ProviderField("account_id", "text", "settings.agentcliAccountId",
+                          placeholder="0123456789abcdef0123456789abcdef"), _API_KEY_FIELD),
+    purpose="decision",
+)
+PROVIDER_DEFINITIONS["gemini_decision"] = ProviderDefinition(
+    kind="gemini_decision", label="Google / Gemini Decision", adapter="gemini_decisions",
+    base_url=DECISION_GEMINI_BASE_URL, model="gemini-decision-1",
     fields=(_API_KEY_FIELD,), purpose="decision",
 )
 

@@ -1292,7 +1292,8 @@
       "oauthNotEnabled": "Schakel eerst OAuth-aanmelding in voor deze toegangssleutel.",
       "oauthSignInNotFound": "Die aanmelding bestaat niet meer.",
       "oauthSaveFailed": "De aanmelding kon niet worden verwijderd. Probeer het opnieuw.",
-      "oauthNoHttps": "Home Assistant heeft geen HTTPS-adres, dus apps kunnen zich niet aanmelden. Stel eerst een externe HTTPS-URL in."
+      "oauthNoHttps": "Home Assistant heeft geen HTTPS-adres, dus apps kunnen zich niet aanmelden. Stel eerst een externe HTTPS-URL in.",
+      "providerAccountIdInvalid": "Voer je account-ID van 32 tekens in."
     },
     "wizard": {
       "accessSub": "Selecteer het driehoekje naast <code>light</code> om de lichtgroep te openen. Daarin staan je lichtapparaten; selecteer het driehoekje naast een apparaat om de entiteiten te zien. Of typ de naam van je licht in het filterveld. Selecteer daarna <strong>W</strong> bij een licht dat je kunt controleren, zodat de agent het kan lezen en bedienen. Je kunt later meer machtigingen toevoegen.",
@@ -2268,7 +2269,8 @@
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions is nu de standaard",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions is nu de standaard en vervangt {name}",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions is niet langer de standaard",
-      "noneChoice": "Geen"
+      "noneChoice": "Geen",
+      "agentcliAccountId": "Account-ID"
     },
     "approvalSummary": {
       "action.optionalReason": "Optionele reden",

@@ -1246,7 +1246,8 @@
       "oauthNotEnabled": "Active primero el inicio de sesión con OAuth para esta clave de acceso.",
       "oauthSignInNotFound": "Ese inicio de sesión ya no existe.",
       "oauthSaveFailed": "No se pudo eliminar el inicio de sesión. Inténtelo de nuevo.",
-      "oauthNoHttps": "Home Assistant no tiene una dirección HTTPS, así que las aplicaciones no pueden iniciar sesión. Configure primero una URL externa HTTPS."
+      "oauthNoHttps": "Home Assistant no tiene una dirección HTTPS, así que las aplicaciones no pueden iniciar sesión. Configure primero una URL externa HTTPS.",
+      "providerAccountIdInvalid": "Introduzca su ID de cuenta de 32 caracteres."
     },
     "accessKeys": {
       "announceAllHelp": "Ofrezca a los agentes de esta clave todas las herramientas, incluso las que no puede usar. Solo para solucionar problemas; consume más tokens.",
@@ -2080,7 +2081,8 @@
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions es ahora la predeterminada",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions es ahora la predeterminada y sustituye a {name}",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ya no es la predeterminada",
-      "noneChoice": "Ninguno"
+      "noneChoice": "Ninguno",
+      "agentcliAccountId": "ID de cuenta"
     },
     "approvalSummary": {
       "action.optionalReason": "Motivo opcional",

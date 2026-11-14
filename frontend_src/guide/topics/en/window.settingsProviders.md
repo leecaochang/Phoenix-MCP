@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API key", "model", "LLM", "account", "credit", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["new account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "offline", "local model", "price", "pricing", "billing"], "decision-provider": ["TypeSafe", "JEV", "fast path"], "tool-loading": ["load_tools", "deferred tools", "tool search", "tokens", "too many tools", "context"] }, "covers": ["frontend_src/components/LlmProviderSettings.tsx", "frontend_src/components/ProviderAddForm.tsx", "frontend_src/components/DecisionProviderSettings.tsx", "custom_components/phoenix_mcp/tool_loading.py", "custom_components/phoenix_mcp/model_selection.py", "custom_components/phoenix_mcp/routing/decision_budget.py"] }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API key", "model", "LLM", "account", "credit", "TypeSafe", "JEV", "Clef", "Gemini Decision"], "sectionKeywords": { "provider-add": ["new account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "offline", "local model", "price", "pricing", "billing"], "decision-provider": ["TypeSafe", "JEV", "fast path", "OpenCode", "System One", "Gemini Decision", "GPT Luna Decision", "Cloudflare", "Workers AI", "Clef", "Clef Flash", "account ID"], "tool-loading": ["load_tools", "deferred tools", "tool search", "tokens", "too many tools", "context"] }, "covers": ["frontend_src/components/LlmProviderSettings.tsx", "frontend_src/components/ProviderAddForm.tsx", "frontend_src/components/DecisionProviderSettings.tsx", "custom_components/phoenix_mcp/tool_loading.py", "custom_components/phoenix_mcp/model_selection.py", "custom_components/phoenix_mcp/routing/decision_budget.py"] }
 ---
 Add the AI accounts Phoenix uses. Each account needs an API key or, for a local model, a server address.
 
@@ -100,7 +100,18 @@ A decision provider is a small, fast model that carries out simple commands, so 
 
 It works with **{{label:routing.enableChat}}** and **{{label:routing.enableVoice}}**. Phoenix tries Home Assistant's own sentence matching first, and the decision provider handles the commands sentence matching misses.
 
-Phoenix offers one decision provider, TypeSafe / JEV. Add your account here and select the model.
+Choose from these decision providers:
+
+- TypeSafe / JEV: TypeSafe's JEV model, with a TypeSafe API key.
+- OpenCode / System One: JEV, Gemini Decision or GPT Luna Decision, with an OpenCode Console API key.
+- Google / Gemini Decision: Google's Gemini Decision model, with a Gemini API key. Use a key from a paid project, since Google may use free-tier requests to improve its products.
+- Cloudflare / Clef: Clef or Clef Flash on Workers AI, with your Cloudflare account ID and an API token.
+
+Add an account and select its model. Use **{{label:settings.addAccount}}** to add more accounts, then choose the one to use. Only one decision provider is in use at a time, everywhere in Phoenix. Each account shows its model beside its name.
+
+A decision account is separate from any AI provider account of the same company. Add its key here, even if you already use that key for chat.
+
+Only TypeSafe's own JEV models handle follow-up messages that depend on the conversation. Other models leave those to your AI model. See [Follow-up messages](guide:topic.commandRouting#follow-ups).
 
 The jev-latest model follows each new JEV release, so a TypeSafe update can change which commands it carries out and how it answers, without a Phoenix update. To keep one release, choose a fixed version such as jev-1.13.0. The jev-preview model only observes and never carries out commands.
 

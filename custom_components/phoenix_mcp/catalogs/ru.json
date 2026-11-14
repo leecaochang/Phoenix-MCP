@@ -308,7 +308,8 @@
       "oauthNotEnabled": "Сначала включите вход через OAuth для этого ключа доступа.",
       "oauthSignInNotFound": "Этот вход больше не существует.",
       "oauthSaveFailed": "Не удалось удалить вход. Повторите попытку.",
-      "oauthNoHttps": "У Home Assistant нет адреса HTTPS, поэтому приложения не могут войти. Сначала задайте внешний URL с HTTPS."
+      "oauthNoHttps": "У Home Assistant нет адреса HTTPS, поэтому приложения не могут войти. Сначала задайте внешний URL с HTTPS.",
+      "providerAccountIdInvalid": "Введите ваш 32-символьный ID аккаунта."
     },
     "agentchat": {
       "accessKey": "Ключ доступа",
@@ -2210,7 +2211,8 @@
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions теперь используется по умолчанию",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions теперь используется по умолчанию вместо {name}",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions больше не используется по умолчанию",
-      "noneChoice": "Нет"
+      "noneChoice": "Нет",
+      "agentcliAccountId": "ID аккаунта"
     },
     "shell": {
       "agentChat": "Agent Chat",

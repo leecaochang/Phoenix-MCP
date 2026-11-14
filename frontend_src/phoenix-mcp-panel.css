@@ -3393,6 +3393,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .routing-account-choice { display: inline-flex; max-width: 100%; align-items: center; gap: 10px; min-width: 0; cursor: pointer; color: var(--phx-text); }
 .routing-account-choice input[type="radio"] { accent-color: var(--phx-accent); flex: none; }
 .routing-account-choice > span { min-width: 0; overflow-wrap: anywhere; }
+.routing-account-model { color: var(--phx-text-2); }
 .routing-provider-section .agentcli-add-row { margin-top: 12px; }
 /* No Decision Provider and the accounts are one radio group; an account's options open under it. */
 .routing-choices { display: flex; flex-direction: column; gap: 8px; }

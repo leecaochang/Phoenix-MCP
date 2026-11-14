@@ -231,7 +231,8 @@
       "oauthNotEnabled": "請先為此存取金鑰開啟 OAuth 登入。",
       "oauthSignInNotFound": "該登入已不存在。",
       "oauthSaveFailed": "無法移除該登入。請再試一次。",
-      "oauthNoHttps": "Home Assistant 沒有 HTTPS 位址，因此應用程式無法登入。請先設定 HTTPS 外部 URL。"
+      "oauthNoHttps": "Home Assistant 沒有 HTTPS 位址，因此應用程式無法登入。請先設定 HTTPS 外部 URL。",
+      "providerAccountIdInvalid": "請輸入 32 個字元的帳戶 ID。"
     },
     "agentchat": {
       "accessKey": "存取金鑰",
@@ -2089,7 +2090,8 @@
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions 現為預設",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions 現為預設，已取代 {name}",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions 不再是預設",
-      "noneChoice": "無"
+      "noneChoice": "無",
+      "agentcliAccountId": "帳戶 ID"
     },
     "shell": {
       "agentChat": "Agent Chat",

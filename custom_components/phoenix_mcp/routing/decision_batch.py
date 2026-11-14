@@ -29,7 +29,7 @@ from .routing_tables import (
 )
 from .decision_identity import explicit_write_target, identity_competitors
 from .decision_provider import (
-    DecisionValidationError, DecisionProvider, _evaluate_guarded, revision_admitted,
+    DecisionValidationError, DecisionProvider, _evaluate_guarded, decision_key, revision_admitted,
 )
 from .decision_types import DecisionError, confident_choice
 from .decision_targets import catalog_state, capture_targets, CatalogLimitError, TargetSnapshot
@@ -95,13 +95,13 @@ def capture_batch_targets(hass: HomeAssistant, access_key: Any, *, numeric_previ
 def batch_execution_eligible(cfg: Any, language: str) -> bool:
     """Qualify each endpoint, configured model and language independently."""
     return bool(language in DECISION_BATCH_EXECUTION_LANGUAGES
-                and (cfg.kind, cfg.base_url, cfg.model) in DECISION_BATCH_EXECUTION_MODELS)
+                and decision_key(cfg) in DECISION_BATCH_EXECUTION_MODELS)
 
 
 def percentage_execution_eligible(cfg: Any, language: str) -> bool:
     """Qualify numeric execution by its own model allowlist, on top of batch eligibility."""
     return bool(batch_execution_eligible(cfg, language)
-                and (cfg.kind, cfg.base_url, cfg.model) in DECISION_PERCENTAGE_EXECUTION_MODELS)
+                and decision_key(cfg) in DECISION_PERCENTAGE_EXECUTION_MODELS)
 
 
 def batch_catalog_digest(snapshot: tuple[dict[str, dict], dict[str, TargetSnapshot]]) -> str:

@@ -1972,7 +1972,8 @@
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions is now the default",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions is now the default, replacing {name}",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions is no longer the default",
-      "noneChoice": "None"
+      "noneChoice": "None",
+      "agentcliAccountId": "Account ID"
     },
     "agentchat": {
       "accessKey": "Access Key",
@@ -2536,7 +2537,8 @@
       "oauthNotEnabled": "Turn on OAuth sign-in for this access key first.",
       "oauthSignInNotFound": "That sign-in no longer exists.",
       "oauthSaveFailed": "The sign-in could not be removed. Try again.",
-      "oauthNoHttps": "Home Assistant has no HTTPS address, so apps can't sign in. Set an HTTPS external URL first."
+      "oauthNoHttps": "Home Assistant has no HTTPS address, so apps can't sign in. Set an HTTPS external URL first.",
+      "providerAccountIdInvalid": "Enter your 32-character account ID."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the profile makes that intent explicit. To allow agent control behind admin approval instead, choose Confirm in Profile Editor before saving; approval applies while MESA is enforced.",

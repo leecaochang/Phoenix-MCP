@@ -50,6 +50,9 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `qwen` | 對話 | `api_key`、`base_url` |
 | `zai` | 對話 | `api_key`、`endpoint_id`：`standard`、`coding`、`china` |
 | `typesafe`（TypeSafe） | 決策 | `api_key`、`model` |
+| `opencode_decision`（OpenCode） | 決策 | `api_key`、`model`：`jev-1.13`、`gemini-decision-1`、`gpt-6-luna-decision` |
+| `gemini_decision`（Google） | 決策 | `api_key`、`model`：`gemini-decision-1` |
+| `cloudflare_decision`（Cloudflare） | 決策 | `account_id`、`api_key`、`model`：`clef-flash`、`clef` |
 
 ### 設定欄位 {#setup-fields}
 
@@ -61,7 +64,8 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `api_key` | string | 除 `ollama` 外每種類型都必填。最多 4096 個字元，不能包含控制字元。Phoenix 絕不傳回它。 |
 | `base_url` | string | `ollama` 和 `qwen` 必填。只有 `ollama` 可以使用私有位址。其他每種類型都使用固定端點，並忽略此欄位。 |
 | `endpoint_id` | string | 僅用於帶端點的類型。省略它表示預設值。 |
-| `model` | string | 對話類型選填；留空表示自動跟隨提供者。`typesafe` 必填：最多 200 個字元，且必須在提供者目前清單中。 |
+| `account_id` | string | `cloudflare_decision` 必填：32 個字元的 Cloudflare 帳戶 ID。Phoenix 用它建構端點。 |
+| `model` | string | 對話類型選填；留空表示自動跟隨提供者。決策類型必填：最多 200 個字元，且必須在提供者目前清單中。 |
 
 ### 列出帳戶 {#list-providers}
 
@@ -73,7 +77,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 
 回應包含 `instances`（帳戶）和 `provider_types`（設定表單）。兩者都依標籤排序。
 
-`provider_types` 中的每個條目有 `kind`、`label`、`label_key` 和 `fields`。每個欄位有 `id`、`type`（`secret`、`url` 或 `choice`）、`label_key` 和 `required`。它還可能包含 `placeholder` 和 `choices`，每個選擇有 `value`、`label` 和 `label_key`。
+`provider_types` 中的每個條目有 `kind`、`label`、`label_key` 和 `fields`。每個欄位有 `id`、`type`（`secret`、`url`、`text` 或 `choice`）、`label_key` 和 `required`。它還可能包含 `placeholder` 和 `choices`，每個選擇有 `value`、`label` 和 `label_key`。
 
 `instances` 中的每個帳戶有這些欄位。API 金鑰絕不在其中。
 
@@ -96,7 +100,9 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 
 `POST /api/phoenix-mcp/admin/agentcli/providers` 接受[設定欄位](guide:#setup-fields)。
 
-對於對話類型，Phoenix 會執行提供者的憑據檢查。對於決策類型，它會載入模型清單並要求你的模型在其中。如果通過，Phoenix 會儲存帳戶，並嘗試讀取其模型清單和宣告的能力。
+對於對話類型，Phoenix 會執行提供者的憑據檢查。對於決策類型，它要求你的模型在提供者的清單中。TypeSafe 的模型清單也會檢查金鑰。對於其他決策類型，Phoenix 會傳送一個小型決策，這會花費少量 token。
+
+如果通過，Phoenix 會儲存帳戶，並嘗試讀取其模型清單和宣告的能力。
 
 回應為 `201`，包含 `{"instance": {...}}`，帶有上方的帳戶欄位。
 
@@ -105,6 +111,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | 400 | `invalid_request` | `adminError.providerUnknown` | `kind` 不是已知類型。 |
 | 400 | `invalid_request` | `adminError.providerApiKeyRequired` | 缺少 `api_key`。 |
 | 400 | `invalid_request` | `adminError.providerEndpointInvalid` | `endpoint_id` 不是該類型的值之一。 |
+| 400 | `invalid_request` | `adminError.providerAccountIdInvalid` | `account_id` 不是 32 個十六進位字元。 |
 | 400 | `invalid_request` | `adminError.ollamaUrlRequired`、`adminError.providerBaseUrlRequired` | 缺少必要的 `base_url`。 |
 | 400 | `invalid_request` | `adminError.providerUrlInvalid`、`adminError.providerUrlScheme`、`adminError.providerRemoteUrlScheme`、`adminError.providerUrlHostRequired`、`adminError.providerUrlCredentialsForbidden`、`adminError.providerUrlFragmentForbidden`、`adminError.providerUrlAddressForbidden`、`adminError.providerUrlResolutionForbidden`、`adminError.providerRemoteUrlAddressForbidden`、`adminError.providerRemoteUrlResolutionForbidden`、`adminError.providerRemoteUrlResolutionFailed` | `base_url` 不是可接受的 URL。 |
 | 400 | `invalid_request` | `adminError.providerConnectionFailed`，或提供者自身失敗的鍵 | 憑據檢查失敗。`adminError.providerConnectionFailed` 會帶有 `detail`。 |

@@ -32,6 +32,7 @@ from .routing_tables import TOOL_ROUTING_MAX_BYTES, TOOL_ROUTING_MAX_GROUPS
 from .routing_tables import (
     DECISION_SEQUENTIAL_MAX_TARGETS, DECISION_FOLLOWED_ALIASES, DECISION_FOLLOWED_REVISION,
     DECISION_SEQUENTIAL_EXECUTION_MODELS, DECISION_TYPESAFE_BASE_URL, DECISION_PINNABLE_MODELS,
+    DECISION_CLOUDFLARE_BASE_URL, DECISION_CLOUDFLARE_ACCOUNT_ID, DECISION_FIXED_MODELS,
 )
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
@@ -122,13 +123,92 @@ def _probability(value: Any) -> bool:
     return type(value) in (int, float) and math.isfinite(value) and 0 <= value <= 1
 
 
+# The (kind, protocol) pairs DecisionProvider speaks; anything else is refused at construction.
+_DECISION_PROTOCOLS = frozenset({
+    ("typesafe", "systemone"), ("opencode_decision", "systemone"),
+    ("cloudflare_decision", "systemone"), ("gemini_decision", "gemini_decisions"),
+})
+_CLOUDFLARE_PREFIX, _CLOUDFLARE_SUFFIX = DECISION_CLOUDFLARE_BASE_URL.split("{account_id}")
+
+
+def decision_endpoint(cfg: Any) -> str:
+    """The endpoint an account's registry entries name.
+
+    Cloudflare's address carries the operator's account id; every account at that
+    fixed address shares its entries. Any other address is compared as it is.
+    """
+    base_url = cfg.base_url
+    if (cfg.kind == "cloudflare_decision" and base_url.startswith(_CLOUDFLARE_PREFIX)
+            and base_url.endswith(_CLOUDFLARE_SUFFIX)
+            and re.fullmatch(DECISION_CLOUDFLARE_ACCOUNT_ID,
+                             base_url[len(_CLOUDFLARE_PREFIX):len(base_url) - len(_CLOUDFLARE_SUFFIX)])):
+        return DECISION_CLOUDFLARE_BASE_URL
+    return base_url
+
+
+def decision_key(cfg: Any) -> tuple[str, str, str]:
+    """The (kind, endpoint, model) key that execution registries are keyed by."""
+    return (cfg.kind, decision_endpoint(cfg), cfg.model)
+
+
+def _gemini_text(value: Any) -> str:
+    """Text for a field Google's API accepts only as text; structured values become JSON."""
+    if isinstance(value, str):
+        return value
+    return "" if value is None else json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def gemini_request(model: str, state: Any, questions: Mapping[str, Any]) -> dict:
+    """A System One request in the Decisions API's shape.
+
+    The state becomes the shared text input, named so instructions that cite
+    state fields still resolve. Choice descriptions and instructions become text,
+    and yes/no criteria take that API's key names.
+    """
+    converted: dict[str, Any] = {}
+    for name, spec in questions.items():
+        question: dict[str, Any] = {"type": spec["type"], "instructions": _gemini_text(spec.get("instructions"))}
+        criteria = spec.get("criteria")
+        if spec["type"] == "choice" and isinstance(criteria, Mapping):
+            question["criteria"] = {key: _gemini_text(text) for key, text in criteria.items()}
+        elif spec["type"] == "score" and isinstance(criteria, list):
+            question["criteria"] = [_gemini_text(text) for text in criteria]
+        elif spec["type"] == "noul" and isinstance(criteria, Mapping):
+            question["criteria"] = {f"{key}_description": _gemini_text(criteria[key])
+                                    for key in ("true", "false") if key in criteria}
+        converted[name] = question
+    return {"model": model, "input": "state = " + _gemini_text(state), "questions": converted}
+
+
+def normalized_response(kind: str, model: str, body: Any) -> Any:
+    """A provider's successful body in System One's shape, without changing any answer.
+
+    Cloudflare wraps the answer in its API envelope. Google names no model and
+    reports usage under its own keys; the account's model is the one that answered.
+    """
+    if kind == "cloudflare_decision" and isinstance(body, dict) and set(body) >= {"result", "success"}:
+        if body["success"] is not True or not isinstance(body["result"], dict):
+            raise DecisionError("malformed")
+        return body["result"]
+    if kind == "gemini_decision" and isinstance(body, dict):
+        if "model" in body:
+            raise DecisionError("malformed")
+        usage = body.get("usage")
+        normalized = {**body, "model": model}
+        if isinstance(usage, dict):
+            normalized["usage"] = {"input_tokens": usage.get("total_input_tokens"),
+                                   "output_tokens": usage.get("total_output_tokens")}
+        return normalized
+    return body
+
+
 def revision_admitted(registry: Mapping[tuple[str, str, str], frozenset[str]], cfg: Any, returned: Any) -> bool:
     """Whether the answering revision may act for this account under one execution registry.
 
     The account's endpoint and configured model must be registered. A followed
     alias admits any JEV revision; otherwise the revision must be listed.
     """
-    key = (cfg.kind, cfg.base_url, cfg.model)
+    key = decision_key(cfg)
     if key not in registry or not isinstance(returned, str):
         return False
     return returned in registry[key] or (
@@ -138,12 +218,12 @@ def revision_admitted(registry: Mapping[tuple[str, str, str], frozenset[str]], c
 def sequential_revision_admitted(cfg: Any, classify_model: Any, target_model: Any) -> bool:
     """Whether a sequential classify and target answer may act together for this account.
 
-    Both answers must come from one revision. At TypeSafe's own endpoint that revision must be
-    qualified for sequential execution; a custom endpoint is the operator's own choice.
+    Both answers must come from one revision. At a fixed hosted endpoint that revision must be
+    qualified for sequential execution; a custom TypeSafe address is the operator's own choice.
     """
     if not isinstance(classify_model, str) or classify_model != target_model:
         return False
-    if (cfg.kind, cfg.base_url) == ("typesafe", DECISION_TYPESAFE_BASE_URL):
+    if cfg.kind != "typesafe" or cfg.base_url == DECISION_TYPESAFE_BASE_URL:
         return revision_admitted(DECISION_SEQUENTIAL_EXECUTION_MODELS, cfg, classify_model)
     return True
 
@@ -200,12 +280,12 @@ def parse_choice(body: Any, choices: Mapping[str, str], question: str = "route",
 
 
 class DecisionProvider:
-    """TypeSafe System One decisions; no tool execution API."""
+    """Hosted System One decisions, and Google's equivalent; no tool execution API."""
 
     def __init__(self, cfg: ProviderConfig, protocol: str, *, metrics: DecisionMetrics | None = None,
                  metric_scope: str = "preview", request_budget: Any = None, request_limit: int = 0,
                  request_guard: Callable[[], None] | None = None) -> None:
-        if cfg.kind != "typesafe" or protocol != "systemone":
+        if (cfg.kind, protocol) not in _DECISION_PROTOCOLS:
             raise ValueError("Unsupported decision protocol")
         self.cfg = cfg
         self.protocol = protocol
@@ -218,7 +298,7 @@ class DecisionProvider:
     @property
     def rounding_error(self) -> float:
         """Apply precision evidence only to the known TypeSafe endpoint."""
-        return DECISION_PROBABILITY_ROUNDING.get((self.cfg.kind, self.cfg.base_url, self.protocol), 0)
+        return DECISION_PROBABILITY_ROUNDING.get((self.cfg.kind, decision_endpoint(self.cfg), self.protocol), 0)
 
     def _parse_choice(self, body: Any, choices: Mapping[str, str], question: str = "route") -> dict:
         return parse_choice(body, choices, question, rounding_error=self.rounding_error)
@@ -287,7 +367,8 @@ class DecisionProvider:
         if response.status == 529 or response.status >= 500:
             # TypeSafe's 529 is "temporarily overloaded"; a 5xx is a server failure, neither a refusal.
             return "unavailable"
-        if response.status != 400 or self.cfg.kind != "typesafe" or self.protocol != "systemone":
+        # OpenCode serves JEV and relays TypeSafe's error body.
+        if response.status != 400 or self.cfg.kind not in ("typesafe", "opencode_decision") or self.protocol != "systemone":
             return "http_error"
         try:
             raw = bytearray()
@@ -308,7 +389,7 @@ class DecisionProvider:
     async def request_evaluation(self, session: ClientSession, state: Any, questions: Mapping[str, Any],
                                  timeout_ms: int) -> dict:
         """Ask caller-written questions; the names and state reach neither metrics nor spans."""
-        return await self._request(session, "POST", "systemone", timeout_ms,
+        return await self._request(session, "POST", self.protocol, timeout_ms,
                                    {"model": self.cfg.model, "state": state, "questions": dict(questions)},
                                    operation="evaluate",
                                    input_facts={"state_type": type(state).__name__, "question_count": len(questions)})
@@ -325,8 +406,19 @@ class DecisionProvider:
         if self.request_guard is not None:
             self.request_guard()
         headers = {"Content-Type": "application/json"}
-        if self.cfg.api_key:
+        if self.cfg.api_key and self.cfg.kind == "gemini_decision":
+            headers["x-goog-api-key"] = self.cfg.api_key
+        elif self.cfg.api_key:
             headers["Authorization"] = f"Bearer {self.cfg.api_key}"
+        url = f"{self.cfg.base_url}/{path}"
+        wire = payload
+        if method == "POST" and payload is not None and path == self.protocol:
+            if self.cfg.kind == "cloudflare_decision":
+                # Workers AI runs each model at its own address.
+                url = f"{self.cfg.base_url}/{self.cfg.model}"
+            elif self.cfg.kind == "gemini_decision":
+                url = f"{self.cfg.base_url}/decisions"
+                wire = gemini_request(payload["model"], payload["state"], payload["questions"])
         started = monotonic()
         parsed = None
         statistics = begin_decision(self.metric_scope) if method == "POST" and payload is not None else None
@@ -348,8 +440,8 @@ class DecisionProvider:
                           scope=self.metric_scope, observation_only="shadow" in self.metric_scope,
                           method=method, operation=operation, input=input_facts) as receipt:
             try:
-                async with session.request(method, f"{self.cfg.base_url}/{path}", headers=headers,
-                                           json=payload, allow_redirects=False,
+                async with session.request(method, url, headers=headers,
+                                           json=wire, allow_redirects=False,
                                            timeout=ClientTimeout(total=timeout_ms / 1000)) as response:
                     if response.status != 200:
                         raise DecisionError(await self._http_error_reason(response))
@@ -358,7 +450,8 @@ class DecisionProvider:
                         raw.extend(chunk)
                         if len(raw) > DECISION_MAX_RESPONSE_BYTES:
                             raise DecisionError("response_too_large")
-                    parsed = json.loads(raw, object_pairs_hook=_object)
+                    parsed = normalized_response(self.cfg.kind, self.cfg.model,
+                                                 json.loads(raw, object_pairs_hook=_object))
                     if not isinstance(parsed, dict):
                         raise DecisionError("malformed")
                     return parsed
@@ -376,6 +469,10 @@ class DecisionProvider:
                                         provider_kind=self.cfg.kind)
 
     async def list_models(self, session: ClientSession) -> list[str]:
+        fixed = DECISION_FIXED_MODELS.get(self.cfg.kind)
+        if fixed is not None:
+            # These endpoints list no decision models; their documented ids are offered.
+            return sorted(fixed)
         body = await self._request(session, "GET", "models", DECISION_TIMEOUT_DEFAULT_MS)
         entries = body.get("models", body.get("data"))
         if not isinstance(entries, list):
@@ -391,12 +488,18 @@ class DecisionProvider:
     def selectable(self, listed: list[str]) -> list[str]:
         """The listed models plus the fixed revisions reviewed at this endpoint, which the list may omit."""
         pinned = {model for kind, base_url, model in DECISION_PINNABLE_MODELS
-                  if (kind, base_url) == (self.cfg.kind, self.cfg.base_url)}
+                  if (kind, base_url) == (self.cfg.kind, decision_endpoint(self.cfg))}
         return sorted(set(listed) | pinned)
 
     async def validate(self, session: ClientSession) -> tuple[bool, str]:
         try:
-            await self.list_models(session)
+            if self.cfg.kind in DECISION_FIXED_MODELS:
+                # No model list proves the key here, so one small decision does.
+                await self.request_evaluation(session, "Phoenix connection check.", {"check": {
+                    "type": "choice", "instructions": "Select ready.",
+                    "criteria": {"ready": "Ready.", "other": "Anything else."}}}, DECISION_TIMEOUT_DEFAULT_MS)
+            else:
+                await self.list_models(session)
             return True, ""
         except DecisionError as error:
             return False, decision_error_reason(str(error))
@@ -423,7 +526,7 @@ class DecisionProvider:
 
     def supports_exact_percentages(self) -> bool:
         """Use the documented larger Choice format only at the known provider endpoint."""
-        return (self.cfg.kind, self.cfg.base_url, self.protocol) in DECISION_EXACT_PERCENTAGE_ENDPOINTS
+        return (self.cfg.kind, decision_endpoint(self.cfg), self.protocol) in DECISION_EXACT_PERCENTAGE_ENDPOINTS
 
     async def classify(self, session: ClientSession, sentence: str, timeout_ms: int, language: str = "en", *,
                        numeric_preview: bool = False) -> dict:

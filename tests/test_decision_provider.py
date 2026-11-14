@@ -149,7 +149,7 @@ async def test_decision_accounts_are_secret_free_and_cannot_resolve_for_conversa
     with pytest.raises(ValueError):llm_factory.build_provider(cfg)
     assert 'test-secret' not in json.dumps(store.list_instances())
     assert not any(i['kind']=='typesafe' for i in llm_accounts._provider_catalog())
-    assert {i['kind'] for i in llm_accounts._provider_catalog('decision')}=={'typesafe'}
+    assert {i['kind'] for i in llm_accounts._provider_catalog('decision')}=={'typesafe', 'opencode_decision', 'cloudflare_decision', 'gemini_decision'}
 
 
 @pytest.mark.parametrize('field',['voice_agent_provider_id','ai_task_provider_id'])

@@ -357,7 +357,9 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
                 parts.append(voice_text(language, 'companion_count_groups'))
             if detail == 'detailed':
                 parts.append(voice_text(language, 'companion_count_scope'))
-        elif evidence.readings and not evidence.model_answer:
+        elif (evidence.chosen or 0 < len(evidence.readings) <= HOME_COMPANION_MAX_REPORT_NAMES) and not evidence.model_answer:
+            # Search rows answer only when every one fits the reply; the first few of a broad
+            # search are an arbitrary subset, so the model, which read them all, answers instead.
             parts.append(voice_text(language, 'companion_readings', readings='; '.join(
                 list((evidence.chosen or evidence.readings).values())[:HOME_COMPANION_MAX_REPORT_NAMES])))
         else:

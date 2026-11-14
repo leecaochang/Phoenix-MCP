@@ -427,7 +427,8 @@
       "oauthNotEnabled": "Ota ensin OAuth-kirjautuminen käyttöön tälle käyttöavaimelle.",
       "oauthSignInNotFound": "Kyseistä kirjautumista ei ole enää olemassa.",
       "oauthSaveFailed": "Kirjautumista ei voitu poistaa. Yritä uudelleen.",
-      "oauthNoHttps": "Home Assistantilla ei ole HTTPS-osoitetta, joten sovellukset eivät voi kirjautua. Aseta ensin ulkoinen HTTPS-URL-osoite."
+      "oauthNoHttps": "Home Assistantilla ei ole HTTPS-osoitetta, joten sovellukset eivät voi kirjautua. Aseta ensin ulkoinen HTTPS-URL-osoite.",
+      "providerAccountIdInvalid": "Anna tilisi 32-merkkinen tunnus."
     },
     "agentchat": {
       "accessKey": "Käyttöavain",
@@ -2567,7 +2568,8 @@
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions on nyt oletus",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions on nyt oletus ja korvaa entiteetin {name}",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ei ole enää oletus",
-      "noneChoice": "Ei mitään"
+      "noneChoice": "Ei mitään",
+      "agentcliAccountId": "Tilin tunnus"
     },
     "shell": {
       "agentChat": "Agent Chat",

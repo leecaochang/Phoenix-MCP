@@ -1312,7 +1312,8 @@
       "oauthNotEnabled": "Najpierw włącz logowanie OAuth dla tego klucza dostępu.",
       "oauthSignInNotFound": "To logowanie już nie istnieje.",
       "oauthSaveFailed": "Nie można usunąć logowania. Spróbuj ponownie.",
-      "oauthNoHttps": "Home Assistant nie ma adresu HTTPS, więc aplikacje nie mogą się zalogować. Najpierw ustaw zewnętrzny adres URL HTTPS."
+      "oauthNoHttps": "Home Assistant nie ma adresu HTTPS, więc aplikacje nie mogą się zalogować. Najpierw ustaw zewnętrzny adres URL HTTPS.",
+      "providerAccountIdInvalid": "Wpisz swój 32-znakowy identyfikator konta."
     },
     "wizard": {
       "accessSub": "Wybierz trójkąt obok <code>light</code>, aby otworzyć grupę świateł. Zawiera ona Twoje urządzenia oświetleniowe; wybierz trójkąt obok urządzenia, aby zobaczyć jego encje. Możesz też wpisać nazwę światła w polu filtra. Następnie wybierz <strong>W</strong> przy świetle, które możesz sprawdzić, aby agent mógł je odczytywać i nim sterować. Więcej uprawnień możesz dodać później.",
@@ -2322,7 +2323,8 @@
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions jest teraz domyślną encją",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions jest teraz domyślną encją i zastępuje {name}",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions nie jest już domyślną encją",
-      "noneChoice": "Brak"
+      "noneChoice": "Brak",
+      "agentcliAccountId": "Identyfikator konta"
     },
     "approvalSummary": {
       "action.optionalReason": "Opcjonalny powód",

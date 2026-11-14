@@ -27,6 +27,8 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   // The account whose options show under it; none until one is clicked.
   const [open, setOpen] = useState<string | null>(null);
+  // Another account can be added beside the saved ones; only one is ever in use.
+  const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const generation = useRef(0);
@@ -231,18 +233,25 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
             checked={inUse && account.id === settings.decision_provider_id} busy={saving || busy} data-help="routing.accountChoiceHelp"
             onChange={() => use(account.id)}
             onClick={() => { if (open === account.id) closeOptions(); else { closeOptions(); setOpen(account.id); } }} />
-          <span>{account.name}</span>
+          {/* Accounts at different providers can answer with different models, so each names its own. */}
+          <span>{account.name}{account.model && <>{" "}<span className="routing-account-model">{account.model}</span></>}</span>
         </label>
         {open === account.id && accountOptions(account)}
       </div>)}
     </div>
-    {accountsLoaded && accounts.length === 0 && <ProviderAddForm providerTypes={types} disabled={saving || busy || editing !== null}
+    {accountsLoaded && hasAccounts && !adding && <div className="phx-window-actions">
+      <ActionButton icon="add" label={t("settings.addAccount")} className="btn btn-outline btn-sm" help="settings.addAccountHelp"
+        busy={saving || busy} onClick={() => { closeOptions(); setAdding(true); }} />
+    </div>}
+    {accountsLoaded && (!hasAccounts || adding) && <ProviderAddForm providerTypes={types} disabled={saving || busy || editing !== null}
       idPrefix="decision-add" requireModel allowCapabilityProbe={false} compact
       completeLabel={t("settings.agentcliDone")}
+      onClose={hasAccounts ? () => setAdding(false) : undefined}
       onCreated={async instance => {
         if (!mounted.current) return;
-        // A first account is selected and put in use, as adding it always did.
-        if (selectionVersion.current === currentSelectionVersion) onChange("decision_provider_id", instance.id);
+        // A first account is selected and put in use, as adding it always did; a further one waits to be chosen.
+        if (!hasAccounts && selectionVersion.current === currentSelectionVersion) onChange("decision_provider_id", instance.id);
+        setAdding(false);
         await load();
       }} />}
     {inUse && <details className="routing-disclosure">

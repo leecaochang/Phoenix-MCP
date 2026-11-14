@@ -343,7 +343,9 @@ export function ProviderAddForm({
                   <BusyInput
                     id={id}
                     ref={index === 0 ? (element) => { firstFieldRef.current = element; } : undefined}
-                    type="url"
+                    type={field.type === "text" ? "text" : "url"}
+                    spellCheck={field.type === "text" ? false : undefined}
+                    autoComplete={field.type === "text" ? "off" : undefined}
                     placeholder={field.placeholder ?? fieldLabel(field)}
                     value={form.values[field.id] ?? ""}
                     busy={form.validating || form.saving}

@@ -21,7 +21,7 @@ It only applies to plain text messages. Messages for Home Companion keys always 
 
 ## Follow-up messages {#follow-ups}
 
-The first message in a conversation can go to the decision provider. A follow-up only goes there with a TypeSafe / JEV model, in a language the model supports. Otherwise it goes to your AI model.
+The first message in a conversation can go to the decision provider. A follow-up only goes there with a JEV model from TypeSafe's own account, in a language the model supports. Otherwise it goes to your AI model.
 
 ## Actions the decision provider never runs {#risky-actions}
 

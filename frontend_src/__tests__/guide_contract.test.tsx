@@ -121,7 +121,7 @@ describe("selecting a setting", () => {
     const { container, registry } = renderSettings({ settings: {
       ...BASE_SETTINGS, decision_provider_id: "d1", decision_provider_default_id: "d1", voice_agent_pipeline_id: "pl1", ai_task_decisions_supported: true,
     } as GlobalSettings });
-    await screen.findByRole("radio", { name: "JEV" });
+    await screen.findByRole("radio", { name: "JEV jev-latest" });
     await screen.findByRole("checkbox", { name: "Default AI Task", hidden: true });
     await screen.findByRole("checkbox", { name: t("settings.aiDecisionsDefaultLabel"), hidden: true });
     // Adding an account shows on request, from the toolbar.

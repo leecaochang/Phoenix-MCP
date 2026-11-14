@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import ipaddress
 import json
 import logging
+import re
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -28,6 +29,7 @@ from .helpers import get_client_ip
 from .catalog_text import LocalizedReason
 from .home_companion import is_companion
 from .net_guard import ip_is_blocked
+from .routing.routing_tables import DECISION_CLOUDFLARE_ACCOUNT_ID
 from .llm.accounts import (
     _default_base_url, _default_model, _get_secret_store, _provider_catalog,
     DuplicateProviderError, PROVIDER_DEFINITIONS, provider_purpose, ProviderConfig,
@@ -393,7 +395,14 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
                 "Choose a valid provider plan.", "providerEndpointInvalid",
             )
 
-    if any(field.id == "base_url" for field in definition.fields):
+    if any(field.id == "account_id" for field in definition.fields):
+        # The account id is the only part of the address the operator supplies.
+        account_id = body.get("account_id", "")
+        account_id = account_id.strip().lower() if isinstance(account_id, str) else ""
+        if not re.fullmatch(DECISION_CLOUDFLARE_ACCOUNT_ID, account_id):
+            return ProbeConfigError("Enter your 32-character account ID.", "providerAccountIdInvalid")
+        base_url = definition.base_url.format(account_id=account_id)
+    elif any(field.id == "base_url" for field in definition.fields):
         base_url = str(body.get("base_url") or "").strip().rstrip("/")
         if not base_url:
             if kind == "ollama":
@@ -425,7 +434,7 @@ def _stored_setup_config(cfg: ProviderConfig, model: str = "") -> dict[str, Any]
     out: dict[str, Any] = {}
     if any(field.id == "api_key" for field in definition.fields):
         out["api_key"] = cfg.api_key
-    if any(field.id == "base_url" for field in definition.fields):
+    if any(field.id in ("base_url", "account_id") for field in definition.fields):
         out["base_url"] = cfg.base_url
     if cfg.endpoint_id:
         out["endpoint_id"] = cfg.endpoint_id

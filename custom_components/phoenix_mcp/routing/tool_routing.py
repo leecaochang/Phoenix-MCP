@@ -20,7 +20,7 @@ from .routing_tables import (
     TOOL_ROUTING_REASONS, TOOL_ROUTING_SETTINGS,
 )
 from .decision_history import pending_context_history, history_texts, without_thinking
-from .decision_provider import DecisionProvider, _evaluate_guarded
+from .decision_provider import DecisionProvider, _evaluate_guarded, decision_key
 from .decision_types import DecisionError
 from ..redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 from ..home_companion import is_companion
@@ -64,7 +64,7 @@ def qualified_languages(cfg: Any) -> list[str]:
     if cfg is None:
         return []
     return sorted({language for (kind, endpoint, model, language), returned in TOOL_ROUTING_QUALIFIED_MODELS.items()
-                   if (kind, endpoint, model) == (cfg.kind, cfg.base_url, cfg.model) and returned})
+                   if (kind, endpoint, model) == decision_key(cfg) and returned})
 
 
 def withheld_results(calls: list[dict], review: ToolReview) -> list[dict]:
@@ -169,7 +169,7 @@ async def async_review_tools(hass: HomeAssistant, data: Any, turn: ToolReviewSta
                 cfg = store.resolve(account, purpose="decision") if account else None
                 if cfg is None:
                     return result("no_account")
-                admitted = TOOL_ROUTING_QUALIFIED_MODELS.get((cfg.kind, cfg.base_url, cfg.model, lang), ())
+                admitted = TOOL_ROUTING_QUALIFIED_MODELS.get((*decision_key(cfg), lang), ())
                 if mode == "advise" and not admitted:
                     return result("unqualified")
                 catalog = build_agent_tool_list(access_key, data, surface)

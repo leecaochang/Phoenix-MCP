@@ -1245,7 +1245,8 @@
       "oauthNotEnabled": "先にこのアクセスキーの OAuth ログインをオンにしてください。",
       "oauthSignInNotFound": "そのログインはもう存在しません。",
       "oauthSaveFailed": "ログインを削除できませんでした。もう一度お試しください。",
-      "oauthNoHttps": "Home Assistant に HTTPS アドレスがないため、アプリはログインできません。先に HTTPS の外部 URL を設定してください。"
+      "oauthNoHttps": "Home Assistant に HTTPS アドレスがないため、アプリはログインできません。先に HTTPS の外部 URL を設定してください。",
+      "providerAccountIdInvalid": "32 文字のアカウント ID を入力してください。"
     },
     "agentchat": {
       "accessKey": "アクセスキー",
@@ -1888,7 +1889,8 @@
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions が既定になりました",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions が {name} に代わって既定になりました",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions は既定ではなくなりました",
-      "noneChoice": "なし"
+      "noneChoice": "なし",
+      "agentcliAccountId": "アカウント ID"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",

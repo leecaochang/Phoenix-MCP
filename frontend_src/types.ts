@@ -245,7 +245,8 @@ export interface AiTaskPreferredStatus {
 export type AgentCliProviderKind =
   "claude" | "deepseek" | "chatgpt" | "gemini" | "grok" | "kimi" | "meta"
   | "minimax" | "mistral" | "openrouter" | "nvidia" | "ollama" | "ollama_cloud"
-  | "zai" | "groq" | "together" | "cerebras" | "fireworks" | "qwen" | "opencode" | "mimo" | "tencent" | "infron" | "typesafe";
+  | "zai" | "groq" | "together" | "cerebras" | "fireworks" | "qwen" | "opencode" | "mimo" | "tencent" | "infron"
+  | "typesafe" | "opencode_decision" | "cloudflare_decision" | "gemini_decision";
 
 export interface AgentCliProviderChoice {
   value: string;
@@ -256,8 +257,8 @@ export interface AgentCliProviderChoice {
 }
 
 export interface AgentCliProviderField {
-  id: "api_key" | "base_url" | "endpoint_id";
-  type: "secret" | "url" | "choice";
+  id: "api_key" | "base_url" | "endpoint_id" | "account_id";
+  type: "secret" | "url" | "text" | "choice";
   label_key: string;
   required: boolean;
   placeholder?: string;

@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 金鑰", "模型", "LLM", "帳戶", "額度", "TypeSafe", "JEV"], "sectionKeywords": { "provider-add": ["新帳戶", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通義千問", "千問", "阿里雲百煉", "百煉", "智譜", "月之暗面", "騰訊雲", "小米", "離線", "本機模型", "價格", "計費"], "decision-provider": ["TypeSafe", "JEV", "快速路徑"], "tool-loading": ["load_tools", "延遲載入", "工具搜尋", "token", "工具太多", "上下文"] } }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 金鑰", "模型", "LLM", "帳戶", "額度", "TypeSafe", "JEV", "Clef", "Gemini Decision"], "sectionKeywords": { "provider-add": ["新帳戶", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通義千問", "千問", "阿里雲百煉", "百煉", "智譜", "月之暗面", "騰訊雲", "小米", "離線", "本機模型", "價格", "計費"], "decision-provider": ["TypeSafe", "JEV", "快速路徑", "OpenCode", "System One", "Gemini Decision", "GPT Luna Decision", "Cloudflare", "Workers AI", "Clef", "Clef Flash", "帳戶 ID", "谷歌"], "tool-loading": ["load_tools", "延遲載入", "工具搜尋", "token", "工具太多", "上下文"] } }
 ---
 新增 Phoenix 使用的 AI 帳戶。每個帳戶需要 API 金鑰，或者對於本機模型，需要伺服器位址。
 
@@ -104,7 +104,18 @@ Phoenix 會不時重新讀取每個帳戶的模型清單。這能讓清單保持
 
 它與 **{{label:routing.enableChat}}** 和 **{{label:routing.enableVoice}}** 搭配使用。Phoenix 會先嘗試 Home Assistant 自己的句子比對，決策提供者處理句子比對遺漏的命令。
 
-Phoenix 提供一個決策提供者：TypeSafe / JEV。在此新增你的帳戶並選擇模型。
+從以下決策提供者中選擇：
+
+- TypeSafe / JEV：TypeSafe 的 JEV 模型，使用 TypeSafe API 金鑰。
+- OpenCode / System One：JEV、Gemini Decision 或 GPT Luna Decision，使用 OpenCode Console API 金鑰。
+- Google / Gemini Decision：Google 的 Gemini Decision 模型，使用 Gemini API 金鑰。請使用付費專案的金鑰，因為 Google 可能會用免費方案的請求來改進其產品。
+- Cloudflare / Clef：Workers AI 上的 Clef 或 Clef Flash，使用你的 Cloudflare 帳戶 ID 和 API 權杖。
+
+新增一個帳戶並選擇其模型。使用 **{{label:settings.addAccount}}** 新增更多帳戶，然後選擇要使用的那一個。整個 Phoenix 中同一時間只使用一個決策提供者。每個帳戶的名稱旁會顯示其模型。
+
+決策帳戶與同一家公司的任何 AI 提供者帳戶彼此獨立。即使你已在聊天中使用該金鑰，也要在此新增它。
+
+只有 TypeSafe 自己的 JEV 模型會處理依賴對話內容的後續訊息。其他模型會把這類訊息交給你的 AI 模型。參見[後續訊息](guide:topic.commandRouting#follow-ups)。
 
 jev-latest 模型會跟隨每個新的 JEV 版本，因此 TypeSafe 的更新可能改變它執行哪些命令以及如何回答，而無需更新 Phoenix。要固定在一個版本，請選擇 jev-1.13.0 這樣的固定版本。jev-preview 模型只觀察，從不執行命令。
 

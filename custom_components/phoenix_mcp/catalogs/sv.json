@@ -427,7 +427,8 @@
       "oauthNotEnabled": "Slå först på OAuth-inloggning för den här åtkomstnyckeln.",
       "oauthSignInNotFound": "Den inloggningen finns inte längre.",
       "oauthSaveFailed": "Inloggningen kunde inte tas bort. Försök igen.",
-      "oauthNoHttps": "Home Assistant har ingen HTTPS-adress, så appar kan inte logga in. Ange först en extern HTTPS-URL."
+      "oauthNoHttps": "Home Assistant har ingen HTTPS-adress, så appar kan inte logga in. Ange först en extern HTTPS-URL.",
+      "providerAccountIdInvalid": "Ange ditt konto-ID på 32 tecken."
     },
     "agentchat": {
       "accessKey": "Åtkomstnyckel",
@@ -2567,7 +2568,8 @@
       "aiDecisionsDefaultSetToast": "Phoenix MCP Decisions är nu standard",
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions är nu standard och ersätter {name}",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions är inte längre standard",
-      "noneChoice": "Ingen"
+      "noneChoice": "Ingen",
+      "agentcliAccountId": "Konto-ID"
     },
     "shell": {
       "agentChat": "Agent Chat",

@@ -201,7 +201,7 @@ describe("Find Setting index", () => {
     const { container, registry } = renderSettings({ settings: {
       ...BASE_SETTINGS, decision_provider_id: "d1", decision_provider_default_id: "d1", voice_agent_pipeline_id: "pl1", ai_task_decisions_supported: true,
     } as GlobalSettings });
-    await screen.findByRole("radio", { name: "JEV" });
+    await screen.findByRole("radio", { name: "JEV jev-latest" });
     // Adding an account shows on request.
     const add = await waitFor(() => toolsFor(registry).flatMap((g) => g.tools).find((tool) => tool.id === "addAccount")!);
     act(() => add.onSelect!());

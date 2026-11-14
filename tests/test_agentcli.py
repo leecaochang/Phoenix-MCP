@@ -381,13 +381,13 @@ async def test_openai_usage_chunk_with_empty_choices_reports_usage():
 @pytest.mark.parametrize(("kind", "expects_flag"), [
     ("chatgpt", True), ("deepseek", True), ("openrouter", True), ("kimi", True),
     ("groq", True), ("ollama", True), ("ollama_cloud", True),
-    ("gemini", False), ("grok", True), ("mistral", False), ("nvidia", False), ("meta", True),
+    ("gemini", True), ("grok", True), ("mistral", False), ("nvidia", False), ("meta", True),
     ("zai", False), ("tencent", True),
     ("together", False), ("cerebras", False), ("fireworks", False), ("qwen", True),
 ])
 async def test_stream_options_include_usage_only_for_curated_kinds(kind, expects_flag):
     # OpenAI and Ollama omit streaming usage unless asked; DeepSeek, OpenRouter, Kimi,
-    # Groq, Qwen, xAI, Meta and TokenHub document accepting the flag. Everyone else must NOT get it (an unrecognized
+    # Groq, Qwen, xAI, Meta, TokenHub and Gemini's compatibility layer document accepting the flag. Everyone else must NOT get it (an unrecognized
     # stream_options could reject the whole request there).
     body = _sse("data: [DONE]")
     cfg = ProviderConfig(kind=kind, model="m", base_url="https://h", api_key="k")

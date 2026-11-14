@@ -73,7 +73,7 @@ const BACKEND_NAMED = [
   "diff.", "approvalSummary.", "version.", "mesaSuggestion.", "agentchat.notice.",
   "agentchat.progress.", "adminError.", "oauth.problem.",
   "settings.provider", "settings.agentcliApiKey", "settings.agentcliBaseUrl",
-  "settings.agentcliServerUrl", "settings.agentcliZai",
+  "settings.agentcliServerUrl", "settings.agentcliZai", "settings.agentcliAccountId",
   "settings.agentcliSite", "settings.agentcliSingapore",
   "settings.agentcliGuangzhou", "settings.agentcliSiliconValley",
   "settings.agentcliRegion", "settings.agentcliMimo", "settings.agentcliOpenCode",

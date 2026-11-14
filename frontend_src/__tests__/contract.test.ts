@@ -151,6 +151,9 @@ const PROVIDER_KINDS = {
   qwen: true,
   zai: true,
   typesafe: true,
+  opencode_decision: true,
+  cloudflare_decision: true,
+  gemini_decision: true,
 } satisfies Record<AgentCliProviderKind, true>;
 
 describe("frontend/backend agentCLI provider contract", () => {

@@ -50,6 +50,9 @@ Every account has a `kind`. Kinds with endpoints take an `endpoint_id`; the firs
 | `qwen` | conversation | `api_key`, `base_url` |
 | `zai` | conversation | `api_key`, `endpoint_id`: `standard`, `coding`, `china` |
 | `typesafe` (TypeSafe) | decision | `api_key`, `model` |
+| `opencode_decision` (OpenCode) | decision | `api_key`, `model`: `jev-1.13`, `gemini-decision-1`, `gpt-6-luna-decision` |
+| `gemini_decision` (Google) | decision | `api_key`, `model`: `gemini-decision-1` |
+| `cloudflare_decision` (Cloudflare) | decision | `account_id`, `api_key`, `model`: `clef-flash`, `clef` |
 
 ### Setup fields {#setup-fields}
 
@@ -61,7 +64,8 @@ Adding an account and checking a setup take the same body.
 | `api_key` | string | Required for every kind except `ollama`. At most 4096 characters, with no control characters. Phoenix never returns it. |
 | `base_url` | string | Required for `ollama` and `qwen`. Only `ollama` may use a private address. Every other kind uses a fixed endpoint and ignores this field. |
 | `endpoint_id` | string | Only for kinds with endpoints. Leave it out for the default. |
-| `model` | string | Optional for conversation kinds; leave it empty to follow the provider automatically. Required for `typesafe`: at most 200 characters, and in the provider's current list. |
+| `account_id` | string | Required for `cloudflare_decision`: the 32-character Cloudflare account ID. Phoenix builds the endpoint from it. |
+| `model` | string | Optional for conversation kinds; leave it empty to follow the provider automatically. Required for decision kinds: at most 200 characters, and in the provider's current list. |
 
 ### List accounts {#list-providers}
 
@@ -73,7 +77,7 @@ Adding an account and checking a setup take the same body.
 
 The response has `instances`, the accounts, and `provider_types`, the setup forms. Both are sorted by label.
 
-Each entry in `provider_types` has `kind`, `label`, `label_key` and `fields`. Each field has `id`, `type` (`secret`, `url` or `choice`), `label_key` and `required`. It may also have `placeholder` and `choices`, each choice with `value`, `label` and `label_key`.
+Each entry in `provider_types` has `kind`, `label`, `label_key` and `fields`. Each field has `id`, `type` (`secret`, `url`, `text` or `choice`), `label_key` and `required`. It may also have `placeholder` and `choices`, each choice with `value`, `label` and `label_key`.
 
 Each account in `instances` has these fields. The API key is never among them.
 
@@ -96,7 +100,9 @@ Each account in `instances` has these fields. The API key is never among them.
 
 `POST /api/phoenix-mcp/admin/agentcli/providers` takes the [setup fields](guide:#setup-fields).
 
-For a conversation kind, Phoenix runs the provider's credential check. For a decision kind, it loads the model list and requires your model to be in it. If that passes, Phoenix stores the account and tries to read its model list and declared capabilities.
+For a conversation kind, Phoenix runs the provider's credential check. For a decision kind, it requires your model to be in the provider's list. TypeSafe's model list also checks the key. For the other decision kinds, Phoenix sends one small decision, which costs a few tokens.
+
+If that passes, Phoenix stores the account and tries to read its model list and declared capabilities.
 
 The response is `201` with `{"instance": {...}}`, holding the account fields above.
 
@@ -105,6 +111,7 @@ The response is `201` with `{"instance": {...}}`, holding the account fields abo
 | 400 | `invalid_request` | `adminError.providerUnknown` | `kind` isn't a known kind. |
 | 400 | `invalid_request` | `adminError.providerApiKeyRequired` | `api_key` is missing. |
 | 400 | `invalid_request` | `adminError.providerEndpointInvalid` | `endpoint_id` isn't one of the kind's values. |
+| 400 | `invalid_request` | `adminError.providerAccountIdInvalid` | `account_id` isn't 32 hexadecimal characters. |
 | 400 | `invalid_request` | `adminError.ollamaUrlRequired`, `adminError.providerBaseUrlRequired` | A required `base_url` is missing. |
 | 400 | `invalid_request` | `adminError.providerUrlInvalid`, `adminError.providerUrlScheme`, `adminError.providerRemoteUrlScheme`, `adminError.providerUrlHostRequired`, `adminError.providerUrlCredentialsForbidden`, `adminError.providerUrlFragmentForbidden`, `adminError.providerUrlAddressForbidden`, `adminError.providerUrlResolutionForbidden`, `adminError.providerRemoteUrlAddressForbidden`, `adminError.providerRemoteUrlResolutionForbidden`, `adminError.providerRemoteUrlResolutionFailed` | `base_url` isn't an acceptable URL. |
 | 400 | `invalid_request` | `adminError.providerConnectionFailed`, or a key for the provider's own failure | The credential check failed. `adminError.providerConnectionFailed` comes with a `detail`. |

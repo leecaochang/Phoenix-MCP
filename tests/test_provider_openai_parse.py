@@ -883,3 +883,17 @@ async def test_infron_returns_a_signature_carried_on_the_call():
     signed = _tool(arguments="{}", thought_signature="s")
     events = await _events(_provider("infron"), _frame({"tool_calls": [signed]}, finish="tool_calls"))
     assert events[-1]["assistant_msg"]["tool_calls"][0]["thought_signature"] == "s"
+
+
+@pytest.mark.parametrize("kind, usage, output", [
+    # Gemini's thinking tokens appear only in the total, and are billed as output.
+    ("gemini", {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 450}, 350),
+    ("gemini", {"prompt_tokens": 100, "completion_tokens": 20}, 20),
+    ("gemini", {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 90}, 20),
+    # Elsewhere the total never adds output: OpenAI's completion count already includes reasoning.
+    ("chatgpt", {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 450}, 20),
+])
+@pytest.mark.asyncio
+async def test_gemini_thinking_tokens_count_as_output(kind, usage, output):
+    events = await _events(_provider(kind), 'data: ' + json.dumps({"choices": [], "usage": usage}), _frame(finish="stop"))
+    assert events[0]["output_tokens"] == output and events[0]["input_tokens"] == 100

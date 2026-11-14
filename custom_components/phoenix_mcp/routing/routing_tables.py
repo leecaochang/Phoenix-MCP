@@ -320,6 +320,21 @@ DECISION_TEMPORAL_CATEGORIES = MappingProxyType({
 # Decision-only shadow routing: configurable network time, independent of HA recognition.
 DECISION_TYPESAFE_BASE_URL = "https://api.typesafe.ai/v1"
 DECISION_TYPESAFE_MODEL = "jev-latest"
+# Further hosted System One endpoints. Each has a fixed model list, since none of them
+# lists its decision models; Cloudflare's address carries the operator's account id.
+DECISION_OPENCODE_BASE_URL = "https://opencode.ai/inference/systemone/v1"
+DECISION_OPENCODE_MODELS = ("jev-1.13", "gemini-decision-1", "gpt-6-luna-decision")
+DECISION_CLOUDFLARE_BASE_URL = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/cloudflare"
+DECISION_CLOUDFLARE_ACCOUNT_ID = r"[0-9a-f]{32}"
+DECISION_CLOUDFLARE_MODELS = ("clef-flash", "clef")
+# Google's own Decisions API: the same question types, with the state sent as text input.
+DECISION_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+DECISION_GEMINI_MODELS = ("gemini-decision-1",)
+DECISION_FIXED_MODELS = MappingProxyType({
+    "opencode_decision": DECISION_OPENCODE_MODELS,
+    "cloudflare_decision": DECISION_CLOUDFLARE_MODELS,
+    "gemini_decision": DECISION_GEMINI_MODELS,
+})
 DECISION_TIMEOUT_DEFAULT_MS = 5000
 DECISION_TIMEOUT_MIN_MS = 250
 DECISION_TIMEOUT_MAX_MS = 30000
@@ -389,16 +404,29 @@ DECISION_FOLLOWUP_EXECUTION_MODELS = MappingProxyType({
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
 })
+# Hosted models that chose no wrong target on the inert corpus JEV was measured with; the operator
+# picks among them. Each answers with its own id. They act on single requests only: context,
+# reference and follow-up review stay with the JEV revisions qualified for them.
+DECISION_HOSTED_EXECUTION_MODELS = MappingProxyType({
+    ("opencode_decision", DECISION_OPENCODE_BASE_URL, "jev-1.13"): frozenset({"jev-1.13"}),
+    ("opencode_decision", DECISION_OPENCODE_BASE_URL, "gemini-decision-1"): frozenset({"gemini-decision-1"}),
+    ("opencode_decision", DECISION_OPENCODE_BASE_URL, "gpt-6-luna-decision"): frozenset({"gpt-6-luna-decision"}),
+    ("gemini_decision", DECISION_GEMINI_BASE_URL, "gemini-decision-1"): frozenset({"gemini-decision-1"}),
+    ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL, "clef-flash"): frozenset({"clef-flash"}),
+    ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL, "clef"): frozenset({"clef"}),
+})
 # Joint routing has its own qualification, independent of context and numeric decisions.
 DECISION_BATCH_EXECUTION_MODELS = MappingProxyType({
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
+    **DECISION_HOSTED_EXECUTION_MODELS,
 })
 DECISION_BATCH_EXECUTION_LANGUAGES = frozenset(_COMMAND_ROUTING_LANGUAGES.values())
 # Numeric execution is qualified independently from categorical routing.
 DECISION_PERCENTAGE_EXECUTION_MODELS = MappingProxyType({
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
+    **DECISION_HOSTED_EXECUTION_MODELS,
 })
 # Fixed JEV revisions reviewed for execution. TypeSafe's model list names only its aliases, so
 # these are offered and accepted at its endpoint even when unlisted; versioned ids are documented.
@@ -409,6 +437,7 @@ DECISION_PINNABLE_MODELS = frozenset({("typesafe", DECISION_TYPESAFE_BASE_URL, "
 DECISION_SEQUENTIAL_EXECUTION_MODELS = MappingProxyType({
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
+    **DECISION_HOSTED_EXECUTION_MODELS,
 })
 DECISION_ROUTE_CHOICES = MappingProxyType({
     "light_on": "One immediate, explicit request to turn on one light, without a brightness setting or adjustment.",
@@ -422,7 +451,12 @@ _DECISION_PERCENTAGE_PREVIEW_CHOICES = {
     "cover_position": "One immediate, explicit request to set one cover to an absolute whole percentage open from 0 through 100. Zero is fully closed and 100 fully open. Not a relative adjustment.",
 }
 # TypeSafe Choice supports 255 options; exact percentages need 101 plus a refusal.
-DECISION_EXACT_PERCENTAGE_ENDPOINTS = frozenset({("typesafe", DECISION_TYPESAFE_BASE_URL, "systemone")})
+DECISION_EXACT_PERCENTAGE_ENDPOINTS = frozenset({
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "systemone"),
+    ("opencode_decision", DECISION_OPENCODE_BASE_URL, "systemone"),
+    ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL, "systemone"),
+    ("gemini_decision", DECISION_GEMINI_BASE_URL, "gemini_decisions"),
+})
 # TypeSafe's direct API rounds probabilities to two decimal places.
 DECISION_PROBABILITY_ROUNDING = MappingProxyType({("typesafe", DECISION_TYPESAFE_BASE_URL, "systemone"): 0.005})
 DECISION_PROBABILITY_SUM_TOLERANCE = 0.001
@@ -432,7 +466,7 @@ DECISION_PERCENTAGE_CHOICES = MappingProxyType({
     "none": "No single explicit absolute whole percentage from 0 through 100 is requested for this operation.",
 })
 
-DECISION_PROVIDERS = frozenset({"typesafe"})
+DECISION_PROVIDERS = frozenset({"typesafe", "opencode_decision", "cloudflare_decision", "gemini_decision"})
 _DECISION_TARGET_INTENTS = {
     "light_on": "HassTurnOn", "light_off": "HassTurnOff",
     "light_brightness": "HassLightSet", "state_query": "HassGetState",
