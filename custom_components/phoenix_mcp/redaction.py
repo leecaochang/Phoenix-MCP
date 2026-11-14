@@ -9,7 +9,6 @@ import logging
 import re
 from typing import Any, TYPE_CHECKING
 
-from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, async_get_hass_or_none
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.network import get_url
@@ -53,13 +52,15 @@ _PROVIDER_KEY_RE = re.compile(
     r"AIza[A-Za-z0-9_-]{30,}|(?:gsk_|xai-|nvapi-)[A-Za-z0-9_-]{20,})\b"
 )
 
-# Credentials that are a URL's path: a Telegram bot token, Slack and Discord webhook paths and
-# a Home Assistant webhook ID, which needs no other authentication. Group 1 is what stays.
+# Credentials that are a URL's path: a Telegram bot token and Slack and Discord webhook paths.
+# Group 1 or 2 is what stays.
 _SERVICE_URL_TOKEN_RE = re.compile(
     r"(?i)(/bot)\d{5,12}+:[A-Za-z0-9_-]{20,}+"
-    r"|(hooks\.slack\.com/(?:services|workflows|triggers)/|discord(?:app)?\.com/api/webhooks/"
-    r"|/api/webhook/)[^\s?#\"'<>]++"
+    r"|(hooks\.slack\.com/(?:services|workflows|triggers)/|discord(?:app)?\.com/api/webhooks/)[^\s?#\"'<>]++"
 )
+# A Home Assistant webhook ID in its URL, which needs no other authentication. Readers mask it;
+# a configuration copy keeps it, like the webhook_id key (READER_CREDENTIAL_KEYS).
+_HA_WEBHOOK_URL_RE = re.compile(r"(?i)(/api/webhook/)[^\s?#\"'<>]++")
 # The same services' tokens with no URL around them: Slack xox and xapp tokens, a bot token.
 _BARE_SERVICE_TOKEN_RE = re.compile(
     r"(?<![\w-])(?:xox[abposre]-[A-Za-z0-9-]{10,}+|xapp-[A-Za-z0-9-]{10,}+|\d{6,12}+:AA[A-Za-z0-9_-]{30,}+)"
@@ -102,14 +103,18 @@ def _container_end(text: str, start: int) -> int:
     return len(text)
 
 
-def _redact_keyed_values(text: str) -> str:
-    """Replace the value of every sensitively named key, a bracketed value whole."""
+def _redact_keyed_values(text: str, reader: bool = True) -> str:
+    """Replace the value of every sensitively named key, a bracketed value whole.
+
+    A reader also masks the keys only readers hide (is_credential_key); a copy masks sensitive keys.
+    """
+    credential = is_credential_key if reader else is_sensitive_key
     parts: list[str] = []
     cursor = 0
     for match in _KEYED_VALUE_RE.finditer(text):
         value = match[4]
         # A !secret or !env_var reference names where the value lives, not the value itself.
-        if (match.start() < cursor or not is_credential_key(match[2]) or value in ("!secret", "!env_var")
+        if (match.start() < cursor or not credential(match[2]) or value in ("!secret", "!env_var")
                 or value.startswith(_SCRUBBED_MARKS)):
             continue
         start = match.start(4)
@@ -128,7 +133,7 @@ def _redact_keyed_values(text: str) -> str:
     return "".join(parts)
 
 
-def _scrub_log_text(text: str) -> str:
+def _scrub_log_text(text: str, reader: bool = True) -> str:
     """Redact access keys, tokens and credentials from a log line.
 
     Covers Phoenix MCP access keys, JWTs and long-lived access tokens, URL
@@ -136,7 +141,7 @@ def _scrub_log_text(text: str) -> str:
     the value of any sensitively named key in dict, JSON, keyword or plain-text form,
     wherever it sits in the line. Over-redaction
     is the accepted failure mode, since another integration's log line can hold
-    anything.
+    anything. With reader false a Home Assistant webhook ID stays, as a configuration copy keeps it.
     """
     text = _PHOENIX_ACCESS_KEY_SCRUB_RE.sub("<phoenix-access-key>", text)
     text = _JWT_SCRUB_RE.sub(r"\1<token>", text)
@@ -145,8 +150,10 @@ def _scrub_log_text(text: str) -> str:
     text = _AUTH_SCHEME_RE.sub(r"\1<redacted>", text)
     text = _PROVIDER_KEY_RE.sub("<redacted>", text)
     text = _SERVICE_URL_TOKEN_RE.sub(lambda match: f"{match[1] or match[2]}<redacted>", text)
+    if reader:
+        text = _HA_WEBHOOK_URL_RE.sub(r"\1<redacted>", text)
     text = _BARE_SERVICE_TOKEN_RE.sub("<redacted>", text)
-    return _redact_keyed_values(text)
+    return _redact_keyed_values(text, reader)
 
 
 # A "key: value" or "key = value" line in a YAML/config diff, capturing the
@@ -186,25 +193,27 @@ def _non_secret_code_initializer(line: str) -> bool:
     ))
 
 
-def redact_secrets_in_text(text: str | None) -> str | None:
+def redact_secrets_in_text(text: str | None, *, reader: bool = True) -> str | None:
     """Redact secret-valued config lines and embedded credentials from free text.
 
     Replaces values of sensitive keys plus JWTs and URL credentials anywhere. It reads one line
     at a time, so a whole YAML file goes through esphome_yaml.mask_yaml_text, which walks it.
+    A recovery copy passes reader=False: a webhook ID is configuration it keeps, not a secret.
     """
     if not text:
         return text
+    credential = is_credential_key if reader else is_sensitive_key
     out: list[str] = []
     for line in text.split("\n"):
         if _non_secret_code_initializer(line):
             out.append(line)
             continue
         m = _CONFIG_SECRET_LINE_RE.match(line)
-        if (m is not None and is_credential_key(m.group(2))
+        if (m is not None and credential(m.group(2))
                 and not _SECRET_REFERENCE_RE.fullmatch(m.group(4))):
-            out.append(_scrub_log_text(f"{m.group(1)}{m.group(2)}{m.group(3)}<redacted>"))
+            out.append(_scrub_log_text(f"{m.group(1)}{m.group(2)}{m.group(3)}<redacted>", reader))
         else:
-            out.append(_scrub_log_text(line))
+            out.append(_scrub_log_text(line, reader))
     return "\n".join(out)
 
 
@@ -429,12 +438,6 @@ _ENTITY_ID_TEXT_RE = re.compile(r"(?<![\w.])([a-z0-9_]+\.[a-z0-9_]+)(?!\w|\.\w)"
 # one is searched window by window in _chain_windows.
 _DOTTED_CHAIN_RE = re.compile(r"(?<![\w.])\w++(?:\.\w++)++")
 _ID_PART_RE = re.compile(r"[a-z0-9_]+")
-_ENTITY_PLATFORMS = frozenset(platform.value for platform in Platform)
-
-
-def _entity_domain(hass: HomeAssistant, domain: str) -> bool:
-    """Whether a domain holds entities here; a static platform list keeps it from being an oracle."""
-    return domain in _ENTITY_PLATFORMS or hass.states.async_entity_ids_count(domain) > 0
 
 
 def entity_exists(hass: HomeAssistant, entity_id: str) -> bool:
@@ -445,9 +448,9 @@ def entity_exists(hass: HomeAssistant, entity_id: str) -> bool:
 def _chain_windows(parts: list[str], hass: HomeAssistant) -> Iterator[int]:
     """Start indexes of the two-part windows of a longer chain that may name an entity.
 
-    The window after a `states` part is always one (template access), the leading
-    window is one when its domain holds entities, and any other window when that entity
-    exists, as in a logger named after an automation. Windows never overlap.
+    The window after a `states` part is always one (template access), and any other window
+    when that entity exists, as in lock.door.state or a logger named after an automation; a
+    platform name alone (event.data.get) is not one. Windows never overlap.
     """
     index = 0
     while index < len(parts) - 1:
@@ -456,7 +459,6 @@ def _chain_windows(parts: list[str], hass: HomeAssistant) -> Iterator[int]:
             _ID_PART_RE.fullmatch(domain) is not None and _ID_PART_RE.fullmatch(object_id) is not None
             and not (domain.isdecimal() and object_id.isdecimal())
             and ((index > 0 and parts[index - 1] == "states")
-                 or (index == 0 and _entity_domain(hass, domain))
                  or entity_exists(hass, f"{domain}.{object_id}")))
         if candidate:
             yield index

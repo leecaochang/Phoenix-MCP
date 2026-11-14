@@ -67,6 +67,28 @@ async def test_state_with_unit_matches_core_outside_sensor_rounding(hass, attrib
             "{% for s in states.input_number %}{{ s.state_with_unit }}{% endfor %}", snapshot) == expected
 
 
+@pytest.mark.parametrize("template", [
+    "{{ states('input_number.level', with_unit=True) }}",
+    "{{ states('input_number.level', rounded=True) }}",
+    "{{ states('input_number.level', rounded=False, with_unit=True) }}",
+    "{{ states('input_number.level', False, True) }}",
+    "{{ states('input_number.level', True) }}",
+    "{{ states('input_number.missing', True, True) }}",
+])
+@pytest.mark.parametrize("attributes", [{"unit_of_measurement": "°C"}, {}])
+async def test_the_states_function_takes_cores_arguments(hass, template, attributes):
+    """Outside a sensor's display rounding, states() with rounded and with_unit answers as Core does."""
+    hass.states.async_set("input_number.level", "21.456", attributes)
+    expected = Template(template, hass).async_render(parse_result=False)
+    access_key = AccessKeyRecord(
+        id="t3", name="unit", access_key_hash="x", created_at=utcnow(), created_by="admin",
+        permissions=PermissionTree(entities={"input_number.level": PermissionNode(state="YELLOW")}),
+    )
+    snapshot = {entity_id: ScrubbedState.from_dict(state.as_dict())
+                for entity_id, state in build_permitted_states(access_key, hass).items()}
+    assert render_template_snapshot(template, snapshot) == expected
+
+
 def test_permitted_entity_renders(two_states):
     access_key = _scoped_access_key()
     assert _render("{{ states('sensor.allowed') }}", access_key, two_states) == "42"

@@ -101,7 +101,7 @@ MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。
 | 409 | `conflict` | `adminError.approvalExpired` | 它已超過 `expires_at`，因此本次呼叫以 `expired` 關閉它。沒有執行任何內容。 |
 | 409 | `conflict` | `adminError.approvalAlreadyResolved` | 另一個請求先完成了它。 |
 | 404 | `not_found` | `adminError.approvalAccessKeyInactive` | 存取金鑰不再有效。Phoenix 以 `cancelled` 關閉核准，原因為 `access_key_inactive`。 |
-| 404 | `not_found` | `adminError.approvalCredentialEnded` | 請求之後金鑰已輪換，或發出請求的 OAuth 登入已結束。Phoenix 以 `cancelled` 關閉核准，原因為 `access_key_rotated` 或 `oauth_sign_in_ended`。 |
+| 404 | `not_found` | `adminError.approvalCredentialEnded` | 應用程式發出請求之後金鑰已輪換，或發出請求的 OAuth 登入已結束。Phoenix 以 `cancelled` 關閉核准，原因為 `access_key_rotated` 或 `oauth_sign_in_ended`。 |
 | 403 | `forbidden` | `adminError.approvalCapabilityDenied` | 此金鑰的能力現在設為拒絕存取。Phoenix 以 `failed` 關閉核准，原因為 `capability_denied`。 |
 | 503 | `service_unavailable` | `adminError.killSwitchEngaged` | 緊急停止開關已開啟。Phoenix 以 `cancelled` 關閉核准，原因為 `kill_switch`。 |
 | 503 | `service_unavailable` | `adminError.approvalRecordFailed` | Phoenix 無法儲存執行標記。沒有執行任何內容，核准仍為待處理。 |
@@ -245,7 +245,7 @@ Phoenix 保留每個資源最新的 20 個版本。超過 100,000 位元組的�
 
 它會新增 `restore_refusals: { before, after }`。每一側為 `null`，或 Phoenix 拒絕還原該側的原因：`yaml_tags`、`audit_only`、`template_incompatible` 或 `entity_missing`。
 
-儀表板版本還有 `restore_active_content: { before, after }`。每一側列出還原該側會向目前佈局新增的範本、會執行程式碼的自訂卡片和外部 URL。還原不會等待核准，因此請先檢查它們。
+儀表板版本還有 `restore_active_content: { before, after }`。每一側列出還原該側會在目前佈局中新增或變更的範本、自訂卡片和外部 URL。還原不會等待核准，因此請先檢查它們。
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|

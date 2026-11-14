@@ -207,10 +207,13 @@ OAUTH_GRANT_REQUEST_KEY = "phoenix_mcp_oauth_grant_id"
 OAUTH_TOKEN_UNTIL_REQUEST_KEY = "phoenix_mcp_oauth_token_until"
 OAUTH_ACCESS_TOKEN_TTL_SECONDS = 3600
 # A replaced refresh or access token keeps working this long, so a retried or
-# concurrent refresh does not end the sign-in. A replaced refresh token may be redeemed
-# once more inside it (one sibling), while fewer than OAUTH_REFRESH_SIBLINGS_MAX refresh
-# tokens are current; any further use is reuse and ends the sign-in.
+# concurrent refresh does not end the sign-in. One refresh token may be used up to
+# OAUTH_REFRESH_USES_MAX times inside it (each retry adds a sibling), while fewer than
+# OAUTH_REFRESH_SIBLINGS_MAX refresh tokens are current; any further use, or any use after
+# the grace, is reuse and ends the sign-in. Three uses cover three concurrent refreshes or
+# two lost responses.
 OAUTH_REFRESH_GRACE_SECONDS = 60
+OAUTH_REFRESH_USES_MAX = 3
 OAUTH_REFRESH_SIBLINGS_MAX = 3
 OAUTH_RETIRED_TOKENS_MAX = 8
 # Hex characters of a refresh token naming its sign-in, so a token that fell off the
@@ -381,15 +384,6 @@ CARD_CATALOG_STORAGE_VERSION = 1
 MAX_CARD_CATALOG_ENTRIES = 500
 MAX_CARD_STUB_CONFIG_BYTES = 2000
 MAX_CARD_CATALOG_FAILURES = 50
-# Custom cards that run code taken from their own configuration (JavaScript templates,
-# evaluated functions, raw HTML or templating of other cards). Every viewer's browser
-# runs it with that viewer's session, so a layout write adding or changing one needs
-# approval even where cap_lovelace_write is Allow. Template markers in any card are
-# caught separately; this list covers what a marker cannot show.
-DASHBOARD_CODE_CARD_TYPES = frozenset({
-    "apexcharts-card", "button-card", "card-templater", "config-template-card",
-    "decluttering-card", "html-template-card", "plotly-graph", "streamline-card",
-})
 # HA's own card types: the card picker's core cards plus the Energy cards. A bare
 # type in this set is a built-in card, available without any harvest.
 # It follows the current HA card picker; a type an older HA lacks only misses its
@@ -554,11 +548,14 @@ SENSITIVE_KEY_SUBSTRINGS = frozenset({
     "network_key", "networkkey", "pre_shared_key", "preshared_key", "presharedkey",
     "shared_key", "signing_key", "ssh_key", "license_key", "licensekey",
     "passwd", "pwd", "bearer",
-    # Credentials under ordinary names: a cookie is a session, and the rest are API, account
-    # and Z-Wave network keys.
-    "cookie", "user_key", "consumer_key", "appid", "sp_dc",
+    # Credentials under ordinary names: API, account and Z-Wave network keys.
+    "consumer_key", "sp_dc",
     "s0_legacy_key", "s2_access_control_key", "s2_authenticated_key", "s2_unauthenticated_key",
 })
+# Credentials whose names are ordinary words inside other names (cookies_enabled, steam_appid,
+# user_keyboard_layout), so they mark a secret only as the whole key: a cookie is a session,
+# a Pushover user key and app ID an account.
+SENSITIVE_WHOLE_KEYS = frozenset({"cookie", "cookies", "set_cookie", "user_key", "appid"})
 # Too short to match as substrings ("ping", "shipping", "upskill", "bypass"), so these
 # mark a secret only as the final word of a key name, as in wpa_psk, door-pin or mqtt_pass.
 SENSITIVE_KEY_FINAL_WORDS = frozenset({"pin", "psk", "pass"})
@@ -806,8 +803,9 @@ CAPABILITY_TIERS: Mapping[str, str] = MappingProxyType({
     # when it opens a dashboard, so registering a JavaScript file runs code
     # with the viewing person's Home Assistant session. That is why it is separate from
     # cap_lovelace_write and sits in the irreversible tier. A layout is not inert either:
-    # cards render templates and fetch URLs with each viewer's authority, so a layout
-    # write carrying such content needs approval (DASHBOARD_CODE_CARD_TYPES).
+    # cards render templates, run custom card code and fetch URLs with each viewer's
+    # authority, so a layout write adding or changing such content, or any custom: card,
+    # needs approval even under Allow (tools/lovelace.py _active_items).
     "cap_dashboard_resources": "irreversible",
     "cap_backup": "irreversible",
     # Both are reads of configuration the operator owns; cap_yaml_edit also gates

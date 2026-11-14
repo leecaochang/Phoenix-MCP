@@ -1205,6 +1205,73 @@ async def test_a_device_action_under_mesa_confirm_binds_the_device_and_runs_once
     assert len(ran) == 1
 
 
+async def test_a_disabled_actuator_still_counts_and_a_domain_grant_covers_it(hass, esphome_entries):
+    """The firmware still drives a disabled entity's hardware; the refusal says how to grant it."""
+    data, pending, ran = await _gate_device(hass, esphome_entries)
+    er.async_get(hass).async_update_entity(_PULSE, disabled_by=er.RegistryEntryDisabler.USER)
+    hass.states.async_remove(_PULSE)
+    key = _key({_SENSOR: "GREEN", _RELAY: "GREEN"}, cap_physical_control="allow")
+    refused = await _call_tool("call_service", _ACTION, key, hass, data)
+    assert refused[1] == "denied" and "disabled in Home Assistant" in _text(refused)
+    preview = _body(await _call_tool("dry_run_service", _ACTION, key, hass, data))
+    assert preview["predicted_outcome"] == "denied" and "disabled in Home Assistant" in preview["reason"]
+    assert ran == [] and pending == []
+    key.permissions.domains["button"] = PermissionNode(state="GREEN")
+    assert (await _call_tool("call_service", _ACTION, key, hass, data))[1] == "allowed"
+    assert len(ran) == 1
+
+
+async def test_a_device_refusal_names_no_reason_to_a_key_without_any_of_it(hass, esphome_entries):
+    data, _, ran = await _gate_device(hass, esphome_entries)
+    key = _key({}, cap_physical_control="allow")
+    refused = await _call_tool("call_service", _ACTION, key, hass, data)
+    assert refused[1] == "denied" and _text(refused) == "Forbidden."
+    assert "reason" not in _body(await _call_tool("dry_run_service", _ACTION, key, hass, data))
+    assert ran == []
+
+
+async def test_a_physical_confirm_approval_binds_and_shows_the_device(hass, esphome_entries):
+    """The capability approval comes first; it carries the device's entities and MESA's confirm, like MESA's own."""
+    lock = "lock.gate_lock"
+    data, pending, ran = await _gate_device(hass, esphome_entries, "enforced")
+    extra_lock = er.async_get(hass).async_get_or_create(
+        "lock", "esphome", "unique-gate_lock", suggested_object_id="gate_lock",
+        config_entry=hass.config_entries._entries[esphome_entries[0].entry_id],
+    ).entity_id
+    assert extra_lock == lock
+    hass.states.async_set(lock, "locked")
+    data.mesa.store.set(lock, _profile(lock, "confirm"))
+    for entity_id in (_SENSOR, _RELAY, _PULSE):
+        data.mesa.store.set(entity_id, _profile(entity_id, "autonomous"))
+    key = _key({_SENSOR: "GREEN", _RELAY: "GREEN", _PULSE: "GREEN", lock: "GREEN"}, cap_physical_control="confirm")
+    result = await _call_tool("call_service", _ACTION, key, hass, data, request_id="rid")
+    assert result[1] == "pending_approval", result
+    row = pending[0]
+    assert row["tool_name"] == "call_service"
+    assert row["args"][APPROVAL_TARGETS_KEY]["entity_ids"] == sorted([_SENSOR, _RELAY, _PULSE, lock])
+    preview = row["diff"]["preview"]
+    assert preview["mesa"]["confirm_entities"] == [lock]
+    # A new entity on the device while the approval waits changes what it would reach.
+    other = er.async_get(hass).async_get_or_create(
+        "lock", "esphome", "unique-gate_extra", suggested_object_id="gate_extra",
+        config_entry=hass.config_entries._entries[esphome_entries[0].entry_id],
+    ).entity_id
+    hass.states.async_set(other, "locked")
+    key.permissions.entities[other] = PermissionNode(state="GREEN")
+    data.mesa.store.set(other, _profile(other, "confirm"))
+    stale = await async_execute_approved_tool(row["tool_name"], row["args"], key, hass, data)
+    assert stale[1] == "denied" and "changed" in _text(stale), stale
+    assert ran == []
+    # An approval saved without the binding was never shown the device and does not run either.
+    unbound = {name: value for name, value in row["args"].items() if name != APPROVAL_TARGETS_KEY}
+    hass.states.async_remove(other)
+    er.async_get(hass).async_remove(other)
+    assert (await async_execute_approved_tool(row["tool_name"], unbound, key, hass, data))[1] == "denied"
+    assert ran == []
+    assert (await async_execute_approved_tool(row["tool_name"], row["args"], key, hass, data))[1] == "allowed"
+    assert len(ran) == 1
+
+
 async def test_a_device_action_is_refused_when_mesa_is_configured_but_missing(hass, esphome_entries):
     data, _, ran = await _gate_device(hass, esphome_entries)
     data.store.get_settings.return_value = GlobalSettings(mesa_mode="enforced")

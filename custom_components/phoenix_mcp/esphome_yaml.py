@@ -136,18 +136,29 @@ def placeholder_for(path: str) -> str:
     return f"{_PLACEHOLDER_PREFIX}{path}{_PLACEHOLDER_SUFFIX}"
 
 
+# Bidirectional controls reorder how a name reads (door<U+202E>lmay.yaml shows as door.yaml).
+_BIDI_CONTROLS = frozenset("\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
+# Control, unassigned and surrogate code points, and line and paragraph separators.
+_REFUSED_NAME_CATEGORIES = frozenset({"Cc", "Cn", "Cs", "Zl", "Zp"})
+
+
 def folded_path_parts(rel: str) -> list[str] | None:
     """A relative path's components as the structural path rules compare them, or None.
 
     A case-insensitive filesystem opens ſecrets.yaml as secrets.yaml, and str.lower() keeps the
-    long s, so components are compared after NFKC normalization and casefold(). A component
-    holding a control, format (zero-width, bidi), unassigned or other unprintable character is
-    refused, as it can hide a name from that comparison.
+    long s, so components are compared after NFKC normalization and casefold(), with format
+    characters (zero-width joiners, soft hyphen) left out so secr<U+200B>ets.yaml still reads as
+    secrets. A component holding a control, bidi control, unassigned or surrogate code point, or
+    a line separator is refused; other format characters, as in Persian names, are allowed.
     """
     parts = [p for p in rel.replace("\\", "/").split("/") if p not in ("", ".")]
-    if any(not part.isprintable() for part in parts):
+    if any(char in _BIDI_CONTROLS or unicodedata.category(char) in _REFUSED_NAME_CATEGORIES
+           for part in parts for char in part):
         return None
-    return [unicodedata.normalize("NFKC", part).casefold() for part in parts]
+    return [
+        unicodedata.normalize("NFKC", "".join(char for char in part if unicodedata.category(char) != "Cf")).casefold()
+        for part in parts
+    ]
 
 
 def links_to_secrets_yaml(path: str, root: str) -> bool:
@@ -476,13 +487,12 @@ def _substitution_name(path: tuple[str, ...]) -> str | None:
 def _credential_substitutions(
     items: list[tuple[str, tuple[str, ...], Any]], secret_path: Callable[[tuple[str, ...]], bool],
 ) -> set[str]:
-    """Substitutions to mask: those a credential refers to, and those this file never uses.
+    """Substitutions to mask: those a credential path refers to, directly or through another.
 
-    A substitution used only by another file (a package, an include) may be a credential there,
-    and one a masked substitution refers to is masked with it.
+    A substitution named like a credential is a credential path itself, so what it refers to
+    goes with it. One this file never uses is not masked for that alone.
     """
     defined: dict[str, set[str]] = {}
-    used: set[str] = set()
     hidden: set[str] = set()
     for _dotted, path, node in items:
         if path[-1:] == (_KEY_SEGMENT,):
@@ -493,8 +503,6 @@ def _credential_substitutions(
             defined.setdefault(name, set()).update(refers)
         if refers and secret_path(path):
             hidden |= refers
-        used |= refers
-    hidden |= defined.keys() - used
     pending = list(hidden)
     while pending:
         for refer in defined.get(pending.pop(), ()):

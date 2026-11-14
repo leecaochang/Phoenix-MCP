@@ -79,7 +79,7 @@ from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_action
 from ..tool_common import _project_state, _resolve_area_id, _tool_error, _tool_success, fitted_offset_page, longest_fitting, offset_page
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from ..approval_targets import target_binding
-from ..policy_engine import _ENTITY_ID_RE, Permission, assist_expose_check, device_config_entry_ids, device_read_check, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, group_member_denied, music_assistant_readable_entries, physical_gate_applies, required_service_cap, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_gate_targets, service_target_binding_valid, scrub_sensitive_attributes, unreadable_group_targets, unregistered_targets
+from ..policy_engine import _ENTITY_ID_RE, Permission, assist_expose_check, device_config_entry_ids, device_read_check, device_registry_entity_ids, esphome_entry_refusal, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, group_member_denied, music_assistant_readable_entries, physical_gate_applies, required_service_cap, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_read, resolve_registry_access, resolve_service_targets, service_gate_targets, service_target_binding_valid, scrub_sensitive_attributes, unreadable_group_targets, unregistered_targets
 from ..proxy_diagnostics import device_bluetooth_scanners, rf_capabilities
 from ..radio import device_radio_types
 from ..recorder_queries import iso_utc, state_timestamp
@@ -2771,9 +2771,12 @@ def _outcome_as_answered(outcome: str, resource: Any, access_key: AccessKeyRecor
     """An audit outcome as the key was answered: a refusal over an entity it cannot read was "not found".
 
     The administrator's audit view keeps the distinction; told to the key, it would confirm which
-    guessed IDs exist.
+    guessed IDs exist. The resource is folded to lower case first, as the resolver folds it.
     """
-    if (outcome == "denied" and isinstance(resource, str) and valid_entity_id(resource)
+    if not isinstance(resource, str):
+        return outcome
+    resource = resource.lower()
+    if (outcome == "denied" and valid_entity_id(resource)
             and resolve_read(resource, access_key, hass) not in (Permission.READ, Permission.WRITE)):
         return "not_found"
     return outcome
@@ -3400,6 +3403,8 @@ async def _tool_dry_run_service(
                 "predicted_outcome": predicted_action,
                 "would_execute": allowed,
             }
+            if not writable and (refusal := esphome_entry_refusal(hass, esphome_entry, access_key, service)) != "Forbidden.":
+                body["reason"] = refusal
             return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
 
     if not any((args.get("entity_id"), args.get("device_id"), args.get("area_id"))):

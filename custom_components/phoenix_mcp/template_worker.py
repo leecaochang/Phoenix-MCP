@@ -47,26 +47,28 @@ def _check_environment() -> Any:
 
 
 def _check(templates: list[str]) -> dict:
-    """Compile each template as Home Assistant would, then trial-render it; report compile CPU.
+    """Compile each template as Home Assistant would, then trial-render it.
 
-    A template that does not compile or fails its trial render is Home Assistant's to report.
+    Reports the compile CPU of the slowest single template. A template that does not compile or
+    fails its trial render is Home Assistant's to report.
     """
     env = _check_environment()
     compiled = []
-    started = time.process_time()
+    slowest = 0.0
     for source in templates:
+        started = time.process_time()
         try:
             compiled.append(env.from_string(source))
         except Exception:  # Home Assistant reports the same failure from its own compile
-            continue
-    compile_seconds = time.process_time() - started
+            pass
+        slowest = max(slowest, time.process_time() - started)
     for template in compiled:
         try:
             for _ in template.generate({}):
                 pass
         except Exception:  # a trial render without its runtime variables may fail
             continue
-    return {"compile_seconds": compile_seconds}
+    return {"compile_seconds": slowest}
 
 
 def _evaluate(payload: dict, permitted: dict, limits: dict) -> dict:
@@ -151,13 +153,27 @@ def run_payload(raw: bytes, limits: dict) -> tuple[int, str]:
         logging.disable(previous_logging_disable)
 
 
+# Written to stderr when the host refuses the memory limit, so Home Assistant can log it once.
+NO_MEMORY_LIMIT = "memory_limit_unavailable"
+
+
+def _limit_memory(memory_bytes: int) -> bool:
+    """Cap the address space; False when the host refuses it, as macOS does for RLIMIT_AS."""
+    try:
+        resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+    except (ValueError, OSError):
+        return False
+    return True
+
+
 def main() -> None:
     """Apply OS limits, then run the request read from stdin.
 
     Memory and a startup CPU cap precede HA imports and caller input; once the imports are
-    done the CPU limit becomes what they used plus the work budget. Exit 70 means startup
-    failed; the diagnostic exit code means the request failed, with a bounded JSON diagnostic
-    on stdout.
+    done the CPU limit becomes what they used plus the work budget. A host that refuses the
+    memory limit runs without it, under the CPU limit and the caller's wall timeout. Exit 70
+    means startup failed; the diagnostic exit code means the request failed, with a bounded
+    JSON diagnostic on stdout.
     """
     phase = "resource_limits"
     try:
@@ -169,7 +185,8 @@ def main() -> None:
         startup_seconds = limits["TEMPLATE_WORKER_STARTUP_CPU_SECONDS"]
         memory_bytes = limits["TEMPLATE_WORKER_MEMORY_BYTES"]
         resource.setrlimit(resource.RLIMIT_CPU, (startup_seconds, startup_seconds))
-        resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+        if not _limit_memory(memory_bytes):
+            sys.stderr.write(NO_MEMORY_LIMIT + "\n")
         phase = "imports"
         # These run only after the resource limits above are in force, so their CPU is
         # measured before the work budget is added.

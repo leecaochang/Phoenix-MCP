@@ -101,7 +101,7 @@ The response is `200` with the updated record:
 | 409 | `conflict` | `adminError.approvalExpired` | It was past `expires_at`, so this call closed it as `expired`. Nothing ran. |
 | 409 | `conflict` | `adminError.approvalAlreadyResolved` | Another request finished it first. |
 | 404 | `not_found` | `adminError.approvalAccessKeyInactive` | The access key is no longer active. Phoenix closes the approval as `cancelled`, reason `access_key_inactive`. |
-| 404 | `not_found` | `adminError.approvalCredentialEnded` | The key was rotated since the request, or the OAuth sign-in that asked has ended. Phoenix closes the approval as `cancelled`, reason `access_key_rotated` or `oauth_sign_in_ended`. |
+| 404 | `not_found` | `adminError.approvalCredentialEnded` | The key was rotated since an app's request, or the OAuth sign-in that asked has ended. Phoenix closes the approval as `cancelled`, reason `access_key_rotated` or `oauth_sign_in_ended`. |
 | 403 | `forbidden` | `adminError.approvalCapabilityDenied` | The capability is now set to Deny for this key. Phoenix closes the approval as `failed`, reason `capability_denied`. |
 | 503 | `service_unavailable` | `adminError.killSwitchEngaged` | The kill switch is on. Phoenix closes the approval as `cancelled`, reason `kill_switch`. |
 | 503 | `service_unavailable` | `adminError.approvalRecordFailed` | Phoenix couldn't save the execution marker. Nothing ran and the approval is still pending. |
@@ -245,7 +245,7 @@ Returns one version in full: the summary fields without `has_before` and `has_af
 
 It adds `restore_refusals: { before, after }`. Each side is `null`, or a reason Phoenix would refuse to restore that side: `yaml_tags`, `audit_only`, `template_incompatible` or `entity_missing`.
 
-A dashboard version also has `restore_active_content: { before, after }`. Each side lists the templates, code-running custom cards and external URLs that restoring it would add to the current layout. A restore doesn't wait for approval, so check them first.
+A dashboard version also has `restore_active_content: { before, after }`. Each side lists the templates, custom cards and external URLs that restoring it would add or change in the current layout. A restore doesn't wait for approval, so check them first.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|

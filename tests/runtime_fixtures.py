@@ -220,6 +220,13 @@ def make_mcp_hass(data: PhoenixData) -> MagicMock:
     hass.states.async_all.return_value = []
     # The tools these mocks drive need their component loaded; any other stays unloaded.
     hass.config.components = {"automation", "calendar", "script"}
+    # An empty entity registry, loaded as in a running Home Assistant.
+    registry = er.async_get(hass)
+    try:
+        registry.entities = er.EntityRegistryItems(hass)
+    except TypeError:  # Older Home Assistant builds the index without hass.
+        registry.entities = er.EntityRegistryItems()  # type: ignore[call-arg]
+    registry._entities_data = registry.entities.data
     return hass
 
 

@@ -262,6 +262,91 @@ class TestDashboardBinding:
         assert outcome == "invalid_request" and yi.MSG_CHANGED_SINCE_REVIEW in _text(content)
         assert await async_get_lovelace_config(hass, None) == person
 
+    @pytest.mark.parametrize("position", [None, 1])
+    async def test_queued_adds_to_one_view_both_apply(self, hass, position):
+        """Cards added after a review leave an add's reviewed cards in place, so a batch of adds lands."""
+        await _seed_dashboard(hass, [dict(WEATHER)])
+        data, store = _data()
+        key = _key(cap_lovelace_write="confirm")
+        new = [{"type": "markdown", "content": "A"}, {"type": "markdown", "content": "B"}]
+        for card in new:
+            args = {"view_index": 0, "card": dict(card)} | ({} if position is None else {"position": position})
+            _, outcome, _ = await _call_tool("add_dashboard_card", args, key, hass, data)
+            assert outcome == "pending_approval"
+        for approval in list(store.pending):
+            _, outcome, _ = await async_execute_approved_tool(_tool(approval), _args(approval), key, hass, data)
+            assert outcome == "allowed"
+        cards = (await async_get_lovelace_config(hass, None))["views"][0]["cards"]
+        assert sorted(card["content"] for card in cards) == ["A", "B", "weather"]
+
+    @pytest.mark.parametrize("person_cards", [
+        [dict(SAFETY), dict(WEATHER), dict(ALARM)],
+        [dict(ALARM), dict(WEATHER)],
+        [dict(WEATHER)],
+        [dict(WEATHER, content="edited"), dict(ALARM)],
+    ], ids=["inserted", "reordered", "deleted", "edited"])
+    async def test_add_refused_when_reviewed_cards_changed_or_moved(self, hass, person_cards):
+        await _seed_dashboard(hass, [dict(WEATHER), dict(ALARM)])
+        data, store = _data()
+        key = _key(cap_lovelace_write="confirm")
+        await _call_tool("add_dashboard_card", {"view_index": 0, "position": 1, "card": {"type": "markdown", "content": "new"}},
+                         key, hass, data)
+        person = {"views": [{"title": "V", "cards": person_cards}]}
+        await async_save_lovelace_config(hass, None, person)
+        approval = store.pending[0]
+        content, outcome, _ = await async_execute_approved_tool(_tool(approval), _args(approval), key, hass, data)
+        assert outcome == "invalid_request" and yi.MSG_CHANGED_SINCE_REVIEW in _text(content)
+        assert await async_get_lovelace_config(hass, None) == person
+
+    async def test_add_binding_cannot_be_forged_by_the_caller(self, hass):
+        await _seed_dashboard(hass, [dict(WEATHER), dict(ALARM)])
+        data, store = _data()
+        key = _key(cap_lovelace_write="confirm")
+        content, outcome, _ = await _call_tool("add_dashboard_card", {
+            "view_index": 0, "card": {"type": "markdown", "content": "new"},
+            APPROVAL_REVIEWED_HASH_KEY: "0:" + reviewed_hash({"cards": []})}, key, hass, data)
+        assert outcome == "invalid_request"
+        assert "Unknown argument" in _text(content) and store.pending == []
+
+    async def test_queued_patches_of_different_views_both_apply(self, hass):
+        assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+        await async_save_lovelace_config(hass, None, {"views": [
+            {"title": "V0", "cards": [dict(WEATHER)]}, {"title": "V1", "cards": [dict(ALARM)]}]})
+        data, store = _data()
+        key = _key(cap_lovelace_write="confirm")
+        for index in (0, 1):
+            content, outcome, _ = await _call_tool("patch_dashboard", {"changes": [
+                {"path": ["views", index, "title"], "kind": "set", "value": f"Renamed {index}"}]}, key, hass, data)
+            assert outcome == "pending_approval", _text(content)
+        _, outcome, _ = await _call_tool("add_dashboard_card", {"view_index": 1, "card": dict(SAFETY)}, key, hass, data)
+        assert outcome == "pending_approval"
+        for approval in list(store.pending):
+            _, outcome, _ = await async_execute_approved_tool(_tool(approval), _args(approval), key, hass, data)
+            assert outcome == "allowed"
+        views = (await async_get_lovelace_config(hass, None))["views"]
+        assert [view["title"] for view in views] == ["Renamed 0", "Renamed 1"]
+        assert views[1]["cards"] == [ALARM, SAFETY]
+
+    @pytest.mark.parametrize("person_views", [
+        [{"title": "V1", "cards": [dict(ALARM)]}, {"title": "V0", "cards": [dict(WEATHER)]}],
+        [{"title": "V0", "cards": [dict(SAFETY), dict(WEATHER)]}, {"title": "V1", "cards": [dict(ALARM)]}],
+        [{"title": "V0", "cards": [dict(WEATHER, content="edited")]}, {"title": "V1", "cards": [dict(ALARM)]}],
+    ], ids=["views-reordered", "card-inserted", "card-edited"])
+    async def test_patch_refused_when_its_path_addresses_something_else(self, hass, person_views):
+        assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+        await async_save_lovelace_config(hass, None, {"views": [
+            {"title": "V0", "cards": [dict(WEATHER)]}, {"title": "V1", "cards": [dict(ALARM)]}]})
+        data, store = _data()
+        key = _key(cap_lovelace_write="confirm")
+        await _call_tool("patch_dashboard", {"changes": [
+            {"path": ["views", 0, "cards", 0, "title"], "kind": "set", "value": "Shown"}]}, key, hass, data)
+        person = {"views": person_views}
+        await async_save_lovelace_config(hass, None, person)
+        approval = store.pending[0]
+        content, outcome, _ = await async_execute_approved_tool(_tool(approval), _args(approval), key, hass, data)
+        assert outcome == "invalid_request" and yi.MSG_CHANGED_SINCE_REVIEW in _text(content)
+        assert await async_get_lovelace_config(hass, None) == person
+
 
 TEMPLATE_CARD = {"type": "markdown", "content": "![x](https://example.invalid/{{ states('lock.front') }}.png)"}
 
@@ -272,6 +357,10 @@ class TestDashboardActiveContent:
         {"type": "markdown", "content": "{% if true %}x{% endif %}"},
         {"type": "custom:button-card", "name": "[[[ return hass.user.name ]]]"},
         {"type": "custom:button-card", "name": "plain"},
+        {"type": "custom:bubble-card", "styles": "${fetch(atob('aA==') + hass.states['lock.front'].state)}"},
+        {"type": "custom:floorplan-card", "config": {"rules": [{"tap_action": "${fetch(atob('aA=='))}"}]}},
+        {"type": "vertical-stack", "cards": [{"type": "custom:any-card-at-all"}]},
+        {"type": "entities", "entities": [{"type": "custom:multiple-entity-row", "entity": "light.kitchen"}]},
         {"type": "picture", "image": "https://example.invalid/a.png"},
         {"type": "markdown", "content": "<img src=//example.invalid/a.png>"},
         {"type": "iframe", "url": "http://example.invalid/"},
@@ -308,6 +397,24 @@ class TestDashboardActiveContent:
         changed = {"views": [{"title": "Renamed", "cards": [dict(TEMPLATE_CARD, content="{{ 1 }}")]}]}
         _, outcome, _ = await _call_tool("set_dashboard_config", {"config": changed}, key, hass, data)
         assert outcome == "pending_approval"
+
+    async def test_unchanged_custom_card_stays_allow_and_a_changed_one_waits(self, hass):
+        """A custom card already stored gives no new reach; editing any field of it does."""
+        stored = {"type": "custom:bubble-card", "name": "Lamp"}
+        await _seed_dashboard(hass, [dict(stored), dict(WEATHER)])
+        data, store = _data()
+        key = _key(cap_lovelace_write="allow")
+        moved = {"views": [{"title": "Renamed", "cards": [dict(WEATHER), dict(stored)]}]}
+        _, outcome, _ = await _call_tool("set_dashboard_config", {"config": moved}, key, hass, data)
+        assert outcome == "allowed" and store.pending == []
+        _, outcome, _ = await _call_tool("add_dashboard_card", {"view_index": 0, "card": {"type": "tile", "entity": "light.kitchen"}},
+                                         key, hass, data)
+        assert outcome == "allowed" and store.pending == []
+        _, outcome, _ = await _call_tool("patch_dashboard", {"changes": [
+            {"path": ["views", 0, "cards", 1, "name"], "kind": "set", "value": "Lamp 2"}]}, key, hass, data)
+        assert outcome == "pending_approval"
+        diff = store.pending[0]["diff"] if isinstance(store.pending[0], dict) else store.pending[0].diff
+        assert diff["reviewed_actions"] == ["custom:bubble-card"]
 
     async def test_patch_adding_a_url_waits_and_review_names_it(self, hass):
         await _seed_dashboard(hass, [{"type": "picture", "image": "/local/a.png"}])

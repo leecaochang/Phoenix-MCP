@@ -39,7 +39,7 @@ from .routing.command_execution import (
 from .routing.command_routing import (
     RoutingAuthority, async_evaluate_command, effective_routing_mode,
 )
-from .routing.decision_shadow import async_preview_decision, operation_unconfirmed
+from .routing.decision_shadow import async_preview_decision
 from .routing.voice_context import capture_voice_origin
 
 _LOGGER = logging.getLogger(__name__)
@@ -248,10 +248,6 @@ async def _async_voice_answer(
                 return await async_execute_command_plan(
                     hass, data, access_key, decision["_plan"], authority, _base_url(hass), language=language,
                 )
-            if operation_unconfirmed(decision):
-                refusal = LocalCommandReply(voice_text(language, "decision_operation_unconfirmed"))
-                local_result(refusal, "decision")
-                return refusal.text
 
     provider = build_provider(cfg)
     session = async_get_clientsession(hass)

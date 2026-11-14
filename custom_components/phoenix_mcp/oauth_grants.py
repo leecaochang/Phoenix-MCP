@@ -26,7 +26,7 @@ from homeassistant.util.dt import utcnow
 from .access_key_store import _parse_dt, hmac_compare
 from .const import (
     OAUTH_ACCESS_TOKEN_PREFIX, OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_MAX_GRANTS,
-    OAUTH_MAX_GRANTS_PER_ACCESS_KEY, OAUTH_REFRESH_GRACE_SECONDS, OAUTH_REFRESH_SIBLINGS_MAX,
+    OAUTH_MAX_GRANTS_PER_ACCESS_KEY, OAUTH_REFRESH_GRACE_SECONDS, OAUTH_REFRESH_SIBLINGS_MAX, OAUTH_REFRESH_USES_MAX,
     OAUTH_REFRESH_FAMILY_HEX_LENGTH, OAUTH_REFRESH_TOKEN_PREFIX, OAUTH_RETIRED_TOKENS_MAX,
     OAUTH_SECRET_HEX_LENGTH,
 )
@@ -69,22 +69,27 @@ def _mint_refresh(family: str) -> tuple[str, str]:
 class _HashUntil:
     """A token hash and the moment it stops being accepted.
 
-    ``spent`` marks a redeemed refresh token that already gave its one grace-time sibling.
+    ``uses`` counts how often a redeemed refresh token was used, its rotation included.
     """
 
     token_hash: str
     until: datetime
-    spent: bool = False
+    uses: int = 1
 
     def to_dict(self) -> dict:
-        return {"hash": self.token_hash, "until": self.until.isoformat(), **({"spent": True} if self.spent else {})}
+        return {"hash": self.token_hash, "until": self.until.isoformat(),
+                **({"uses": self.uses} if self.uses > 1 else {})}
 
     @classmethod
     def from_dict(cls, raw: Any) -> _HashUntil | None:
         if not isinstance(raw, dict) or not isinstance(raw.get("hash"), str):
             return None
         until = _parse_dt(raw.get("until")) if isinstance(raw.get("until"), str) else None
-        return cls(raw["hash"], until, raw.get("spent") is True) if until is not None else None
+        uses = raw.get("uses")
+        if not isinstance(uses, int) or isinstance(uses, bool) or uses < 1:
+            # A record saved before use counts marks a token that gave its one sibling as spent.
+            uses = 2 if raw.get("spent") is True else 1
+        return cls(raw["hash"], until, uses) if until is not None else None
 
 
 @dataclass
@@ -105,7 +110,7 @@ class OAuthGrant:
     # Refresh tokens any one of which may be redeemed next (normally one; a retried
     # refresh inside the grace adds a sibling).
     refresh_hashes: list[str] = field(default_factory=list)
-    # Redeemed refresh tokens: one more use each until their grace ends, then proof of reuse.
+    # Redeemed refresh tokens: a few more uses each until their grace ends, then proof of reuse.
     retired_refresh: list[_HashUntil] = field(default_factory=list)
     # Hash of the family tag in every refresh token issued since; empty for a sign-in
     # stored before tags, until its next refresh.
@@ -333,9 +338,10 @@ class OAuthGrantStore:
 
         ``access_key_of(grant)`` returns the bound key or None; a dead sign-in is unknown,
         returned with the sign-in so the refusal can be recorded. A current token rotates; a
-        redeemed one may add one sibling inside its grace while fewer than
-        OAUTH_REFRESH_SIBLINGS_MAX tokens are current. Any other use of a redeemed token, or
-        of an older token of the sign-in's family, ends the sign-in ("reused"). Raises
+        redeemed one may add a sibling inside its grace, up to OAUTH_REFRESH_USES_MAX uses in
+        all, while fewer than OAUTH_REFRESH_SIBLINGS_MAX tokens are current. Any other use of a
+        redeemed token, or of an older token of the sign-in's family, ends the sign-in
+        ("reused"). Raises
         DurableStorageError when the result could not be saved, leaving the old tokens in force.
         """
         token_hash = secret_hash(raw_token)
@@ -353,7 +359,7 @@ class OAuthGrantStore:
             retired = None
             if how == "retired":
                 retired = next(t for t in working.retired_refresh if hmac_compare(t.token_hash, token_hash))
-                if (now >= retired.until or retired.spent
+                if (now >= retired.until or retired.uses >= OAUTH_REFRESH_USES_MAX
                         or len(working.refresh_hashes) >= OAUTH_REFRESH_SIBLINGS_MAX):
                     how = "family"
             if how == "family":
@@ -379,7 +385,7 @@ class OAuthGrantStore:
             else:
                 # A sibling neither shortens nor drops a token already issued: the app whose
                 # refresh it repeats may be the one that holds them.
-                retired.spent = True
+                retired.uses += 1
                 working.refresh_hashes.append(refresh_hash)
             # A redeemed hash cut from this list stays known through the family tag.
             working.retired_refresh = working.retired_refresh[-OAUTH_RETIRED_TOKENS_MAX:]

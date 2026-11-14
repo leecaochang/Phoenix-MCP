@@ -877,10 +877,12 @@ class PhoenixAdminAccessKeyRotateView(PhoenixView):
 
         async with data.store.async_lock:
             result = await data.store.async_rotate_access_key(access_key_id)
-            # Whoever held the old secret may have queued these, so none survive it.
+            # Whoever held the old secret may have queued these, so none survive it. Household
+            # requests were made by Home Assistant users, not with the secret, and stay.
             changed_approvals = [] if result is None else await async_cancel_approvals_for_access_key(
                 data.store, access_key_id, REASON_ACCESS_KEY_ROTATED,
                 skip_ids=data.approvals_in_progress,
+                where=lambda entry: not entry.get("household_request"),
             )
 
         if result is None:

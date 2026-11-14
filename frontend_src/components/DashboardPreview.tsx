@@ -4,20 +4,25 @@
  * inert so nothing in a preview can be clicked, focused or actuated. Until HA
  * registers <hui-card> in this session, callers hide the Preview toggle.
  *
- * ACCEPTED RISK, on request only. A pending approval's card configuration is
- * written by an MCP client. Its added Jinja passed the server's template
- * worker check before the approval was created, so Core's render_template
- * only sees templates that neither stalled nor crashed the worker. Drawing
- * the card still runs its code in the reviewing administrator's authenticated
- * session before the decision: a custom card that evaluates JavaScript
- * templates executes them in this browser with the administrator's hass, and
- * a built-in card may fetch URLs named in its configuration. So the approval
- * review always opens on the text diff, and
- * this renderer draws a pending card only after the administrator chooses
- * Preview for that request; the choice is never remembered for the next one.
- * Faithful rendering of every installed card is the requirement once asked
- * for; an isolated frame or a card allowlist cannot meet it and must not
- * replace this renderer. */
+ * A pending card containing Jinja ({{, {% or {# anywhere in its
+ * configuration, nested cards included) is never drawn: it shows as its
+ * source text, so no unapproved template reaches Core's render_template,
+ * where the cost or crash of a template only shows at render time. The
+ * server's template worker check before the approval does not bound Core's
+ * render. Only the Changes tab, which draws layouts that were saved, passes
+ * renderTemplates.
+ *
+ * ACCEPTED RISK, on request only, for every other pending card. Its
+ * configuration is written by an MCP client, and drawing it runs its code in
+ * the reviewing administrator's authenticated session before the decision: a
+ * custom card that evaluates JavaScript templates executes them in this
+ * browser with the administrator's hass, and a built-in card may fetch URLs
+ * named in its configuration. So the approval review always opens on the text
+ * diff, and this renderer draws a pending card only after the administrator
+ * chooses Preview for that request; the choice is never remembered for the
+ * next one. Faithful rendering of every installed card is the requirement
+ * once asked for; an isolated frame or a card allowlist cannot meet it and
+ * must not replace this renderer. */
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { currentHass } from "../api";
 import { loadLovelaceResources } from "../utils/card_harvest";
@@ -47,6 +52,20 @@ export interface PreviewView {
 
 function isDict(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// The markers Home Assistant reads as a template anywhere in a string.
+const JINJA_MARKERS = ["{{", "{%", "{#"];
+
+/** True when a card's configuration holds Jinja anywhere, keys and nested cards included. */
+export function cardHasTemplate(config: unknown): boolean {
+  let text: string;
+  try {
+    text = JSON.stringify(config) ?? "";
+  } catch {
+    return true;
+  }
+  return JINJA_MARKERS.some((marker) => text.includes(marker));
 }
 
 function cardEntries(cards: unknown): PreviewCardEntry[] {
@@ -361,6 +380,16 @@ function PreviewCardTile({ hass, config, errorKey, onErrors }: {
   return <div className="dash-preview-card-slot" ref={slotRef} />;
 }
 
+/** A card with Jinja, shown as its configuration text instead of being built. */
+function TemplateSourceTile({ config }: { config: Record<string, unknown> }) {
+  return (
+    <div className="dash-preview-template-card">
+      <p className="dash-preview-template-note">{t("changes.previewTemplateCard")}</p>
+      <pre className="dash-preview-template-source">{JSON.stringify(config, null, 2)}</pre>
+    </div>
+  );
+}
+
 /**
  * Card builds waiting their turn. Setting a hui-card's config builds the card
  * in the same task, and a dashboard holds dozens of cards, so building them
@@ -433,23 +462,26 @@ class PreviewErrorBoundary extends React.Component<{ children: React.ReactNode }
   }
 }
 
-export function DashboardPreview({ config, onConfigErrors }: {
+export function DashboardPreview({ config, onConfigErrors, renderTemplates = false }: {
   config: unknown;
   /** Called with the current list of card configuration errors whenever it
    * changes, so a host surface can act on them (the approval modal offers
    * "Reject with error message"). */
   onConfigErrors?: (messages: string[]) => void;
+  /** Draw cards holding Jinja too. Only for layouts that were saved, never a pending change. */
+  renderTemplates?: boolean;
 }) {
   return (
     <PreviewErrorBoundary>
-      <DashboardPreviewInner config={config} onConfigErrors={onConfigErrors} />
+      <DashboardPreviewInner config={config} onConfigErrors={onConfigErrors} renderTemplates={renderTemplates} />
     </PreviewErrorBoundary>
   );
 }
 
-function DashboardPreviewInner({ config, onConfigErrors }: {
+function DashboardPreviewInner({ config, onConfigErrors, renderTemplates }: {
   config: unknown;
   onConfigErrors?: (messages: string[]) => void;
+  renderTemplates: boolean;
 }) {
   const ready = useHuiCardReady();
   const views = useMemo(() => collectPreviewViews(config), [config]);
@@ -579,7 +611,9 @@ function DashboardPreviewInner({ config, onConfigErrors }: {
                       <div className="dash-preview-placeholder">{t("changes.previewStrategySection")}</div>
                     )}
                     {section.cards.map((card, cIdx) =>
-                      card.kind === "card"
+                      card.kind === "card" && !renderTemplates && cardHasTemplate(card.config)
+                        ? <TemplateSourceTile key={cIdx} config={card.config} />
+                        : card.kind === "card"
                         ? (
                           <PreviewCardTile
                             key={cIdx}

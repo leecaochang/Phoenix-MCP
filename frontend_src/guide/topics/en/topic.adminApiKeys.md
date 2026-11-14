@@ -215,7 +215,7 @@ Related: [{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
 
 `POST /access-keys/{id}/rotate` gives the key a new value and takes no body. The old value and every OAuth sign-in of the key stop working straight away. The key keeps its rate-limit state and counters.
 
-Rotating also cancels every approval the key has waiting, with reason `access_key_rotated`, because whoever held the old value may have queued them.
+Rotating also cancels every approval apps queued with the key, with reason `access_key_rotated`, because whoever held the old value may have queued them. Requests from the Voice Agent, Assist and AI Task stay.
 
 The response is `200` with the record plus `access_key`, the new value. As on create, Phoenix shows it only once. Phoenix fires the `phoenix_mcp_access_key_rotated` event with `access_key_id`, `access_key_name`, `rotated_by` and `timestamp`.
 
@@ -279,6 +279,7 @@ POST   /api/phoenix-mcp/admin/oauth/requests/{request_id}/deny
 |---|---|---|---|
 | 503 | `service_unavailable` | `adminError.oauthKillSwitch` | The kill switch is on. Removing a sign-in still works. |
 | 404 | `not_found` | `adminError.oauthRequestExpired` | The request ended, was answered or never existed. |
+| 404 | `oauth_busy` | `adminError.oauthBusy` | `GET` only: the app's address already had too many requests waiting, so this one was never parked. The app was told nothing. |
 | 400 | `invalid_request` | `adminError.oauthClientNotVerified` | Approving a request whose app wasn't verified. |
 | 400 | `invalid_request` | `adminError.oauthKeyNotEligible` | The key is missing, has OAuth off, or has no open window. |
 | 409 | `conflict` | `adminError.oauthSignInLimit` | The key already has `max` sign-ins. |

@@ -63,7 +63,7 @@ Turns the key's name into a text box. Press Enter to save, or Esc to cancel. You
 
 Gives the key a new secret value and shows it. Everything else stays the same, including its permissions and history. The old value stops working straight away, so update every app that uses it. **{{label:accessKeys.helpConnect}}** in the same dialog shows each app's setup with the new value.
 
-Rotating cancels the key's waiting approvals, because whoever held the old value may have asked for them.
+Rotating cancels the approvals apps queued with the key, because whoever held the old value may have asked for them. Requests from the Voice Agent, Assist and AI Task stay.
 
 ### {{label:accessKeys.enablePtLabel}} {#enable-pass-through}
 

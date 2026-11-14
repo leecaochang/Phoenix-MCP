@@ -56,6 +56,7 @@ def _record(
     pass_through: bool = False,
     settings: GlobalSettings | None = None,
     timestamp: datetime | None = None,
+    uncertain: bool = False,
 ) -> None:
     log.record(
         request_id=generate_request_id(),
@@ -68,6 +69,7 @@ def _record(
         pass_through=pass_through,
         settings=settings or _settings(),
         timestamp=timestamp,
+        uncertain=uncertain,
     )
 
 
@@ -1033,7 +1035,7 @@ def _folded(entry: AuditEntry) -> dict | None:
 
 
 class TestRefusalFolding:
-    @pytest.mark.parametrize("outcome", ["rate_limited", "denied", "invalid_request", "not_found", "not_implemented"])
+    @pytest.mark.parametrize("outcome", ["rate_limited", "invalid_request", "not_implemented"])
     def test_refusals_past_the_allowance_are_counted_on_one_row(self, outcome):
         log = AuditLog()
         for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 500):
@@ -1046,15 +1048,36 @@ class TestRefusalFolding:
     def test_one_summary_counts_every_kind_of_refusal(self):
         log = AuditLog()
         for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW):
-            _record(log, outcome="denied")
+            _record(log, outcome="not_implemented")
         for outcome in ("rate_limited", "invalid_request", "rate_limited"):
             _record(log, outcome=outcome)
         assert _folded(log.query(limit=1)[0])["outcomes"] == {"invalid_request": 1, "rate_limited": 2}
 
+    @pytest.mark.parametrize("outcome", ["denied", "not_found"])
+    def test_scope_refusals_are_never_folded(self, outcome):
+        """Junk spent first cannot hide the probes behind it."""
+        log = AuditLog()
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 1):
+            _record(log, outcome="invalid_request", resource="junk")
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 5):
+            _record(log, outcome=outcome, resource="lock.front_door")
+        assert log.count(resource="lock.front_door") == AUDIT_REFUSAL_ROWS_PER_WINDOW + 5
+        assert all(_folded(entry) is None for entry in log.query(resource="lock.front_door", limit=MAX_QUERY_LIMIT))
+
+    def test_a_write_that_may_have_run_keeps_its_own_row(self):
+        log = AuditLog()
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 1):
+            _record(log, outcome="not_found", resource="get_state")
+        for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 1):
+            _record(log, outcome="invalid_request", resource="junk")
+        _record(log, outcome="invalid_request", method="delete_automation", resource="uncertain", uncertain=True)
+        (row,) = log.query(resource="uncertain")
+        assert _folded(row) is None and row.method == "delete_automation"
+
     def test_allowed_requests_are_never_folded(self):
         log = AuditLog()
         for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 5):
-            _record(log, outcome="denied")
+            _record(log, outcome="rate_limited")
         for _ in range(10):
             _record(log)
         assert log.count(outcome="allowed") == 10
@@ -1064,7 +1087,7 @@ class TestRefusalFolding:
         for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 100):
             _record(log, outcome="rate_limited", access_key_id="flooder")
         for _ in range(5):
-            _record(log, outcome="denied", access_key_id="other")
+            _record(log, outcome="rate_limited", access_key_id="other")
         assert log.count(access_key_id="other") == 5
         assert log.count(access_key_id="flooder") == AUDIT_REFUSAL_ROWS_PER_WINDOW + 1
 
@@ -1072,18 +1095,18 @@ class TestRefusalFolding:
         log = AuditLog()
         start = utcnow()
         for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 10):
-            _record(log, outcome="denied", timestamp=start)
+            _record(log, outcome="rate_limited", timestamp=start)
         later = start + AUDIT_REFUSAL_WINDOW
         for _ in range(3):
-            _record(log, outcome="denied", timestamp=later)
+            _record(log, outcome="rate_limited", timestamp=later)
         assert log.count(since=later) == 3
         assert all(_folded(entry) is None for entry in log.query(since=later))
 
     def test_administrator_and_approval_refusals_are_never_folded(self):
         log = AuditLog()
         for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 20):
-            _record(log, outcome="denied", access_key_id="admin", access_key_name="admin:owner", method="access_key/patch")
-            _record(log, outcome="denied", method="approval/rejected")
+            _record(log, outcome="invalid_request", access_key_id="admin", access_key_name="admin:owner", method="access_key/patch")
+            _record(log, outcome="invalid_request", method="approval/rejected")
         assert len(log) == 2 * (AUDIT_REFUSAL_ROWS_PER_WINDOW + 20)
         assert all(_folded(entry) is None for entry in log.query(limit=MAX_QUERY_LIMIT))
 
@@ -1093,7 +1116,7 @@ class TestRefusalFolding:
         for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW * 2):
             _record(log, outcome="rate_limited", settings=hidden)
         for _ in range(AUDIT_REFUSAL_ROWS_PER_WINDOW):
-            _record(log, outcome="denied")
+            _record(log, outcome="invalid_request")
         assert len(log) == AUDIT_REFUSAL_ROWS_PER_WINDOW
         assert all(_folded(entry) is None for entry in log.query(limit=MAX_QUERY_LIMIT))
 
@@ -1116,9 +1139,20 @@ class TestTrailRing:
         _lifecycle(log, "approval-1")
         for _ in range(1_000):
             _record(log, access_key_id="busy")
-        assert len(log) == 103
-        assert log.count(resource="approval-1") == 3
+        assert len(log) == 102
+        # The queued request is the key's own row; the decision and the run stay.
+        assert [e.method for e in log.query(resource="approval-1")] == ["approval/executed", "approval/approved"]
         assert log.count(access_key_id="busy") == 100
+
+    @pytest.mark.parametrize(("outcome", "method"), [
+        ("pending_approval", "call_service"), ("denied", "approval/expired"),
+    ])
+    def test_a_key_s_queued_and_expired_requests_never_push_the_trail_out(self, outcome, method):
+        log = AuditLog(maxlen=100)
+        _lifecycle(log, "approval-1")
+        for _ in range(500):
+            _record(log, outcome=outcome, access_key_id="agent", method=method, resource="approval:restart_ha")
+        assert [e.method for e in log.query(resource="approval-1")] == ["approval/executed", "approval/approved"]
 
     def test_rows_of_both_rings_read_newest_first_in_the_order_they_were_written(self):
         log = AuditLog()
@@ -1181,5 +1215,5 @@ async def test_the_saved_log_keeps_the_trail_past_a_flood(hass):
     loaded = AuditLog(store=backing, maxlen=100)
     await loaded.async_load()
     assert [e.method for e in loaded.query(resource="approval-1")] == [
-        "approval/executed", "approval/approved", "call_service"]
-    assert len(loaded) == 103
+        "approval/executed", "approval/approved"]
+    assert len(loaded) == 102

@@ -106,11 +106,11 @@
 
 条件中的模板与模板渲染在同一个单独的受限进程中运行，作用于密钥可读取状态的副本。模板必须直接指定实体，例如 `states('sensor.x')`。
 
-触发器中的模板需要 {{label:caps.cap_automation_write.label}}，因为测试期间 Home Assistant 会在每次变化时运行它们。它们会先在那个单独的进程中试运行，与新自动化中的模板一样。没有该能力时，请把模板作为条件来测试。
+触发器中的模板需要 {{label:caps.cap_automation_write.label}} 设为允许，因为测试期间 Home Assistant 会自己在每次变化时运行它们，不经审核。它们会先在那个单独的进程中试运行。否则，请把模板作为条件来测试。
 
 事件、MQTT、Webhook 和对话触发器会被拒绝，因为任何密钥的范围都无法限制它们涉及的内容。
 
-允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；模板触发器还需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write)
+允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；模板触发器还需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) 设为允许
 
 ## Home Companion {#home-companion}
 
@@ -212,6 +212,8 @@
 
 新建或更改的自动化、脚本或模板辅助元素中的模板，以及智能体验证的配置中的模板，都会先在同一个进程中试运行。之后 Home Assistant 才会检查它们。运行太久或使该进程停止的模板会被拒绝，因此它无法让 Home Assistant 卡住或停止。
 
+只有更改新增的模板才会试运行，已保存的模板不会再次试运行。如果该进程一直忙于其他请求，智能体会被要求重试，而且不会做任何更改。
+
 允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)、[{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write)、[{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render)、[{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read)、[{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)
 
 ## 发现和诊断 {#diagnostics}
@@ -220,7 +222,7 @@
 
 - 搜索与发现会搜索和描述实体、区域及其关联方式，比较它们，并找出可用的操作。
 - 读取注册表会列出区域、楼层、地点、设备、标签、自动化、脚本、场景和辅助元素。
-- 自动化跟踪会读取自动化的运行方式。检查过密钥无法读取的实体的步骤不显示任何值。自动化的设置，以及由 webhook 启动的运行中的变量，还需要 {{label:caps.cap_automation_write.label}} 或 {{label:caps.cap_script_write.label}}。
+- 自动化跟踪会读取自动化的运行方式。用到密钥无法读取的实体的步骤（包括经由变量）不显示任何值。设置以及 webhook 启动的运行所记录的内容还需要 {{label:caps.cap_automation_write.label}} 或 {{label:caps.cap_script_write.label}}。
 - 诊断会检查配置并读取系统健康状况、修复项、无线电网络和 ESPHome 概览。
 
 只有在 YAML 配置不为拒绝访问时，配置检查才会指出文件和行号。
@@ -231,7 +233,7 @@
 
 读取文件让智能体读取 www、themes 和 custom_templates 文件夹中的文本文件，每个最大 1 MiB。文件夹列表分页返回，默认每页 500 项，最多 1000 项。它不能写入这些文件。
 
-YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文件、esphome 文件夹和隐藏文件除外。文件名含有普通英文字母以外字符的文件也会被拒绝。
+YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文件、esphome 文件夹和隐藏文件除外。文件名可以使用任何语言，但含有控制字符或改变文字方向的隐藏标记的文件名会被拒绝。
 
 名称暗示机密的值以及提到机密的注释显示为 `<redacted>`，但使用普通名称的密码可见。有 YAML 错误的文件不会显示，智能体只会得到需要修复的行号。没有工具会写入 YAML 配置。
 
@@ -245,7 +247,7 @@ YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文�
 
 secrets.yaml 中的值无论出现在哪里都会被遮蔽，即使在网址或注释中。密钥无法读取的实体 ID 显示为 `<redacted-entity>`，在文件中以及 Device Builder 的输出和日志中都是如此。任何智能体都不能读取或安装名称含 secret 的文件。
 
-密码或密钥使用的替换变量也会被遮蔽，文件定义但自己从不使用的替换变量同样如此，因为某个包可能把它用作密钥。
+密码或密钥直接或经由其他替换变量使用的替换变量也会被遮蔽。只有某个包使用的替换变量不会被遮蔽，除非其名称表明是密码或密钥，所以请把这类值放在 secrets.yaml 中。
 
 Phoenix 根据文件名、文件声明的设备名称以及任何 `use_address` 或静态 IP 确定文件所属的设备。仅限部分设备的密钥只能读取这些设备的文件。声明了自己的名称且不匹配任何设备的文件只受能力限制。
 

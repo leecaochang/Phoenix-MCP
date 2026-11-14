@@ -308,13 +308,6 @@ class DecisionShadow:
             return result(str(error))
 
 
-def operation_unconfirmed(decision: dict) -> bool:
-    """True when a confident decision chose an operation Phoenix never runs from a decision."""
-    selection = decision.get("target_selection")
-    return decision.get("reason") == "operation_unconfirmed" or (
-        isinstance(selection, dict) and selection.get("reason") == "operation_unconfirmed")
-
-
 async def async_preview_decision(hass: HomeAssistant, data: Any, access_key: Any, sentence: str,
                                  language: object, local: dict, *, targets: bool = False,
                                  prepare: bool = False, ingress: str = "voice",

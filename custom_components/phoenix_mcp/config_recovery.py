@@ -121,7 +121,7 @@ def _unsafe_location(node: Any, path: tuple, layout: bool, depth: int = 0) -> tu
     if depth > (CONFIG_RECOVERY_LAYOUT_MAX_DEPTH if layout else CONFIG_RECOVERY_MAX_DEPTH):
         return path, "it is nested too deeply to copy safely"
     if isinstance(node, str):
-        if _holds_placeholder(node, layout) or redact_secrets_in_text(node) != node:
+        if _holds_placeholder(node, layout) or redact_secrets_in_text(node, reader=False) != node:
             return path, "its text holds a credential or a redaction placeholder"
         return None
     if isinstance(node, dict):

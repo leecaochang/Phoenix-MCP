@@ -18,8 +18,8 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from .template_limits import (
-    TEMPLATE_CHECK_COMPILE_SECONDS, TEMPLATE_WORKER_DIAGNOSTIC_EXIT, TEMPLATE_WORKER_INPUT_BYTES,
-    TEMPLATE_WORKER_MAX_TEMPLATES, TEMPLATE_WORKER_TIMEOUT_SECONDS,
+    TEMPLATE_CHECK_COMPILE_SECONDS, TEMPLATE_CHECK_SLOT_WAIT_SECONDS, TEMPLATE_WORKER_DIAGNOSTIC_EXIT,
+    TEMPLATE_WORKER_INPUT_BYTES, TEMPLATE_WORKER_MAX_TEMPLATES, TEMPLATE_WORKER_TIMEOUT_SECONDS,
 )
 from .template_sandbox import build_permitted_states
 from .template_scope import LONE_SURROGATE_REFUSAL, has_lone_surrogate
@@ -33,6 +33,10 @@ class TemplateRenderError(ValueError):
     """Safe diagnostic for template input, execution, or worker failure."""
 
 
+class TemplateWorkerBusyError(TemplateRenderError):
+    """Every worker slot stayed busy: nothing was checked, and the same call may be retried."""
+
+
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from .data import PhoenixData
@@ -42,6 +46,41 @@ if TYPE_CHECKING:
 _WORKER_ENV_KEYS = frozenset({"PATH", "HOME", "LANG", "TMPDIR", "TZ"})
 _WORKER_SCRIPT = Path(__file__).with_name("template_worker.py")
 _WORKER_FAILED = "Template worker exited unexpectedly; a resource limit may have been reached."
+_WORKER_BUSY = (
+    "Template checking is busy with other requests, so nothing was checked or changed. "
+    "Retry the same call in a few seconds."
+)
+# The worker's stderr line when the host refuses its memory limit; it must match the worker's.
+_NO_MEMORY_LIMIT = b"memory_limit_unavailable"
+_memory_limit_noted = False
+
+
+def _note_missing_memory_limit(stderr: bytes) -> None:
+    """Log once per process that the host runs the worker without its memory limit."""
+    global _memory_limit_noted
+    if not _memory_limit_noted and _NO_MEMORY_LIMIT in stderr.splitlines():
+        _memory_limit_noted = True
+        _LOGGER.warning(
+            "This host does not allow a memory limit on the template worker; it runs with its "
+            "CPU limit and timeout only.")
+
+
+# Checks and tests wait for a slot; render_template is refused at once when none is free.
+_WAITING_MODES = frozenset({"check", "evaluate"})
+
+
+async def _acquire_slot(payload: dict, data: PhoenixData) -> None:
+    """Take a worker slot: a render only when one is free, a check or test within a bounded wait."""
+    if payload.get("mode") not in _WAITING_MODES:
+        if data.template_slots.locked():
+            raise TemplateRenderError("Template rendering capacity reached.")
+        await data.template_slots.acquire()
+        return
+    try:
+        async with asyncio.timeout(TEMPLATE_CHECK_SLOT_WAIT_SECONDS):
+            await data.template_slots.acquire()
+    except TimeoutError:
+        raise TemplateWorkerBusyError(_WORKER_BUSY) from None
 
 
 async def _run_worker(payload: dict, hass: HomeAssistant, data: PhoenixData) -> tuple[int, bytes]:
@@ -49,57 +88,65 @@ async def _run_worker(payload: dict, hass: HomeAssistant, data: PhoenixData) -> 
 
     Bounds concurrency, input and wall time here; the worker limits memory and CPU. Authority
     is rechecked before the spawn, after the exchange and after cleanup. Startup failure,
-    timeout and the CPU limit raise TemplateRenderError; the process is always reaped.
+    timeout and the CPU limit raise TemplateRenderError, and a slot still busy after the
+    bounded wait TemplateWorkerBusyError; the process is always reaped.
     """
-    if data.template_slots.locked():
-        raise TemplateRenderError("Template rendering capacity reached.")
-    async with data.template_slots:
+    await _acquire_slot(payload, data)
+    try:
+        return await _run_in_slot(payload, data)
+    finally:
+        data.template_slots.release()
+
+
+async def _run_in_slot(payload: dict, data: PhoenixData) -> tuple[int, bytes]:
+    """The body of _run_worker, holding one slot."""
+    check_request_authority()
+    encoded = json.dumps(payload, default=str).encode()
+    if len(encoded) > TEMPLATE_WORKER_INPUT_BYTES:
+        raise TemplateRenderError("Template state snapshot is too large.")
+    try:
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, str(_WORKER_SCRIPT),
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            # Only locale and path basics are inherited, never HA's credentials
+            # (SUPERVISOR_TOKEN on HAOS). HA adds installed integration
+            # dependencies to sys.path at runtime, so a fresh interpreter must
+            # receive those same import locations.
+            env={
+                **{key: value for key, value in os.environ.items()
+                   if key in _WORKER_ENV_KEYS or key.startswith("LC_")},
+                "PYTHONPATH": os.pathsep.join(sys.path),
+                # HA uses mimalloc, whose large virtual reservations conflict
+                # with a small RLIMIT_AS. Keep this worker on the bounded
+                # standard allocator without changing HA's own allocator.
+                "PYTHONMALLOC": "pymalloc",
+            },
+        )
+    except OSError:
+        raise TemplateRenderError("Template worker could not start. Check Phoenix diagnostics.") from None
+    try:
+        try:
+            async with asyncio.timeout(TEMPLATE_WORKER_TIMEOUT_SECONDS):
+                stdout, stderr = await process.communicate(encoded)
+        except TimeoutError:
+            raise TemplateRenderError("Template rendering timed out. Reduce the template workload.") from None
         check_request_authority()
-        encoded = json.dumps(payload, default=str).encode()
-        if len(encoded) > TEMPLATE_WORKER_INPUT_BYTES:
-            raise TemplateRenderError("Template state snapshot is too large.")
-        try:
-            process = await asyncio.create_subprocess_exec(
-                sys.executable, str(_WORKER_SCRIPT),
-                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                # Only locale and path basics are inherited, never HA's credentials
-                # (SUPERVISOR_TOKEN on HAOS). HA adds installed integration
-                # dependencies to sys.path at runtime, so a fresh interpreter must
-                # receive those same import locations.
-                env={
-                    **{key: value for key, value in os.environ.items()
-                       if key in _WORKER_ENV_KEYS or key.startswith("LC_")},
-                    "PYTHONPATH": os.pathsep.join(sys.path),
-                    # HA uses mimalloc, whose large virtual reservations conflict
-                    # with a small RLIMIT_AS. Keep this worker on the bounded
-                    # standard allocator without changing HA's own allocator.
-                    "PYTHONMALLOC": "pymalloc",
-                },
-            )
-        except OSError:
-            raise TemplateRenderError("Template worker could not start. Check Phoenix diagnostics.") from None
-        try:
-            try:
-                async with asyncio.timeout(TEMPLATE_WORKER_TIMEOUT_SECONDS):
-                    stdout, stderr = await process.communicate(encoded)
-            except TimeoutError:
-                raise TemplateRenderError("Template rendering timed out. Reduce the template workload.") from None
+        _note_missing_memory_limit(stderr)
+        if process.returncode == 70:
+            diagnostic = stderr.decode(errors="replace").strip().splitlines()[-1:]
+            _LOGGER.warning("Template worker startup failed: %s", str(diagnostic)[:240])
+            raise TemplateRenderError("Template worker could not start. Check Phoenix diagnostics.")
+        if process.returncode == -signal.SIGXCPU:
+            raise TemplateRenderError("Template rendering exceeded its CPU budget. Reduce the template workload.")
+        return process.returncode if process.returncode is not None else -1, stdout
+    finally:
+        cancelled = isinstance(sys.exc_info()[1], asyncio.CancelledError)
+        if process.returncode is None:
+            process.kill()
+        await process.wait()
+        if not cancelled:
             check_request_authority()
-            if process.returncode == 70:
-                diagnostic = stderr.decode(errors="replace").strip().splitlines()[-1:]
-                _LOGGER.warning("Template worker startup failed: %s", str(diagnostic)[:240])
-                raise TemplateRenderError("Template worker could not start. Check Phoenix diagnostics.")
-            if process.returncode == -signal.SIGXCPU:
-                raise TemplateRenderError("Template rendering exceeded its CPU budget. Reduce the template workload.")
-            return process.returncode if process.returncode is not None else -1, stdout
-        finally:
-            cancelled = isinstance(sys.exc_info()[1], asyncio.CancelledError)
-            if process.returncode is None:
-                process.kill()
-            await process.wait()
-            if not cancelled:
-                check_request_authority()
 
 
 def _snapshot(access_key: AccessKeyRecord, hass: HomeAssistant, only: Collection[str] | None = None) -> dict:
@@ -176,8 +223,9 @@ async def async_check_caller_templates(templates: list[str], hass: HomeAssistant
     """Compile and trial-render caller templates in the worker before Home Assistant compiles them.
 
     Raises TemplateRenderError when one holds a lone surrogate, when the worker dies, times out
-    or exceeds a limit, or when compiling takes longer than TEMPLATE_CHECK_COMPILE_SECONDS.
-    Compile and render errors are left for Home Assistant's own validation to report.
+    or exceeds a limit, or when compiling one template takes longer than
+    TEMPLATE_CHECK_COMPILE_SECONDS; TemplateWorkerBusyError when no slot freed in time. Compile
+    and render errors are left for Home Assistant's own validation to report.
     """
     if not templates:
         return
@@ -191,5 +239,5 @@ async def async_check_caller_templates(templates: list[str], hass: HomeAssistant
         raise TemplateRenderError(_WORKER_FAILED)
     if seconds > TEMPLATE_CHECK_COMPILE_SECONDS:
         raise TemplateRenderError(
-            "These templates take too long to compile. Reduce constant arithmetic, repetition "
-            "and regular expressions in them.")
+            "A template takes too long to compile. Reduce constant arithmetic, repetition "
+            "and regular expressions in it.")

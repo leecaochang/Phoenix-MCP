@@ -47,8 +47,8 @@ from .tool_catalog import (
     _TOOL_HANDLERS, _tool_is_announced, _tool_required_caps, executor_tracked, run_companion_turn as run_request,
 )
 from .tool_common import (
-    _CAP_FORBIDDEN_MESSAGE, RefusedBeforeWrite, _resolve_area_id, _tool_error, _tool_refused_before_write,
-    _tool_success,
+    _CAP_FORBIDDEN_MESSAGE, RefusedBeforeWrite, UncertainOutcome, _resolve_area_id, _tool_error,
+    _tool_refused_before_write, _tool_success,
 )
 from .request_authority import _approved_exec_ctx
 from .tool_contracts import _RETIRED_REPLACEMENTS, adopt_near_misses, unknown_argument_error
@@ -733,7 +733,8 @@ async def _dispatch_tools_call(
             receipt_outcome, receipt_resource = exc.receipt
             _log(data, access_key, request_id=request_id, method=tool_name,
                  resource=receipt_resource, outcome=receipt_outcome, client_ip=client_ip,
-                 payload={"name": tool_name, "arguments": arguments, "result_withheld": True})
+                 payload={"name": tool_name, "arguments": arguments, "result_withheld": True},
+                 uncertain=True)
         raise
     except PendingApprovalCapacityError:
         # Not an internal error: the key's approval queue is full.
@@ -764,7 +765,7 @@ async def _dispatch_tools_call(
          resource=resource, outcome=outcome, client_ip=client_ip,
          payload={"name": tool_name, "arguments": arguments},
          mesa_advisory=mesa_advisory_ctx.get(),
-         stale_tools_advisory=stale)
+         stale_tools_advisory=stale, uncertain=isinstance(tool_result, UncertainOutcome))
     return _jsonrpc_result(msg_id, tool_result), tool_name or "tools/call", resource, outcome
 
 
@@ -893,6 +894,8 @@ async def _dispatch_mcp(
                 recovery_error = _tool_error("This new request was not executed because an earlier agent action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in the Needs Attention window of the Phoenix MCP panel before trying again. Direct read-only tools remain available where this access key exposes them; delegated requests are blocked.")
                 return _jsonrpc_result(msg_id, recovery_error), method, params["name"], "denied"
         check_request_authority()
+        # The token's hour ends a request before dispatch only; a dispatch under way finishes.
+        authority.check_token_hour()
         write_entered = method == "tools/call" and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"])
         dispatch_entered = True
         result = await _dispatch_mcp_authorized(method, msg_id, params, access_key, hass, data, client_ip, base_url, request_id)
@@ -912,7 +915,7 @@ async def _dispatch_mcp(
                      outcome="denied", client_ip=client_ip)
                 return _jsonrpc_result(msg_id, _tool_error("Request authority changed while this tool was running. It changes nothing in the home, so there is nothing to check.")), method, name, "denied"
             _log(data, access_key, request_id=request_id, method="authority/changed", resource=name,
-                 outcome="invalid_request" if completed else "unknown", client_ip=client_ip)
+                 outcome="invalid_request" if completed else "unknown", client_ip=client_ip, uncertain=True)
             if completed:
                 receipt = _tool_success("Action dispatch completed, but authority changed before its response could be delivered. Response details were withheld. Do not repeat the action; verify its outcome in Home Assistant.")
                 return _jsonrpc_result(msg_id, receipt), method, name, "allowed"

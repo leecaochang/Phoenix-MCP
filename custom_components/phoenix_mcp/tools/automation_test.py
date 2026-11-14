@@ -2,9 +2,9 @@
 
 test_trigger registers trigger definitions with Home Assistant's own trigger helpers for a short,
 bounded wait and reports the first firing; test_condition evaluates one condition now. test_trigger
-admits templates only for a key whose cap_automation_write is not denied, after the template worker
-has compiled and trial-rendered them, as authoring does, since such a key could save the same
-template in an automation; test_condition renders each one in the disposable template worker over
+admits templates only for a key whose cap_automation_write is Allow, after the template worker has
+compiled and trial-rendered them, since such a key could save the same template in an automation
+without review; Home Assistant then renders them itself. test_condition renders each one in the disposable template worker over
 the key's scrubbed states and hands Home Assistant only a reference to the result. Both read
 only what the key may read: every entity a definition names, by ID, registry ID or literal template
 lookup, every entity a target expands to and every entity of a device trigger's device needs Read,
@@ -38,7 +38,7 @@ from ..authoring_validation import async_template_refusal
 from ..capability import effective_cap
 from ..const import (
     AUTOMATION_TEST_CONDITIONS, AUTOMATION_TEST_MAX_TRIGGERS, AUTOMATION_TEST_TRIGGERS,
-    AUTOMATION_TEST_UNSCOPED_KEYS, CAP_DENY, DOMAIN, HELPER_TEMPLATE_PURE_FUNCTIONS,
+    AUTOMATION_TEST_UNSCOPED_KEYS, CAP_ALLOW, CAP_DENY, DOMAIN, HELPER_TEMPLATE_PURE_FUNCTIONS,
     HELPER_TEMPLATE_STATE_FUNCTIONS, MAX_SUBSCRIPTION_SECONDS,
 )
 from ..policy_engine import (
@@ -47,7 +47,9 @@ from ..policy_engine import (
 )
 from ..redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 from ..request_authority import check_request_authority
-from ..template_render import TemplateRenderError, async_evaluate_templates_for_access_key
+from ..template_render import (
+    TemplateRenderError, TemplateWorkerBusyError, async_evaluate_templates_for_access_key,
+)
 from ..template_scope import HelperScopeError, caller_template_strings, is_template, template_entities
 from ..tool_common import _tool_error, _tool_success
 
@@ -69,8 +71,8 @@ _UNSCOPED = (
 )
 _MAX_RESULT_DEPTH = 12
 _TRIGGER_TEMPLATES = (
-    "Templates cannot be tested with test_trigger by this access key: it may not write automations, "
-    "and Home Assistant would run them on every state change. Check a template's current value "
+    "Templates cannot be tested with test_trigger by this access key: it may not write automations "
+    "without review, and Home Assistant would run them on every state change. Check a template's current value "
     "with test_condition, as a template condition."
 )
 # Caller variable names start with a letter, so these never collide with one.
@@ -369,8 +371,8 @@ async def _tool_test_trigger(
 ) -> tuple[dict, str, str]:
     """MCP tool: wait a bounded time for trigger definitions to fire, and report the first firing.
 
-    Templates need cap_automation_write not denied and pass the template worker check before
-    Home Assistant validates them.
+    Templates need cap_automation_write Allow and pass the template worker check before Home
+    Assistant validates them.
     """
     if effective_cap(access_key, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "test_trigger"
@@ -383,7 +385,7 @@ async def _tool_test_trigger(
     scope = _Scope()
     templated = bool(caller_template_strings(triggers))
     try:
-        if templated and effective_cap(access_key, "cap_automation_write") == CAP_DENY:
+        if templated and effective_cap(access_key, "cap_automation_write") != CAP_ALLOW:
             raise _Refused(_TRIGGER_TEMPLATES)
         variables = _variables(args)
         kinds = _trigger_kinds(triggers)
@@ -513,6 +515,8 @@ async def _tool_test_condition(
         try:
             answers = await async_evaluate_templates_for_access_key(
                 renders, variables, scope.entities, access_key, hass, data)
+        except TemplateWorkerBusyError as err:
+            return _tool_error(str(err)), "invalid_request", "test_condition"
         except TemplateRenderError as err:
             return _tool_error(f"The condition's templates could not be evaluated: {err}"), \
                 "invalid_request", "test_condition"

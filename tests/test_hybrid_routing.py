@@ -18,7 +18,6 @@ from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.routing.routing_tables import (
     COMMAND_ROUTING_PLAN_KEY, DECISION_ENTITY_CATEGORIES, DECISION_PROVIDER_REFUSED_CATEGORIES,
 )
-from custom_components.phoenix_mcp.catalog_text import voice_text
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.routing.decision_types import DecisionError
 from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
@@ -1202,7 +1201,7 @@ _OPPOSITE_SENTENCES = {
 @pytest.mark.parametrize('entity_command_home', [(category, None) for category in sorted(DECISION_PROVIDER_REFUSED_CATEGORIES)],
                          indirect=True)
 async def test_joint_decision_never_runs_a_risky_operation(hass, entity_command_home, mesa_mode):
-    """The user said close, lock, silence or arm; a decision for the opposite asks again instead."""
+    """The user said close, lock, silence or arm; a decision for the opposite goes to the conversation model."""
     home, category, value, _, (domain, _, _) = entity_command_home
     data = home[0]
     if category.endswith('_toggle'):
@@ -1220,8 +1219,8 @@ async def test_joint_decision_never_runs_a_risky_operation(hass, entity_command_
         answer, remote, provider = await run_voice(hass, home, request=respond, sentence=_OPPOSITE_SENTENCES[category])
     remote.assert_awaited_once()
     call.assert_not_called()
-    provider.assert_not_called()
-    assert answer == voice_text('en', 'decision_operation_unconfirmed')
+    provider.assert_awaited_once()
+    assert answer == 'Provider answer'
     assert not data.store.get_pending_approvals()
     assert data.decision_shadow.summary()['hybrid'] == {'evaluations': 1, 'reasons': {'operation_unconfirmed': 1}}
 
@@ -1246,6 +1245,25 @@ async def test_sequential_target_selection_refuses_a_risky_operation(hass, hybri
             hass, RoutingAuthority.capture(data, access_key), provider, None, 'Close the desk lamp', category, 1000, prepare=prepare)
     assert result['reason'] == 'operation_unconfirmed' and '_plan' not in result
     select.assert_not_called()
+
+
+@pytest.mark.parametrize('entity_command_home', [('cover_close', None), ('lock_lock', None)], indirect=True)
+async def test_a_same_named_contact_sensor_does_not_block_its_device(hass, entity_command_home):
+    """A garage door or front door often shares its name with an exposed contact sensor the key cannot read."""
+    from homeassistant.components.homeassistant.exposed_entities import async_should_expose
+    home, category, value, _, (domain, service, _) = entity_command_home
+    sensor = er.async_get(hass).async_get_or_create('binary_sensor', 'test', 'contact', original_name='Test helper',
+                                                    original_device_class='garage_door')
+    hass.states.async_set(sensor.entity_id, 'off', {'friendly_name': 'Test helper', 'device_class': 'garage_door'})
+    assert async_should_expose(hass, 'conversation', sensor.entity_id)
+    async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, _, provider = await run_voice(hass, home, request=respond,
+                                         sentence='Please shut Test helper' if domain == 'cover' else 'Please secure Test helper')
+    provider.assert_not_called()
+    call.assert_awaited_once()
+    assert call.await_args.args[:2] == (domain, service)
 
 
 @pytest.mark.parametrize('entity_command_home', [('cover_open', None)], indirect=True)

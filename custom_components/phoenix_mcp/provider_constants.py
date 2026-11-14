@@ -341,14 +341,21 @@ AGENT_CHAT_MAX_MODEL_ID_LENGTH = 200
 # cannot accumulate a large multiple. A real multi-step turn stays far below it.
 AGENT_CHAT_MAX_TURN_OUTPUT_BYTES = 48 * 1024 * 1024
 # Max idle gap between stream data before the provider request is aborted. SSE
-# comment lines (a gateway's keep-alive) do not count as data. Agent Chat's total
-# time is deliberately unbounded (a long agentic turn streams for minutes), but a
-# provider that stops sending data must not hang the turn forever.
+# comment lines (a gateway's keep-alive) count only until the first data line: a
+# reasoning model behind a gateway may think for minutes before it, but a reply that
+# stalls afterwards is not held open by them. Agent Chat's total time is deliberately
+# unbounded (a long agentic turn streams for minutes), but a provider that stops
+# sending must not hang the turn forever.
 AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS = 180
 # The longest one Voice or AI Task model call may take, however steadily the
 # provider keeps sending. Nobody can cancel those turns, so a provider that
 # trickles data forever must not hold an automation or a speaker indefinitely.
 AGENT_HEADLESS_CALL_SECONDS = 600
+# The same bound for a local Ollama server, which runs on the operator's own
+# hardware: a CPU-only machine reads a long prompt for minutes and then produces a
+# few tokens a second, so a thinking model's trace and answer can take far longer
+# than 600 s. An hour still ends a model that generates without end.
+AGENT_HEADLESS_LOCAL_CALL_SECONDS = 3600
 # A retry after a temporary provider failure waits this long for the first reply
 # rather than the full silent-stream bound: a provider that has just said it is
 # overloaded and then sends nothing is stuck, not thinking.

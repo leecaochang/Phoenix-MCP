@@ -32,7 +32,7 @@ from ..capability import effective_cap
 from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..policy_engine import (
-    call_needs_physical_gate, esphome_entry_entities, esphome_entry_writable, filter_service_response, group_member_ids,
+    call_needs_physical_gate, esphome_entry_entities, esphome_entry_refusal, filter_service_response, group_member_ids,
     music_assistant_readable_entries, Permission, required_service_cap, resolve,
     resolve_esphome_user_service, resolve_service_targets, service_target_binding_valid,
     unreadable_group_targets, unregistered_targets,
@@ -148,6 +148,10 @@ async def _tool_call_service(
 
     targets: list[str] = []
     reach = CallReach([])
+    # A device action reaches everything on its device: an approval binds and shows all of it.
+    esphome_device = resolve_esphome_user_service(hass, service) if domain == _ESPHOME_DOMAIN else None
+    if esphome_device is not None:
+        reach = CallReach(esphome_entry_entities(hass, esphome_device))
     if not targetless:
         targets, _ = resolve_service_targets(
             entity_id=args.get("entity_id"), device_id=args.get("device_id"),
@@ -171,14 +175,17 @@ async def _tool_call_service(
     denied = required_cap is not None and effective_cap(access_key, required_cap) == CAP_DENY
     if reach.refusal and not denied:
         return _tool_refused_before_write(reach.refusal), "denied", "call_service"
+    if esphome_device is not None and not denied and (
+            refusal := esphome_entry_refusal(hass, esphome_device, access_key, service)):
+        return _tool_refused_before_write(refusal), "denied", "call_service"
     if not targetless and not targets and not denied and (
             unregistered := unregistered_targets(args.get("entity_id"), access_key, hass)):
         return _tool_refused_before_write(unregistered_target_error(unregistered)), "denied", "call_service"
     if required_cap is not None:
         # An approval must bind everything it will reach, and a key holding no target
         # queues nothing. A denied capability refuses without resolving.
-        bind_targets = not targetless and not denied
-        if bind_targets and not targets:
+        bind_targets = (not targetless or esphome_device is not None) and not denied
+        if bind_targets and not (targets or esphome_device is not None):
             return _tool_error("Forbidden."), "denied", "call_service"
         # An update replaces running code, so a person reviews it whatever the mode.
         review = service_key == UPDATE_INSTALL_SERVICE
@@ -467,10 +474,11 @@ async def _execute_call_service(
     if domain == _ESPHOME_DOMAIN:
         esphome_entry = resolve_esphome_user_service(hass, service)
         if esphome_entry is not None:
-            if not esphome_entry_writable(hass, esphome_entry, access_key):
-                return _tool_error("Forbidden."), "denied", resource
+            if refusal := esphome_entry_refusal(hass, esphome_entry, access_key, service):
+                return _tool_refused_before_write(refusal), "denied", resource
             device_entities = esphome_entry_entities(hass, esphome_entry)
-            if APPROVAL_TARGETS_KEY in args and not targets_current(args, device_entities, hass):
+            # An approval binds the device's entities; one that binds none was never shown them.
+            if not targets_current(args, device_entities, hass):
                 return _tool_error(TARGETS_CHANGED), "denied", resource
             device_constraints: dict[str, Any] = {
                 "approval_args": args, "approval_diff": lambda: _build_diff_call_service(args, access_key, hass),
@@ -778,6 +786,9 @@ def _build_diff_call_service(args: dict, access_key: AccessKeyRecord, hass: Home
     )
     preview.update(todo_removal_review(hass, domain, service, service_data, resolved))
     reach = call_reach(domain, service, service_data, resolved, access_key, hass)
+    if domain == _ESPHOME_DOMAIN and (device := resolve_esphome_user_service(hass, service)) is not None:
+        # A device action reaches everything on its device, which the approval binds.
+        reach = CallReach(esphome_entry_entities(hass, device))
     if also_reaches := [entity_id for entity_id in reach.entities if entity_id not in resolved]:
         preview["also_reaches"] = also_reaches
     mesa_note = _mesa_confirm_annotation(access_key, hass, [(domain, service, reach.entities)])

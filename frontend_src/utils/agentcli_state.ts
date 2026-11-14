@@ -236,8 +236,9 @@ export function patchDurable(patch: Partial<AgentCliDurable>, owner = ownerId): 
 // MAX_CONV_AGE_MS below. Home Assistant has no logout hook, so what an admin saved
 // stays until the next identity shows up. A non-admin session purges it only where
 // Phoenix code runs for that user: the global Agent Chat module or the MESA
-// injector, which load on every page, and the panel bundle. With both modules off,
-// it stays until MAX_CONV_AGE_MS or a wipe. Another admin, who can read the same
+// injector, which load on every page. The panel bundle never loads for a non-admin,
+// because Home Assistant does not list an admin-only panel for them. With both
+// modules off, it stays until MAX_CONV_AGE_MS or a wipe. Another admin, who can read the same
 // data through the Conversation Log, leaves it in place.
 // ---------------------------------------------------------------------------
 
@@ -451,15 +452,6 @@ export function purgeAgentCliStorage(): void {
     if (removed) localStorage.setItem(PURGE_MARKER_KEY, `${Date.now()}.${tabId}`);
   } catch { /* storage unavailable */ }
   window.dispatchEvent(new Event(PURGE_EVENT));
-}
-
-/** Purge every stored conversation when Home Assistant reports the signed-in user is
- *  not an administrator. Returns whether it purged; a user not yet known purges nothing. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function purgeIfNotAdmin(hass: any): boolean {
-  if (hass?.user?.is_admin !== false) return false;
-  purgeAgentCliStorage();
-  return true;
 }
 
 function load(): Conversation {

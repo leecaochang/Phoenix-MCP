@@ -41,7 +41,8 @@ from custom_components.phoenix_mcp import mcp_transport
 from custom_components.phoenix_mcp.const import (
     DOMAIN, OAUTH_ACCESS_TOKEN_TTL_SECONDS, OAUTH_ADDRESS_REQUESTS_PER_MINUTE, OAUTH_CODE_TTL_SECONDS,
     OAUTH_GRANTS_STORAGE_KEY, OAUTH_GRANTS_STORAGE_VERSION, OAUTH_MAX_GRANTS_PER_ACCESS_KEY,
-    OAUTH_PENDING_PER_ADDRESS_MAX, OAUTH_REFRESH_GRACE_SECONDS, OAUTH_REFRESH_SIBLINGS_MAX, OAUTH_RETIRED_TOKENS_MAX,
+    OAUTH_PENDING_PER_ADDRESS_MAX, OAUTH_REFRESH_GRACE_SECONDS, OAUTH_REFRESH_SIBLINGS_MAX, OAUTH_REFRESH_USES_MAX,
+    OAUTH_RETIRED_TOKENS_MAX,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.durable_storage import DurableStorageError, DurableStore
@@ -49,12 +50,16 @@ from custom_components.phoenix_mcp.mcp_transport import ALL_MCP_VIEWS
 from custom_components.phoenix_mcp.mesa import async_create_mesa_approval
 from custom_components.phoenix_mcp.oauth_client_metadata import check_document
 from custom_components.phoenix_mcp.oauth_flow import ClientVerdict, pkce_matches, redirect_matches
-from custom_components.phoenix_mcp.oauth_grants import GrantLimitError, OAuthGrantStore, secret_hash
+from custom_components.phoenix_mcp.oauth_grants import GrantLimitError, OAuthGrantStore, _HashUntil, secret_hash
 from custom_components.phoenix_mcp.oauth_views import ALL_OAUTH_VIEWS
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
+from custom_components.phoenix_mcp.household_authority import HouseholdAuthority
 from custom_components.phoenix_mcp.request_authority import (
-    AuthorityChangedError, RequestAuthority, check_request_authority, request_authority,
+    AuthorityChangedError, RequestAuthority, check_request_authority, household_authority, request_authority,
+    write_boundary,
 )
+from custom_components.phoenix_mcp.tool_common import _create_registry_mesa_approval
+from custom_components.phoenix_mcp.tools import system as system_tools
 
 ORIGIN = "https://phx.example"
 # Home Assistant's forwarded middleware turns these into the request's https scheme.
@@ -641,9 +646,9 @@ def _sse_data(text: str) -> dict:
     return json.loads(lines[-1]) if lines else json.loads(text)
 
 
-async def _call_restart(app, token) -> dict:
+async def _call_restart(app, token, accept: str = "application/json, text/event-stream") -> dict:
     """tools/call restart_ha through the real MCP route, as the signed-in app."""
-    headers = {**HOST, "Authorization": f"Bearer {token}", "Accept": "application/json, text/event-stream"}
+    headers = {**HOST, "Authorization": f"Bearer {token}", "Accept": accept}
     init = await app.post("/api/phoenix-mcp", headers=headers, json=_initialize())
     assert init.status == 200, await init.text()
     headers["MCP-Protocol-Version"] = "2025-03-26"
@@ -710,6 +715,50 @@ async def test_a_mesa_confirm_records_the_sign_in_and_the_secret_that_queued_it(
     stored = next(row for row in data.store.get_pending_approvals() if row["id"] == approval.id)
     assert stored["sign_in_id"] == sign_in.id and stored["oauth_app"] == APP_LABEL
     assert stored["credential_generation"] == credential_generation(access_key)
+
+
+async def test_a_registry_mesa_confirm_records_the_sign_in_and_the_secret_that_queued_it(hass, queued):
+    """A registry write held only by MESA binds its approval to the credential too."""
+    _app, admin, data, access_key, _tokens, sign_in = queued
+    token = request_authority.set(
+        RequestAuthority(hass, data, access_key.id, access_key.access_key_hash, sign_in.id))
+    try:
+        _content, outcome, _resource = await _create_registry_mesa_approval(
+            hass, data, access_key, tool_name="set_entity", args={"entity_id": "light.kitchen"}, diff={},
+            request_id="registry-mesa", client_ip=None)
+    finally:
+        request_authority.reset(token)
+    assert outcome == "pending_approval"
+    (stored,) = _pending(data)
+    assert stored["sign_in_id"] == sign_in.id and stored["oauth_app"] == APP_LABEL
+    assert stored["credential_generation"] == credential_generation(access_key)
+    await data.store.async_rotate_access_key(access_key.id)
+    with patch(_EXECUTOR, AsyncMock(return_value=_OK)) as executor:
+        approved = await admin.post(f"/api/phoenix-mcp/admin/approvals/{stored['id']}/approve")
+    assert (await approved.json())["message_key"] == "adminError.approvalCredentialEnded"
+    executor.assert_not_awaited()
+
+
+async def test_rotation_keeps_household_requests_the_secret_never_made(queued):
+    """Assist, Voice and AI Task requests come from Home Assistant users, so a new secret leaves them."""
+    _app, admin, data, access_key, _tokens, _sign_in_record = queued
+    household = household_authority.set(HouseholdAuthority(user_id=None, user=None))
+    try:
+        spoken = await async_create_pending_approval(
+            data.store, access_key_id=access_key.id, access_key_name=access_key.name, tool_name="restart_ha",
+            cap_name="cap_restart", args={}, diff={}, request_id="assist", access_key=access_key)
+    finally:
+        household_authority.reset(household)
+    keyed = await async_create_pending_approval(
+        data.store, access_key_id=access_key.id, access_key_name=access_key.name, tool_name="restart_ha",
+        cap_name="cap_restart", args={}, diff={}, request_id="raw", access_key=access_key)
+    await _end(admin, access_key, None, "rotate")
+    assert get_approval(data.store, keyed.id).closure_reason == "access_key_rotated"
+    assert get_approval(data.store, spoken.id).status == "pending"
+    with patch(_EXECUTOR, AsyncMock(return_value=_OK)) as executor:
+        approved = await admin.post(f"/api/phoenix-mcp/admin/approvals/{spoken.id}/approve")
+    assert approved.status == 200, await approved.text()
+    executor.assert_awaited_once()
 
 
 @pytest.mark.parametrize(("event", "reason"), [
@@ -834,6 +883,102 @@ async def test_removing_the_sign_in_during_an_inline_wait_cancels_the_action(has
     assert "applied" not in json.dumps(answer)
 
 
+# The access token's hour ends a request at admission and before dispatch, never during one.
+
+_MODERN = "2026-07-28"
+
+
+def _past_the_hour():
+    """Move only the authority clock past the token's hour, so the client's own timeouts are unaffected."""
+    later = utcnow() + timedelta(seconds=OAUTH_ACCESS_TOKEN_TTL_SECONDS + 1)
+    return patch("custom_components.phoenix_mcp.request_authority.utcnow", return_value=later)
+
+
+async def test_a_write_running_when_the_token_hour_ends_finishes_and_answers(queued):
+    """On the modern stream the keepalive tick no longer cancels the write or holds the key."""
+    app, _admin, data, access_key, tokens, _sign_in_record = queued
+    await data.store.async_patch_access_key(access_key.id, cap_restart="allow")
+    clock = _past_the_hour()
+
+    @write_boundary
+    async def slow_restart(args, access_key, hass, data):
+        clock.start()
+        await asyncio.sleep(1)
+        return {"content": [{"type": "text", "text": "restarted"}]}, "allowed", "restart_ha"
+
+    headers = {**HOST, "Authorization": f"Bearer {tokens['access_token']}",
+               "Accept": "application/json, text/event-stream",
+               "MCP-Protocol-Version": _MODERN, "Mcp-Method": "tools/call", "Mcp-Name": "restart_ha"}
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+        "name": "restart_ha", "arguments": {}, "_meta": {
+            "io.modelcontextprotocol/protocolVersion": _MODERN,
+            "io.modelcontextprotocol/clientInfo": {"name": "client", "version": "1"},
+            "io.modelcontextprotocol/clientCapabilities": {}}}}
+    try:
+        with patch.object(system_tools, "_execute_restart_ha", slow_restart), \
+                patch.object(mcp_transport, "MCP_SSE_KEEPALIVE_SECONDS", 0.2):
+            response = await app.post("/api/phoenix-mcp", headers=headers, json=body)
+            answer = _sse_data(await response.text())
+    finally:
+        clock.stop()
+    assert answer["result"]["content"][0]["text"] == "restarted"
+    assert not data.agent_recovery.blocks(access_key.id, "next")
+    rows = [(e.method, e.outcome) for e in data.audit.query(access_key_id=access_key.id) or []]
+    assert ("restart_ha", "allowed") in rows and not any(method == "request/cancelled" for method, _ in rows)
+
+
+@pytest.mark.parametrize("accept", ["application/json, text/event-stream", "application/json"])
+async def test_the_token_hour_ending_during_an_inline_wait_still_answers_pending(hass, queued, accept):
+    """The client keeps the approval id; nothing claims the action ended or may have run."""
+    app, _admin, data, access_key, tokens, _sign_in_record = queued
+    await data.store.async_patch_access_key(access_key.id, confirm_inline_wait_seconds=30)
+    with patch(_EXECUTOR, AsyncMock(return_value=_OK)) as executor, \
+            patch("custom_components.phoenix_mcp.tool_common.MAX_CONFIRM_INLINE_WAIT_SECONDS", 1), \
+            patch.object(mcp_transport, "MCP_SSE_KEEPALIVE_SECONDS", 0.2):
+        call = hass.async_create_task(_call_restart(app, tokens["access_token"], accept=accept))
+        async with asyncio.timeout(10):
+            while not _pending(data):
+                await asyncio.sleep(0.01)
+        (stored,) = _pending(data)
+        with _past_the_hour():
+            async with asyncio.timeout(10):
+                answer = await call
+    executor.assert_not_awaited()
+    text = answer["result"]["content"][0]["text"]
+    assert stored["id"] in text and "may have run" not in text and "No action was executed" not in text
+    assert not data.agent_recovery.blocks(access_key.id, "next")
+
+
+async def test_a_batch_item_after_the_token_hour_is_not_dispatched(queued):
+    """Each dispatch checks the hour first, so a batch that outlives its token stops there."""
+    app, _admin, data, access_key, tokens, _sign_in_record = queued
+    await data.store.async_patch_access_key(access_key.id, cap_restart="allow")
+    clock = _past_the_hour()
+    runs: list[str] = []
+
+    @write_boundary
+    async def restart(args, access_key, hass, data):
+        runs.append("restart")
+        clock.start()
+        return {"content": [{"type": "text", "text": "restarted"}]}, "allowed", "restart_ha"
+
+    headers = {**HOST, "Authorization": f"Bearer {tokens['access_token']}", "Accept": "application/json"}
+    init = await app.post("/api/phoenix-mcp", headers=headers, json=_initialize())
+    headers["MCP-Protocol-Version"] = "2025-03-26"
+    if session := init.headers.get("Mcp-Session-Id"):
+        headers["Mcp-Session-Id"] = session
+    await app.post("/api/phoenix-mcp", headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    batch = [{"jsonrpc": "2.0", "id": index, "method": "tools/call",
+              "params": {"name": "restart_ha", "arguments": {}}} for index in (1, 2)]
+    try:
+        with patch.object(system_tools, "_execute_restart_ha", restart):
+            answer = await (await app.post("/api/phoenix-mcp", headers=headers, json=batch)).json()
+    finally:
+        clock.stop()
+    assert runs == ["restart"]
+    assert [reply["id"] for reply in answer if "error" in reply] == [2]
+
+
 async def _reuse_ends_sign_in(app, admin, data, access_key, how) -> tuple[str, object]:
     """Sign in afresh and return its access token plus an ending: reuse of a secret, or the app revoking it."""
     data.oauth.open_window(access_key.id)
@@ -853,8 +998,8 @@ async def _reuse_ends_sign_in(app, admin, data, access_key, how) -> tuple[str, o
             assert revoked.status == 200
             return
         refresh = tokens["refresh_token"]
-        await _refresh(app, refresh)                                   # the app rotates
-        await _refresh(app, refresh)                                   # one sibling in the grace
+        for _ in range(OAUTH_REFRESH_USES_MAX):                        # the rotation and its retries
+            await _refresh(app, refresh)
         assert (await _refresh(app, refresh))[0] == 400                # reuse ends the sign-in
 
     return tokens["access_token"], end
@@ -1007,6 +1152,28 @@ async def test_a_form_that_stops_arriving_ends_its_own_request(oauth):
             "/api/phoenix-mcp/oauth/token", data=stalls(),
             headers={**HOST, "Content-Type": "application/x-www-form-urlencoded"}), 3)
     assert response.status == 400 and (await response.json())["error"] == "invalid_request"
+
+
+async def test_a_full_queue_looks_parked_to_the_app_and_busy_to_the_administrator(oauth):
+    """The app sees the same redirect either way; only the admin view says the queue is full."""
+    app, admin, data, _fetch = oauth
+    await _key(data)
+    _verifier, challenge = _pkce()
+    parked = [await _authorize(app, challenge) for _ in range(OAUTH_PENDING_PER_ADDRESS_MAX)]
+    refused = await _authorize(app, challenge)
+    assert refused.status == parked[0].status == 302
+    assert set(refused.headers) == set(parked[0].headers)
+    busy_id = refused.headers["Location"].rsplit("/", 1)[1]
+    assert len(busy_id) == len(parked[0].headers["Location"].rsplit("/", 1)[1])
+    assert busy_id not in data.oauth.pending
+    detail = await admin.get(f"/api/phoenix-mcp/admin/oauth/requests/{busy_id}")
+    body = await detail.json()
+    assert detail.status == 404 and body["error"] == "oauth_busy" and body["message_key"] == "adminError.oauthBusy"
+    # A closed window and an unknown ID still read as ended.
+    unknown = await (await admin.get("/api/phoenix-mcp/admin/oauth/requests/" + "x" * 43)).json()
+    assert unknown["error"] == "not_found"
+    data.oauth.clear()
+    assert (await (await admin.get(f"/api/phoenix-mcp/admin/oauth/requests/{busy_id}")).json())["error"] == "not_found"
 
 
 async def test_pending_caps_count_an_ipv6_64_as_one_address(oauth):
@@ -1195,18 +1362,49 @@ async def _refresh(app, token, **extra):
     return response.status, await response.json()
 
 
-async def test_a_redeemed_refresh_token_gives_one_sibling_then_ends_the_sign_in(oauth):
+async def test_a_refresh_token_serves_three_uses_in_its_grace_then_ends_the_sign_in(oauth):
     app, admin, data, _fetch = oauth
     access_key, _raw = await _key(data)
     r0 = (await _sign_in(app, admin, access_key.id))["refresh_token"]
     _status, app_tokens = await _refresh(app, r0)                     # the app rotates R0
-    status, sibling = await _refresh(app, r0)                         # one retry inside the grace
-    assert status == 200 and (await _mcp(app, sibling["access_token"])).status == 200
-    status, body = await _refresh(app, r0)                            # a second one is reuse
+    for _ in range(OAUTH_REFRESH_USES_MAX - 1):                       # two retries inside the grace
+        status, sibling = await _refresh(app, r0)
+        assert status == 200 and (await _mcp(app, sibling["access_token"])).status == 200
+    status, body = await _refresh(app, r0)                            # a fourth use is reuse
     assert status == 400 and body["error"] == "invalid_grant"
     assert data.oauth_grants.list_for_key(access_key.id) == []
     assert (await _mcp(app, app_tokens["access_token"])).status == 401
     assert _token_rows(data, access_key.id)[0].outcome == "denied"
+
+
+async def test_three_concurrent_refreshes_of_one_token_all_succeed(oauth):
+    """An app without a refresh lock may send three at once; each gets working tokens."""
+    app, admin, data, _fetch = oauth
+    access_key, _raw = await _key(data)
+    r0 = (await _sign_in(app, admin, access_key.id))["refresh_token"]
+    answers = await asyncio.gather(*(_refresh(app, r0) for _ in range(3)))
+    assert [status for status, _body in answers] == [200, 200, 200]
+    for _status, body in answers:
+        assert (await _mcp(app, body["access_token"])).status == 200
+    assert len(data.oauth_grants.list_for_key(access_key.id)) == 1
+
+
+async def test_two_lost_refresh_answers_then_a_retry_keep_the_sign_in(oauth):
+    app, admin, data, _fetch = oauth
+    access_key, _raw = await _key(data)
+    r0 = (await _sign_in(app, admin, access_key.id))["refresh_token"]
+    await _refresh(app, r0)                                           # its answer never arrived
+    await _refresh(app, r0)                                           # nor this one
+    status, body = await _refresh(app, r0)
+    assert status == 200 and (await _mcp(app, body["access_token"])).status == 200
+    assert (await _refresh(app, body["refresh_token"]))[0] == 200
+
+
+async def test_a_refresh_token_saved_as_spent_has_one_use_left():
+    """A record from before use counts: a token that gave its one sibling had two uses."""
+    loaded = _HashUntil.from_dict({"hash": "h", "until": utcnow().isoformat(), "spent": True})
+    assert loaded is not None and loaded.uses == OAUTH_REFRESH_USES_MAX - 1
+    assert _HashUntil.from_dict(loaded.to_dict()).uses == loaded.uses
 
 
 async def test_a_sibling_leaves_the_apps_access_token_its_hour(oauth, freezer: FrozenDateTimeFactory):
@@ -1296,6 +1494,7 @@ async def test_sign_ins_persist_and_removal_deletes_their_file(hass, hass_storag
     outcome, rotated, _grant = await grants.async_refresh(issued.refresh_token, CLIENT_ID, lambda _g: key)
     assert outcome == "issued" and rotated is not None
     assert (await grants.async_refresh(issued.refresh_token, CLIENT_ID, lambda _g: key))[0] == "issued"
+    assert (await grants.async_refresh(issued.refresh_token, CLIENT_ID, lambda _g: key))[0] == "issued"
     text = repr(hass_storage[OAUTH_GRANTS_STORAGE_KEY]["data"])
     for raw in (issued.access_token, issued.refresh_token, rotated.refresh_token, issued.refresh_token[5:21]):
         assert raw not in text
@@ -1304,7 +1503,7 @@ async def test_sign_ins_persist_and_removal_deletes_their_file(hass, hass_storag
     grant = reloaded.get(issued.grant_id)
     assert grant is not None and grant.is_live(key) and grant.family_hash
     assert reloaded.find_by_access_hash(secret_hash(rotated.access_token)) is not None
-    # The spent sibling and the family tag came back from storage: another use is reuse.
+    # The use count and the family tag came back from storage: a fourth use is reuse.
     assert (await reloaded.async_refresh(issued.refresh_token, CLIENT_ID, lambda _g: key))[0] == "reused"
     await reloaded.async_clear()
     assert OAUTH_GRANTS_STORAGE_KEY not in hass_storage and reloaded.get(issued.grant_id) is None

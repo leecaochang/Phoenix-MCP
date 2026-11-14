@@ -120,11 +120,13 @@ def _bounded_field(value: object) -> str:
     return _storable_text(s if len(s) <= MAX_AUDIT_FIELD_LEN else s[:MAX_AUDIT_FIELD_LEN] + "...[truncated]")
 
 MAX_QUERY_LIMIT = 500
-# A key's refused requests beyond this many in one window are counted on one row, so a
-# flood of cheap refusals cannot push everything else out of the log.
+# A key's cheap refusals beyond this many in one window are counted on one row, so a flood
+# of junk cannot push everything else out of the log. Denied and not-found rows are scope
+# refusals, the evidence of a probe, so they always keep a row of their own, as does a row
+# about a write that may have run.
 AUDIT_REFUSAL_ROWS_PER_WINDOW = 30
 AUDIT_REFUSAL_WINDOW = timedelta(seconds=60)
-_REFUSED_OUTCOMES = frozenset({"denied", "not_found", "not_implemented", "invalid_request", "rate_limited"})
+_FOLDED_OUTCOMES = frozenset({"not_implemented", "invalid_request", "rate_limited"})
 MAX_AUDIT_PAYLOAD_BYTES = 2048
 # How much of a payload is sanitized. A row keeps MAX_AUDIT_PAYLOAD_BYTES, so more
 # buys nothing, and the sanitizer runs on the event loop for every audited call,
@@ -232,9 +234,9 @@ class AuditEntry:
 class AuditLog:
     """Circular buffer audit log, optionally persisted through a Store.
 
-    Two rings of the same size: approval and administrator rows, and all others, so requests
-    a key sends never push the trail out. Logging toggles apply at record time, not query
-    time. Counters in sensor.py ignore these toggles and reflect total activity.
+    Two rings of the same size: approval closures and administrator rows, and all others,
+    including a key's queued requests, so requests a key sends never push the trail out.
+    Logging toggles apply at record time, not query time. Counters in sensor.py ignore these toggles and reflect total activity.
     """
 
     def __init__(self, maxlen: int = AUDIT_LOG_MAXLEN, store: Store | None = None) -> None:
@@ -284,12 +286,14 @@ class AuditLog:
         ha_user_id: str | None = None,
         originating_access_key_id: str | None = None,
         oauth_app: dict[str, str] | None = None,
+        uncertain: bool = False,
     ) -> None:
         """Append an audit entry, subject to the current logging settings.
         Skipped by disable_all_logging or the per-outcome toggle, except pending_approval and
-        approval/* rows. A key's refusals past AUDIT_REFUSAL_ROWS_PER_WINDOW in one window are
-        counted on one row. log_entity_names and log_client_ip redact names and IPs, keeping
-        Phoenix's own surfaces named. ``oauth_app`` defaults to the request's own OAuth sign-in.
+        approval/* rows. A key's cheap refusals past AUDIT_REFUSAL_ROWS_PER_WINDOW in one window
+        are counted on one row; ``uncertain`` marks a write that may have run, never folded.
+        log_entity_names and log_client_ip redact names and IPs, keeping Phoenix's own surfaces
+        named. ``oauth_app`` defaults to the request's own OAuth sign-in.
         """
         if settings.disable_all_logging:
             return
@@ -320,7 +324,7 @@ class AuditLog:
 
         when = timestamp or utcnow()
         window: _RefusalWindow | None = None
-        if outcome in _REFUSED_OUTCOMES and not approval_lifecycle and access_key_id != "admin":
+        if outcome in _FOLDED_OUTCOMES and not uncertain and not approval_lifecycle and access_key_id != "admin":
             window = self._refusal_window(access_key_id, when)
             window.rows += 1
             if window.rows <= AUDIT_REFUSAL_ROWS_PER_WINDOW:
@@ -578,12 +582,15 @@ class AuditLog:
 
 
 def _is_trail_row(entry: AuditEntry) -> bool:
-    """Whether a row belongs to the approval and administrator trail."""
-    return (
-        entry.outcome == "pending_approval"
-        or str(entry.method).startswith("approval/")
-        or entry.access_key_id == "admin"
-    )
+    """Whether a row belongs to the approval and administrator trail.
+
+    A key's own request queued for approval, and its expiry, come from the key and go with its
+    other requests, so no key can push the trail's decisions out.
+    """
+    if entry.access_key_id == "admin":
+        return True
+    method = str(entry.method)
+    return method.startswith("approval/") and method != "approval/expired"
 
 
 @dataclass

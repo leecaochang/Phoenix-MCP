@@ -94,6 +94,19 @@ describe("dashboard preview toggle in Review", () => {
     expect(queryByRole("button", { name: "Before" })).toBeNull();
   });
 
+  it("shows a pending card with Jinja as its text in Preview, never as a drawn card", async () => {
+    const card = { type: "markdown", content: "{{ states('lock.front') }}" };
+    const { container, findByRole } = await openDetail(record({
+      tool_name: "add_dashboard_card",
+      diff: { kind: "yaml_diff", summary: "Add 'markdown' to dashboard", after: JSON.stringify(card) },
+      args: { view_index: 0, card },
+    }));
+    fireEvent.click(await findByRole("button", { name: "Preview" }));
+    expect(container.querySelector(".dash-preview-template-card pre")?.textContent).toBe(JSON.stringify(card, null, 2));
+    expect(container.querySelector("hui-card")).toBeNull();
+    expect(container.querySelector(".dash-preview-card-slot")).toBeNull();
+  });
+
   it("offers a Before|After side toggle for edit_dashboard_card, defaulting to After", async () => {
     const { container, findByRole, getByRole } = await openDetail(record({
       tool_name: "edit_dashboard_card",

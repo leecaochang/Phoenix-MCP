@@ -629,3 +629,24 @@ async def test_agent_write_error_without_the_marker_keeps_the_barrier(hass, resu
             arguments=_write()["params"]["arguments"], tool_id=1, request_id="uncertain",
             client_ip="agentcli", base_url="")
     assert data.agent_recovery.blocks(access_key.id)
+
+
+async def test_a_write_that_may_have_run_keeps_its_audit_row_after_a_flood_of_junk(hass):
+    """The request id of an uncertain write always finds its row, however much junk came first."""
+    from custom_components.phoenix_mcp.audit import AUDIT_REFUSAL_ROWS_PER_WINDOW
+    from custom_components.phoenix_mcp.tool_common import _tool_uncertain
+
+    data, access_key, _ = await _environment(hass)
+    for index in range(AUDIT_REFUSAL_ROWS_PER_WINDOW + 1):
+        await tool_dispatch._dispatch_mcp("tools/call", index, {"name": "no_such_tool"}, access_key, hass, data,
+                                          client_ip="203.0.113.1", base_url="", request_id=f"junk-{index}")
+
+    async def handler(*args, **kwargs):
+        return _tool_uncertain({"status": "partial", "retry_safe": False}), "invalid_request", "call_service"
+
+    with patch.dict(tool_catalog._TOOL_HANDLERS, {"call_service": (handler, (), {})}):
+        await tool_dispatch._dispatch_mcp("tools/call", 99, _write()["params"], access_key, hass, data,
+                                          client_ip="203.0.113.1", base_url="", request_id="uncertain-write")
+    (row,) = data.audit.query(request_id="uncertain-write")
+    assert row.method == "call_service" and row.outcome == "invalid_request"
+    assert "folded_refusals" not in (row.payload or "")

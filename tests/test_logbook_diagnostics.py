@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.components.logbook.websocket_api import ws_get_events
+from homeassistant.core import State
 
 from custom_components.phoenix_mcp.tool_dispatch import _dispatch_mcp
 from custom_components.phoenix_mcp.policy_engine import Permission
@@ -475,13 +476,24 @@ def _automation_and_light_only(entity_id, _key, _hass):
     return Permission.READ if entity_id.split(".")[0] in ("automation", "light") else Permission.NO_ACCESS
 
 
+def _home_hass():
+    access_key, _ = _make_access_key(cap_log_read="allow")
+    data = _make_data(access_key)
+    hass = _make_hass(data)
+    hass.states.async_all.return_value = [
+        State(entity_id, "on") for entity_id in (_HIDDEN_TRIGGER, "automation.bedroom_light", "light.bedroom",
+                                                 "light.hall", "automation.hall", "sensor.wan_host")]
+    return access_key, data, hass
+
+
 @pytest.mark.asyncio
 async def test_a_readable_row_names_no_hidden_trigger_in_its_text():
+    access_key, data, hass = _home_hass()
     with patch("custom_components.phoenix_mcp.policy_engine._resolve_access_key_access",
                side_effect=_automation_and_light_only), \
          patch("custom_components.phoenix_mcp.tools.logs.async_ws_command",
                new=AsyncMock(return_value=[dict(row) for row in _TRIGGERED_ROWS])):
-        body, _result, outcome = await _call({})
+        body, _result, outcome = await _call({}, access_key=access_key, hass=hass, data=data)
     assert outcome == "allowed"
     assert _HIDDEN_TRIGGER not in json.dumps(body)
     rows = {entry["entity_id"]: entry for entry in body["entries"]}
@@ -489,3 +501,22 @@ async def test_a_readable_row_names_no_hidden_trigger_in_its_text():
     assert rows["light.bedroom"]["context_source"] == "state of <redacted-entity>"
     # A readable trigger stays named, and so does the row's own entity.
     assert rows["automation.hall"]["message"] == "triggered by state of light.hall"
+
+
+@pytest.mark.asyncio
+async def test_a_dotted_word_in_no_entity_domain_stays_in_a_logbook_row():
+    access_key, data, hass = _home_hass()
+    rows = [
+        {"entity_id": "light.hall", "state": "router.local", "when": 1.0},
+        {"entity_id": "light.hall", "state": "6.3b2", "when": 1.1},
+        {"entity_id": "light.hall", "name": "Backup", "message": "saved backup.tar to nas.lan, not binary_sensor.made_up",
+         "when": 1.2},
+    ]
+    with patch("custom_components.phoenix_mcp.policy_engine._resolve_access_key_access",
+               side_effect=_automation_and_light_only), \
+         patch("custom_components.phoenix_mcp.tools.logs.async_ws_command", new=AsyncMock(return_value=rows)):
+        body, _result, outcome = await _call({}, access_key=access_key, hass=hass, data=data)
+    assert outcome == "allowed"
+    shown = sorted(entry.get("state") or entry.get("message") for entry in body["entries"])
+    # binary_sensor is an entity domain here, so a hidden or missing one is redacted alike.
+    assert shown == ["6.3b2", "router.local", "saved backup.tar to nas.lan, not <redacted-entity>"]

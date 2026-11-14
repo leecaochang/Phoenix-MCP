@@ -1,7 +1,8 @@
 """A run's trace detail tells a key no more than its scope and capabilities allow.
 
-Step results name no entity, so a step that evaluated a hidden entity loses its values; the
-stored configuration and a webhook-triggered run's variables need the authoring capability.
+Step results name no entity, so a step that evaluated a hidden entity, or a variable computed
+from one, loses its values; the stored configuration and a webhook-triggered run's variables and
+step results need the authoring capability.
 """
 
 from __future__ import annotations
@@ -138,3 +139,55 @@ async def test_variables_computed_from_a_webhook_request_need_the_authoring_capa
     author = _key({"automation": "YELLOW"}, **{**caps, "cap_automation_write": "confirm"})
     text, detail = await _run_detail(hass, author, "automation.hook_vars")
     assert "DERIVED-MARKER" in text and "derived-marker-step" in text
+
+
+async def test_a_hidden_state_carried_by_a_variable_stays_hidden(hass):
+    hass.states.async_set("alarm_control_panel.home", "armed-marker", {})
+    hass.states.async_set("binary_sensor.porch", "off", {})
+    assert await async_setup_component(hass, "automation", {"automation": [{
+        "id": "flow", "alias": "Flow",
+        "triggers": [{"trigger": "state", "entity_id": "binary_sensor.porch"}],
+        "variables": {"top": "{{ states('alarm_control_panel.home') }}", "plain": "kept-marker"},
+        "actions": [
+            {"variables": {"alarm": "{{ states('alarm_control_panel.home') }}"}},
+            {"variables": {"copied": "{{ alarm ~ '-copy' }}"}},
+            {"event": "trace_probe", "event_data": {"seen": "{{ copied }}", "top": "{{ top }}"}},
+            {"event": "trace_plain", "event_data": {"plain": "{{ plain }}"}},
+        ],
+    }]})
+    await hass.async_block_till_done()
+    key = _key({"automation": "GREEN", "binary_sensor": "GREEN"})
+    hass.states.async_set("binary_sensor.porch", "on", {})
+    await hass.async_block_till_done()
+
+    text, detail = await _run_detail(hass, key, "automation.flow")
+    assert "armed-marker" not in text
+    trace = detail["trace"]
+    assert trace["trigger/0"][0]["changed_variables"] == "<redacted>"
+    assert trace["action/1"][0]["changed_variables"] == "<redacted>"
+    assert trace["action/2"][0]["result"] == "<redacted>"
+    # A step that uses only readable variables keeps its result.
+    assert trace["action/3"][0]["result"]["event_data"] == {"plain": "kept-marker"}
+
+
+async def test_a_webhook_request_in_a_step_result_needs_the_authoring_capability(hass, hass_client_no_auth):
+    assert await async_setup_component(hass, "http", {})
+    assert await async_setup_component(hass, "webhook", {})
+    assert await async_setup_component(hass, "automation", {"automation": [{
+        "id": "hook_result", "alias": "Hook result",
+        "triggers": [{"trigger": "webhook", "webhook_id": WEBHOOK_ID, "allowed_methods": ["POST"]}],
+        "actions": [{"event": "trace_hook", "event_data": {"note": "{{ trigger.json.note }}"}}],
+    }]})
+    await hass.async_block_till_done()
+    client = await hass_client_no_auth()
+    assert (await client.post(f"/api/webhook/{WEBHOOK_ID}", json={"note": "payload-marker"})).status == 200
+    await hass.async_block_till_done()
+
+    caps = dict(PERSONA_DEFINITIONS[PERSONA_READ_ONLY])
+    text, detail = await _run_detail(hass, _key({"automation": "YELLOW"}, **caps), "automation.hook_result")
+    assert "payload-marker" not in text
+    assert all("result" not in step for steps in detail["trace"].values() for step in steps)
+
+    author = _key({"automation": "YELLOW"}, **{**caps, "cap_automation_write": "confirm"})
+    text, _detail = await _run_detail(hass, author, "automation.hook_result")
+    assert "payload-marker" in text

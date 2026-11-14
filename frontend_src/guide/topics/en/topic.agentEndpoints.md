@@ -70,8 +70,9 @@ POST   /api/phoenix-mcp/oauth/revoke
 - Only S256 PKCE is accepted. `resource`, when sent, must be your address followed by `/api/phoenix-mcp`.
 - Authorize sends the browser to the Phoenix panel, where an administrator approves the sign-in for one key. It answers the same way whether or not a sign-in window is open. Authorization responses carry `iss`.
 - A code works once, within 60 seconds. A wrong client, redirect, resource or PKCE verifier uses it up. Using a code again ends the sign-in it produced.
-- Access tokens (`phxo_`) last one hour. Each refresh replaces the refresh token (`phxr_`).
-- Within 60 seconds, an app may retry a replaced refresh token once, in case the answer got lost. Any other use of an old refresh token ends the sign-in.
+- Access tokens (`phxo_`) last one hour. A tool call already running when the hour ends still finishes and answers. Each refresh replaces the refresh token (`phxr_`).
+- Within 60 seconds, an app may use a replaced refresh token twice more, in case an answer got lost or it refreshed several times at once.
+- A fourth use, any later use, or reuse of an older refresh token ends the sign-in.
 - Revoke takes either token and ends the whole sign-in.
 
 The routes answer `404` until a key allows OAuth sign-in, and to any request that didn't arrive over HTTPS, even while the kill switch is on. Otherwise, while the kill switch is on they answer `503`. Each address may make 30 requests a minute to them, and IPv6 addresses count by their /64 block.

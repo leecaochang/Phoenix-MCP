@@ -77,3 +77,33 @@ async def test_missing_translations_fall_back_and_cancellation_propagates(hass):
 async def test_installed_ha_translation_loader_supplies_device_class_words(hass):
     assert await async_display_state(hass, 'binary_sensor.door',
         {'state': 'on', 'attributes': {'device_class': 'door'}}, 'en') == 'Open'
+
+
+async def test_categories_sharing_a_service_get_distinct_reply_names(hass):
+    """A mute and an unmute, or a plain turn on and a flash, never sound the same after a routed write."""
+    from custom_components.phoenix_mcp.routing.command_display import async_service_label
+    from custom_components.phoenix_mcp.routing.routing_tables import (
+        COMMAND_ROUTING_ENTITY_COMMANDS, COMMAND_ROUTING_ENTITY_FIXED_DATA,
+    )
+    for language in ('en', 'de', 'zh-Hans'):
+        labels: dict[tuple[str, str], set[str]] = {}
+        for category, data in COMMAND_ROUTING_ENTITY_FIXED_DATA.items():
+            domain, service = COMMAND_ROUTING_ENTITY_COMMANDS[category][:2]
+            if category == 'automation_off':
+                continue
+            label = await async_service_label(hass, domain, service, language, dict(data))
+            assert label is not None
+            labels.setdefault((domain, service), set()).add(label)
+        light_on = await async_service_label(hass, 'light', 'turn_on', language, {})
+        assert light_on not in labels[('light', 'turn_on')]
+        sizes = {key: len(values) for key, values in labels.items()}
+        assert sizes == {('light', 'turn_on'): 2, ('water_heater', 'set_away_mode'): 2, ('media_player', 'volume_mute'): 2,
+                         ('media_player', 'shuffle_set'): 2, ('media_player', 'repeat_set'): 3,
+                         ('fan', 'oscillate'): 2, ('fan', 'set_direction'): 2}
+    assert await async_service_label(hass, 'media_player', 'volume_mute', 'en', {'is_volume_muted': False}) == (
+        'Mute/unmute media player (Muted: No)')
+    assert await async_service_label(hass, 'fan', 'set_direction', 'en', {'direction': 'reverse'}) == (
+        'Set fan direction (Direction: Reverse)')
+    assert await async_service_label(hass, 'light', 'turn_on', 'en', {'color_name': 'blue'}) == 'Turn on light (Color name: Blue)'
+    # A service no two categories share keeps its bare name.
+    assert await async_service_label(hass, 'climate', 'set_temperature', 'en', {'temperature': 21}) == 'Set thermostat target temperature'

@@ -369,23 +369,51 @@ def _logbook_entry_visible(
     return permission in (Permission.READ, Permission.WRITE)
 
 
-def _logbook_context_scoped(entry: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
+def _logbook_entity_domains(hass: HomeAssistant) -> frozenset[str]:
+    """Every domain with a state or a registry entry: a dotted word outside them names no entity."""
+    domains = {state.domain for state in hass.states.async_all()}
+    return frozenset(domains | {entry.domain for entry in er.async_get(hass).entities.values()})
+
+
+def _logbook_context_scoped(
+    entry: dict, access_key: AccessKeyRecord, hass: HomeAssistant, domains: frozenset[str],
+) -> dict:
     """Keep what caused a logbook row only when the access key may see the cause.
 
     A hidden cause loses all its context fields: a name would disclose it and a redaction marker
-    would confirm it. A user ID is never returned. Every other text field has the entity IDs the
-    key may not read replaced, as an automation row names its trigger (`triggered by state of
-    lock.door`); a service name stays.
+    would confirm it. A user ID is never returned. Every other text field has the entity IDs in
+    `domains` the key may not read replaced, as an automation row names its trigger (`triggered
+    by state of lock.door`); a service name, and a dotted word in no entity domain (router.local),
+    stays. The state of a row's own entity, which the row filter judged, stays as get_state shows it.
     """
     cause = entry.get("context_entity_id")
     hidden = cause is not None and resolve_read(cause, access_key, hass) not in (Permission.READ, Permission.WRITE)
     keep = service_not_entity(hass)
     return {
-        key: redact_inaccessible_entity_ids_in_text(value, access_key, hass, keep=keep)
-        if isinstance(value, str) and key not in _LOGBOOK_ID_FIELDS else value
+        key: redact_inaccessible_entity_ids_in_text(value, access_key, hass, domains=domains, keep=keep)
+        if isinstance(value, str) and key not in _LOGBOOK_ID_FIELDS and not _own_state(entry, key) else value
         for key, value in entry.items()
         if key != "context_user_id" and not (hidden and key.startswith("context_"))
     }
+
+
+def _own_state(entry: dict, key: str) -> bool:
+    """Whether a field is the state of the row's own entity, which the row filter judged."""
+    return key == "state" and key in entry and isinstance(entry.get("entity_id"), str)
+
+
+def _logbook_rows_scoped(
+    rows: list[dict], access_key: AccessKeyRecord, hass: HomeAssistant, domains: frozenset[str],
+) -> Any:
+    """Every visible row with its context scoped and its values filtered; a row's own state stays."""
+    contexted = [_logbook_context_scoped(entry, access_key, hass, domains) for entry in rows]
+    filtered = filter_service_response(contexted, access_key, hass)
+    if not isinstance(filtered, list) or len(filtered) != len(contexted):
+        return filtered
+    return [
+        {**row, "state": entry["state"]} if isinstance(row, dict) and _own_state(entry, "state") else row
+        for row, entry in zip(filtered, contexted)
+    ]
 
 
 # Fields holding one ID that the row filter has already judged.
@@ -509,6 +537,7 @@ async def _tool_get_logbook(
         ), "invalid_request", "get_logbook"
     entity_permissions = dict(zip(entity_ids, requested_permissions[:len(entity_ids)]))
     device_permissions = dict(zip(device_ids, requested_permissions[len(entity_ids):]))
+    domains = _logbook_entity_domains(hass)
     scoped = [
         entry
         for entry in result
@@ -517,9 +546,7 @@ async def _tool_get_logbook(
             entry, access_key, hass, entity_permissions, device_permissions
         )
     ]
-    scoped = filter_service_response(
-        [_logbook_context_scoped(entry, access_key, hass) for entry in scoped], access_key, hass,
-    )
+    scoped = _logbook_rows_scoped(scoped, access_key, hass, domains)
     if not isinstance(scoped, list) or any(
         not isinstance(entry, dict)
         or not isinstance(entry.get("when"), (int, float))

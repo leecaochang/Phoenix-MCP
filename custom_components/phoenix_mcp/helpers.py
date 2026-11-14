@@ -113,8 +113,12 @@ def log_request(
     mesa_advisory: bool = False,
     stale_tools_advisory: bool = False,
     oauth_app: dict[str, str] | None = None,
+    uncertain: bool = False,
 ) -> None:
-    """Record an audit entry and update in-memory access key counters."""
+    """Record an audit entry and update in-memory access key counters.
+
+    ``uncertain`` marks a write that may have run, whose row is never folded.
+    """
     # Attribute the request to the access key's active settings preset, when one is
     # set. getattr-guarded for partial key objects.
     preset_name: str | None = None
@@ -139,6 +143,7 @@ def log_request(
         preset=preset_name,
         stale_tools_advisory=stale_tools_advisory,
         oauth_app=oauth_app,
+        uncertain=uncertain,
     )
     update_access_key_counter(data, access_key.id, outcome)
 

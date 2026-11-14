@@ -55,7 +55,7 @@ from .provider_constants import (
     AGENT_CHAT_ATTACHMENT_MAX_TOTAL_BYTES, AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS,
     AGENT_CHAT_MAX_TURN_OUTPUT_BYTES, AGENT_CHAT_PROGRESS_INTERVAL_SECONDS,
     AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS, AGENT_CHAT_STATUS_INTERVAL_SECONDS,
-    AGENT_CHAT_TOOL_RESULT_MAX_CHARS, AGENT_HEADLESS_CALL_SECONDS,
+    AGENT_CHAT_TOOL_RESULT_MAX_CHARS, AGENT_HEADLESS_CALL_SECONDS, AGENT_HEADLESS_LOCAL_CALL_SECONDS,
 )
 from .request_authority import AuthorityChangedError, household_authority
 from .routing.routing_statistics import provider_events
@@ -1756,6 +1756,13 @@ async def _stream_headless_round(
     return model
 
 
+def _headless_call_seconds(provider: ClaudeProvider | OpenAICompatProvider) -> float:
+    """The longest one headless model call may take; longer for a local Ollama server."""
+    if getattr(provider, "kind", "") == "ollama":
+        return AGENT_HEADLESS_LOCAL_CALL_SECONDS
+    return AGENT_HEADLESS_CALL_SECONDS
+
+
 async def _read_headless_round(
     run: _HeadlessRun, *, round_system: str, tools: list[dict], final_round: bool, iteration: int,
     usage: HeadlessUsage | None, final_note: bool,
@@ -1769,7 +1776,7 @@ async def _read_headless_round(
         tools=tools, options={"tool_choice": "none"} if final_note else {}, cancel=run.cancel,
         dispatch_started=run.dispatch_started,
         write_started=run.write_started, first_reply_seconds=run.first_reply_seconds,
-        call_seconds=AGENT_HEADLESS_CALL_SECONDS,
+        call_seconds=_headless_call_seconds(run.provider),
     ):
         etype = ev["type"]
         if etype == EV_INVALID_TOOLS:

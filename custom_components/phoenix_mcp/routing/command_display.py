@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 
 from .routing_tables import (
     COMMAND_ROUTING_NUMERIC_READ_DOMAINS, COMMAND_ROUTING_TRANSLATION_TIMEOUT_SECONDS,
-    COMMAND_ROUTING_READ_PERCENT_SCALES,
+    COMMAND_ROUTING_READ_PERCENT_SCALES, COMMAND_ROUTING_SHARED_SERVICES,
 )
 from ..entity_commands import attribute_display
 from ..locales import canonical_language
@@ -83,15 +83,51 @@ async def async_state_translations(hass: HomeAssistant, language: object) -> dic
         return {}
 
 
-async def async_service_label(hass: HomeAssistant, domain: str, service: str, language: object) -> str | None:
-    """HA's translated name for one service, or None when HA has none or cannot load it."""
+def _field_text(translated: dict[str, str], domain: str, service: str, key: str, value: object) -> str | None:
+    """One choice-valued service data field as HA words it ("Muted: No"), or None.
+
+    Numbers are left out: the reply's state check already covers them, and HA has no unit for them here.
+    """
+    attribute = f'component.{domain}.entity_component._.state_attributes.{key}'
+    name = translated.get(f'{attribute}.name') or translated.get(f'component.{domain}.services.{service}.fields.{key}.name')
+    if isinstance(value, bool):
+        states: tuple[str, ...] = ('true', 'on') if value else ('false', 'off')
+    elif isinstance(value, str):
+        states = (value,)
+    else:
+        return None
+    shown = next((label for state in states for label in (
+        translated.get(f'{attribute}.state.{state}'), translated.get(f'component.{domain}.selector.{key}.options.{state}'))
+        if isinstance(label, str) and label), None)
+    if shown is None and isinstance(value, str):
+        shown = value
+    return f'{name}: {shown}' if isinstance(name, str) and name and shown is not None else None
+
+
+async def async_service_label(hass: HomeAssistant, domain: str, service: str, language: object,
+                              data: dict | None = None) -> str | None:
+    """HA's translated name for one service, or None when HA has none or cannot load it.
+
+    A service several categories share (COMMAND_ROUTING_SHARED_SERVICES) is followed by its data
+    fields as HA words them, so a mute and an unmute do not sound the same.
+    """
+    resolved = canonical_language(language)
+    shared = (domain, service) in COMMAND_ROUTING_SHARED_SERVICES and isinstance(data, dict) and bool(data)
     try:
         async with asyncio.timeout(COMMAND_ROUTING_TRANSLATION_TIMEOUT_SECONDS):
-            translated = await translation.async_get_translations(hass, canonical_language(language), 'services', {domain})
+            translated = await translation.async_get_translations(hass, resolved, 'services', {domain})
+            if shared:
+                for category in ('entity_component', 'selector'):
+                    translated = {**translated, **await translation.async_get_translations(hass, resolved, category, {domain})}
     except (TimeoutError, HomeAssistantError, ValueError):
         return None
     label = translated.get(f'component.{domain}.services.{service}.name')
-    return label if isinstance(label, str) and label and len(label) <= 1024 else None
+    if not isinstance(label, str) or not label or len(label) > 1024:
+        return None
+    details = [text for key, value in (data or {}).items()
+               if shared and (text := _field_text(translated, domain, service, key, value))]
+    text = f"{label} ({', '.join(details)})" if details else label
+    return text if len(text) <= 1024 else label
 
 
 def state_label(translations: dict[str, str], domain: str, value: str, device_class: object = None) -> str | None:

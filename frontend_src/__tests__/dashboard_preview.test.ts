@@ -1,7 +1,7 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { collectConfigErrors, collectPreviewViews, DashboardPreview, singleCardPreviewConfig } from "../components/DashboardPreview";
+import { cardHasTemplate, collectConfigErrors, collectPreviewViews, DashboardPreview, singleCardPreviewConfig } from "../components/DashboardPreview";
 import { loadLovelaceResources } from "../utils/card_harvest";
 
 vi.mock("../utils/card_harvest", () => ({ loadLovelaceResources: vi.fn().mockResolvedValue(undefined) }));
@@ -255,5 +255,58 @@ describe("DashboardPreview custom card resources", () => {
     const builtIn = render(React.createElement(DashboardPreview, { config: { views: [{ cards: [{ type: "tile", entity: "light.x" }] }] } }));
     expect(builtIn.container.querySelector(".dash-preview-card-slot")).toBeTruthy();
     expect(loadLovelaceResources).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("DashboardPreview template cards", () => {
+  const built: unknown[] = [];
+  function defineRecordingHuiCard(): void {
+    if (!customElements.get("hui-card")) {
+      customElements.define("hui-card", class extends HTMLElement {});
+    }
+    const proto = customElements.get("hui-card")!.prototype as { config?: unknown };
+    Object.defineProperty(proto, "config", {
+      configurable: true,
+      set(value: unknown) { built.push(value); },
+      get() { return undefined; },
+    });
+  }
+
+  const plain = { type: "tile", entity: "light.a" };
+  const templated = [
+    { type: "markdown", content: "{{ states('lock.front') }}" },
+    { type: "markdown", content: "{% if true %}x{% endif %}" },
+    { type: "markdown", content: "{# note #}" },
+    { type: "vertical-stack", cards: [{ type: "markdown", content: "{{ 9 ** 9 }}" }] },
+    { type: "entities", entities: [{ entity: "light.a", name: "{{ now() }}" }] },
+    { type: "markdown", "{{ key }}": "x" },
+  ];
+
+  it.each(templated)("shows a pending card with Jinja as its text and never builds it: %j", async (card) => {
+    defineRecordingHuiCard();
+    built.length = 0;
+    const { container } = render(React.createElement(DashboardPreview, { config: { views: [{ cards: [card, plain] }] } }));
+    const tile = container.querySelector(".dash-preview-template-card")!;
+    expect(tile).toBeTruthy();
+    expect(tile.textContent).toContain("Template not previewed");
+    expect(tile.querySelector("pre")!.textContent).toBe(JSON.stringify(card, null, 2));
+    // Positive control: the plain card next to it is still built through hui-card.
+    await waitFor(() => expect(built).toEqual([plain]));
+  });
+
+  it("renders a card with Jinja when the caller draws a saved layout", async () => {
+    defineRecordingHuiCard();
+    built.length = 0;
+    const { container } = render(React.createElement(DashboardPreview, {
+      config: { views: [{ cards: [templated[0]] }] }, renderTemplates: true,
+    }));
+    expect(container.querySelector(".dash-preview-template-card")).toBeNull();
+    await waitFor(() => expect(built).toEqual([templated[0]]));
+  });
+
+  it("detects markers anywhere and nothing else", () => {
+    expect(cardHasTemplate(plain)).toBe(false);
+    expect(cardHasTemplate({ type: "markdown", content: "{ single } and [[[ js ]]]" })).toBe(false);
+    for (const card of templated) expect(cardHasTemplate(card)).toBe(true);
   });
 });

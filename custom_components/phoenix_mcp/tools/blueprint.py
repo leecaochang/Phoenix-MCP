@@ -38,12 +38,14 @@ from ..access_key_store import AccessKeyRecord
 from ..authoring_validation import async_template_refusal
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
+    _bind_reviewed,
     _gate,
     _noting_reviewed_actions,
     _read_text_capped,
     _record_version,
     _check_authority_before_dispatch,
     _recovery_failure,
+    _reviewed_conflict,
     _tool_error,
     _tool_refused_before_write,
     _tool_success,
@@ -223,15 +225,17 @@ def _parsed_blueprint(content: str) -> Any:
 
 
 async def _blueprint_template_refusal(
-    hass: HomeAssistant, content: str, data: PhoenixData, tool_name: str,
+    hass: HomeAssistant, content: str, data: PhoenixData, tool_name: str, current: str | None = None,
 ) -> tuple[dict, str, str] | None:
     """Refuse blueprint templates the template worker cannot compile and trial-render in time.
 
     Home Assistant compiles them when an automation or script built on the blueprint is
-    validated, which create and edit of those do before any approval exists.
+    validated, which create and edit of those do before any approval exists. Templates the
+    ``current`` source already holds are not checked again.
     """
     parsed = await hass.async_add_executor_job(_parsed_blueprint, content)
-    if refusal := await async_template_refusal(parsed, hass, data):
+    stored = await hass.async_add_executor_job(_parsed_blueprint, current) if current is not None else None
+    if refusal := await async_template_refusal(parsed, hass, data, stored):
         return _tool_error(refusal), "invalid_request", tool_name
     return None
 
@@ -397,7 +401,7 @@ def _canonical_blueprint_source(domain: str, content: str) -> str:
 
 def _blueprint_recovery_snapshot(domain: str, rel: str, content: str | None) -> dict:
     """Capture exact blueprint source only when textual secret scrubbing is lossless."""
-    if content is not None and redact_secrets_in_text(content) != content:
+    if content is not None and redact_secrets_in_text(content, reader=False) != content:
         raise ConfigurationRecoveryError("Blueprint source contains secret-shaped content and cannot be snapshotted safely.")
     return safe_snapshot({
         "snapshot_type": "blueprint_source", "schema": 1,
@@ -425,9 +429,9 @@ async def _blueprint_recovery_precheck(
 
 
 async def _build_diff_blueprint(
-    args: dict, hass: HomeAssistant, op: str
+    args: dict, hass: HomeAssistant, op: str, *, reviewed: str | None = None
 ) -> dict:
-    """Approval diff for a blueprint write.
+    """Approval diff for a blueprint write; `reviewed` is the source its approval is bound to.
 
     For an edit or delete the consumer list is the point: a small YAML diff can
     rewire every automation or script built from the blueprint.
@@ -435,7 +439,9 @@ async def _build_diff_blueprint(
     domain = str(args.get("domain") or "").strip().lower()
     resolved = await hass.async_add_executor_job(_resolve_blueprint_path, hass, domain, args.get("path"))
     rel = resolved[1] if resolved else str(args.get("path") or "")
-    before = await _read_blueprint_source(hass, resolved[0]) if resolved else None
+    before = reviewed
+    if before is None and resolved:
+        before = await _read_blueprint_source(hass, resolved[0])
     content = args.get("content") if isinstance(args.get("content"), str) else None
     consumers = await hass.async_add_executor_job(
         _blueprint_consumers, hass, domain, rel) if rel else []
@@ -501,20 +507,22 @@ async def _tool_edit_blueprint(
         args, hass, "edit_blueprint", needs_content=True)
     if pre is not None:
         return pre
-    pre = await _blueprint_template_refusal(hass, args["content"], data, "edit_blueprint")
-    if pre is not None:
-        return pre
     current = await _read_blueprint_source(hass, target)
     if current is None:
         return _tool_error("Blueprint not found."), "not_found", "edit_blueprint"
+    pre = await _blueprint_template_refusal(hass, args["content"], data, "edit_blueprint", current)
+    if pre is not None:
+        return pre
     pre = await _blueprint_recovery_precheck(hass, target, args["domain"], rel, args["content"], "edit_blueprint")
     if pre is not None:
         return pre
     actions = await hass.async_add_executor_job(_added_blueprint_actions, args["content"], current)
+    args = _bind_reviewed(args, current)
     blocked = await _gate(
         _blueprint_gate_cap(access_key, args.get("domain")), access_key, hass, data,
         tool_name="edit_blueprint", args=args, request_id=request_id,
-        client_ip=client_ip, diff=_noting_reviewed_actions(lambda: _build_diff_blueprint(args, hass, "edit"), actions),
+        client_ip=client_ip,
+        diff=_noting_reviewed_actions(lambda: _build_diff_blueprint(args, hass, "edit", reviewed=current), actions),
         review=bool(actions),
     )
     if blocked is not None:
@@ -534,15 +542,17 @@ async def _tool_delete_blueprint(
         args, hass, "delete_blueprint", needs_content=False)
     if pre is not None:
         return pre
-    if await _read_blueprint_source(hass, target) is None:
+    current = await _read_blueprint_source(hass, target)
+    if current is None:
         return _tool_error("Blueprint not found."), "not_found", "delete_blueprint"
     pre = await _blueprint_recovery_precheck(hass, target, args["domain"], rel, None, "delete_blueprint")
     if pre is not None:
         return pre
+    args = _bind_reviewed(args, current)
     blocked = await _gate(
         _blueprint_gate_cap(access_key, args.get("domain")), access_key, hass, data,
         tool_name="delete_blueprint", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_blueprint(args, hass, "delete"),
+        client_ip=client_ip, diff=lambda: _build_diff_blueprint(args, hass, "delete", reviewed=current),
     )
     if blocked is not None:
         return blocked
@@ -571,6 +581,9 @@ async def _save_blueprint(
         return _tool_error(
             "A blueprint already exists at that path; use edit_blueprint to replace it."
         ), "invalid_request", tool_name
+    stale = _reviewed_conflict(args, before, tool_name) if allow_override else None
+    if stale is not None:
+        return stale
     consumers = await hass.async_add_executor_job(_blueprint_consumers, hass, domain, rel)
     resource = f"blueprint:{domain}/{rel}"
     recovery = data.config_recovery
@@ -675,6 +688,9 @@ async def _execute_delete_blueprint(
     before = await _read_blueprint_source(hass, target)
     if before is None:
         return _tool_error("Blueprint not found."), "not_found", "delete_blueprint"
+    stale = _reviewed_conflict(args, before, "delete_blueprint")
+    if stale is not None:
+        return stale
     resource = f"blueprint:{domain}/{rel}"
     recovery = data.config_recovery
     sent = None

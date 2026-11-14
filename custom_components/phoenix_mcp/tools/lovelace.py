@@ -5,8 +5,8 @@ placement, the same information the writes edit. set_dashboard_config replaces a
 card ops and patch_dashboard carry only the change, because resending a whole dashboard in one tool
 call blows weaker providers' output limits. All guard with an optimistic-lock content_hash, checked
 pre-gate and at apply time, and bind what their review showed, refused at apply time once changed.
-A layout is active content: cards render templates and fetch URLs with each viewer's authority, so
-a write adding any of that needs a person's review even under Allow (_active_content), and Jinja it
+A layout is active content: cards render templates, run custom card code and fetch URLs with each
+viewer's authority, so a write adding any of that needs a person's review even under Allow (_active_content), and Jinja it
 adds must first pass the template worker (_dashboard_template_refusal). This module never imports
 the dispatcher.
 """
@@ -25,9 +25,9 @@ from homeassistant.helpers import entity_registry as er
 
 from ..card_catalog import CardEntry, CatalogFreshness, assess_freshness
 from ..const import (
+    APPROVAL_REVIEWED_HASH_KEY,
     BUILTIN_CARD_TYPES,
     CAP_DENY,
-    DASHBOARD_CODE_CARD_TYPES,
     DASHBOARD_SCRUB_MAX_DEPTH,
     DASHBOARD_SEARCH_MAX_MATCHES,
     DASHBOARD_SEARCH_MAX_WARNINGS,
@@ -50,7 +50,7 @@ from ..policy_engine import Permission, filter_service_response, is_sensitive_ke
 from ..access_key_store import AccessKeyRecord
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..request_authority import AuthorityChangedError, mark_dispatch_started, write_boundary
-from ..template_render import TemplateRenderError, async_check_caller_templates
+from ..template_render import TemplateRenderError, TemplateWorkerBusyError, async_check_caller_templates
 from ..template_scope import is_template
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
@@ -562,8 +562,9 @@ def _active_items(layout: Any) -> set[tuple[str, str]]:
         node = stack.pop()
         if isinstance(node, dict):
             card_type = node.get("type")
-            if (isinstance(card_type, str) and card_type.startswith("custom:")
-                    and card_type[len("custom:"):] in DASHBOARD_CODE_CARD_TYPES):
+            # Any custom element may run code from its own configuration in the viewer's browser,
+            # and no marker or name list shows which do; its whole configuration is the evidence.
+            if isinstance(card_type, str) and card_type.startswith("custom:"):
                 found.add((card_type, json.dumps(node, sort_keys=True, default=str)))
             stack.extend(node.keys())
             stack.extend(node.values())
@@ -581,8 +582,8 @@ def _active_items(layout: Any) -> set[tuple[str, str]]:
 def _active_content(written: Any, current: Any) -> list[str]:
     """What a layout write adds that renders with each viewer's authority, for review.
 
-    Templates, code-running custom cards and absolute URLs already in the stored layout give no
-    new reach, so a write keeping them is not flagged; anything new or changed is.
+    Templates, custom cards and absolute URLs already in the stored layout give no new reach, so a
+    write keeping them unchanged is not flagged; anything new or changed is.
     """
     added = _active_items(written) - _active_items(current)
     labels = sorted({label for label, _ in added})
@@ -617,6 +618,8 @@ async def _dashboard_template_refusal(
     added = sorted(_jinja_strings(written) - _jinja_strings(current))
     try:
         await async_check_caller_templates(added, hass, data)
+    except TemplateWorkerBusyError as err:
+        return _tool_refused_before_write(str(err)), "invalid_request", tool_name
     except TemplateRenderError as err:
         return _tool_refused_before_write(
             f"Templates in this dashboard change were refused before any review: {err} Nothing was written."
@@ -1349,18 +1352,45 @@ async def _dashboard_card_current(
     return current
 
 
-def _reviewed_card_target(config: dict, op: str, args: dict) -> Any:
+def _reviewed_card_target(config: dict, op: str, args: dict, count: int | None = None) -> Any:
     """What a card op's review shows of the layout: the addressed card, or for an add its card list.
 
-    None when the address no longer resolves.
+    An add with ``count`` takes only that many leading cards, so cards appended after the review do
+    not count. None when the address no longer resolves or the list is shorter than ``count``.
     """
     cards, _ = _resolve_dashboard_cards(copy.deepcopy(config), args.get("view_index"), args.get("section_index"))
     if cards is None:
         return None
     if op == "add":
-        return {"cards": cards}
+        if count is None:
+            return {"cards": cards}
+        return {"cards": cards[:count]} if count <= len(cards) else None
     index = args.get("card_index")
     return {"card": cards[index]} if _card_index_ok(index) and 0 <= index < len(cards) else None
+
+
+# An add's binding is "<card count at review>:<hash of those cards>": the cards the review showed
+# must still lead the list in the same order, while cards appended since leave it valid, so queued
+# adds to one list do not refuse each other.
+_ADD_BINDING_RE = re.compile(r"(\d{1,9}):(.+)", re.S)
+
+
+def _bind_card_op(args: dict, config: dict, op: str) -> dict:
+    """Return args bound to what the card op's review shows, replacing any caller-supplied value."""
+    reviewed = _reviewed_card_target(config, op, args)
+    bound = _bind_reviewed(args, reviewed)
+    if op == "add" and isinstance(reviewed, dict):
+        bound[APPROVAL_REVIEWED_HASH_KEY] = f"{len(reviewed['cards'])}:{bound[APPROVAL_REVIEWED_HASH_KEY]}"
+    return bound
+
+
+def _card_op_conflict(args: dict, config: dict, op: str, tool_name: str) -> tuple[dict, str, str] | None:
+    """Refuse a card op whose reviewed card, or an add's reviewed leading cards, changed or moved."""
+    bound = args.get(APPROVAL_REVIEWED_HASH_KEY)
+    if op == "add" and isinstance(bound, str) and (match := _ADD_BINDING_RE.fullmatch(bound)):
+        reviewed = _reviewed_card_target(config, op, args, int(match.group(1)))
+        return _reviewed_conflict({**args, APPROVAL_REVIEWED_HASH_KEY: match.group(2)}, reviewed, tool_name)
+    return _reviewed_conflict(args, _reviewed_card_target(config, op, args), tool_name)
 
 
 # Version-summary key per card op, so the Changes tab's "added/edited/deleted"
@@ -1447,7 +1477,7 @@ async def _tool_dashboard_card(
         return _tool_error(reason), "invalid_request", tool_name
     if refusal := await _dashboard_template_refusal(new_config, current, hass, data, tool_name):
         return refusal
-    args = _bind_reviewed(args, _reviewed_card_target(current, op, args))
+    args = _bind_card_op(args, current, op)
     active = _active_content(new_config, current)
     blocked = await _gate(
         "cap_lovelace_write", access_key, hass, data,
@@ -1467,9 +1497,9 @@ async def _execute_dashboard_card(
     current = await _dashboard_card_current(args, hass, tool_name)
     if isinstance(current, tuple):
         return current
-    # The card the review showed must still sit at that index, and an add's card list must be
-    # unchanged, or an approved op would act on a card nobody reviewed.
-    stale = _reviewed_conflict(args, _reviewed_card_target(current, op, args), tool_name)
+    # The card the review showed must still sit at that index, and the cards an add's review showed
+    # must still lead its list, or an approved op would act on a card nobody reviewed.
+    stale = _card_op_conflict(args, current, op, tool_name)
     if stale is not None:
         return stale
     new_config, prior, reason = _apply_dashboard_card_op(current, op, args)
@@ -1638,6 +1668,39 @@ def _apply_dashboard_patch(config: dict, args: dict) -> tuple[dict | None, list[
     return new_config, priors, None
 
 
+def _reviewed_patch_target(config: dict, args: dict) -> list | None:
+    """What a patch's review shows of the layout: per change, its value and the list items it steps through.
+
+    Each change is read on the layout as left by the changes before it. A change of one view or
+    card leaves another's binding untouched, while a reorder or edit under any path changes it.
+    None when a change no longer applies.
+    """
+    changes = args.get("changes")
+    if not isinstance(changes, list) or not changes:
+        return None
+    layout = copy.deepcopy(config)
+    witnesses: list[Any] = []
+    for change in changes:
+        change = change if isinstance(change, dict) else {}
+        path = change.get("path")
+        container, key, reason = resolve_json_path(layout, path)
+        if reason is not None or not isinstance(path, list):
+            return None
+        node: Any = layout
+        stepped: list[Any] = []
+        for segment in path[:-1]:
+            node = node[segment]
+            if isinstance(segment, int):
+                stepped.append(node)
+        if isinstance(container, list) or key in container:
+            witnesses.append({"value": container[key], "stepped": stepped})
+        else:
+            witnesses.append({"absent": True, "stepped": stepped})
+        if _apply_one_patch(layout, change)[1] is not None:
+            return None
+    return witnesses
+
+
 def _patch_summary_fields(args: dict, label: str) -> dict:
     """One-change summaries keep their own wording; several are counted."""
     changes = args.get("changes") or []
@@ -1713,7 +1776,7 @@ async def _tool_patch_dashboard(
         return _tool_error(reason), "invalid_request", tool
     if refusal := await _dashboard_template_refusal(new_config, current, hass, data, tool):
         return refusal
-    args = _bind_reviewed(args, current)
+    args = _bind_reviewed(args, _reviewed_patch_target(current, args))
     active = _active_content(new_config, current)
     blocked = await _gate(
         "cap_lovelace_write", access_key, hass, data,
@@ -1735,8 +1798,9 @@ async def _execute_patch_dashboard(
     current = await _dashboard_card_current(args, hass, tool)
     if isinstance(current, tuple):
         return current
-    # Paths address the layout the review showed; any change since makes them address something else.
-    stale = _reviewed_conflict(args, current, tool)
+    # Each path must still address what the review showed: the same value, reached through the same
+    # list items. Changes elsewhere in the dashboard, another view or card, leave it valid.
+    stale = _reviewed_conflict(args, _reviewed_patch_target(current, args), tool)
     if stale is not None:
         return stale
     new_config, _, reason = _apply_dashboard_patch(current, args)

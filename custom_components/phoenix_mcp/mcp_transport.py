@@ -598,8 +598,9 @@ async def _mcp_sse_response(
 
     The payload matches the plain JSON path, with a frame every MCP_SSE_KEEPALIVE_SECONDS so
     an intermediary does not drop a held gate. Before each such frame the request's authority
-    is checked; once it ends the stream closes with the result withheld, cancelling modern
-    dispatch as a disconnect does. Only this function writes to the stream.
+    (not its OAuth token's hour) is checked; once it ends the stream closes with the result
+    withheld, cancelling modern dispatch as a disconnect does. Only this function writes to
+    the stream.
     """
     authority = request_authority.get()
     resp = web.StreamResponse(
@@ -1456,7 +1457,7 @@ class PhoenixMcpView(PhoenixView):
         )
         request_authority.set(authority)
         try:
-            access_key = authority.current_access_key()
+            access_key = authority.admit()
         except AuthorityChangedError:
             return _authority_lost_response(
                 hass, data, access_key, request_id, client_ip, method="DELETE", resource="mcp:session",
@@ -1546,7 +1547,7 @@ class PhoenixMcpView(PhoenixView):
         if isinstance(chunks, web.Response):
             return chunks
         try:
-            post.access_key = authority.current_access_key()
+            post.access_key = authority.admit()
         except AuthorityChangedError:
             return _authority_lost_response(
                 hass, data, access_key, request_id, client_ip, method="POST", resource="/api/phoenix-mcp",

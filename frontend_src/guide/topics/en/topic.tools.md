@@ -101,11 +101,11 @@ Every entity the trigger or condition reaches must be one the key can read. That
 
 A condition's templates run in the same separate, limited process as Template render, on a copy of the states the key can read. Templates must name entities directly, such as `states('sensor.x')`.
 
-Templates in a trigger need {{label:caps.cap_automation_write.label}}, because Home Assistant runs them on every change during the test. They're first tried in that separate process, like templates in a new automation. Without that capability, test the template as a condition.
+Templates in a trigger need {{label:caps.cap_automation_write.label}} set to Allow, because Home Assistant runs them itself on every change during the test, with no review. They're first tried in that separate process. Otherwise, test the template as a condition.
 
 Event, MQTT, webhook and conversation triggers are refused, because no key's scope limits what they reach.
 
-Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read); template triggers also need [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write)
+Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read); template triggers also need [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) set to Allow
 
 ## Home Companion {#home-companion}
 
@@ -207,6 +207,8 @@ Template functions that need Home Assistant itself, such as area or device looku
 
 Before Home Assistant checks the templates in a new or changed automation, script or Template helper, or in a configuration an agent validates, they're tried in that same process. A template that runs too long or stops the process is refused, so it can't stall or stop Home Assistant.
 
+Only templates a change adds are tried; ones already saved aren't tried again. If that process stays busy with other requests, the agent is asked to retry, and nothing changes.
+
 Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read), [{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write), [{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render), [{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read), [{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)
 
 ## Discovery and diagnostics {#diagnostics}
@@ -215,7 +217,7 @@ These tools only read. They help an agent find its way before it acts.
 
 - Search & discovery searches and describes entities, areas and how things relate, compares them, and finds what actions are available.
 - Registry read lists areas, floors, zones, devices, labels, automations, scripts, scenes and helpers.
-- Automation traces reads how automations ran. A step that checked an entity the key can't read shows no values. The automation's settings, and the variables of a run a webhook started, also need {{label:caps.cap_automation_write.label}} or {{label:caps.cap_script_write.label}}.
+- Automation traces reads how automations ran. A step that used an entity the key can't read, even through a variable, shows no values. The settings, and what a webhook-started run recorded, also need {{label:caps.cap_automation_write.label}} or {{label:caps.cap_script_write.label}}.
 - Diagnostics checks the configuration and reads system health, repairs, radio networks and the ESPHome overview.
 
 A configuration check names the file and line only when YAML configuration isn't Deny.
@@ -226,7 +228,7 @@ Allowed by: [{{label:caps.cap_search.label}}](guide:window.capabilities#search),
 
 Read files lets an agent read text files in the www, themes and custom_templates folders, up to 1 MiB each. Folder lists come in pages, 500 entries by default and up to 1,000. It can't write these files.
 
-YAML configuration lets an agent read your YAML files, apart from any file with secret in its name, the esphome folder and hidden files. A file name with characters outside plain English letters is refused too.
+YAML configuration lets an agent read your YAML files, apart from any file with secret in its name, the esphome folder and hidden files. Names in any language work, but a file name with control characters or hidden marks that change the text direction is refused.
 
 Values under names that suggest a secret show as `<redacted>`, and so do comments that mention one, but a password under an ordinary name is visible. A file with a YAML mistake isn't shown; the agent gets the line to fix instead. No tool writes YAML configuration.
 
@@ -238,7 +240,7 @@ Agents read and search ESPHome device configuration, with passwords, keys, every
 
 A value from secrets.yaml is masked wherever it appears, even inside a web address or a comment. Entity IDs the key can't read show as `<redacted-entity>`, in files and in the Device Builder's output and logs. No agent can read or install a file with secret in its name.
 
-So is a substitution a password or key uses, and one the file defines but never uses itself, since a package may use it as a key.
+So is a substitution a password or key uses, directly or through another substitution. One that only a package uses isn't masked unless its name says password or key, so keep such values in secrets.yaml.
 
 Phoenix works out a file's device from the file name, the device name it states and any `use_address` or static IP. A key limited to some devices reads only their files. A file that states its own name and matches no device follows the capability alone.
 

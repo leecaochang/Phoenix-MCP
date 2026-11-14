@@ -215,7 +215,7 @@ PATCH 拒绝不在此表中的任何字段，且 `expires_at` 根本无法更改
 
 `POST /access-keys/{id}/rotate` 为密钥提供新值，不接受正文。旧值以及该密钥的每个 OAuth 登录都会立即失效。密钥保留其速率限制状态和计数。
 
-轮换还会取消该密钥所有等待中的审批，原因为 `access_key_rotated`，因为持有旧值的人可能排队了这些请求。
+轮换还会取消应用用该密钥排队的所有审批，原因为 `access_key_rotated`，因为持有旧值的人可能排队了这些请求。来自语音智能体、Assist 和 AI 任务的请求会保留。
 
 响应为 `200`，包含记录以及 `access_key`，即新值。与创建时一样，Phoenix 只显示一次。Phoenix 触发 `phoenix_mcp_access_key_rotated` 事件，包含 `access_key_id`、`access_key_name`、`rotated_by` 和 `timestamp`。
 
@@ -279,6 +279,7 @@ POST   /api/phoenix-mcp/admin/oauth/requests/{request_id}/deny
 |---|---|---|---|
 | 503 | `service_unavailable` | `adminError.oauthKillSwitch` | 紧急停止开关已开启。移除登录仍然可用。 |
 | 404 | `not_found` | `adminError.oauthRequestExpired` | 请求已结束、已得到答复或从未存在。 |
+| 404 | `oauth_busy` | `adminError.oauthBusy` | 仅限 `GET`：该应用的地址已有过多等待中的请求，因此此请求从未被保留。应用不会得知这一点。 |
 | 400 | `invalid_request` | `adminError.oauthClientNotVerified` | 批准一个应用未经验证的请求。 |
 | 400 | `invalid_request` | `adminError.oauthKeyNotEligible` | 密钥不存在、已关闭 OAuth，或没有开放的登录窗口期。 |
 | 409 | `conflict` | `adminError.oauthSignInLimit` | 密钥已有 `max` 个登录。 |

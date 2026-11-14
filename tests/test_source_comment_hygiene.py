@@ -46,9 +46,11 @@ RECORD_REFERENCE = re.compile(
 PROTOCOL_REVISIONS = {"2025-03-26", "2026-07-28"}
 
 # Internal context no tracked file may carry, in comments or strings: review finding ids
-# such as X-QZ-1 or Q8-FOO-BAR-02, internal notes, and a home directory.
+# such as X-QZ-1, Q8-FOO-BAR-02 or Q7B-FOO-02, merged finding names such as M-FOO-BAR,
+# internal notes, and a home directory.
 INTERNAL_CONTEXT = re.compile(
-    r"\b[A-Z]\d{0,2}-(?=[A-Z0-9]*[A-Z][A-Z0-9]*[A-Z])[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*-\d+\b"
+    r"\b[A-Z](?:\d{1,2}[A-Z]?)?-(?=[A-Z0-9]*[A-Z][A-Z0-9]*[A-Z])[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*-\d+\b"
+    r"|\bM-[A-Z][A-Z0-9]{2,}(?:-[A-Z0-9]+)*\b"
     r"|docs-internal/|\bBACKLOG\.md\b|/(?:Users|home)/[a-z][a-z0-9_.-]*/"
 )
 # Fixture values the scan would otherwise flag, each one a deliberate example.
@@ -211,6 +213,9 @@ def test_no_tracked_file_carries_a_private_literal() -> None:
     "// fixes X-QZ-1 from round 3\n",
     "// see K4-WIDGET-03 and Z9-ZORP-01\n",
     "msg = 'see Q8-FOO-BAR-07'\n",
+    "# see Q7B-WIDGET-PART-04 and K3A-ZORP-11\n",
+    "msg = 'M-ZORPLE follow-up'\n",
+    "// the M-WIDGET-FLOW repair\n",
     "// rules in docs-internal/agents/guide.md\n",
     "// copied from /Users/someone/Documents/project/x.ts\n",
     "// smoke-tested on the test server, see BACKLOG.md\n",
@@ -225,6 +230,7 @@ def test_the_tracked_scan_finds_internal_context(text: str) -> None:
     "encoding = 'UTF-8'; header = 'X-Frame-Options'\n",
     "path = '/Users/private/secret.txt'  # the scrub fixture\n",
     "token = 'phx_' + 'a-b-1'\n",
+    "license = 'CC-BY-4.0'; size = 'M-2'\n",
 ])
 def test_the_tracked_scan_leaves_ordinary_text(text: str) -> None:
     assert _internal_context(text) == []

@@ -66,13 +66,16 @@ def _stored_text(value: Any, limit: int) -> bool:
 
 
 def _stored_value(value: Any) -> Any:
-    """A capability value fit to store, or None when it is not."""
+    """A capability value fit to store, or None when it is not.
+
+    An empty string is kept: `thinking_off: ""` says the model cannot stop thinking.
+    """
     if isinstance(value, bool):
         return value
     if isinstance(value, int):
         return value if abs(value) <= 9_007_199_254_740_991 else None
     if isinstance(value, str):
-        return value if _stored_text(value, AGENT_CHAT_MAX_MODEL_ID_LENGTH) else None
+        return value if value == "" or _stored_text(value, AGENT_CHAT_MAX_MODEL_ID_LENGTH) else None
     if isinstance(value, list) and len(value) <= _CAPABILITY_LIST_ITEMS:
         kept = [item for item in value if _stored_text(item, AGENT_CHAT_MAX_MODEL_ID_LENGTH)]
         return kept if len(kept) == len(value) else None

@@ -2554,6 +2554,16 @@ select.input:not(.agentcli-select) { flex: 0 0 auto; width: clamp(10rem, 33%, 18
   border: 1px dashed var(--phx-border); border-radius: var(--phx-radius-xs);
   padding: 10px; font-size: 12px; color: var(--phx-text-2); font-style: italic;
 }
+/* A pending card with a template, shown as its configuration text. Phoenix chrome, so own colours. */
+.dash-preview-template-card {
+  border: 1px dashed var(--phx-border); border-radius: var(--phx-radius-xs);
+  padding: 10px; background: var(--phx-surface); color: var(--phx-text); min-width: 0;
+}
+.dash-preview-template-note { margin: 0 0 6px; font-size: 12px; color: var(--phx-text-2); font-style: italic; }
+.dash-preview-template-source {
+  margin: 0; font-family: var(--phx-mono); font-size: 12px; line-height: 1.4;
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto;
+}
 /* Config errors extracted from the rendered cards, re-surfaced OUTSIDE the
    inert region so the text is selectable and the Copy button clickable. */
 .dash-preview-error-panel {

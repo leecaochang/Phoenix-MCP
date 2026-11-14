@@ -116,6 +116,51 @@ class TestCancelledWrite:
         assert len(data.versions.list_for("script", "alpha")) == 1
         assert len(data.versions.list_for("script", "beta")) == 1
 
+    async def test_a_hung_cancelled_write_releases_the_lock_after_its_bound(self, hass, config_dir):
+        """Repeated cancels do not shorten the wait; at the bound the lock goes and no version is recorded."""
+        _routed(config_dir)
+        data = _data()
+        real_write = yaml_includes.write_utf8_file_atomic
+        started, release = threading.Event(), threading.Event()
+
+        def hung_first_write(path, text):
+            if not started.is_set():
+                started.set()
+                release.wait(5)
+            real_write(path, text)
+
+        try:
+            with patch.object(yaml_includes, "write_utf8_file_atomic", new=hung_first_write), \
+                    patch.object(authoring, "_CANCELLED_WRITE_WAIT_SECONDS", 0.3):
+                one = asyncio.ensure_future(authoring._execute_edit_script(
+                    {"script_id": "alpha", "config": {"alias": "Alpha edited", "sequence": [{"delay": 2}]}},
+                    _key(), hass, data))
+                while not started.is_set():
+                    await asyncio.sleep(0.01)
+                for _ in range(3):
+                    one.cancel()
+                    await asyncio.sleep(0.02)
+                assert not one.done()
+                two = asyncio.ensure_future(authoring._execute_edit_script(
+                    {"script_id": "beta", "config": {"alias": "Beta edited", "sequence": [{"delay": 3}]}},
+                    _key(), hass, data))
+                async with asyncio.timeout(3):
+                    with pytest.raises(asyncio.CancelledError):
+                        await one
+                    result = await two
+                assert result[1] == "allowed", result
+                assert not release.is_set()
+        finally:
+            release.set()
+        # The stalled thread's own file replace still lands; the job that would record it is gone.
+        async with asyncio.timeout(3):
+            while "Alpha edited" not in (config_dir / "scripts.yaml").read_text():
+                await asyncio.sleep(0.01)
+        await asyncio.sleep(0.1)
+        await hass.async_block_till_done()
+        assert data.versions.list_for("script", "alpha") == []
+        assert len(data.versions.list_for("script", "beta")) == 1
+
     async def test_cancelled_before_the_lock_writes_nothing(self, hass, config_dir):
         """A request cancelled while queued for the lock never starts its write."""
         _routed(config_dir)

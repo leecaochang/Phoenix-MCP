@@ -65,6 +65,9 @@ async def test_a_dotted_reference_to_a_hidden_entity_is_redacted(hass, text):
     "homeassistant.components.sensor.recorder: compiling statistics",
     "aiohttp.client_exceptions.ClientConnectorError at 192.168.1.10 version 2026.11.0",
     "trigger.to_state.state is on",
+    "entity_id = event.data.get('entity_id')",
+    "camera.stream.source and notify.mobile_app.send",
+    "time.sleep.blocking, select.option.value, image.png.bak, sensor.yaml.bak, button.press.service",
 ])
 async def test_readable_and_non_entity_chains_stay(hass, text):
     _home(hass)
@@ -104,6 +107,33 @@ def test_the_log_scrub_keeps_what_holds_no_credential():
     assert _scrub_log_text("password: !secret wifi") == "password: !secret wifi"
 
 
+@pytest.mark.parametrize("name", ["user_keyboard_layout", "cookies_enabled", "accept_cookies", "steam_appid"])
+async def test_a_name_holding_a_credential_word_is_not_a_credential(hass, name):
+    from custom_components.phoenix_mcp.policy_engine import is_sensitive_key, scrub_attributes
+
+    assert not is_sensitive_key(name)
+    assert _scrub_log_text(f"{name}=us") == f"{name}=us"
+    assert scrub_attributes({name: "us"}, _key(), hass) == {name: "us"}
+    for credential in ("cookie", "Set-Cookie", "user_key", "appid"):
+        assert is_sensitive_key(credential)
+
+
+@pytest.mark.parametrize("value", [
+    "{{ trigger.webhook_id == 'garage' }}",
+    "http://homeassistant.local:8123/api/webhook/garage-door",
+    "webhook_id: garage-door",
+])
+def test_a_recovery_copy_keeps_a_webhook_id_that_readers_mask(value):
+    from custom_components.phoenix_mcp.config_recovery import safe_snapshot
+
+    assert redact_secrets_in_text(value) != value
+    assert redact_secrets_in_text(value, reader=False) == value
+    assert safe_snapshot({"id": "a", "actions": [{"data": {"text": value}}], "webhook_id": "garage-door"})
+    hooks = "https://hooks.slack.com/services/T000/B000/XXXXsecret"
+    with pytest.raises(Exception, match="credential"):
+        safe_snapshot({"id": "a", "actions": [{"data": {"url": hooks}}]})
+
+
 def test_configuration_files_mask_the_keys_device_files_do():
     masked = mask_yaml_text(
         "notify:\n  - platform: pushover\n    user_key: uk-1\n    appid: ap-2\n    consumer_key: ck-3\n"
@@ -129,29 +159,41 @@ def test_a_substitution_behind_a_credential_is_masked():
         "  part: partpartpart\n"
         '  pw_full: "x${part}"\n'
         "  pkg_only: used-by-a-package\n"
+        "  relay_pin: GPIO12\n"
+        "  pkg_api_key: hunter33word\n"
         "esphome:\n  name: ${name}\n"
         "api:\n  encryption:\n    key: ${enc}\n"
         "ota:\n  - platform: esphome\n    password: $ota_word\n"
         "wifi:\n  password: ${pw_full}\n"
-        "packages:\n  common: !include\n    file: common.yaml\n    vars:\n      wifi_word: hunter22\n"
+        "packages:\n  common: !include\n    file: common.yaml\n    vars:\n      friendly: Kitchen Plug\n"
+        "      ota_password: hunter22\n"
     )
     masked, paths = redact_esphome_text(doc)
-    for secret in (_KEY, "otaotaota9", "partpartpart", "used-by-a-package", "hunter22"):
+    for secret in (_KEY, "otaotaota9", "partpartpart", "hunter22", "hunter33word"):
         assert secret not in masked
-    assert "name: rf-blaster1" in masked
+    # A substitution or package variable no credential refers to stays, though this file never uses it.
+    for kept in ("name: rf-blaster1", "pkg_only: used-by-a-package", "relay_pin: GPIO12", "friendly: Kitchen Plug"):
+        assert kept in masked
     assert {"substitutions.enc", "substitutions.ota_word", "substitutions.part"} <= set(paths)
-    # The values join the scrub of Builder output too.
+    # The values join the scrub of Builder output too; the readable ones do not.
     assert _KEY in inline_secret_values(doc)
+    assert not {"used-by-a-package", "Kitchen Plug", "rf-blaster1"} & inline_secret_values(doc)
 
 
 def test_folded_names_and_hidden_characters_are_refused():
     refused = (
-        "ſecrets.yaml", "ſECRETS.yaml", "packages/ſecrets.yaml", "secr\u200bets.yaml",
-        "packages/door\u202eamly.yaml", "door\u200d.yaml", "door\x07.yaml", "door\u0378.yaml",
+        "ſecrets.yaml", "ſECRETS.yaml", "packages/ſecrets.yaml", "secr\u200bets.yaml", "secrets\u00ad.yaml",
+        "packages/door\u202eamly.yaml", "door\u2066.yaml", "door\x07.yaml", "door\u0378.yaml", "door\u2028.yaml",
+        "\u200b.storage/core.yaml",
     )
     for name in refused:
         assert not esphome_rel_path_ok(name), name
-    for name in ("door.yaml", "packages/küche.yaml", "厨房/灯.yaml", "ﬁle.yaml", "eſphome/door.yaml"):
+    readable = (
+        "door.yaml", "packages/küche.yaml", "厨房/灯.yaml", "ﬁle.yaml", "eſphome/door.yaml",
+        "packages/\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645.yaml", "packages/a\u00a0b.yaml",
+        "\U0001F468\u200d\U0001F469.yaml", "door\u00ad.yaml",
+    )
+    for name in readable:
         assert esphome_rel_path_ok(name), name
 
 
@@ -189,9 +231,11 @@ async def test_get_yaml_config_reads_printable_non_ascii_names(hass, config_dir)
     (config_dir / "packages").mkdir()
     (config_dir / "packages" / "küche.yaml").write_text("light_level: 3\n")
     (config_dir / "厨房.yaml").write_text("fan_speed: 2\n")
+    persian = "packages/\u0622\u0634\u067e\u0632\u200c\u062e\u0627\u0646\u0647.yaml"
+    (config_dir / persian).write_text("oven_mode: 4\n")
     os.link(config_dir / "secrets.yaml", config_dir / "密钥.yaml")
     key = _key(cap_yaml_edit="allow")
-    for name, value in (("packages/küche.yaml", "light_level"), ("厨房.yaml", "fan_speed")):
+    for name, value in (("packages/küche.yaml", "light_level"), ("厨房.yaml", "fan_speed"), (persian, "oven_mode")):
         content, outcome, _ = await _call_tool("get_yaml_config", {"file": name}, key, hass, _yaml_data())
         assert outcome == "allowed", name
         assert value in content["content"][0]["text"]
@@ -227,6 +271,27 @@ async def test_the_audit_summary_answers_a_hidden_entity_as_not_found(hass):
     assert listed == ["set_integration_log_level"]
     _content, outcome, _ = await _call_tool("get_audit_summary", {"outcome": "bogus"}, key, hass, data)
     assert outcome == "invalid_request"
+
+
+async def test_the_audit_summary_folds_the_case_of_a_probed_id(hass):
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+    from custom_components.phoenix_mcp.audit import AuditLog
+
+    _home(hass)
+    key = _key()
+    log = AuditLog()
+    data = SimpleNamespace(audit=log)
+    probes = ["LOCK.SMART_LOCK", "Lock.Smart_Lock", "LOCK.MADE_UP", "lock.made_up"]
+    for index, probe in enumerate(probes):
+        for tool in ("get_state", "get_history"):
+            content, outcome, resource = await _call_tool(tool, {"entity_id": probe}, key, hass, data)
+            assert "not found" in content["content"][0]["text"], (tool, probe)
+            log.record(request_id=f"{tool}-{index}", access_key_id=key.id, access_key_name="t", method=tool,
+                       resource=resource, outcome=outcome, client_ip="x", settings=GlobalSettings())
+    content, _outcome, _ = await _call_tool("get_audit_summary", {"limit": 50}, key, hass, data)
+    entries = json.loads(content["content"][0]["text"])["entries"]
+    assert len(entries) == 8
+    assert {row["outcome"] for row in entries} == {"not_found"}
 
 
 

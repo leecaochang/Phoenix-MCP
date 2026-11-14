@@ -106,11 +106,11 @@
 
 條件中的範本與模板渲染在同一個個別受限程序中執行，作用於金鑰可讀取狀態的副本。範本必須直接指定實體，例如 `states('sensor.x')`。
 
-觸發條件中的範本需要 {{label:caps.cap_automation_write.label}}，因為測試期間 Home Assistant 會在每次變化時執行它們。它們會先在那個個別程序中試執行，與新自動化中的範本一樣。沒有該能力時，請把範本當作條件來測試。
+觸發條件中的範本需要 {{label:caps.cap_automation_write.label}} 設為允許，因為測試期間 Home Assistant 會自己在每次變化時執行它們，不經審核。它們會先在那個個別程序中試執行。否則，請把範本當作條件來測試。
 
 事件、MQTT、Webhook 和對話觸發條件會被拒絕，因為任何金鑰的範圍都無法限制它們涉及的內容。
 
-允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；範本觸發條件還需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write)
+允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；範本觸發條件還需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) 設為允許
 
 ## Home Companion {#home-companion}
 
@@ -212,6 +212,8 @@
 
 新建或變更的自動化、腳本或模板輔助元素中的模板，以及智慧體驗證的設定中的模板，都會先在同一個程序中試執行。之後 Home Assistant 才會檢查它們。執行太久或使該程序停止的模板會被拒絕，因此它無法讓 Home Assistant 卡住或停止。
 
+只有變更新增的模板才會試執行，已儲存的模板不會再次試執行。如果該程序一直忙於其他請求，智慧體會被要求重試，而且不會做任何變更。
+
 允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)、[{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write)、[{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render)、[{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read)、[{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)
 
 ## 探索和診斷 {#diagnostics}
@@ -220,7 +222,7 @@
 
 - 搜尋與發現會搜尋和描述實體、分區及其關聯方式，比較它們，並找出可用的操作。
 - 讀取登錄檔會列出分區、樓層、區域、裝置、分類、自動化、腳本、場景和輔助項目。
-- 自動化追蹤會讀取自動化的執行方式。檢查過金鑰無法讀取的實體的步驟不顯示任何值。自動化的設定，以及由 webhook 啟動的執行中的變數，還需要 {{label:caps.cap_automation_write.label}} 或 {{label:caps.cap_script_write.label}}。
+- 自動化追蹤會讀取自動化的執行方式。用到金鑰無法讀取的實體的步驟（包括經由變數）不顯示任何值。設定以及 webhook 啟動的執行所記錄的內容還需要 {{label:caps.cap_automation_write.label}} 或 {{label:caps.cap_script_write.label}}。
 - 診斷會檢查設定並讀取系統健康狀況、修復項、無線網路和 ESPHome 概覽。
 
 只有在 YAML 設定不是拒絕存取時，設定檢查才會指出檔案和行號。
@@ -231,7 +233,7 @@
 
 讀取檔案讓智慧體讀取 www、themes 和 custom_templates 資料夾中的文字檔案，每個最大 1 MiB。資料夾清單分頁傳回，預設每頁 500 項，最多 1000 項。它不能寫入這些檔案。
 
-YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔案、esphome 資料夾和隱藏檔案除外。檔名含有一般英文字母以外字元的檔案也會被拒絕。
+YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔案、esphome 資料夾和隱藏檔案除外。檔名可以使用任何語言，但含有控制字元或改變文字方向的隱藏標記的檔名會被拒絕。
 
 名稱暗示機密的值以及提到機密的註解會顯示為 `<redacted>`，但使用普通名稱的密碼可見。有 YAML 錯誤的檔案不會顯示，智慧體只會得到需要修復的行號。沒有工具會寫入 YAML 設定。
 
@@ -245,7 +247,7 @@ YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔�
 
 secrets.yaml 中的值無論出現在哪裡都會被遮蔽，即使在網址或註解中。金鑰無法讀取的實體 ID 顯示為 `<redacted-entity>`，在檔案中以及 Device Builder 的輸出和日誌中都是如此。任何智慧體都不能讀取或安裝名稱含 secret 的檔案。
 
-密碼或金鑰使用的替換變數也會被遮蔽，檔案定義但自己從不使用的替換變數同樣如此，因為某個套件可能把它用作金鑰。
+密碼或金鑰直接或經由其他替換變數使用的替換變數也會被遮蔽。只有某個套件使用的替換變數不會被遮蔽，除非其名稱表明是密碼或金鑰，所以請把這類值放在 secrets.yaml 中。
 
 Phoenix 依檔名、檔案宣告的裝置名稱以及任何 `use_address` 或靜態 IP 確定檔案所屬的裝置。僅限部分裝置的金鑰只能讀取這些裝置的檔案。宣告了自己的名稱且不符合任何裝置的檔案只受能力限制。
 

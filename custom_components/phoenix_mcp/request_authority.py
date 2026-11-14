@@ -81,14 +81,23 @@ class RequestAuthority:
     # Set when an OAuth sign-in presented the key: removing that sign-in, switching
     # OAuth off or rotating the key then ends the request like a revoked key.
     oauth_grant_id: str | None = None
-    # When the OAuth access token that presented the key stops being accepted; the
-    # request ends with it.
+    # When the OAuth access token that presented the key stops being accepted. Its hour is
+    # routine, not a revocation, and a client cannot hand a running request a new token, so
+    # it is checked only at admission and before each dispatch, never while one runs.
     oauth_token_until: datetime | None = None
+
+    def check_token_hour(self) -> None:
+        """Refuse admission or a new dispatch once the presenting OAuth access token has ended."""
+        if self.oauth_token_until is not None and utcnow() >= self.oauth_token_until:
+            raise AuthorityChangedError("Unauthorized.")
+
+    def admit(self) -> AccessKeyRecord:
+        """The current key for a request being admitted, refused once its token has ended."""
+        self.check_token_hour()
+        return self.current_access_key()
 
     def current_access_key(self) -> AccessKeyRecord:
         data = self.data
-        if self.oauth_token_until is not None and utcnow() >= self.oauth_token_until:
-            raise AuthorityChangedError("Unauthorized.")
         if (self.hass.data.get(DOMAIN) is not data or not data.ready
                 or data.shutting_down or data.store.get_settings().kill_switch):
             raise AuthorityChangedError("Service unavailable.")

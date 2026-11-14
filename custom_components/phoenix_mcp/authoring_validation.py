@@ -21,7 +21,7 @@ from homeassistant.helpers.trigger import async_get_all_descriptions as async_ge
 from homeassistant.loader import IntegrationNotFound, async_get_integration
 
 from .const import AUTHORING_MAX_ERRORS, AUTHORING_MAX_PATH_DEPTH, AUTHORING_TARGET_CHECK_MAX, REFERENCE_WARNING_MAX
-from .template_render import TemplateRenderError, async_check_caller_templates
+from .template_render import TemplateRenderError, TemplateWorkerBusyError, async_check_caller_templates
 from .template_scope import caller_template_strings
 from .yaml_includes import TAG_STRING_REFUSAL, contains_tag_strings
 
@@ -347,14 +347,21 @@ def _key_sites(config: Any) -> list[tuple[str, str, str, dict]]:
     return sites
 
 
-async def async_template_refusal(value: Any, hass: HomeAssistant, data: PhoenixData) -> str | None:
+async def async_template_refusal(
+    value: Any, hass: HomeAssistant, data: PhoenixData, existing: Any = None,
+) -> str | None:
     """Refuse caller templates before Home Assistant compiles them on its event loop.
 
-    Every template string in ``value`` is compiled and trial-rendered in the template worker
-    first; the refusal text, or None when Home Assistant may validate them.
+    Each distinct template string in ``value`` that the stored ``existing`` entry does not already
+    hold is compiled and trial-rendered in the template worker first. Returns the refusal text,
+    a retry notice when the worker stayed busy, or None when Home Assistant may validate them.
     """
+    stored = set(caller_template_strings(existing)) if existing is not None else set()
+    added = [template for template in dict.fromkeys(caller_template_strings(value)) if template not in stored]
     try:
-        await async_check_caller_templates(caller_template_strings(value), hass, data)
+        await async_check_caller_templates(added, hass, data)
+    except TemplateWorkerBusyError as err:
+        return str(err)
     except TemplateRenderError as err:
         return f"Templates refused before Home Assistant validated them: {err}"
     return None

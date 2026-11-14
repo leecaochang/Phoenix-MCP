@@ -32,7 +32,7 @@ The decision provider picks the action from your words. Phoenix checks that you 
 - Turning on or toggling a siren
 - Disarming or triggering an alarm
 
-Phoenix asks you to say these commands plainly instead, like "unlock the front door", so sentence matching handles them.
+These commands go to your AI model instead, just as when the decision provider isn't sure. Your access key's permissions and approvals still apply there.
 
 ## Limits {#limits}
 

@@ -2,8 +2,8 @@
 
 test_condition evaluates its templates in the worker; validation, confirm-mode authoring and
 the helper preflights compile and trial-render theirs there first. A template that stalls or
-crashes the interpreter costs only the worker. Off Linux the worker's memory limit cannot be
-set, so these tests run it through a wrapper that skips only that limit.
+crashes the interpreter costs only the worker. A host that refuses the worker's memory limit,
+as macOS does, runs it without that limit.
 """
 
 from __future__ import annotations
@@ -41,23 +41,6 @@ REAL_TEMPLATE_WORKER = True
 POWER = "{{ (9 ** (9 ** 7)) > 0 }}"
 # A lone surrogate computed at render time, which ciso8601 cannot survive.
 COMPUTED_SURROGATE = "{{ as_timestamp('%c' % 55296, 0) > 0 }}"
-
-
-@pytest.fixture(autouse=True)
-def worker_script(tmp_path):
-    """The real worker; off Linux, through a wrapper that skips only RLIMIT_AS."""
-    if sys.platform == "linux":
-        yield
-        return
-    wrapper = tmp_path / "worker_without_memory_limit.py"
-    wrapper.write_text(
-        "import resource, runpy\n"
-        "_set = resource.setrlimit\n"
-        "resource.setrlimit = lambda kind, limits: None if kind == resource.RLIMIT_AS else _set(kind, limits)\n"
-        f"runpy.run_path({str(template_render._WORKER_SCRIPT)!r}, run_name='__main__')\n"
-    )
-    with patch.object(template_render, "_WORKER_SCRIPT", wrapper):
-        yield
 
 
 def _data() -> PhoenixData:
@@ -107,7 +90,7 @@ async def _longest_stall(call) -> tuple[float, object]:
     ("validate_automation_or_script", {"cap_diagnostics": "allow"},
      {"type": "automation", "config": _automation("{{ ('%c' % 55296) | as_timestamp(0) > 0 }}")}),
     ("create_automation", {"cap_automation_write": "confirm"}, {"config": _automation(POWER)}),
-    ("test_trigger", {"cap_config_read": "allow", "cap_automation_write": "confirm"},
+    ("test_trigger", {"cap_config_read": "allow", "cap_automation_write": "allow"},
      {"trigger": {"trigger": "template", "value_template": POWER}, "timeout": 1}),
     ("test_trigger", {"cap_config_read": "allow", "cap_automation_write": "allow"},
      {"trigger": {"trigger": "template", "value_template": COMPUTED_SURROGATE}, "timeout": 1}),
@@ -200,3 +183,185 @@ async def test_more_templates_than_the_worker_takes_are_refused(hass):
     with patch.object(template_render, "_run_worker", side_effect=AssertionError("spawned")):
         refusal = await async_template_refusal(["{{ %d }}" % n for n in range(300)], hass, _data())
     assert refusal is not None and "Too many templates" in refusal
+
+
+async def test_the_compile_budget_holds_for_each_template_not_their_sum(hass):
+    """Several templates that each compile well within the budget pass, though together they exceed it."""
+    templates = ["{{ (7 ** 400000) > %d }}" % n for n in range(8)]
+    assert await async_template_refusal(templates, hass, _data()) is None
+
+
+async def test_repeated_templates_are_checked_once(hass):
+    seen: list[list[str]] = []
+
+    async def worker(payload, hass, data):
+        seen.append(payload["templates"])
+        return 0, b'{"compile_seconds": 0}'
+
+    with patch.object(template_render, "_run_worker", worker):
+        assert await async_template_refusal(["{{ 1 }}"] * 300 + ["{{ 2 }}"], hass, _data()) is None
+    assert seen == [["{{ 1 }}", "{{ 2 }}"]]
+
+
+async def test_templates_the_stored_entry_holds_are_not_checked_again(hass):
+    stored = {"sequence": [{"variables": {f"v{n}": "{{ 1 + %d }}" % n}} for n in range(300)]}
+    edited = {"alias": "Renamed", **stored}
+    with patch.object(template_render, "_run_worker", side_effect=AssertionError("spawned")):
+        assert await async_template_refusal(edited, hass, _data(), stored) is None
+    added = {**edited, "variables": {"new": "{{ 2 + 2 }}"}}
+    seen: list[list[str]] = []
+
+    async def worker(payload, hass, data):
+        seen.append(payload["templates"])
+        return 0, b'{"compile_seconds": 0}'
+
+    with patch.object(template_render, "_run_worker", worker):
+        assert await async_template_refusal(added, hass, _data(), stored) is None
+    assert seen == [["{{ 2 + 2 }}"]]
+
+
+@pytest.mark.usefixtures("immediate_authoring_observation")
+async def test_renaming_a_large_stored_script_starts_no_worker(hass, tmp_path):
+    """An edit that adds no template checks nothing, however many templates the script holds."""
+    from custom_components.phoenix_mcp import yaml_includes
+
+    hass.config.config_dir = str(tmp_path)
+    hass.services.async_register("script", "reload", lambda call: None)
+    big = {"alias": "Big", "sequence": [{"variables": {f"v{n}": "{{ 1 + %d }}" % n}} for n in range(300)]}
+    (tmp_path / "configuration.yaml").write_text("script: !include scripts.yaml\n")
+    (tmp_path / "scripts.yaml").write_text(yaml_includes.dump_tagged({"big": big}))
+    with patch.object(template_render, "_run_worker", side_effect=AssertionError("spawned")):
+        content, outcome, _ = await _call_tool(
+            "edit_script", {"script_id": "big", "config": {**big, "alias": "Renamed"}},
+            _key(cap_script_write="allow"), hass, _data())
+    assert outcome == "allowed", content
+    assert "alias: Renamed" in (tmp_path / "scripts.yaml").read_text()
+
+
+async def _hold_slots(data: PhoenixData) -> None:
+    for _ in range(data.template_slots._value):
+        await data.template_slots.acquire()
+
+
+async def test_a_check_waits_for_a_busy_worker_slot(hass):
+    data = _data()
+    await _hold_slots(data)
+
+    async def in_slot(payload, data):
+        return 0, b'{"compile_seconds": 0}'
+
+    with patch.object(template_render, "_run_in_slot", in_slot):
+        task = asyncio.create_task(async_template_refusal({"value_template": "{{ 1 }}"}, hass, data))
+        await asyncio.sleep(0.05)
+        assert not task.done()
+        data.template_slots.release()
+        assert await task is None
+
+
+async def test_a_check_still_waiting_answers_busy_not_refused(hass, monkeypatch):
+    data = _data()
+    await _hold_slots(data)
+    monkeypatch.setattr(template_render, "TEMPLATE_CHECK_SLOT_WAIT_SECONDS", 0.05)
+    with patch.object(template_render, "_run_in_slot", side_effect=AssertionError("spawned")):
+        refusal = await async_template_refusal({"value_template": "{{ 1 }}"}, hass, data)
+    assert refusal is not None and "busy" in refusal and "Retry" in refusal
+    assert "refused" not in refusal
+
+
+async def test_a_render_never_waits_for_a_slot(hass):
+    data = _data()
+    await _hold_slots(data)
+    with patch.object(template_render, "_run_in_slot", side_effect=AssertionError("spawned")):
+        with pytest.raises(template_render.TemplateRenderError, match="capacity"):
+            await template_render.async_render_template_for_access_key("{{ 1 }}", _key(), hass, data)
+
+
+def test_a_host_without_a_memory_limit_still_runs_the_worker(monkeypatch, capsys):
+    """macOS refuses RLIMIT_AS; the worker then runs under its CPU limit and says so on stderr."""
+    calls: list[int] = []
+
+    def setrlimit(kind, limits):
+        calls.append(kind)
+        if kind == resource.RLIMIT_AS:
+            raise ValueError("not allowed")
+
+    monkeypatch.setattr(template_worker.resource, "setrlimit", setrlimit)
+    payload = json.dumps({"template": "{{ 6 * 7 }}", "states": [], "time_zone": "UTC"}).encode()
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(payload)))
+    zone = dt_util.get_default_time_zone()
+    try:
+        template_worker.main()
+    finally:
+        dt_util.set_default_time_zone(zone)
+    captured = capsys.readouterr()
+    assert captured.out == "42"
+    assert captured.err.splitlines() == [template_worker.NO_MEMORY_LIMIT]
+    assert calls == [resource.RLIMIT_CPU, resource.RLIMIT_AS, resource.RLIMIT_CPU]
+
+
+async def test_a_missing_memory_limit_is_logged_once(hass, monkeypatch, caplog):
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(template_render, "_memory_limit_noted", False)
+    process = MagicMock(returncode=0)
+    process.communicate = AsyncMock(return_value=(b"42", template_worker.NO_MEMORY_LIMIT.encode() + b"\n"))
+    process.wait = AsyncMock()
+    with patch.object(template_render.asyncio, "create_subprocess_exec", AsyncMock(return_value=process)):
+        for _ in range(2):
+            assert await template_render.async_render_template_for_access_key("{{ 6 * 7 }}", _key(), hass, _data()) == "42"
+    assert sum("memory limit" in record.getMessage() for record in caplog.records) == 1
+
+
+@pytest.mark.parametrize("tool,caps,args", [
+    ("test_condition", {"cap_config_read": "allow"}, {"condition": "{{ is_state('light.desk', 'on') }}"}),
+    ("test_trigger", {"cap_config_read": "allow", "cap_automation_write": "allow"},
+     {"trigger": {"trigger": "template", "value_template": "{{ is_state('light.desk', 'on') }}"}, "timeout": 1}),
+    ("validate_automation_or_script", {"cap_diagnostics": "allow"},
+     {"type": "automation", "config": _automation("{{ is_state('light.desk', 'on') }}")}),
+    ("add_dashboard_card", {"cap_lovelace_write": "confirm"},
+     {"view_index": 0, "card": {"type": "markdown", "content": "{{ states('light.desk') }}"}}),
+])
+async def test_every_checking_tool_answers_busy_rather_than_refused(hass, monkeypatch, tool, caps, args):
+    assert await async_setup_component(hass, "homeassistant", {})
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    await async_save_lovelace_config(hass, None, {"views": [{"title": "V", "cards": []}]})
+    hass.states.async_set("light.desk", "on")
+    data = _data()
+    await _hold_slots(data)
+    monkeypatch.setattr(template_render, "TEMPLATE_CHECK_SLOT_WAIT_SECONDS", 0.05)
+    with patch.object(template_render, "_run_in_slot", side_effect=AssertionError("spawned")):
+        content, outcome, _ = await _call_tool(tool, args, _key(**caps), hass, data)
+    text = content["content"][0]["text"]
+    assert outcome == "invalid_request", content
+    assert "busy" in text and "Retry" in text, text
+    assert "refused" not in text and "could not be evaluated" not in text, text
+
+
+async def test_a_blueprint_edit_checks_only_templates_the_current_source_lacks(hass):
+    from custom_components.phoenix_mcp.tools.blueprint import _blueprint_template_refusal
+
+    current = ("blueprint:\n  name: Probe\n  domain: script\nsequence:\n"
+               + "".join(f"  - variables:\n      v{n}: \"{{{{ 1 + {n} }}}}\"\n" for n in range(300)))
+    edited = current.replace("name: Probe", "name: Renamed")
+    with patch.object(template_render, "_run_worker", side_effect=AssertionError("spawned")):
+        assert await _blueprint_template_refusal(hass, edited, _data(), "edit_blueprint", current) is None
+    refusal = await _blueprint_template_refusal(hass, edited, _data(), "edit_blueprint")
+    assert refusal is not None and "Too many templates" in refusal[0]["content"][0]["text"]
+
+
+@pytest.mark.usefixtures("immediate_authoring_observation")
+async def test_editing_a_large_stored_automation_starts_no_worker(hass, tmp_path):
+    from custom_components.phoenix_mcp import yaml_includes
+
+    hass.config.config_dir = str(tmp_path)
+    hass.services.async_register("automation", "reload", lambda call: None)
+    big = {"id": "big", "alias": "Big", "triggers": [{"trigger": "homeassistant", "event": "start"}],
+           "actions": [{"variables": {f"v{n}": "{{ 1 + %d }}" % n}} for n in range(300)]}
+    (tmp_path / "configuration.yaml").write_text("automation: !include automations.yaml\n")
+    (tmp_path / "automations.yaml").write_text(yaml_includes.dump_tagged([big]))
+    with patch.object(template_render, "_run_worker", side_effect=AssertionError("spawned")):
+        content, outcome, _ = await _call_tool(
+            "edit_automation", {"automation_id": "big", "config": {**big, "description": "Edited"}},
+            _key(cap_automation_write="allow"), hass, _data())
+    assert outcome == "allowed", content
+    assert "description: Edited" in (tmp_path / "automations.yaml").read_text()

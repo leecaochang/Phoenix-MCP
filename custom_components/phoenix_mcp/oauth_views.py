@@ -219,12 +219,13 @@ class PhoenixOAuthAuthorizeView(PhoenixView):
         })
 
     @classmethod
-    def _parked_nothing(cls) -> web.Response:
+    def _parked_nothing(cls, request_id: str | None = None) -> web.Response:
         """The answer for a closed window or a full queue, shaped like a parked request.
 
-        The panel tells the administrator which it was; the caller learns nothing.
+        A full queue passes the ID it noted as busy. The panel tells the administrator which it
+        was; the caller learns nothing.
         """
-        return cls._to_panel(secrets.token_urlsafe(32))
+        return cls._to_panel(request_id or secrets.token_urlsafe(32))
 
     async def get(self, request: web.Request) -> web.Response:
         rid = generate_request_id()
@@ -257,7 +258,7 @@ class PhoenixOAuthAuthorizeView(PhoenixView):
             address=get_client_ip(request),
         )
         if pending is None:
-            return self._parked_nothing()
+            return self._parked_nothing(data.oauth.note_busy())
         return self._to_panel(pending.id)
 
 

@@ -600,8 +600,8 @@ async def _sse_lines(resp: Any) -> AsyncIterator[str]:
     """Yield decoded lines from a streaming HTTP response, buffering split frames.
 
     Exceeding the between-newline or the whole-response byte cap raises ClientError, and a stream
-    sending only comment lines for the read bound raises SocketTimeoutError, as a silent one does;
-    each provider's stream_turn turns either into a clean chat error.
+    that has sent data and then only comment lines for the read bound raises SocketTimeoutError, as
+    a silent one does; each provider's stream_turn turns either into a clean chat error.
     """
     # Both caps bound memory only. One stops a stream that never sends a newline; the other stops
     # unlimited small frames. Parsing time stays linear because every parser accumulates fragments
@@ -614,6 +614,7 @@ async def _sse_lines(resp: Any) -> AsyncIterator[str]:
     decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
     clock = asyncio.get_running_loop().time
     last_data = clock()
+    seen_data = False
     async for chunk in resp.content.iter_chunked(2048):
         total += len(chunk)
         if total > AGENT_CHAT_MAX_STREAM_BYTES:
@@ -626,8 +627,12 @@ async def _sse_lines(resp: Any) -> AsyncIterator[str]:
             pending, pending_size = [], 0
             for line in parts[:-1]:
                 line = line.rstrip("\r")
-                # A gateway's keep-alive comment is not data: it must not hold a stalled reply open.
+                # A gateway's keep-alive comment holds the wait for the first data open (a reasoning
+                # model may think for minutes before it), but not a reply that has stalled after it.
                 if line and not line.startswith(":"):
+                    seen_data = True
+                    last_data = clock()
+                elif not seen_data:
                     last_data = clock()
                 lines += 1
                 if lines % _SSE_YIELD_EVERY_LINES == 0:

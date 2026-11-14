@@ -209,3 +209,12 @@ async def test_native_approval_keeps_exact_action_and_current_guards(hass, nativ
         else:
             assert outcome == 'denied'
             call.assert_not_called()
+
+
+@pytest.mark.parametrize('sentence,muted', [('mute the TV', 'Yes'), ('unmute the TV', 'No')])
+async def test_mute_and_unmute_replies_name_the_value_sent(hass, native_home, sentence, muted):
+    """Both run media_player.volume_mute, so the reply carries HA's own words for the value."""
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock)):
+        answer = await run_native(hass, native_home, sentence, 'voice')
+    assert f'Mute/unmute media player (Muted: {muted})' in answer

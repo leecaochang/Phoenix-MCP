@@ -83,7 +83,11 @@ def test_redacted_catalog_text_is_not_identity_evidence():
 def test_name_outside_the_catalog_that_covers_the_mention_refuses():
     heater = [('switch.heater', ['switch.heater', 'Heater Audit Lamp'])]
     assert not check('Set the Heater Audit Lamp to blue.', outside=heater)
-    assert not check('Set Audit Lamp to blue.', outside=[('switch.twin', ['Audit Lamp'])])
+    assert not check('Set Audit Lamp to blue.', outside=[('light.twin', ['Audit Lamp'])])
+    assert not check('Set the Heater Audit Lamp to blue.', outside=[('binary_sensor.heater', ['Heater Audit Lamp'])])
+    # The same name in a domain this write cannot reach, such as a door's contact sensor, does not compete.
+    assert check('Set Audit Lamp to blue.', outside=[('binary_sensor.twin', ['Audit Lamp'])])
+    assert check('Set Audit Lamp to blue.', outside=[('switch.twin', ['Audit Lamp'])])
     assert not check('Set Audit Lamp Post to blue.', outside=[('light.post', ['Lamp Post'])])
     # A shorter outside name inside the catalog name, or one elsewhere in the sentence, proves nothing against it.
     assert check('Set Audit Lamp to blue.', outside=[('sensor.audit', ['Audit'])])

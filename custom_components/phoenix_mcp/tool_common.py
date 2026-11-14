@@ -1027,6 +1027,7 @@ async def _create_registry_mesa_approval(
             diff=diff,
             request_id=request_id,
             client_ip=client_ip,
+            access_key=access_key,
         )
     create_approval_notification(hass, approval)
     fire_approval_requested_event(hass, approval)

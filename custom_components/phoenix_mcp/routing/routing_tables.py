@@ -236,6 +236,11 @@ _COMMAND_ROUTING_ENTITY_COMMANDS.update({
     "update_skip": ('update', 'skip', '', '', '', ''),
     "update_clear_skipped": ('update', 'clear_skipped', '', '', '', ''),
 })
+# Services more than one category runs, with different data: a routed reply names that data too,
+# so a mute and an unmute, or turning a light on and flashing it, never sound the same.
+COMMAND_ROUTING_SHARED_SERVICES = frozenset(
+    (domain, service) for domain, service, *_ in _COMMAND_ROUTING_ENTITY_COMMANDS.values()
+    if sum(spec[:2] == (domain, service) for spec in _COMMAND_ROUTING_ENTITY_COMMANDS.values()) > 1)
 # Read selection reuses known public state projections, never writable service fields.
 _COMMAND_ROUTING_ENTITY_COMMANDS["attribute_read"] = ('', '', 'attribute', '__read_attributes__', '', '')
 COMMAND_ROUTING_READ_INTENTS = frozenset({"HassGetState", "PhoenixEntityAttributeRead", "PhoenixStateSummary"})
@@ -550,7 +555,8 @@ DECISION_PERCENTAGE_UNITS = (("%",), ("％",), ("percent",), ("per", "cent"), ("
 # Adding a preview category must not automatically authorize an execution path.
 DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query", *DECISION_ENTITY_CATEGORIES})
 # Nothing checks a model-chosen operation against the sentence, so one that opens, unlocks, disarms or
-# sounds something never runs from a decision; strict local recognition still handles these commands.
+# sounds something never runs from a decision. A confident pick of one goes to the conversation model,
+# as a low-confidence decision does, where the key's scope, physical control and MESA gates apply.
 DECISION_PROVIDER_REFUSED_CATEGORIES = frozenset({
     "lock_unlock", "lock_open", "cover_open", "cover_toggle", "valve_open", "valve_toggle",
     "siren_on", "siren_toggle", "alarm_disarm", "alarm_trigger",

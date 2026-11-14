@@ -168,9 +168,16 @@ class FilteredStates:
     def __init__(self, permitted: dict) -> None:
         self._permitted = permitted
 
-    def __call__(self, entity_id: str, default: str = "unknown") -> str:
+    def __call__(self, entity_id: str, rounded: Any = None, with_unit: bool = False) -> str:
+        """Core's states(entity_id, rounded, with_unit): the state, or unknown for an unreadable entity.
+
+        with_unit appends the unit as Core does. Rounding needs a sensor's display precision from
+        the entity registry, which the snapshot lacks, so a rounded state is the state itself.
+        """
         s = self._permitted.get(entity_id)
-        return s.state if s is not None else default
+        if s is None:
+            return "unknown"
+        return s.state_with_unit if with_unit else s.state
 
     def __getitem__(self, entity_id: str) -> Any:
         return self._permitted.get(entity_id)

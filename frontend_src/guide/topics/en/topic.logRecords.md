@@ -34,9 +34,9 @@ Which outcomes are recorded is up to the [audit log settings](guide:window.setti
 
 The audit log keeps the newest 10,000 entries by default, and saves them to disk every 15 minutes and when Home Assistant stops. Change both in [{{label:workspace.logsNotifications}}](guide:window.settingsLogs#log-max-entries).
 
-Approvals and your changes in the panel are kept apart, up to the same number. Requests from agents never push them out.
+Approval decisions and results, and your changes in the panel, are kept apart, up to the same number. Requests from agents never push them out. A request waiting for approval, and its expiry, stay with the agent's other requests.
 
-A key's refused requests count toward the limit, but only its first 30 in a minute get their own entry. The rest of that minute share one entry, which counts them by outcome.
+A key's malformed, unsupported and rate-limited requests count toward the limit, but only its first 30 in a minute get their own entry. The rest of that minute share one entry, which counts them by outcome. Permission refusals, missing names and writes that may have run always get their own entry.
 
 Nothing in the panel clears the audit log on its own. A Phoenix core data wipe does. Removing Phoenix keeps it.
 

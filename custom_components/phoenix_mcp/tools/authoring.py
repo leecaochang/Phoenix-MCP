@@ -18,7 +18,7 @@ import logging
 import re
 import uuid
 from functools import partial
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
 from traceback import format_exc, format_tb
 from typing import Any, Literal, TypeVar
 
@@ -36,6 +36,7 @@ from ..authoring_validation import (
     async_template_refusal, async_validation_message, authoring_input_error, validation_message,
 )
 from ..const import APPROVAL_REVIEWED_HASH_KEY, CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
+from ..template_scope import caller_template_strings
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
 from ..helpers import content_hash
@@ -151,25 +152,41 @@ _SCENE_LOCK_KEY = f"{DOMAIN}_scene_yaml_lock"
 _T = TypeVar("_T")
 
 
+# How long a cancelled request keeps its domain lock while its write finishes. A file write takes
+# milliseconds; one still running after a minute is stalled (a hung network share), and Home
+# Assistant's own final-write shutdown stage gives writes the same minute.
+_CANCELLED_WRITE_WAIT_SECONDS = 60.0
+
+
 async def _locked_write(lock: asyncio.Lock, work: Callable[[], Awaitable[_T]]) -> _T:
     """Run work under lock to its end, even when the caller is cancelled meanwhile.
 
-    The lock is released only after work finishes, so a cancelled request never leaves its worker
-    writing beside the next writer; the cancellation is raised once work has finished.
+    A cancelled request keeps the lock until work finishes, at most _CANCELLED_WRITE_WAIT_SECONDS;
+    work still running then is cancelled before it records a version, the lock released and the
+    stall logged. The cancellation is raised either way; further cancellations do not shorten it.
     """
     async with lock:
         task = asyncio.ensure_future(work())
-        cancelled = False
-        while not task.done():
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.done():
+                raise
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _CANCELLED_WRITE_WAIT_SECONDS
+        while not task.done() and loop.time() < deadline:
             try:
-                await asyncio.shield(task)
+                await asyncio.wait({task}, timeout=deadline - loop.time())
             except asyncio.CancelledError:
-                cancelled = True
-        if cancelled:
-            if not task.cancelled() and task.exception() is not None:
-                _LOGGER.debug("A write finished with an error after its request was cancelled", exc_info=task.exception())
-            raise asyncio.CancelledError
-        return task.result()
+                pass
+        if not task.done():
+            # Its executor thread cannot be stopped, but the job stops here, so it records no version.
+            task.cancel()
+            _LOGGER.warning("A cancelled configuration write did not finish within %ss; its lock is released "
+                            "and the file write may still complete", _CANCELLED_WRITE_WAIT_SECONDS)
+        elif not task.cancelled() and task.exception() is not None:
+            _LOGGER.debug("A write finished with an error after its request was cancelled", exc_info=task.exception())
+        raise asyncio.CancelledError
 
 
 def _get_scene_lock(hass: HomeAssistant) -> asyncio.Lock:
@@ -209,6 +226,21 @@ async def _added_reviewed_actions(
         except Exception:  # noqa: BLE001 - an unreadable entry only costs a review
             _LOGGER.debug("Could not read %s %s", domain, entry_id, exc_info=True)
     return sorted(reviewed_actions(config) - reviewed_actions(current))
+
+
+async def _stored_entry(hass: HomeAssistant, domain: str, entry_id: Any, config: Any) -> Any:
+    """The stored entry an edit replaces, or None when the ID is not a string or nothing is readable.
+
+    Home Assistant already compiles its templates, so the template worker checks only new ones;
+    nothing is read when ``config`` holds no template.
+    """
+    if not isinstance(entry_id, str) or not entry_id.strip() or not caller_template_strings(config):
+        return None
+    try:
+        return await _read_config_entry(hass, domain, entry_id.strip())
+    except Exception:  # noqa: BLE001 - an unreadable entry only means every template is checked
+        _LOGGER.debug("Could not read %s %s", domain, entry_id, exc_info=True)
+        return None
 
 
 def _config_read_response(
@@ -576,10 +608,13 @@ async def _automation_write_precheck(
 ) -> tuple[dict, str, str] | None:
     """Pre-gate validation for automation writes; None means OK to proceed.
 
-    Checks the config's templates in the template worker, then automation_id presence and config
-    schema, so a doomed request gets no pending approval. The executor re-validates at apply time.
+    Checks the config's new templates in the template worker, then automation_id presence and
+    config schema, so a doomed request gets no pending approval. The executor re-validates at
+    apply time.
     """
-    if refusal := await async_template_refusal(args.get("config"), hass, data):
+    stored = await _stored_entry(
+        hass, "automation", args.get("automation_id"), args.get("config")) if require_id else None
+    if refusal := await async_template_refusal(args.get("config"), hass, data, stored):
         return _tool_error(refusal), "invalid_request", tool_name
     error = _automation_argument_error(args, create=not require_id)
     if error:
@@ -973,10 +1008,11 @@ async def _script_write_precheck(
 ) -> tuple[dict, str, str] | None:
     """Pre-gate validation for script writes; None means OK to proceed.
 
-    Checks the config's templates in the template worker, then script_id format and config
+    Checks the config's new templates in the template worker, then script_id format and config
     schema, so a doomed request gets no pending approval. The executor re-validates at apply time.
     """
-    if refusal := await async_template_refusal(args.get("config"), hass, data):
+    stored = await _stored_entry(hass, "script", args.get("script_id"), args.get("config"))
+    if refusal := await async_template_refusal(args.get("config"), hass, data, stored):
         return _tool_error(refusal), "invalid_request", tool_name
     if error := _script_argument_error(args):
         return _tool_error(error), "invalid_request", tool_name
@@ -1322,31 +1358,94 @@ def _names_hidden_entity(node: Any, access_key: AccessKeyRecord, hass: HomeAssis
         node, access_key, hass, domains=instance_entity_domains(hass), keep=service_not_entity(hass)) != node
 
 
+# Configuration keys that hold a mapping of variables (automation, trigger and step `variables`).
+_TRACE_VARIABLE_BLOCKS = ("variables", "trigger_variables")
+# A name as a template reads it: not an attribute (trigger.alarm) and not inside a word.
+_TRACE_WORD_RE = re.compile(r"(?<![\w.])[A-Za-z_]\w*")
+
+
+def _variable_definitions(node: Any, depth: int = 0) -> Iterator[tuple[str, Any]]:
+    """Every variable a configuration defines, with what it is computed from.
+
+    A `variables` mapping, a response variable (from its call) and `wait` (from its wait step).
+    """
+    if depth > TRACE_SCOPE_MAX_DEPTH:
+        return
+    if isinstance(node, dict):
+        for block in _TRACE_VARIABLE_BLOCKS:
+            if isinstance(node.get(block), dict):
+                yield from ((name, value) for name, value in node[block].items() if isinstance(name, str))
+        if isinstance(node.get("response_variable"), str):
+            yield node["response_variable"], node
+        if "wait_template" in node or "wait_for_trigger" in node:
+            yield "wait", node
+        for item in node.values():
+            yield from _variable_definitions(item, depth + 1)
+    elif isinstance(node, (list, tuple)):
+        for item in node:
+            yield from _variable_definitions(item, depth + 1)
+
+
+def _uses_variable(node: Any, names: set[str], depth: int = 0) -> bool:
+    """Whether any text in a configuration node names one of these variables as a word."""
+    if not names or depth > TRACE_SCOPE_MAX_DEPTH:
+        return bool(names)
+    if isinstance(node, dict):
+        return any(_uses_variable(key, names, depth + 1) or _uses_variable(item, names, depth + 1)
+                   for key, item in node.items())
+    if isinstance(node, (list, tuple)):
+        return any(_uses_variable(item, names, depth + 1) for item in node)
+    return isinstance(node, str) and any(word in names for word in _TRACE_WORD_RE.findall(node))
+
+
+def _hidden_variables(config: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> set[str]:
+    """Variables computed from an entity this key cannot read, directly or through another variable."""
+    definitions = [(name, value, _names_hidden_entity(value, access_key, hass))
+                   for name, value in _variable_definitions(config)]
+    hidden = {name for name, _value, names_hidden in definitions if names_hidden}
+    grown = True
+    while grown:
+        grown = False
+        for name, value, _names_hidden in definitions:
+            if name not in hidden and _uses_variable(value, hidden):
+                hidden.add(name)
+                grown = True
+    return hidden
+
+
+def _step_carries(step: Any, variables: set[str]) -> bool:
+    """Whether a trace step changed one of these variables (an automation's own run in trigger/0)."""
+    changed = step.get("changed_variables") if isinstance(step, dict) else None
+    return isinstance(changed, dict) and any(name in variables for name in changed)
+
+
 def _scoped_run_detail(detail: dict, domain: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """A run's detail without what the key may not learn from it; _scope_trace still follows.
 
     A step's result and changed variables go when the configuration it evaluated names an entity
-    the key cannot read, or when that configuration cannot be located and any of it does. The stored
-    configuration, blueprint inputs and every variable of a webhook-triggered run need the
-    authoring capability, since any of those variables may be computed from the request.
+    the key cannot read or a variable computed from one, when the step sets such a variable, or
+    when that configuration cannot be located and any of it does. The stored configuration,
+    blueprint inputs and the variables and step results of a webhook-triggered run need the
+    authoring capability, since any of those may be computed from the request.
     """
     nested = detail.get("extended_dict")
     extended: dict = nested if isinstance(nested, dict) else detail
     webhook_run = _webhook_triggered(extended)
     config, inputs = extended.get("config"), extended.get("blueprint_inputs")
+    tainted = _hidden_variables([config, inputs], access_key, hass)
     whole_hidden: bool | None = None
     trace: dict[str, Any] = {}
     for path, steps in (extended.get("trace") or {}).items():
         node = _trace_step_node(config, str(path))
         if node is None:
             if whole_hidden is None:
-                whole_hidden = _names_hidden_entity([config, inputs], access_key, hass)
+                whole_hidden = _names_hidden_entity([config, inputs], access_key, hass) or bool(tainted)
             hidden = whole_hidden
         else:
-            hidden = _names_hidden_entity(node, access_key, hass)
+            hidden = _names_hidden_entity(node, access_key, hass) or _uses_variable(node, tainted)
         trace[path] = [
             {**step, **{key: "<redacted>" for key in ("result", "changed_variables") if key in step}}
-            if hidden and isinstance(step, dict) else step
+            if (hidden or _step_carries(step, tainted)) and isinstance(step, dict) else step
             for step in (steps if isinstance(steps, list) else [])
         ]
     scoped = {**extended, "trace": trace}
@@ -1357,12 +1456,12 @@ def _scoped_run_detail(detail: dict, domain: str, access_key: AccessKeyRecord, h
         if webhook_run:
             for path, steps in trace.items():
                 trace[path] = [
-                    {key: item for key, item in step.items() if key != "changed_variables"}
+                    {key: item for key, item in step.items() if key not in ("changed_variables", "result")}
                     if isinstance(step, dict) else step
                     for step in steps
                 ]
         scoped["withheld"] = [
-            f"The configuration and the variables of a webhook-triggered run need {capability}."]
+            f"The configuration, and the variables and step results of a webhook-triggered run, need {capability}."]
     return {**detail, "extended_dict": scoped} if extended is not detail else scoped
 
 

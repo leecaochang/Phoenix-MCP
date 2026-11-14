@@ -196,6 +196,17 @@ it("says the request ended when a window is open but the link names nothing", as
   expect(screen.getByText("This sign-in request has ended. Start again from the app.")).toBeInTheDocument();
 });
 
+it("says too many requests are waiting when the app's queue was full", async () => {
+  vi.mocked(api.getOAuthRequest).mockRejectedValue(Object.assign(new Error("busy"), { status: 404, code: "oauth_busy" }));
+  vi.mocked(api.getOAuthSummary).mockResolvedValue({
+    keys: { k1: { sign_ins: 0, window_open_until: new Date(NOW + 600_000).toISOString() } }, kill_switch: false });
+  render(<OAuthRequestDialog link="abc" onClose={() => {}} />);
+  await settle();
+  await settle();
+  expect(screen.getByText("Too many sign-in requests are waiting. Wait a few minutes, then start again from the app.")).toBeInTheDocument();
+  expect(screen.queryByText("This sign-in request has ended. Start again from the app.")).toBeNull();
+});
+
 it("explains a closed window without asking the server", async () => {
   render(<OAuthRequestDialog link="closed" onClose={() => {}} />);
   expect(screen.getByText(/accepts a new sign-in right now/)).toBeInTheDocument();

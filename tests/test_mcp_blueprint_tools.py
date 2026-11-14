@@ -97,6 +97,48 @@ async def test_secret_source_never_creates_approval(hass, bp_env, tool):
     assert "blueprint-secret" not in _text(result)
 
 
+WEBHOOK_BLUEPRINT = """\
+blueprint:
+  name: Webhook notify
+  domain: automation
+  input:
+    hook:
+      name: Webhook ID
+      selector:
+        text:
+triggers:
+  - trigger: webhook
+    webhook_id: !input hook
+    allowed_methods: [POST]
+conditions:
+  - condition: template
+    value_template: "{{ trigger.webhook_id == 'garage' }}"
+actions:
+  - action: rest_command.ping
+    data:
+      url: http://homeassistant.local:8123/api/webhook/garage-door
+"""
+
+
+@pytest.mark.parametrize("tool", ["create_blueprint", "edit_blueprint", "delete_blueprint"])
+async def test_a_webhook_blueprint_reaches_approval(hass, bp_env, tool):
+    """A webhook ID is configuration a recovery copy keeps, though readers mask it."""
+    args = {"domain": "automation", "path": "author/hook.yaml"}
+    if tool != "create_blueprint":
+        _write_existing(bp_env, rel=args["path"], body=WEBHOOK_BLUEPRINT)
+    if tool != "delete_blueprint":
+        args["content"] = WEBHOOK_BLUEPRINT
+    refused = _tool_error_refusal()
+    with patch.object(blueprint_tools, "_gate", new_callable=AsyncMock, return_value=refused) as gate:
+        result, _outcome, _ = await _call(tool, args, _access_key(cap_blueprint_write="confirm"), hass)
+    assert "cannot be snapshotted" not in _text(result), _text(result)
+    gate.assert_awaited_once()
+
+
+def _tool_error_refusal() -> tuple[dict, str, str]:
+    return {"content": [{"type": "text", "text": "stopped at the gate"}], "isError": True}, "denied", "gate"
+
+
 def _access_key(**caps) -> AccessKeyRecord:
     base = {
         "cap_blueprint_write": "allow",

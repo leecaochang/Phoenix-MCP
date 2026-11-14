@@ -131,7 +131,9 @@ Reconfigures an integration, adds or changes its subentries, such as an AI agent
 
 Reads and changes dashboards. Without it, the agent can't read dashboards either.
 
-Cards run with the access of whoever opens the dashboard. So a change that adds a template, a custom card that runs code, or a picture or link from another site waits for your approval, even on Allow. So does an agent's restore of an earlier layout that brings such a card back. Ordinary cards follow the mode you set.
+Cards run with the access of whoever opens the dashboard. So a change that adds a template, adds or changes any custom card, or adds a picture or link from another site waits for your approval, even on Allow. So does an agent's restore of an earlier layout that brings such a card back.
+
+A custom card already on the dashboard and left unchanged doesn't count. Built-in cards without any of these follow the mode you set.
 
 Templates in a dashboard change are first tried in a separate process, and a change whose template fails there is refused.
 

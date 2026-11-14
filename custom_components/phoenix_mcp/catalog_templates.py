@@ -450,10 +450,10 @@ VOICE_TEMPLATES: Mapping[str, str] = MappingProxyType({
     "local_unauthorized": "This access key is no longer authorized.",
     "local_state_matched": "Home Assistant reports the requested state.",
     "local_state_unconfirmed": "Command sent. Home Assistant has not yet confirmed the requested state.",
-    # {operation} is Home Assistant's own translated name of the service that ran.
+    # {operation} is Home Assistant's own translated name of the service that ran, followed by HA's
+    # words for its data when several operations share that service ("Mute/unmute media player (Muted: No)").
     "local_operation_matched": "Action: {operation}. Home Assistant reports the requested state.",
     "local_operation_unconfirmed": "Action sent: {operation}. Home Assistant has not yet confirmed the requested state.",
-    "decision_operation_unconfirmed": "I did not run this command because I could not confirm the action. Please say it again plainly, naming the action and the device.",
     "local_pending": "This command needs approval in the Phoenix MCP panel.",
     "local_review": "Review command",
     # Link label after a typed Assist reply that queued approvals (not spoken).

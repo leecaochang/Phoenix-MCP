@@ -10,7 +10,7 @@ from unittest.mock import patch
 from aiohttp import SocketTimeoutError
 import pytest
 
-from custom_components.phoenix_mcp import agent_turn
+from custom_components.phoenix_mcp import agent_turn, provider_constants
 from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.llm.accounts import AgentCliStore, ProviderConfig
 from custom_components.phoenix_mcp.llm.provider_claude import ClaudeProvider
@@ -167,6 +167,36 @@ async def test_keep_alive_comments_alone_do_not_hold_a_stream_open():
                     pass
 
 
+class _ThinkingGateway:
+    """A gateway that sends only keep-alive comments while the model thinks, then the answer."""
+
+    async def iter_chunked(self, _size: int):
+        for _ in range(30):
+            await asyncio.sleep(0.01)
+            yield b": PROCESSING\n\n"
+        yield b'data: {"answer": 1}\n\n'
+
+
+async def test_keep_alive_comments_hold_the_wait_for_the_first_data_open():
+    resp = _Resp(b"")
+    resp.content = _ThinkingGateway()
+    with patch.object(llm_base, "AGENT_CHAT_STREAM_READ_TIMEOUT_SECONDS", 0.1):
+        async with asyncio.timeout(5):
+            lines = [line async for line in llm_base._sse_lines(resp)]
+    assert 'data: {"answer": 1}' in lines
+
+
+@pytest.mark.parametrize(("kind", "seconds"), [
+    ("ollama", provider_constants.AGENT_HEADLESS_LOCAL_CALL_SECONDS),
+    ("ollama_cloud", provider_constants.AGENT_HEADLESS_CALL_SECONDS),
+    ("openrouter", provider_constants.AGENT_HEADLESS_CALL_SECONDS),
+])
+def test_a_local_ollama_call_gets_the_longer_headless_deadline(kind, seconds):
+    provider = OpenAICompatProvider(ProviderConfig(kind=kind, model="m", base_url="https://h/v1", api_key="k"))
+    assert agent_turn._headless_call_seconds(provider) == seconds
+    assert provider_constants.AGENT_HEADLESS_LOCAL_CALL_SECONDS > provider_constants.AGENT_HEADLESS_CALL_SECONDS
+
+
 class _Session:
     def __init__(self, content) -> None:
         self._content = content
@@ -254,7 +284,23 @@ async def test_capability_strings_are_bounded_before_they_are_stored():
     json.dumps(store._data, ensure_ascii=False).encode("utf-8")
 
 
-BASE = "http://ollama.lan:11434"
+async def test_an_empty_thinking_off_survives_storage():
+    """An empty thinking_off means the model cannot stop thinking, so Agent Chat offers no Off."""
+    class _Memory:
+        async def async_save(self, data):
+            self.data = data
+
+    store = AgentCliStore(_Memory())
+    store._data = {"acct": {"kind": "ollama"}}
+    await store.set_capabilities("acct", {
+        "qwq": {"tools": True, "thinking": True, "thinking_off": ""},
+        "gpt-oss:20b": {"thinking": True, "thinking_off": "", "thinking_default": "medium"},
+    }, "2026-11-13T00:00:00+00:00")
+    stored = store._data["acct"]["capabilities"]
+    assert stored["qwq"]["thinking_off"] == "" and stored["gpt-oss:20b"]["thinking_off"] == ""
+
+
+BASE ="http://ollama.lan:11434"
 _LOCAL = [{"name": "llama3.1:8b", "model": "llama3.1:8b", "modified_at": "2026-09-01T10:00:00Z"},
           {"name": "qwen3:14b", "model": "qwen3:14b", "modified_at": "2026-10-01T10:00:00Z"}]
 _CLOUD = {"name": "gpt-oss:120b-cloud", "model": "gpt-oss:120b-cloud", "modified_at": "2026-11-01T10:00:00Z",

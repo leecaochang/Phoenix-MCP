@@ -15,15 +15,19 @@ TEMPLATE_WORKER_STARTUP_CPU_SECONDS = 8
 TEMPLATE_WORKER_MEMORY_BYTES = 512 * 1024 * 1024
 TEMPLATE_WORKER_INPUT_BYTES = 1_048_576
 TEMPLATE_WORKER_CONCURRENCY = 2
+# How long a check or test waits for a worker slot before answering busy; render_template
+# never waits, so renders cannot hold back writes.
+TEMPLATE_CHECK_SLOT_WAIT_SECONDS = 10
 TEMPLATE_WORKER_DIAGNOSTIC_EXIT = 65
 TEMPLATE_DIAGNOSTIC_BYTES = 4096
 TEMPLATE_DIAGNOSTIC_MESSAGE_CHARS = 320
 TEMPLATE_DIAGNOSTIC_SOURCE_CHARS = 240
 TEMPLATE_DIAGNOSTIC_TRACEBACK_FRAMES = 64
-# A caller template Home Assistant will compile on its event loop must compile in the worker
-# within this much CPU, all of one call's templates together: Jinja folds constant
-# expressions while compiling, so compiling runs caller arithmetic, regexes and filters.
+# Each caller template Home Assistant will compile on its event loop must compile in the
+# worker within this much CPU: Jinja folds constant expressions while compiling, so compiling
+# runs caller arithmetic, regexes and filters. A legitimate one takes about 1 ms on a desktop
+# CPU, so slow boards stay far below it. The worker's CPU limit bounds a call's total.
 TEMPLATE_CHECK_COMPILE_SECONDS = 0.25
-# Template strings one call may send to the worker. A typical one compiles in under 1 ms.
+# Distinct new template strings one call may send to the worker.
 TEMPLATE_WORKER_MAX_TEMPLATES = 256
 TEMPLATE_WARNINGS_PER_RENDER = 10

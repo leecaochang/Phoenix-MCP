@@ -28,13 +28,13 @@ Phoenix checks the request again before running it:
 
 - An expired request closes as expired.
 - If the access key was revoked or has expired, the request is cancelled.
-- If the key was rotated since the request, or the app sign-in that asked has ended, the request is cancelled.
+- If the key was rotated since an app's request, or the app sign-in that asked has ended, the request is cancelled.
 - If its capability is now Deny, the request fails without running.
 - If the kill switch is on, the request is cancelled, unless it's a configuration recovery review.
 
 Once those pass, Phoenix records your decision before it runs anything. Each action also checks its own targets, permissions and MESA rules again. If the devices it targets have changed since the request, it's refused, and the agent must ask again.
 
-An edit of an automation, script, scene or dashboard is refused the same way if what you reviewed has changed since. Someone may have edited it in Home Assistant, or another approval may have moved the cards. Nothing is overwritten, and the agent must ask again.
+An edit of an automation, script, scene, blueprint or dashboard, or a blueprint's removal, is refused the same way if what you reviewed has changed since. Someone may have edited it in Home Assistant, or another approval may have moved the cards. Nothing is overwritten, and the agent must ask again.
 
 A request can reach more than it names, such as a raw command that works on a whole device. It lists the rest as `also_reaches`, and those entities count as targets.
 
@@ -52,7 +52,9 @@ The agent receives your reason, or is told to ask you if you gave none. A reject
 
 ## What ends a request early {#cancelled}
 
-Restarting Home Assistant cancels every pending request. Reloading Phoenix doesn't, and an approved action that's already running carries on. Revoking the access key, the key expiring and deleting core data cancel its requests too. Rotating the key cancels all of its requests.
+Restarting Home Assistant cancels every pending request. Reloading Phoenix doesn't, and an approved action that's already running carries on. Revoking the access key, the key expiring and deleting core data cancel its requests too.
+
+Rotating the key cancels the requests apps made with it. Requests from the Voice Agent, Assist and AI Task stay, since nobody used the key's value to make them.
 
 Removing an app's sign-in, or turning off OAuth sign-in for the key, cancels the requests that app asked for, including one the app is still waiting on. So does a sign-in that ends because the app signed out or a token was used twice. Requests sent with the access key itself stay.
 

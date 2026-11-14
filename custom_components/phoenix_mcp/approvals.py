@@ -303,7 +303,8 @@ async def async_create_pending_approval(
         ha_user_id=household.user_id if household else None,
         sign_in_id=sign_in_id,
         oauth_app=oauth_app,
-        credential_generation=None if access_key is None else credential_generation(access_key),
+        # A household request was made by a Home Assistant user, not with the key's secret.
+        credential_generation=None if access_key is None or household is not None else credential_generation(access_key),
     )
     raw.append(approval.to_dict(redact_args=False))
     store.set_pending_approvals(raw)

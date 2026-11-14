@@ -70,7 +70,8 @@ def explicit_write_target(sentence: str, targets: dict, proposal: dict, language
     """Require a unique literal identity; this is not complete intent recognition.
 
     `competitors` are the names of entities outside the catalog (`identity_competitors`); one that
-    covers a catalog mention refuses it. Never fuzzy-match, translate names, or use area metadata.
+    covers a catalog mention refuses it, but one with exactly the mention's name only when it shares
+    the chosen target's domain. Never fuzzy-match, translate names, or use area metadata.
     """
     # Reads and independently reviewed conversation references have separate contracts.
     if proposal['intent'] in COMMAND_ROUTING_READ_INTENTS:
@@ -86,7 +87,8 @@ def explicit_write_target(sentence: str, targets: dict, proposal: dict, language
     text = _normalized(sentence)
     unsegmented = language.replace('_', '-').split('-')[0] in DECISION_UNSEGMENTED_TARGET_LANGUAGES
     mentions: set[tuple[int, int, str]] = set()
-    others: set[tuple[int, int]] = set()
+    others: set[tuple[int, int, bool]] = set()
+    target_domains = {entity_id.split('.', 1)[0] for entity_id in ids}
     for descriptor in targets.values():
         entity_id = descriptor['entity_id']
         for mention in _mentions(text, entity_id, [entity_id, descriptor.get('name', ''),
@@ -95,8 +97,9 @@ def explicit_write_target(sentence: str, targets: dict, proposal: dict, language
             if len(mentions) > DECISION_TARGET_MENTION_LIMIT:
                 return False
     for entity_id, names in competitors:
+        same_domain = entity_id.split('.', 1)[0] in target_domains
         for start, end, _ in _mentions(text, entity_id, names, unsegmented):
-            others.add((start, end))
+            others.add((start, end, same_domain))
             if len(others) > DECISION_TARGET_MENTION_LIMIT:
                 return False
     # "Desk lamp" must not independently match the shorter alias "Desk".
@@ -104,9 +107,11 @@ def explicit_write_target(sentence: str, targets: dict, proposal: dict, language
                if not any(other_start <= start and end <= other_end and (other_start, other_end) != (start, end)
                           for other_start, other_end, _ in mentions)}
     # A name outside the catalog that overlaps a mention without lying inside it ("heater desk lamp"
-    # around "desk lamp", or the same name) leaves the identity unproven.
+    # around "desk lamp") leaves the identity unproven. The same name does too, unless the other
+    # entity's domain cannot take this write: a garage door's contact sensor beside its cover.
     if any(other_start < end and start < other_end
            and not (start <= other_start and other_end <= end and (other_start, other_end) != (start, end))
-           for start, end, _ in maximal for other_start, other_end in others):
+           and ((other_start, other_end) != (start, end) or same_domain)
+           for start, end, _ in maximal for other_start, other_end, same_domain in others):
         return False
     return {entity_id for _, _, entity_id in maximal} == set(ids)

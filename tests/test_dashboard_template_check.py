@@ -1,7 +1,7 @@
 """Jinja an agent adds to a dashboard passes the template worker before any approval exists.
 
-Drawing a pending card, as the approval Preview does, sends its Jinja to Core's render_template,
-so every agent layout write and layout restore checks the strings it adds in the worker first and
+Drawing a card sends its Jinja to Core's render_template once the layout is saved (the approval
+Preview shows a pending card with Jinja as text instead), so every agent layout write and layout restore checks the strings it adds in the worker first and
 refuses the call when the worker refuses, dies or runs slow. Strings the stored layout already
 holds are never re-checked. Worker requests run in-process here; one real-worker case lives in
 test_template_worker_checks.py.

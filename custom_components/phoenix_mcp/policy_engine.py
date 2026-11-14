@@ -24,7 +24,8 @@ from .const import (
     MUSIC_ASSISTANT_LIBRARY_SERVICES, NON_ACTUATING_SERVICES, NO_TARGET_SERVICES,
     PHYSICAL_COMMAND_SERVICES, PHYSICAL_GATE_DOMAINS, PRIMARY_ENTITY_DOMAINS, SCRIPT_ENTITY_SERVICES,
     SENSITIVE_ATTRIBUTES, APPROVAL_TARGET_DEPTH, APPROVAL_TARGET_LIMIT, SENSITIVE_KEY_FINAL_WORDS,
-    SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES, PERSONA_HOME_COMPANION, READER_CREDENTIAL_KEYS,
+    SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES, SENSITIVE_WHOLE_KEYS, PERSONA_HOME_COMPANION,
+    READER_CREDENTIAL_KEYS,
     HOME_COMPANION_SENSOR_CLASSES, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS,
     UPDATE_INSTALL_SERVICE,
 )
@@ -549,8 +550,8 @@ def resolve_config_entry_registry_write(
 def is_sensitive_key(key: Any) -> bool:
     """Return whether a key name marks its value as sensitive, case-insensitively.
 
-    Matches SENSITIVE_ATTRIBUTES, SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES or a last
-    word in SENSITIVE_KEY_FINAL_WORDS. A dash or a space reads as an underscore, so x-api-key
+    Matches SENSITIVE_ATTRIBUTES, SENSITIVE_KEY_SUBSTRINGS, SENSITIVE_KEY_SUFFIXES, a whole key
+    in SENSITIVE_WHOLE_KEYS or a last word in SENSITIVE_KEY_FINAL_WORDS. A dash or a space reads as an underscore, so x-api-key
     and "wifi key" match.
     """
     if not isinstance(key, str):
@@ -559,6 +560,7 @@ def is_sensitive_key(key: Any) -> bool:
         return True
     lowered = key.lower().replace("-", "_").replace(" ", "_")
     return (any(marker in lowered for marker in SENSITIVE_KEY_SUBSTRINGS)
+            or lowered in SENSITIVE_WHOLE_KEYS
             or lowered.endswith(SENSITIVE_KEY_SUFFIXES)
             or re.split(r"[^a-z0-9]+", lowered)[-1] in SENSITIVE_KEY_FINAL_WORDS)
 
@@ -1531,6 +1533,23 @@ def esphome_entry_writable(hass: HomeAssistant, entry: Any, access_key: AccessKe
         for entity_id, permission in permissions.items()
         if entity_id.split(".", 1)[0] in DEVICE_ACTUATOR_DOMAINS
     )
+
+
+def esphome_entry_refusal(hass: HomeAssistant, entry: Any, access_key: AccessKeyRecord, service: str) -> str | None:
+    """Why the key may not run a device action of the entry, or None when it may.
+
+    A key with WRITE on none of the device's entities gets the bare refusal, so the reason never
+    tells it the device exists. Entities disabled in Home Assistant count: the firmware still drives
+    their hardware, and only a device or domain grant reaches them, as the permission tree omits them.
+    """
+    if esphome_entry_writable(hass, entry, access_key):
+        return None
+    if not any(resolve(entity_id, access_key, hass) is Permission.WRITE
+               for entity_id in esphome_entry_entities(hass, entry)):
+        return "Forbidden."
+    return (f"esphome.{service} is the device's own action and can drive anything on it, so it needs write "
+            "access to everything that device can operate, including entities disabled in Home Assistant. "
+            "Grant the device itself to cover those. No action was dispatched.")
 
 
 def music_assistant_readable_entries(hass: HomeAssistant, access_key: AccessKeyRecord) -> list[str]:

@@ -92,6 +92,11 @@ export function OAuthRequestDialog({ link, onClose }: { link: string; onClose: (
         setPhase({ kind: "message", text: e instanceof Error ? e.message : t("oauth.loadFailed") });
         return;
       }
+      // The queue for the app's address was full; the app itself was told nothing.
+      if ((e as { code?: string } | null)?.code === "oauth_busy") {
+        setPhase({ kind: "message", text: t("oauth.busyPage") });
+        return;
+      }
       // Nothing was parked under this ID: no window was open, or the request ended.
       const anyOpen = await api.getOAuthSummary()
         .then((summary) => Object.values(summary.keys).some((k) => k.window_open_until !== null))

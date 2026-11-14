@@ -329,7 +329,7 @@ function VersionComparison({ c, restore }: { c: ChangesState; restore: ReactNode
       </div>
       {showPreview ? (
         <div className="dash-preview-host">
-          <DashboardPreview key={`${record.id}:${previewSide}`} config={previewSide === "before" ? record.before : record.after} />
+          <DashboardPreview key={`${record.id}:${previewSide}`} config={previewSide === "before" ? record.before : record.after} renderTemplates />
         </div>
       ) : (
         <div className={`yaml-diff-cols${stacked ? " stacked" : ""}`}>

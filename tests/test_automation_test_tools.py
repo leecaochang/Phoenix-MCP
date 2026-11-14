@@ -407,8 +407,24 @@ async def test_a_trigger_template_is_refused_before_home_assistant_sees_it(home,
     validate.assert_not_called()
 
 
+@pytest.mark.parametrize("fields", [
+    {"cap_automation_write": "deny"}, {"cap_automation_write": "confirm"},
+    {"cap_automation_write": "confirm", "pass_through": True},
+])
+async def test_a_key_that_may_not_save_automations_unreviewed_cannot_test_a_template_trigger(home, fields):
+    """Core renders a template trigger on its event loop, which only Allow may cause without review."""
+    with patch.object(automation_test.ha_trigger, "async_initialize_triggers") as attach, \
+            patch.object(template_render, "_run_worker", side_effect=AssertionError("spawned")):
+        content, outcome = await _call("test_trigger", {"trigger": {
+            "trigger": "template", "value_template": "{{ 9 ** n > 0 }}"}, "variables": {"n": 3}, "timeout": 1},
+            _key(**fields), home)
+    assert outcome == "invalid_request", content
+    assert "Templates cannot be tested with test_trigger" in _text(content)
+    attach.assert_not_called()
+
+
 async def test_a_key_that_may_write_automations_tests_a_template_trigger(home):
-    key = _key(cap_automation_write="confirm")
+    key = _key(cap_automation_write="allow")
     content, outcome = await _fire_after_registration(
         home, {"trigger": {"trigger": "template", "value_template": "{{ is_state('light.lamp', 'on') }}"}, "timeout": 5},
         key, lambda: home.states.async_set(LAMP, "on", {"brightness": 10, "access_token": "abc"}))

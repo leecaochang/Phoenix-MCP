@@ -1368,10 +1368,9 @@ async def test_qualified_jev_chat_uses_one_joint_request(hass, hybrid_chat, cate
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
 
 
-async def test_qualified_jev_chat_asks_again_instead_of_unlocking(hass, hybrid_chat):
-    """A lock decision opposite to the sentence never runs; Chat answers with the plain-command request."""
+async def test_qualified_jev_chat_hands_an_unlock_to_the_conversation_model(hass, hybrid_chat):
+    """A lock decision opposite to the sentence never runs; the conversation model answers instead."""
     from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
-    from custom_components.phoenix_mcp.catalog_text import voice_text
     from custom_components.phoenix_mcp.tools import service as service_tools
     data, access_key = hybrid_chat
     access_key.permissions.domains['lock'] = PermissionNode(state='GREEN')
@@ -1390,9 +1389,7 @@ async def test_qualified_jev_chat_asks_again_instead_of_unlocking(hass, hybrid_c
                                                                       sentence='Please secure the Front door')
     remote.assert_awaited_once()
     call.assert_not_called()
-    provider.stream_turn.assert_not_called()
-    assert messages[-1] == {'role': 'assistant', 'content': voice_text('en', 'decision_operation_unconfirmed')}
-    assert events[-1] == ('done', {'stop_reason': 'end_turn'})
+    provider.stream_turn.assert_called_once()
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'operation_unconfirmed': 1}
 
 

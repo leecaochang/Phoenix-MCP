@@ -126,6 +126,9 @@ class OAuthRuntime:
     redeemed: dict[str, _Redemption] = field(default_factory=dict)
     # Address to (window start, count) for the unauthenticated endpoints.
     _address_hits: OrderedDict[str, tuple[float, int]] = field(default_factory=OrderedDict)
+    # Request IDs handed out for a sign-in refused by a full queue, to when they lapse, so the
+    # administrator's panel says the queue is full while the caller sees an ordinary request.
+    busy: OrderedDict[str, datetime] = field(default_factory=OrderedDict)
 
     def clear(self) -> None:
         """Forget every window, request and code (kill switch on)."""
@@ -133,6 +136,7 @@ class OAuthRuntime:
         self.pending.clear()
         self.codes.clear()
         self.redeemed.clear()
+        self.busy.clear()
 
     def forget_key(self, access_key_id: str) -> None:
         """Close a key's window and drop its unredeemed codes, so none can be put back either."""
@@ -175,6 +179,8 @@ class OAuthRuntime:
             del self.codes[code_hash]
         for code_hash in [h for h, r in self.redeemed.items() if now >= r.until]:
             del self.redeemed[code_hash]
+        for request_id in [i for i, until in self.busy.items() if now >= until]:
+            del self.busy[request_id]
 
     def add_pending(self, **values) -> PendingRequest | None:
         """Store a new request, or None when this address already has too many.
@@ -195,6 +201,19 @@ class OAuthRuntime:
         )
         self.pending[request.id] = request
         return request
+
+    def note_busy(self) -> str:
+        """A new request ID for a sign-in refused by a full queue; is_busy knows it until it lapses."""
+        self._expire()
+        request_id = secrets.token_urlsafe(32)
+        self.busy[request_id] = utcnow() + timedelta(seconds=OAUTH_REQUEST_TTL_SECONDS)
+        while len(self.busy) > OAUTH_PENDING_MAX:
+            self.busy.popitem(last=False)
+        return request_id
+
+    def is_busy(self, request_id: str) -> bool:
+        self._expire()
+        return request_id in self.busy
 
     def get_pending(self, request_id: str) -> PendingRequest | None:
         self._expire()

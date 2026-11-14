@@ -103,7 +103,7 @@ Related: [What Pass-Through Opens](guide:topic.passThrough)
 
 ## If something goes wrong {#emergency}
 
-If a key leaks, rotate it. The old value stops working at once, and the app needs the new one. Rotating also cancels the key's waiting approvals. Revoke a key you no longer use.
+If a key leaks, rotate it. The old value stops working at once, and the app needs the new one. Rotating also cancels the approvals apps queued with the key. Revoke a key you no longer use.
 
 If one signed-in app is the problem, remove its sign-in in the key's OAuth settings. That cancels the approvals it asked for, and the key's other apps keep working.
 

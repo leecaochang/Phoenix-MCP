@@ -83,6 +83,8 @@ class PhoenixAdminOAuthRequestView(PhoenixView):
         if (refusal := _kill_switch_refusal(data, rid)) is not None:
             return refusal
         pending = data.oauth.get_pending(request_id)
+        if pending is None and data.oauth.is_busy(request_id):
+            return _err("oauth_busy", "Too many sign-in requests are waiting.", 404, rid, key="oauthBusy")
         if pending is None:
             return _err("not_found", "This sign-in request has ended.", 404, rid, key="oauthRequestExpired")
         pending.opened = True
