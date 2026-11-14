@@ -6,12 +6,15 @@ from collections.abc import Collection, Iterable, Iterator, Callable
 from functools import lru_cache
 import ipaddress
 import logging
+import os
+import pkgutil
 import re
 from typing import Any, TYPE_CHECKING
 
 from homeassistant.core import HomeAssistant, async_get_hass_or_none
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.network import get_url
+import homeassistant.components as core_components
 import yarl
 
 from .const import DOMAIN
@@ -454,26 +457,107 @@ def entity_domains(hass: HomeAssistant) -> frozenset[str]:
     return frozenset(domains | {entry.domain for entry in er.async_get(hass).entities.values()})
 
 
+# The packages whose dotted logger and module names lead with an integration domain.
+_MODULE_ROOTS = (("homeassistant", "components"), ("custom_components",))
+_MODULE_MAP_KEY = f"{DOMAIN}_integration_modules"
+_MODULE_MAP_PENDING_KEY = f"{DOMAIN}_integration_modules_pending"
+
+
+class _IntegrationModules:
+    """Module and package names of installed integrations, by root and entity domain."""
+
+    def __init__(self, covered: frozenset[str], names: dict[tuple[str, str], frozenset[str]]) -> None:
+        self.covered = covered
+        self.names = names
+
+
+def _list_integration_modules(
+    roots: dict[str, str], domains: frozenset[str],
+) -> dict[tuple[str, str], frozenset[str]]:
+    """List each domain's modules and packages under each root folder. Blocking: executor only."""
+    names: dict[tuple[str, str], frozenset[str]] = {}
+    for root, folder in roots.items():
+        for domain in domains:
+            path = os.path.join(folder, domain)
+            if os.path.isdir(path):
+                names[(root, domain)] = frozenset(info.name for info in pkgutil.iter_modules([path]))
+    return names
+
+
+async def async_refresh_integration_modules(hass: HomeAssistant) -> None:
+    """Fill the module map for every entity domain on this home, listing folders in the executor."""
+    try:
+        domains = entity_domains(hass)
+        roots = {"homeassistant.components": list(core_components.__path__)[0],
+                 "custom_components": hass.config.path("custom_components")}
+        names = await hass.async_add_executor_job(_list_integration_modules, roots, domains)
+        hass.data[_MODULE_MAP_KEY] = _IntegrationModules(domains, names)
+    finally:
+        hass.data.pop(_MODULE_MAP_PENDING_KEY, None)
+
+
+def request_integration_modules(hass: HomeAssistant) -> None:
+    """Schedule one refresh of the module map from any thread; a refresh already pending suffices."""
+    if hass.data.get(_MODULE_MAP_PENDING_KEY):
+        return
+    hass.data[_MODULE_MAP_PENDING_KEY] = True
+
+    def _start() -> None:
+        hass.async_create_background_task(
+            async_refresh_integration_modules(hass), f"{DOMAIN}_integration_modules")
+
+    try:
+        hass.loop.call_soon_threadsafe(_start)
+    except RuntimeError:
+        hass.data.pop(_MODULE_MAP_PENDING_KEY, None)
+
+
+def _integration_module(hass: HomeAssistant, root: str, domain: str, name: str) -> bool:
+    """Whether `name` is a module or package of that installed integration.
+
+    Unknown until the map covers the domain, and unknown reads as no, so the window is judged as
+    an entity and redacted unless readable.
+    """
+    modules = hass.data.get(_MODULE_MAP_KEY)
+    if not isinstance(modules, _IntegrationModules) or domain not in modules.covered:
+        request_integration_modules(hass)
+        return False
+    return name in modules.names.get((root, domain), ())
+
+
+def _module_path_start(parts: list[str]) -> tuple[str, int] | None:
+    """The root and the index of the integration part when a chain is a module path."""
+    for root in _MODULE_ROOTS:
+        if len(parts) > len(root) + 1 and tuple(parts[:len(root)]) == root:
+            return ".".join(root), len(root)
+    return None
+
+
 def _chain_windows(
     parts: list[str], hass: HomeAssistant, domains: Callable[[], Collection[str]],
 ) -> Iterator[int]:
     """Start indexes of the two-part windows of a longer chain that may name an entity.
 
-    The leading window is one when its domain has an entity on this home, whether or not that
-    entity exists, as in lock.door.state, so a missing entity reads like a hidden one; a word
-    outside every entity domain (router.local, event.data.get) is not one. The window after a
-    `states` part is always one (template access), and a later window when that entity exists,
-    as in a logger named after an automation. Windows never overlap.
+    Any window whose domain has an entity on this home is one, whether or not that entity
+    exists, as in lock.door.state or x.lock.door, so a missing entity reads like a hidden one; a
+    word outside every entity domain (router.local, event.data.get) is not one. The window after
+    a `states` part is always one (template access). In a module path such as
+    homeassistant.components.sensor.recorder, the window after the root and the rest of the chain
+    are kept when it names a module of that integration; a logger named after an automation
+    (homeassistant.components.automation.morning) names no module and is judged as an entity.
+    Windows never overlap.
     """
+    module_path = _module_path_start(parts)
     index = 0
     while index < len(parts) - 1:
         domain, object_id = parts[index], parts[index + 1]
         candidate = (
             _ID_PART_RE.fullmatch(domain) is not None and _ID_PART_RE.fullmatch(object_id) is not None
             and not (domain.isdecimal() and object_id.isdecimal())
-            and ((index > 0 and parts[index - 1] == "states")
-                 or (index == 0 and domain in domains())
-                 or entity_exists(hass, f"{domain}.{object_id}")))
+            and ((index > 0 and parts[index - 1] == "states") or domain in domains()))
+        if (candidate and module_path is not None and index == module_path[1]
+                and _integration_module(hass, module_path[0], domain, object_id)):
+            return
         if candidate:
             yield index
             index += 2

@@ -52,6 +52,8 @@ FLOOR = _version(MIN_HA_VERSION)
 KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     # Entity-command feature exports verified in each component's 2024.5.0
     # __init__.py, older than any claimed floor.
+    # The components package itself, whose folder lists each integration's modules.
+    "homeassistant.components": {"*module*": "0.0.0"},
     "homeassistant.components.alarm_control_panel": {"AlarmControlPanelEntityFeature": "0.0.0"},
     "homeassistant.components.climate": {"ClimateEntityFeature": "0.0.0"},
     "homeassistant.components.fan": {"FanEntityFeature": "0.0.0"},

@@ -90,7 +90,7 @@ _SETUP_MODULES = (
     "assist_api", "config_reconciliation", "config_recovery", "conversation_log",
     "dashboard_resource_ownership", "debug_capture", "durable_storage", "llm.accounts",
     "log_read", "logger_control", "mcp_transport", "mesa", "mesa_audit", "mesa_core", "oauth_views",
-    "mesa_suggestions", "oauth_grants", "panel", "recovery_storage", "routing.decision_budget",
+    "mesa_suggestions", "oauth_grants", "panel", "recovery_storage", "redaction", "routing.decision_budget",
     "routing.routing_statistics", "sensor", "skill_view", "template_sandbox", "tool_registration",
     "tools.calendar", "voice_agent", "ws_dispatch",
 )
@@ -1114,6 +1114,8 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     _audit_template_sandbox()
     _listen_for_registry_changes(hass, entry, data)
     _start_mesa_background_work(hass, entry, data)
+    from .redaction import request_integration_modules
+    request_integration_modules(hass)
 
     # Publish readiness before the bounded recovery readback. Earlier setup
     # failures are caught by async_setup_entry and rolled back.
