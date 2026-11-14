@@ -3,6 +3,8 @@
 ---
 A short line about the control under the pointer, or the one in focus when the pointer is elsewhere. It sits along the bottom of every workspace and doesn't scroll.
 
+In an open dropdown list, it explains the choice under the pointer. Where the choice's name is all there is to know, such as a model or an access key, it says what the list is for.
+
 Pointing at the Quick Help window itself keeps its text, so you can read it. For more than a line, open the Guide from the **{{label:shell.help}}** menu.
 
 ## Showing and hiding Quick Help {#showing}

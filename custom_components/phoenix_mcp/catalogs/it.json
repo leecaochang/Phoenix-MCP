@@ -461,7 +461,16 @@
       "rowResource": "Risorsa",
       "rowTime": "Ora",
       "outcomeCancelled": "Annullato",
-      "outcomeUnknown": "Esito sconosciuto"
+      "outcomeUnknown": "Esito sconosciuto",
+      "outcomeAllowedHelp": "Eseguito.",
+      "outcomeDeniedHelp": "Rifiutato dalle autorizzazioni o da MESA, oppure un'approvazione rifiutata, scaduta o annullata.",
+      "outcomeInvalidRequestHelp": "Malformata, o una modifica non confermata da Phoenix che potrebbe essere stata applicata.",
+      "outcomeNotFoundHelp": "Ha indicato qualcosa che non esiste.",
+      "outcomeNotImplementedHelp": "Ha chiesto qualcosa che Phoenix non fa.",
+      "outcomePendingApprovalHelp": "In attesa della tua approvazione.",
+      "outcomeRateLimitedHelp": "La chiave di accesso ha inviato troppe richieste.",
+      "outcomeCancelledHelp": "L'app si è disconnessa prima della fine della richiesta. Nulla è arrivato alla tua casa.",
+      "outcomeUnknownHelp": "L'app si è disconnessa o ha perso l'autorizzazione prima di finire. La modifica potrebbe essere stata eseguita."
     },
     "approvalSummary": {
       "action.optionalReason": "Motivo facoltativo",
@@ -913,7 +922,15 @@
       "todoRemovalWarning": "La rimozione degli elementi delle liste di cose da fare è definitiva. Phoenix non ne conserva alcuna copia, quindi non possono essere ripristinati.",
       "todoStatusCompleted": "Completato",
       "todoStatusNeedsAction": "Non completato",
-      "reviewedActions": "Richiede la tua revisione perché aggiunge: {actions}"
+      "reviewedActions": "Richiede la tua revisione perché aggiunge: {actions}",
+      "scopeAllHelp": "Ogni richiesta, in attesa o decisa.",
+      "scopeApprovedHelp": "Richieste che hai approvato.",
+      "scopeRejectedHelp": "Richieste che hai rifiutato.",
+      "scopeFailedHelp": "Rifiutate al controllo finale, oppure l'azione ha restituito un errore.",
+      "scopeExpiredHelp": "Richieste su cui nessuno ha deciso entro un'ora.",
+      "scopeCancelledHelp": "Richieste chiuse senza una decisione, ad esempio quando la chiave di accesso è stata revocata.",
+      "scopeHistoryHelp": "Ogni richiesta già decisa.",
+      "scopePendingHelp": "Richieste in attesa della tua decisione."
     },
     "caps": {
       "cap_automation_write": {
@@ -1476,7 +1493,35 @@
       "viewAutomationsHelp": "Mostra o nascondi le automazioni che MESA ha potuto controllare solo in parte, perché usano modelli o progetti.",
       "openOrphanHelp": "Apri questo profilo in Editor dei profili, dove puoi eliminarlo. Ciò che copriva non esiste più.",
       "dismissNoticeHelp": "Nascondi questa segnalazione in questo browser. Ripristina le segnalazioni ignorate la fa tornare.",
-      "comboMatchCount": "Corrispondenze: {count}"
+      "comboMatchCount": "Corrispondenze: {count}",
+      "costHighHelp": "Annullarlo è possibile, ma ha conseguenze reali.",
+      "costModerateHelp": "Annullarlo ha effetti collaterali minori, come un allarme che richiede tempo per riattivarsi.",
+      "costNoneHelp": "Annullarlo non ha effetti collaterali, come una luce o un semplice interruttore.",
+      "costTrivialHelp": "Annullarlo richiede pochi secondi e ha un impatto trascurabile.",
+      "modeAdvisoryHelp": "Lascia questo profilo alla modalità MESA nelle Impostazioni.",
+      "modeAutonomousHelp": "Gli agenti agiscono liberamente.",
+      "modeConfirmHelp": "Le azioni attendono la tua approvazione quando la modalità MESA è Applicata.",
+      "modeEnforcedHelp": "Applica questo profilo anche quando la modalità MESA nelle Impostazioni è Consultiva.",
+      "modeInheritedHelp": "Il profilo lascia il controllo ad altri profili o alla base integrata.",
+      "modeProhibitedHelp": "Gli agenti non possono agire su di esso quando la modalità MESA è Applicata. In Consultiva li avvisa soltanto.",
+      "modeReadOnlyHelp": "Gli agenti non possono modificarlo in nessuna modalità MESA tranne Disattivata.",
+      "reversibleNoHelp": "La modifica non si può annullare, come l'invio di una notifica.",
+      "privNormalHelp": "Un normale dispositivo domestico, come un sensore di movimento o una luce.",
+      "privPublicHelp": "Nessun dato personale, come una stazione meteo o un contatore delle utenze.",
+      "privRestrictedHelp": "Altamente personale o critico per la sicurezza. Un profilo Autonomo richiede allora una conferma.",
+      "privSensitiveHelp": "Dati personali, come una telecamera, un microfono o un sensore di presenza.",
+      "scopeDeploymentWideHelp": "Può influire sull'intera casa attraverso l'hardware.",
+      "scopeDeviceLocalizedHelp": "Può influire su altre entità dello stesso dispositivo fisico.",
+      "scopeEntityOnlyHelp": "Influisce solo su questa entità.",
+      "scopeRoomLocalizedHelp": "Può influire su altre entità della stessa stanza attraverso l'hardware.",
+      "scopeZoneWideHelp": "Può influire sulle entità di un'intera zona attraverso l'hardware.",
+      "trigDeploymentDefinedHelp": "Sai esattamente quali automazioni di questa casa attiva.",
+      "trigLikelyHelp": "Modificarlo probabilmente avvia automazioni, quindi gli agenti valutano gli effetti a catena.",
+      "trigNoneHelp": "Modificarlo non avvia automazioni. MESA segnala ogni automazione che lo usa ancora.",
+      "trigUnknownHelp": "Non sai dire se modificarlo avvii automazioni, quindi gli agenti procedono con cautela.",
+      "unsetControlHelp": "Il profilo non decide. Decidono altri profili o la base integrata.",
+      "unsetEffectHelp": "Non dà indicazioni agli agenti su questo.",
+      "reversibleYesHelp": "La modifica si può annullare, come spegnere una luce."
     },
     "selectBy": {
       "area": "Area",
@@ -1855,7 +1900,13 @@
       "styleGrumpyTeenagerHelp": "Annoiato, insofferente e sospirante, ma fa comunque il lavoro. Solo risposte in inglese.",
       "styleNatureDocumentaryHelp": "Un narratore di documentari sulla natura che osserva sottovoce la tua casa come un habitat. Solo risposte in inglese.",
       "styleStarshipComputerHelp": "Rapporti di stato asciutti e formali dal computer di un'astronave. Solo risposte in inglese.",
-      "styleNoirDetectiveHelp": "Un investigatore privato disilluso degli anni 1940, dalle battute cupe. Solo risposte in inglese."
+      "styleNoirDetectiveHelp": "Un investigatore privato disilluso degli anni 1940, dalle battute cupe. Solo risposte in inglese.",
+      "mesaModeAdvisoryHelp": "La maggior parte delle regole avvisa soltanto. Regole sulla privacy, dispositivi in sola lettura e profili applicati bloccano comunque.",
+      "mesaModeEnforcedHelp": "Le azioni vietate vengono bloccate e quelle che richiedono conferma attendono la tua approvazione.",
+      "mesaModeOffHelp": "MESA viene ignorato e ogni azione è consentita.",
+      "toolLoadingAutoHelp": "Carica gli strumenti a blocchi quando la chiave di accesso ne ha circa 75 o più, altrimenti li invia tutti.",
+      "toolLoadingAlwaysHelp": "Carica gli strumenti a blocchi, qualunque sia il loro numero.",
+      "toolLoadingNeverHelp": "Invia tutti gli strumenti, tranne ai provider che ne accettano solo 128."
     },
     "version": {
       "card.added": "aggiunto {subject} ({where})",
@@ -2757,7 +2808,25 @@
       "settingsHelp": "Mostra o nascondi la registrazione delle conversazioni e quanta cronologia conservare.",
       "limitEntriesHelp": "Il numero massimo di voci che il Registro conversazioni conserva, da 1 a 2.000 (predefinito 100). Phoenix elimina prima le più vecchie.",
       "limitDaysHelp": "Phoenix elimina le voci più vecchie di questo valore, da 1 a 365 giorni (predefinito 7).",
-      "limitMbHelp": "Lo spazio massimo su disco che usa il Registro conversazioni, da 1 a 250 MB (predefinito 25)."
+      "limitMbHelp": "Lo spazio massimo su disco che usa il Registro conversazioni, da 1 a 250 MB (predefinito 25).",
+      "sourceHelp": {
+        "agentcli": "Turni scritti in Agent Chat, con le tue parole, la risposta e ogni chiamata a uno strumento.",
+        "voice": "Turni pronunciati all'Agente vocale, con ciò che è stato detto, la risposta e ogni chiamata a uno strumento.",
+        "ai_task": "Richieste di Attività di IA, con le istruzioni, il risultato e ogni chiamata a uno strumento.",
+        "assist": "Chiamate agli strumenti da Assist. Ciò che la persona ha detto non viene trasmesso.",
+        "mcp": "Chiamate agli strumenti dai client MCP. Ciò che la persona ha scritto non viene trasmesso.",
+        "home_companion": "Richieste dalle chiavi Home Companion, con ogni chiamata a uno strumento e il suo risultato."
+      },
+      "outcomeHelp": {
+        "completed": "Terminato senza errori.",
+        "failed": "Terminato con un errore, oppure un'azione non è riuscita.",
+        "denied": "Un'azione è stata rifiutata dalle autorizzazioni o da MESA, oppure la sua approvazione è stata rifiutata.",
+        "pending_approval": "Un'azione è in attesa della tua approvazione.",
+        "cancelled": "Interrotto prima di terminare.",
+        "interrupted": "La registrazione si è fermata prima della fine, ad esempio durante un riavvio.",
+        "unknown": "Un'azione potrebbe essere stata eseguita, ma Phoenix non ha potuto confermarlo. Controlla Home Assistant.",
+        "running": "Ancora in corso."
+      }
     },
     "attention": {
       "actionTitle": "Verifica un’azione precedente",

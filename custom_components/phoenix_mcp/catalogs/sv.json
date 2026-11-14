@@ -1047,7 +1047,15 @@
       "todoRemovalWarning": "Att ta bort objekt från att göra-listor är permanent. Phoenix sparar ingen kopia, så de kan inte återställas.",
       "todoStatusCompleted": "Slutförd",
       "todoStatusNeedsAction": "Ej slutförd",
-      "reviewedActions": "Behöver granskas eftersom det lägger till: {actions}"
+      "reviewedActions": "Behöver granskas eftersom det lägger till: {actions}",
+      "scopeAllHelp": "Alla begäranden, väntande eller avgjorda.",
+      "scopeApprovedHelp": "Begäranden som du godkände.",
+      "scopeRejectedHelp": "Begäranden som du avvisade.",
+      "scopeFailedHelp": "Nekades vid den sista kontrollen, eller åtgärden returnerade ett fel.",
+      "scopeExpiredHelp": "Begäranden som ingen avgjorde inom en timme.",
+      "scopeCancelledHelp": "Begäranden som stängdes utan beslut, till exempel när åtkomstnyckeln återkallades.",
+      "scopeHistoryHelp": "Alla begäranden som redan har avgjorts.",
+      "scopePendingHelp": "Begäranden som väntar på ditt beslut."
     },
     "attention": {
       "actionTitle": "Kontrollera en tidigare åtgärd",
@@ -1120,7 +1128,16 @@
       "rowResource": "Resurs",
       "rowTime": "Tid",
       "outcomeCancelled": "Avbruten",
-      "outcomeUnknown": "Utfallet okänt"
+      "outcomeUnknown": "Utfallet okänt",
+      "outcomeAllowedHelp": "Utfördes.",
+      "outcomeDeniedHelp": "Nekades av behörigheter eller MESA, eller ett godkännande som avvisades, gick ut eller avbröts.",
+      "outcomeInvalidRequestHelp": "Felaktigt utformad, eller en ändring som Phoenix inte kunde bekräfta och som kan ha genomförts.",
+      "outcomeNotFoundHelp": "Angav något som inte finns.",
+      "outcomeNotImplementedHelp": "Bad om något som Phoenix inte gör.",
+      "outcomePendingApprovalHelp": "Väntar på ditt godkännande.",
+      "outcomeRateLimitedHelp": "Åtkomstnyckeln skickade för många begäranden.",
+      "outcomeCancelledHelp": "Appen kopplade från innan begäran var klar. Inget nådde ditt hem.",
+      "outcomeUnknownHelp": "Appen kopplade från eller förlorade behörigheten innan den var klar. Ändringen kan ha körts."
     },
     "caps": {
       "cap_automation_write": {
@@ -1585,7 +1602,25 @@
       "settingsHelp": "Visa eller dölj inspelning av konversationer och hur mycket historik som behålls.",
       "limitEntriesHelp": "Det högsta antalet poster konversationsloggen behåller, 1 till 2 000 (standard 100). Phoenix raderar de äldsta först.",
       "limitDaysHelp": "Phoenix raderar poster som är äldre än så här, 1 till 365 dagar (standard 7).",
-      "limitMbHelp": "Det största diskutrymme konversationsloggen använder, 1 till 250 MB (standard 25)."
+      "limitMbHelp": "Det största diskutrymme konversationsloggen använder, 1 till 250 MB (standard 25).",
+      "sourceHelp": {
+        "agentcli": "Turer som skrivs i Agent Chat, med dina ord, svaret och varje verktygsanrop.",
+        "voice": "Turer som sägs till Röstagenten, med det som sades, svaret och varje verktygsanrop.",
+        "ai_task": "Begäranden från AI-uppgift, med instruktionerna, resultatet och varje verktygsanrop.",
+        "assist": "Verktygsanrop från Assist. Det personen sa skickas inte vidare.",
+        "mcp": "Verktygsanrop från MCP-klienter. Det personen skrev skickas inte vidare.",
+        "home_companion": "Begäranden från Home Companion-nycklar, med varje verktygsanrop och dess resultat."
+      },
+      "outcomeHelp": {
+        "completed": "Slutfördes utan fel.",
+        "failed": "Slutade med ett fel, eller en åtgärd misslyckades.",
+        "denied": "En åtgärd nekades av behörigheter eller MESA, eller så avvisades dess godkännande.",
+        "pending_approval": "En åtgärd väntar på ditt godkännande.",
+        "cancelled": "Stoppades innan den var klar.",
+        "interrupted": "Inspelningen stoppades innan den var slut, till exempel vid en omstart.",
+        "unknown": "En åtgärd kan ha körts, men Phoenix kunde inte bekräfta det. Kontrollera Home Assistant.",
+        "running": "Pågår fortfarande."
+      }
     },
     "diff": {
       "blueprint.create": "Skapa {domain}-blueprint '{rel}'",
@@ -2008,7 +2043,35 @@
       "viewAutomationsHelp": "Visa eller dölj automatiseringarna som MESA bara kunde kontrollera delvis, eftersom de använder mallar eller blueprints.",
       "openOrphanHelp": "Öppna profilen i Profilredigerare, där du kan radera den. Det den täckte finns inte längre.",
       "dismissNoticeHelp": "Dölj notisen i den här webbläsaren. Återställ avfärdade notiser tar tillbaka den.",
-      "comboMatchCount": "Träffar: {count}"
+      "comboMatchCount": "Träffar: {count}",
+      "costHighHelp": "Det går att ångra, men det får verkliga följder.",
+      "costModerateHelp": "Att ångra det ger små sidoeffekter, som ett larm som tar tid att aktivera igen.",
+      "costNoneHelp": "Att ångra det ger inga sidoeffekter, som en lampa eller en enkel strömbrytare.",
+      "costTrivialHelp": "Att ångra det tar sekunder och har försumbar påverkan.",
+      "modeAdvisoryHelp": "Överlåter profilen till MESA-läget i Inställningar.",
+      "modeAutonomousHelp": "Agenter agerar fritt.",
+      "modeConfirmHelp": "Åtgärder väntar på ditt godkännande när MESA är i påtvingat läge.",
+      "modeEnforcedHelp": "Tillämpar profilen även när MESA-läget i Inställningar är Rådgivande.",
+      "modeInheritedHelp": "Profilen överlåter styrningen till andra profiler eller den inbyggda baslinjen.",
+      "modeProhibitedHelp": "Agenter kan inte agera på det när MESA är i påtvingat läge. I Rådgivande varnas de bara.",
+      "modeReadOnlyHelp": "Agenter kan inte ändra det i något MESA-läge utom Av.",
+      "reversibleNoHelp": "Ändringen kan inte ångras, som att skicka en avisering.",
+      "privNormalHelp": "En vanlig enhet i hemmet, som en rörelsesensor eller en lampa.",
+      "privPublicHelp": "Inga personuppgifter, som en väderstation eller en förbrukningsmätare.",
+      "privRestrictedHelp": "Mycket personlig eller säkerhetskritisk. En profil med Autonomt kräver då bekräftelse.",
+      "privSensitiveHelp": "Personuppgifter, som en kamera, en mikrofon eller en närvarosensor.",
+      "scopeDeploymentWideHelp": "Kan påverka hela hemmet via hårdvaran.",
+      "scopeDeviceLocalizedHelp": "Kan påverka andra entiteter på samma fysiska enhet.",
+      "scopeEntityOnlyHelp": "Påverkar bara den här entiteten.",
+      "scopeRoomLocalizedHelp": "Kan påverka andra entiteter i samma rum via hårdvaran.",
+      "scopeZoneWideHelp": "Kan påverka entiteter i en hel zon via hårdvaran.",
+      "trigDeploymentDefinedHelp": "Du vet exakt vilka automatiseringar i hemmet den driver.",
+      "trigLikelyHelp": "En ändring startar troligen automatiseringar, så agenter väger in följdeffekterna.",
+      "trigNoneHelp": "En ändring startar inga automatiseringar. MESA flaggar alla automatiseringar som ändå använder den.",
+      "trigUnknownHelp": "Du kan inte avgöra om en ändring startar automatiseringar, så agenter är försiktiga.",
+      "unsetControlHelp": "Profilen avgör inte. Andra profiler eller den inbyggda baslinjen gör det.",
+      "unsetEffectHelp": "Ger agenter inget tips om detta.",
+      "reversibleYesHelp": "Ändringen kan ångras, som att släcka en lampa."
     },
     "mesaSuggestion": {
       "baseline_note": " Förbjudet matchar den inbyggda baslinjen för denna domän, så profilen tydliggör den avsikten. Om du i stället vill tillåta agentstyrning bakom administratörsgodkännande väljer du Bekräfta i Profilredigerare innan du sparar; godkännande gäller när MESA är påtvingat.",
@@ -2588,7 +2651,13 @@
       "styleGrumpyTeenagerHelp": "Uttråkad, förorättad och suckande, men gör jobbet ändå. Endast svar på engelska.",
       "styleNatureDocumentaryHelp": "En viskande naturfilmsberättare som betraktar ditt hem som ett habitat. Endast svar på engelska.",
       "styleStarshipComputerHelp": "Korta, formella statusrapporter från ett rymdskepps dator. Endast svar på engelska.",
-      "styleNoirDetectiveHelp": "En desillusionerad privatdetektiv från 1940-talet med dystra oneliners. Endast svar på engelska."
+      "styleNoirDetectiveHelp": "En desillusionerad privatdetektiv från 1940-talet med dystra oneliners. Endast svar på engelska.",
+      "mesaModeAdvisoryHelp": "De flesta regler varnar bara. Integritetsregler, skrivskyddade enheter och påtvingade profiler blockerar ändå.",
+      "mesaModeEnforcedHelp": "Förbjudna åtgärder blockeras, och åtgärder som kräver bekräftelse väntar på ditt godkännande.",
+      "mesaModeOffHelp": "MESA hoppas över och alla åtgärder tillåts.",
+      "toolLoadingAutoHelp": "Läser in verktyg i omgångar när åtkomstnyckeln har ungefär 75 eller fler, annars skickas alla.",
+      "toolLoadingAlwaysHelp": "Läser in verktyg i omgångar, oavsett antal verktyg.",
+      "toolLoadingNeverHelp": "Skickar alla verktyg, utom till leverantörer som bara tar emot 128."
     },
     "shell": {
       "agentChat": "Agent Chat",

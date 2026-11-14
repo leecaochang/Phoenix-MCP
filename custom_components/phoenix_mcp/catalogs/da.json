@@ -1047,7 +1047,15 @@
       "todoRemovalWarning": "Fjernelse af opgaveelementer er permanent. Phoenix gemmer ingen kopi, så de kan ikke gendannes.",
       "todoStatusCompleted": "Afsluttet",
       "todoStatusNeedsAction": "Ikke afsluttet",
-      "reviewedActions": "Skal gennemgås, fordi det tilføjer: {actions}"
+      "reviewedActions": "Skal gennemgås, fordi det tilføjer: {actions}",
+      "scopeAllHelp": "Alle anmodninger, afventende eller afgjorte.",
+      "scopeApprovedHelp": "Anmodninger, du godkendte.",
+      "scopeRejectedHelp": "Anmodninger, du afviste.",
+      "scopeFailedHelp": "Afvist ved den sidste kontrol, eller handlingen returnerede en fejl.",
+      "scopeExpiredHelp": "Anmodninger, som ingen afgjorde inden for en time.",
+      "scopeCancelledHelp": "Anmodninger lukket uden en afgørelse, fx da adgangsnøglen blev tilbagekaldt.",
+      "scopeHistoryHelp": "Alle anmodninger, der allerede er afgjort.",
+      "scopePendingHelp": "Anmodninger, der venter på din afgørelse."
     },
     "attention": {
       "actionTitle": "Kontrollér en tidligere handling",
@@ -1120,7 +1128,16 @@
       "rowResource": "Ressource",
       "rowTime": "Tid",
       "outcomeCancelled": "Annulleret",
-      "outcomeUnknown": "Ukendt udfald"
+      "outcomeUnknown": "Ukendt udfald",
+      "outcomeAllowedHelp": "Udført.",
+      "outcomeDeniedHelp": "Afvist af tilladelser eller MESA, eller en godkendelse, der blev afvist, udløb eller blev annulleret.",
+      "outcomeInvalidRequestHelp": "Fejlbehæftet, eller en ændring, Phoenix ikke kunne bekræfte, og som kan være gennemført.",
+      "outcomeNotFoundHelp": "Nævnte noget, der ikke findes.",
+      "outcomeNotImplementedHelp": "Bad om noget, Phoenix ikke gør.",
+      "outcomePendingApprovalHelp": "Venter på din godkendelse.",
+      "outcomeRateLimitedHelp": "Adgangsnøglen sendte for mange anmodninger.",
+      "outcomeCancelledHelp": "Appen koblede fra, før anmodningen var færdig. Intet nåede dit hjem.",
+      "outcomeUnknownHelp": "Appen koblede fra eller mistede tilladelsen, før den var færdig. Ændringen kan være kørt."
     },
     "caps": {
       "cap_automation_write": {
@@ -1585,7 +1602,25 @@
       "settingsHelp": "Vis eller skjul registrering af samtaler, og hvor meget historik der beholdes.",
       "limitEntriesHelp": "Det højeste antal poster, samtaleloggen beholder, 1 til 2.000 (standard 100). Phoenix sletter de ældste først.",
       "limitDaysHelp": "Phoenix sletter poster, der er ældre end dette, 1 til 365 dage (standard 7).",
-      "limitMbHelp": "Den største diskplads, samtaleloggen bruger, 1 til 250 MB (standard 25)."
+      "limitMbHelp": "Den største diskplads, samtaleloggen bruger, 1 til 250 MB (standard 25).",
+      "sourceHelp": {
+        "agentcli": "Ture skrevet i Agent Chat, med dine ord, svaret og hvert værktøjskald.",
+        "voice": "Ture talt til Stemmeagent, med det, der blev sagt, svaret og hvert værktøjskald.",
+        "ai_task": "Anmodninger fra AI-opgave, med instruktionerne, resultatet og hvert værktøjskald.",
+        "assist": "Værktøjskald fra Assist. Det, personen sagde, sendes ikke videre.",
+        "mcp": "Værktøjskald fra MCP-klienter. Det, personen skrev, sendes ikke videre.",
+        "home_companion": "Anmodninger fra Home Companion-nøgler, med hvert værktøjskald og dets resultat."
+      },
+      "outcomeHelp": {
+        "completed": "Afsluttet uden fejl.",
+        "failed": "Endte med en fejl, eller en handling mislykkedes.",
+        "denied": "En handling blev afvist af tilladelser eller MESA, eller dens godkendelse blev afvist.",
+        "pending_approval": "En handling venter på din godkendelse.",
+        "cancelled": "Stoppet, før den var færdig.",
+        "interrupted": "Registreringen stoppede, før samtalen sluttede, fx ved en genstart.",
+        "unknown": "En handling kan være kørt, men Phoenix kunne ikke bekræfte det. Kontrollér Home Assistant.",
+        "running": "Stadig i gang."
+      }
     },
     "diff": {
       "blueprint.create": "Opret {domain}-blueprint '{rel}'",
@@ -2008,7 +2043,35 @@
       "viewAutomationsHelp": "Vis eller skjul de automatiseringer, MESA kun delvist kunne tjekke, fordi de bruger skabeloner eller blueprints.",
       "openOrphanHelp": "Åbn denne profil i Profileditor, hvor du kan slette den. Det, den dækkede, findes ikke længere.",
       "dismissNoticeHelp": "Skjul denne meddelelse i denne browser. Gendan afviste meddelelser henter den tilbage.",
-      "comboMatchCount": "Match: {count}"
+      "comboMatchCount": "Match: {count}",
+      "costHighHelp": "Det kan fortrydes, men har reelle konsekvenser.",
+      "costModerateHelp": "At fortryde det har mindre bivirkninger, fx en alarm, der tager tid at genaktivere.",
+      "costNoneHelp": "At fortryde det har ingen bivirkninger, fx et lys eller en simpel kontakt.",
+      "costTrivialHelp": "At fortryde det tager sekunder og har ubetydelig virkning.",
+      "modeAdvisoryHelp": "Overlader profilen til MESA-tilstanden i Indstillinger.",
+      "modeAutonomousHelp": "Agenter handler frit.",
+      "modeConfirmHelp": "Handlinger venter på din godkendelse, når MESA håndhæves.",
+      "modeEnforcedHelp": "Håndhæver profilen, selv når MESA-tilstanden i Indstillinger er Rådgivende.",
+      "modeInheritedHelp": "Profilen overlader styringen til andre profiler eller den indbyggede basislinje.",
+      "modeProhibitedHelp": "Agenter kan ikke handle på det, når MESA håndhæves. I Rådgivende advares de kun.",
+      "modeReadOnlyHelp": "Agenter kan ikke ændre det i nogen MESA-tilstand undtagen Fra.",
+      "reversibleNoHelp": "Ændringen kan ikke fortrydes, fx at sende en notifikation.",
+      "privNormalHelp": "En almindelig enhed i hjemmet, fx en bevægelsessensor eller et lys.",
+      "privPublicHelp": "Ingen personlige data, fx en vejrstation eller en forbrugsmåler.",
+      "privRestrictedHelp": "Meget personligt eller sikkerhedskritisk. En Autonom profil kræver så bekræftelse.",
+      "privSensitiveHelp": "Personlige data, fx et kamera, en mikrofon eller en tilstedeværelsessensor.",
+      "scopeDeploymentWideHelp": "Kan påvirke hele hjemmet via hardwaren.",
+      "scopeDeviceLocalizedHelp": "Kan påvirke andre entiteter på samme fysiske enhed.",
+      "scopeEntityOnlyHelp": "Påvirker kun denne entitet.",
+      "scopeRoomLocalizedHelp": "Kan påvirke andre entiteter i samme rum via hardwaren.",
+      "scopeZoneWideHelp": "Kan påvirke entiteter i en hel zone via hardwaren.",
+      "trigDeploymentDefinedHelp": "Du ved præcis, hvilke automatiseringer i dette hjem den styrer.",
+      "trigLikelyHelp": "En ændring her starter sandsynligvis automatiseringer, så agenter vejer følgevirkningerne.",
+      "trigNoneHelp": "En ændring her starter ingen automatiseringer. MESA markerer enhver automatisering, der stadig bruger den.",
+      "trigUnknownHelp": "Du kan ikke afgøre, om en ændring her starter automatiseringer, så agenter er forsigtige.",
+      "unsetControlHelp": "Profilen bestemmer ikke. Det gør andre profiler eller den indbyggede basislinje.",
+      "unsetEffectHelp": "Giver ikke agenter noget vink om dette.",
+      "reversibleYesHelp": "Ændringen kan fortrydes, fx at slukke et lys."
     },
     "mesaSuggestion": {
       "baseline_note": " Forbudt matcher den indbyggede basislinje for dette domæne, så profilen gør denne hensigt eksplicit. Vælg i stedet Bekræft i Profileditor, før du gemmer, for at tillade agentkontrol bag administratorgodkendelse; godkendelse gælder, når MESA håndhæves.",
@@ -2588,7 +2651,13 @@
       "styleGrumpyTeenagerHelp": "Uinteresseret, forurettet og sukkende, men gør arbejdet alligevel. Kun til svar på engelsk.",
       "styleNatureDocumentaryHelp": "En hviskende naturfilmfortæller, der betragter dit hjem som et levested. Kun til svar på engelsk.",
       "styleStarshipComputerHelp": "Korte, formelle statusrapporter fra et rumskibs computer. Kun til svar på engelsk.",
-      "styleNoirDetectiveHelp": "En desillusioneret privatdetektiv fra 1940'erne med dystre replikker. Kun til svar på engelsk."
+      "styleNoirDetectiveHelp": "En desillusioneret privatdetektiv fra 1940'erne med dystre replikker. Kun til svar på engelsk.",
+      "mesaModeAdvisoryHelp": "De fleste regler advarer kun. Privatlivsregler, skrivebeskyttede enheder og håndhævede profiler blokerer stadig.",
+      "mesaModeEnforcedHelp": "Forbudte handlinger blokeres, og handlinger, der kræver bekræftelse, venter på din godkendelse.",
+      "mesaModeOffHelp": "MESA springes over, og alle handlinger er tilladt.",
+      "toolLoadingAutoHelp": "Indlæser værktøjer i dele, når adgangsnøglen har omkring 75 eller flere, ellers sendes alle.",
+      "toolLoadingAlwaysHelp": "Indlæser værktøjer i dele, uanset antallet af værktøjer.",
+      "toolLoadingNeverHelp": "Sender alle værktøjer, undtagen til udbydere, der kun accepterer 128."
     },
     "shell": {
       "agentChat": "Agent Chat",

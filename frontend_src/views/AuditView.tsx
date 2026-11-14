@@ -263,15 +263,15 @@ export function AuditView({ accessKeys }: Props) {
             onChange={(e) => setOutcomeFilter(e.target.value as Outcome | "")}
           >
             <option value="">{t("audit.allOutcomes")}</option>
-            <option value="allowed">{t("audit.outcomeAllowed")}</option>
-            <option value="denied">{t("audit.outcomeDenied")}</option>
-            <option value="not_found">{t("audit.outcomeNotFound")}</option>
-            <option value="rate_limited">{t("audit.outcomeRateLimited")}</option>
-            <option value="not_implemented">{t("audit.outcomeNotImplemented")}</option>
-            <option value="invalid_request">{t("audit.outcomeInvalidRequest")}</option>
-            <option value="pending_approval">{t("audit.outcomePendingApproval")}</option>
-            <option value="cancelled">{t("audit.outcomeCancelled")}</option>
-            <option value="unknown">{t("audit.outcomeUnknown")}</option>
+            <option value="allowed" data-help="audit.outcomeAllowedHelp">{t("audit.outcomeAllowed")}</option>
+            <option value="denied" data-help="audit.outcomeDeniedHelp">{t("audit.outcomeDenied")}</option>
+            <option value="not_found" data-help="audit.outcomeNotFoundHelp">{t("audit.outcomeNotFound")}</option>
+            <option value="rate_limited" data-help="audit.outcomeRateLimitedHelp">{t("audit.outcomeRateLimited")}</option>
+            <option value="not_implemented" data-help="audit.outcomeNotImplementedHelp">{t("audit.outcomeNotImplemented")}</option>
+            <option value="invalid_request" data-help="audit.outcomeInvalidRequestHelp">{t("audit.outcomeInvalidRequest")}</option>
+            <option value="pending_approval" data-help="audit.outcomePendingApprovalHelp">{t("audit.outcomePendingApproval")}</option>
+            <option value="cancelled" data-help="audit.outcomeCancelledHelp">{t("audit.outcomeCancelled")}</option>
+            <option value="unknown" data-help="audit.outcomeUnknownHelp">{t("audit.outcomeUnknown")}</option>
           </select>
           <select
             aria-label={t("audit.filterAccessKeyAria")}

@@ -26,6 +26,26 @@ import { useTableSettings } from "../ui/table/settings";
 const SERVER_SORT = { column: "latest", dir: "desc" } as const;
 
 /** A conversation's prompt, or an honest description of what is missing. */
+/** What each filter choice means, for the Help window. */
+const SOURCE_HELP: Record<string, string> = {
+  agentcli: "conversations.sourceHelp.agentcli",
+  voice: "conversations.sourceHelp.voice",
+  ai_task: "conversations.sourceHelp.ai_task",
+  assist: "conversations.sourceHelp.assist",
+  mcp: "conversations.sourceHelp.mcp",
+  home_companion: "conversations.sourceHelp.home_companion",
+};
+const OUTCOME_HELP: Record<string, string> = {
+  completed: "conversations.outcomeHelp.completed",
+  failed: "conversations.outcomeHelp.failed",
+  denied: "conversations.outcomeHelp.denied",
+  pending_approval: "conversations.outcomeHelp.pending_approval",
+  cancelled: "conversations.outcomeHelp.cancelled",
+  interrupted: "conversations.outcomeHelp.interrupted",
+  unknown: "conversations.outcomeHelp.unknown",
+  running: "conversations.outcomeHelp.running",
+};
+
 export function conversationTitle(entry: ConversationSummary): string {
   return entry.excerpt || (entry.prompt_attachments ? t("conversations.attachmentPrompt") : entry.first_tool)
     || t(entry.coverage === "tool_exchange" ? "conversations.toolExchange" : "conversations.promptUnavailable");
@@ -164,11 +184,11 @@ export function ConversationsView({ accessKeys = NO_KEYS }: { accessKeys?: Acces
       <div className="filter-row">
         <select className="input input-auto" data-filter="source" data-help="help.conversationSource" aria-label={t("conversations.sourceFilter")} value={source} onChange={e => { setSource(e.target.value); resetPage(); }}>
           <option value="">{t("conversations.allSources")}</option>
-          {["agentcli", "voice", "ai_task", "assist", "mcp", "home_companion"].map(value => <option key={value} value={value}>{label("source", value)}</option>)}
+          {["agentcli", "voice", "ai_task", "assist", "mcp", "home_companion"].map(value => <option key={value} value={value} data-help={SOURCE_HELP[value]}>{label("source", value)}</option>)}
         </select>
         <select className="input input-auto" data-filter="outcome" data-help="help.conversationOutcome" aria-label={t("conversations.outcomeFilter")} value={outcome} onChange={e => { setOutcome(e.target.value); resetPage(); }}>
           <option value="">{t("conversations.allOutcomes")}</option>
-          {["completed", "failed", "denied", "pending_approval", "cancelled", "interrupted", "unknown", "running"].map(value => <option key={value} value={value}>{label("outcome", value)}</option>)}
+          {["completed", "failed", "denied", "pending_approval", "cancelled", "interrupted", "unknown", "running"].map(value => <option key={value} value={value} data-help={OUTCOME_HELP[value]}>{label("outcome", value)}</option>)}
         </select>
         <select className="input input-auto" data-filter="days" data-help="help.conversationTime" aria-label={t("conversations.timeFilter")} value={days} onChange={e => { setDays(e.target.value); resetPage(); }}>
           <option value="">{t("conversations.allDates")}</option><option value="1">{t("conversations.day")}</option><option value="7">{t("conversations.week")}</option><option value="30">{t("conversations.month")}</option>

@@ -257,9 +257,9 @@ export function SafetyWindow() {
         <SettingLabel help={mesaModeHelp}><span>{t("settings.mesaModeLabel")}</span></SettingLabel>
         <BusySelect aria-label={t("settings.mesaModeAria")} className="input input-auto" value={settings.mesa_mode} busy={saving}
           onChange={(e) => change("mesa_mode", e.target.value)}>
-          <option value="off">{t("settings.mesaModeOff")}</option>
-          <option value="advisory">{t("settings.mesaModeAdvisory")}</option>
-          <option value="enforced">{t("settings.mesaModeEnforced")}</option>
+          <option value="off" data-help="settings.mesaModeOffHelp">{t("settings.mesaModeOff")}</option>
+          <option value="advisory" data-help="settings.mesaModeAdvisoryHelp">{t("settings.mesaModeAdvisory")}</option>
+          <option value="enforced" data-help="settings.mesaModeEnforcedHelp">{t("settings.mesaModeEnforced")}</option>
         </BusySelect>
       </div>
       <Disclosure title={t("settings.dataCard")} guide="window.settingsSafety#data-management" help="settings.dataCardHelp">

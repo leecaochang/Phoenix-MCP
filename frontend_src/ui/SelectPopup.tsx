@@ -13,6 +13,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { Icon } from "./Icon";
+import { hasMessage, t } from "../i18n";
+import { tPlain } from "../i18n/rich";
 
 /** Space kept between the list and the edges of the window it opens in. */
 const EDGE = 8;
@@ -23,8 +25,11 @@ const CLOSE_MS = 120;
 /** How far the pointer moves after opening before a release chooses. */
 const DRAG_SLOP = 4;
 
-/** `group` is the label of the `<optgroup>` holding the choice, shown as a heading above its first choice. */
-interface Choice { value: string; label: string; disabled: boolean; group: string | null }
+/**
+ * `group` is the label of the `<optgroup>` holding the choice, shown as a heading above its first choice.
+ * `help` is what the Help window says while the choice has the pointer: never just its own name.
+ */
+interface Choice { value: string; label: string; disabled: boolean; group: string | null; help: string }
 
 interface OpenState {
   select: HTMLSelectElement;
@@ -47,14 +52,34 @@ function servedBy(select: HTMLSelectElement, root: HTMLElement): boolean {
   return false;
 }
 
+/** An element's own help text: `data-help-text`, or the catalog text a `data-help` key names. */
+function ownHelp(el: Element): string {
+  const text = el.getAttribute("data-help-text")?.trim();
+  if (text) return text;
+  const key = el.getAttribute("data-help");
+  return key && hasMessage(key) ? tPlain(key) : "";
+}
+
+/** What the dropdown itself does: its own help, its settings row's, or at least its name. */
+function listHelp(select: HTMLSelectElement): string {
+  const row = select.closest("[data-help-controls]");
+  return ownHelp(select) || (row ? ownHelp(row) : "") || nameOf(select);
+}
+
 function choicesOf(select: HTMLSelectElement): Choice[] {
+  const fallback = listHelp(select);
   return [...select.options].map((option) => {
     const group = option.parentElement instanceof HTMLOptGroupElement ? option.parentElement : null;
+    const label = option.label || option.text;
+    // A choice with a description of its own says "Name: description"; a choice whose name is
+    // the information (a key, a model, a number) says what the dropdown is for instead.
+    const description = ownHelp(option);
     return {
       value: option.value,
-      label: option.label || option.text,
+      label,
       disabled: option.disabled || Boolean(group?.disabled),
       group: group ? group.label : null,
+      help: description ? t("settings.selectedOptionHelp", { option: label, description }) : fallback,
     };
   });
 }
@@ -272,7 +297,7 @@ function SelectList({ state, closing, onClose, onChoose, keysRef }: {
             choice.group !== null && choice.group !== choices[i - 1]?.group && (
               <li key={`${i}:group`} role="presentation" className="phx-select-group">{choice.group}</li>
             ),
-            <li key={`${i}:${choice.value}`} id={`${id}-${i}`} role="option" data-index={i}
+            <li key={`${i}:${choice.value}`} id={`${id}-${i}`} role="option" data-index={i} data-help-text={choice.help}
               aria-selected={i === chosen} aria-disabled={choice.disabled || undefined}
               className={`phx-select-option${i === chosen ? " is-chosen" : ""}`}
               onPointerMove={() => { if (!choice.disabled && active !== i) setActive(i); }}

@@ -572,9 +572,9 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
             <BusySelect id={`${uid}tool-loading-${inst.id}`} className="input input-auto" busy={busy}
                     value={inst.tool_loading ?? "auto"}
                     onChange={(e) => void saveToolLoading(inst.id, e.target.value as ToolLoadingMode)}>
-              <option value="auto">{t("settings.toolLoadingAuto")}</option>
-              <option value="always">{t("settings.toolLoadingAlways")}</option>
-              <option value="never">{t("settings.toolLoadingNever")}</option>
+              <option value="auto" data-help="settings.toolLoadingAutoHelp">{t("settings.toolLoadingAuto")}</option>
+              <option value="always" data-help="settings.toolLoadingAlwaysHelp">{t("settings.toolLoadingAlways")}</option>
+              <option value="never" data-help="settings.toolLoadingNeverHelp">{t("settings.toolLoadingNever")}</option>
             </BusySelect>
           </div>
           {toolLoadingError && <div className="banner banner-error" role="alert">{toolLoadingError}</div>}

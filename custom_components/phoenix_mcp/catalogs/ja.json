@@ -172,7 +172,15 @@
       "todoRemovalWarning": "To-do 項目の削除は取り消せません。Phoenix はコピーを保持しないため、復元できません。",
       "todoStatusCompleted": "完了",
       "todoStatusNeedsAction": "未完了",
-      "reviewedActions": "次を追加するため確認が必要です: {actions}"
+      "reviewedActions": "次を追加するため確認が必要です: {actions}",
+      "scopeAllHelp": "承認待ちと決定済みを含む、すべてのリクエストです。",
+      "scopeApprovedHelp": "承認したリクエストです。",
+      "scopeRejectedHelp": "拒否したリクエストです。",
+      "scopeFailedHelp": "最終チェックで拒否されたか、アクションがエラーを返しました。",
+      "scopeExpiredHelp": "一時間以内に誰も決定しなかったリクエストです。",
+      "scopeCancelledHelp": "アクセスキーの取り消しなどにより、決定されないまま閉じられたリクエストです。",
+      "scopeHistoryHelp": "決定済みのすべてのリクエストです。",
+      "scopePendingHelp": "決定を待っているリクエストです。"
     },
     "caps": {
       "cap_config_read": {
@@ -597,7 +605,16 @@
       "rowResource": "リソース",
       "rowTime": "時刻",
       "outcomeCancelled": "キャンセル済み",
-      "outcomeUnknown": "結果不明"
+      "outcomeUnknown": "結果不明",
+      "outcomeAllowedHelp": "実行されました。",
+      "outcomeDeniedHelp": "権限または MESA により拒否されたか、承認が拒否、期限切れ、キャンセルのいずれかになりました。",
+      "outcomeInvalidRequestHelp": "形式が不正か、Phoenix が確認できなかった変更です。変更は反映された可能性があります。",
+      "outcomeNotFoundHelp": "存在しないものを指定しました。",
+      "outcomeNotImplementedHelp": "Phoenix が行わないことを求めました。",
+      "outcomePendingApprovalHelp": "承認を待っています。",
+      "outcomeRateLimitedHelp": "アクセスキーが送信したリクエストが多すぎます。",
+      "outcomeCancelledHelp": "リクエストの完了前にアプリが切断しました。家には何も届いていません。",
+      "outcomeUnknownHelp": "完了前にアプリが切断したか、権限を失いました。変更は実行された可能性があります。"
     },
     "inject": {
       "profileSet": "{key} に MESA プロファイルが設定されています。クリックして編集",
@@ -1907,7 +1924,13 @@
       "styleGrumpyTeenagerHelp": "退屈そうに不満げにため息をつきながらも、仕事はこなします。英語の返答のみ。",
       "styleNatureDocumentaryHelp": "ささやき声の自然ドキュメンタリーのナレーターが、あなたの家を生息地として観察します。英語の返答のみ。",
       "styleStarshipComputerHelp": "宇宙船のコンピューターのように、簡潔で形式的な状況報告をします。英語の返答のみ。",
-      "styleNoirDetectiveHelp": "世の中に疲れた1940年代の私立探偵が、陰のある決め台詞を放ちます。英語の返答のみ。"
+      "styleNoirDetectiveHelp": "世の中に疲れた1940年代の私立探偵が、陰のある決め台詞を放ちます。英語の返答のみ。",
+      "mesaModeAdvisoryHelp": "ほとんどのルールは警告のみです。プライバシーのルール、読み取り専用のデバイス、強制されたプロファイルは引き続きブロックします。",
+      "mesaModeEnforcedHelp": "禁止されたアクションはブロックされ、確認が必要なアクションは承認を待ちます。",
+      "mesaModeOffHelp": "MESA はスキップされ、すべてのアクションが許可されます。",
+      "toolLoadingAutoHelp": "アクセスキーのツールが約 75 個以上なら分割して読み込み、それ以外はすべて送信します。",
+      "toolLoadingAlwaysHelp": "ツールの数にかかわらず、分割して読み込みます。",
+      "toolLoadingNeverHelp": "すべてのツールを送信します。ただし、128 個までしか受け付けないプロバイダーは除きます。"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",
@@ -2204,7 +2227,35 @@
       "viewAutomationsHelp": "テンプレートやブループリントを使うため、MESA が一部しか確認できなかったオートメーションを表示または非表示にします。",
       "openOrphanHelp": "このプロファイルをプロファイルエディターで開き、削除できるようにします。対象だったものはもう存在しません。",
       "dismissNoticeHelp": "このブラウザーでこの通知を非表示にします。「非表示にした通知を戻す」で再び表示できます。",
-      "comboMatchCount": "一致: {count}"
+      "comboMatchCount": "一致: {count}",
+      "costHighHelp": "元に戻せますが、実際の影響があります。",
+      "costModerateHelp": "再セットに時間がかかるアラームのように、元に戻すと軽い副作用があります。",
+      "costNoneHelp": "照明や単純なスイッチのように、元に戻しても副作用はありません。",
+      "costTrivialHelp": "数秒で元に戻せ、影響はごくわずかです。",
+      "modeAdvisoryHelp": "このプロファイルを「設定」の MESA モードに任せます。",
+      "modeAutonomousHelp": "エージェントが自由に操作します。",
+      "modeConfirmHelp": "MESA が「強制」のとき、アクションは承認を待ちます。",
+      "modeEnforcedHelp": "「設定」の MESA モードが「助言」のときも、このプロファイルを強制します。",
+      "modeInheritedHelp": "このプロファイルは、ほかのプロファイルか組み込みの基準に制御を任せます。",
+      "modeProhibitedHelp": "MESA が「強制」のとき、エージェントはこれを操作できません。「助言」では警告のみです。",
+      "modeReadOnlyHelp": "「オフ」以外のどの MESA モードでも、エージェントはこれを変更できません。",
+      "reversibleNoHelp": "通知の送信など、元に戻せない変更です。",
+      "privNormalHelp": "モーションセンサーや照明のような、一般的な家庭のデバイスです。",
+      "privPublicHelp": "気象ステーションやユーティリティメーターのように、個人データを含みません。",
+      "privRestrictedHelp": "非常に個人的、または安全上重要です。その場合「自律」のプロファイルでも確認が必要です。",
+      "privSensitiveHelp": "カメラ、マイク、在室センサーのような個人データです。",
+      "scopeDeploymentWideHelp": "ハードウェアを通じて家全体に影響する可能性があります。",
+      "scopeDeviceLocalizedHelp": "同じ物理デバイス上のほかのエンティティに影響する可能性があります。",
+      "scopeEntityOnlyHelp": "このエンティティにのみ影響します。",
+      "scopeRoomLocalizedHelp": "ハードウェアを通じて、同じ部屋のほかのエンティティに影響する可能性があります。",
+      "scopeZoneWideHelp": "ハードウェアを通じて、ゾーン全体のエンティティに影響する可能性があります。",
+      "trigDeploymentDefinedHelp": "この家でこれがどのオートメーションを動かすか、正確に把握しています。",
+      "trigLikelyHelp": "変更するとオートメーションが開始される可能性が高いため、エージェントは波及効果を考慮します。",
+      "trigNoneHelp": "変更してもオートメーションは開始されません。それでもこれを使うオートメーションがあれば MESA が指摘します。",
+      "trigUnknownHelp": "変更でオートメーションが開始されるかわからないため、エージェントは慎重に操作します。",
+      "unsetControlHelp": "このプロファイルは決定しません。ほかのプロファイルか組み込みの基準が決定します。",
+      "unsetEffectHelp": "これについてエージェントにヒントを与えません。",
+      "reversibleYesHelp": "照明を消すなど、元に戻せる変更です。"
     },
     "approvalSummary": {
       "action.optionalReason": "任意の理由",
@@ -2757,7 +2808,25 @@
       "settingsHelp": "会話の記録と、保持する履歴の量を表示または非表示にします。",
       "limitEntriesHelp": "会話ログが保持するエントリの最大数です。1 から 2,000 (既定 100)。Phoenix は古いものから削除します。",
       "limitDaysHelp": "Phoenix はこれより古いエントリを削除します。1 から 365 日 (既定 7)。",
-      "limitMbHelp": "会話ログが使うディスク容量の上限です。1 から 250 MB (既定 25)。"
+      "limitMbHelp": "会話ログが使うディスク容量の上限です。1 から 250 MB (既定 25)。",
+      "sourceHelp": {
+        "agentcli": "Agent Chat で入力したターンです。入力内容、応答、すべてのツール呼び出しを含みます。",
+        "voice": "音声エージェントに話しかけたターンです。発言内容、応答、すべてのツール呼び出しを含みます。",
+        "ai_task": "AI タスクのリクエストです。指示、結果、すべてのツール呼び出しを含みます。",
+        "assist": "Assist からのツール呼び出しです。話した内容は渡されません。",
+        "mcp": "MCP クライアントからのツール呼び出しです。入力した内容は渡されません。",
+        "home_companion": "Home Companion キーからのリクエストです。各ツール呼び出しとその結果を含みます。"
+      },
+      "outcomeHelp": {
+        "completed": "エラーなく終了しました。",
+        "failed": "エラーで終了したか、アクションが失敗しました。",
+        "denied": "アクションが権限または MESA により拒否されたか、その承認が拒否されました。",
+        "pending_approval": "アクションが承認を待っています。",
+        "cancelled": "完了する前に停止しました。",
+        "interrupted": "再起動時などに、会話の終了前に記録が止まりました。",
+        "unknown": "アクションが実行された可能性がありますが、Phoenix は確認できませんでした。Home Assistant を確認してください。",
+        "running": "まだ実行中です。"
+      }
     },
     "attention": {
       "actionTitle": "以前の操作を確認",

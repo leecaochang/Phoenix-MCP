@@ -106,11 +106,11 @@ export function ConversationBehaviorControls({
           onChange={(event) => onStyleChange(event.target.value as ConversationStyle)}
         >
           {byLabel(STYLES).map((value) => (
-            <option key={value} value={value}>{t(STYLE_LABELS[value])}</option>
+            <option key={value} value={value} data-help={STYLE_HELP[value]}>{t(STYLE_LABELS[value])}</option>
           ))}
           <optgroup label={t("settings.styleEnglishOnly")}>
             {byLabel(ENGLISH_ONLY_STYLES).map((value) => (
-              <option key={value} value={value}>{t(STYLE_LABELS[value])}</option>
+              <option key={value} value={value} data-help={STYLE_HELP[value]}>{t(STYLE_LABELS[value])}</option>
             ))}
           </optgroup>
         </BusySelect>
@@ -125,7 +125,7 @@ export function ConversationBehaviorControls({
           onChange={(event) => onDetailChange(event.target.value as DetailLevel)}
         >
           {DETAILS.map((value) => (
-            <option key={value} value={value}>{t(DETAIL_LABELS[value])}</option>
+            <option key={value} value={value} data-help={DETAIL_HELP[value]}>{t(DETAIL_LABELS[value])}</option>
           ))}
         </BusySelect>
       </div>

@@ -25,7 +25,7 @@ import { useClickAway } from "../ui/useClickAway";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
 import { matchesListSearch } from "../utils/list_search";
 import {
-  ADD_HELP_KEYS, ADD_TITLE_KEYS, CONTROL_MODE_LABEL_KEYS, EDITOR_SCOPES, MesaImport, ProfileEditor, SCOPE_LABEL_KEYS, deleteProfile, isEnforced, profileSource, rawControlMode,
+  ADD_HELP_KEYS, ADD_TITLE_KEYS, CONTROL_MODE_LABEL_KEYS, EDITOR_SCOPES, MesaImport, ProfileEditor, SCOPE_HELP, SCOPE_LABEL_KEYS, deleteProfile, isEnforced, profileSource, rawControlMode,
   resetProfileEditorDisclosures, tagsOf,
 } from "./MesaView";
 
@@ -33,6 +33,14 @@ const CONTROL_FILTERS = ["confirm", "prohibited", "read_only", "autonomous", "in
 
 const scopeLabel = (scope: MesaProfileScope): string => t(SCOPE_LABEL_KEYS[scope]);
 const controlLabel = (mode: string): string => t(CONTROL_MODE_LABEL_KEYS[mode] ?? "mesa.modeInherited");
+/** What each control filter choice means, for the Help window. */
+const CONTROL_FILTER_HELP: Record<(typeof CONTROL_FILTERS)[number], string> = {
+  confirm: "mesa.modeConfirmHelp",
+  prohibited: "mesa.modeProhibitedHelp",
+  read_only: "mesa.modeReadOnlyHelp",
+  autonomous: "mesa.modeAutonomousHelp",
+  inherited: "mesa.modeInheritedHelp",
+};
 /** Each control mode's sign, so a narrow column still tells the modes apart without its color. */
 const CONTROL_ICONS: Record<string, IconName> = { autonomous: "success", confirm: "pending", read_only: "preview", prohibited: "denied" };
 
@@ -236,16 +244,16 @@ export function MesaProfilesWindow() {
         <div className="filter-row">
           <select className="input input-auto" data-filter="scope" data-help="mesa.filterTypeHelp" value={scope} onChange={(e) => { forget(); setScope(e.target.value); }} aria-label={t("mesa.colAppliesTo")}>
             <option value="">{t("mesa.allTypes")}</option>
-            {EDITOR_SCOPES.map((s) => <option key={s} value={s}>{scopeLabel(s)}</option>)}
+            {EDITOR_SCOPES.map((s) => <option key={s} value={s} data-help={SCOPE_HELP[s]}>{scopeLabel(s)}</option>)}
           </select>
           <select className="input input-auto" data-filter="control" data-help="mesa.filterControlHelp" value={control} onChange={(e) => { forget(); setControl(e.target.value); }} aria-label={t("mesa.colControl")}>
             <option value="">{t("mesa.allControlModes")}</option>
-            {CONTROL_FILTERS.map((mode) => <option key={mode} value={mode}>{controlLabel(mode)} ({localeNumber(count(mode))})</option>)}
+            {CONTROL_FILTERS.map((mode) => <option key={mode} value={mode} data-help={CONTROL_FILTER_HELP[mode]}>{controlLabel(mode)} ({localeNumber(count(mode))})</option>)}
           </select>
           <select className="input input-auto" data-filter="enforcement" data-help="mesa.filterEnforcementHelp" value={enforcement} onChange={(e) => { forget(); setEnforcement(e.target.value); }} aria-label={t("mesa.fieldEnforcement")}>
             <option value="">{t("mesa.anyEnforcement")}</option>
-            <option value="enforced">{t("mesa.modeEnforced")} ({localeNumber(count("enforced"))})</option>
-            <option value="advisory">{t("mesa.modeAdvisory")} ({localeNumber(m.rows.length - count("enforced"))})</option>
+            <option value="enforced" data-help="mesa.modeEnforcedHelp">{t("mesa.modeEnforced")} ({localeNumber(count("enforced"))})</option>
+            <option value="advisory" data-help="mesa.modeAdvisoryHelp">{t("mesa.modeAdvisory")} ({localeNumber(m.rows.length - count("enforced"))})</option>
           </select>
           {activeFilters > 0 && <ActionButton icon="clearFilters" label={t("logs.clearFilters")} help="mesa.clearFiltersHelp" onClick={clearFilters} />}
         </div>

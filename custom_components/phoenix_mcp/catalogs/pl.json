@@ -424,7 +424,16 @@
       "rowResource": "Zasób",
       "rowTime": "Czas",
       "outcomeCancelled": "Anulowano",
-      "outcomeUnknown": "Wynik nieznany"
+      "outcomeUnknown": "Wynik nieznany",
+      "outcomeAllowedHelp": "Wykonano.",
+      "outcomeDeniedHelp": "Odmowa z powodu uprawnień lub MESA albo zatwierdzenie odrzucone, wygasłe lub anulowane.",
+      "outcomeInvalidRequestHelp": "Błędnie sformułowane albo zmiana niepotwierdzona przez Phoenix, która mogła zostać wprowadzona.",
+      "outcomeNotFoundHelp": "Wskazano coś, co nie istnieje.",
+      "outcomeNotImplementedHelp": "Żądanie czegoś, czego Phoenix nie robi.",
+      "outcomePendingApprovalHelp": "Czeka na Twoje zatwierdzenie.",
+      "outcomeRateLimitedHelp": "Klucz dostępu wysłał zbyt wiele żądań.",
+      "outcomeCancelledHelp": "Aplikacja rozłączyła się przed zakończeniem żądania. Nic nie dotarło do Twojego domu.",
+      "outcomeUnknownHelp": "Aplikacja rozłączyła się lub straciła uprawnienie przed zakończeniem. Zmiana mogła zostać wykonana."
     },
     "caps": {
       "cap_automation_write": {
@@ -896,7 +905,15 @@
       "todoRemovalWarning": "Usunięcie elementów listy zadań jest trwałe. Phoenix nie zachowuje ich kopii, więc nie można ich przywrócić.",
       "todoStatusCompleted": "Ukończone",
       "todoStatusNeedsAction": "Nieukończone",
-      "reviewedActions": "Wymaga sprawdzenia, ponieważ dodaje: {actions}"
+      "reviewedActions": "Wymaga sprawdzenia, ponieważ dodaje: {actions}",
+      "scopeAllHelp": "Każde żądanie, oczekujące lub rozstrzygnięte.",
+      "scopeApprovedHelp": "Zatwierdzone przez Ciebie żądania.",
+      "scopeRejectedHelp": "Odrzucone przez Ciebie żądania.",
+      "scopeFailedHelp": "Odmowa przy ostatnim sprawdzeniu albo akcja zwróciła błąd.",
+      "scopeExpiredHelp": "Żądania, których nikt nie rozstrzygnął w ciągu godziny.",
+      "scopeCancelledHelp": "Żądania zamknięte bez decyzji, na przykład po unieważnieniu klucza dostępu.",
+      "scopeHistoryHelp": "Każde już rozstrzygnięte żądanie.",
+      "scopePendingHelp": "Żądania czekające na Twoją decyzję."
     },
     "agentchat": {
       "accessKey": "Klucz dostępu",
@@ -1985,7 +2002,35 @@
       "viewAutomationsHelp": "Pokaż lub ukryj automatyzacje, które MESA mógł sprawdzić tylko częściowo, bo używają szablonów lub schematów.",
       "openOrphanHelp": "Otwórz ten profil w Edytorze profilu, gdzie możesz go usunąć. To, co obejmował, już nie istnieje.",
       "dismissNoticeHelp": "Ukryj to powiadomienie w tej przeglądarce. Przywróć odrzucone powiadomienia je przywraca.",
-      "comboMatchCount": "Dopasowania: {count}"
+      "comboMatchCount": "Dopasowania: {count}",
+      "costHighHelp": "Cofnięcie jest możliwe, ale ma realne konsekwencje.",
+      "costModerateHelp": "Cofnięcie ma drobne skutki uboczne, jak alarm, którego ponowne uzbrojenie trwa.",
+      "costNoneHelp": "Cofnięcie nie ma skutków ubocznych, jak przy świetle lub zwykłym przełączniku.",
+      "costTrivialHelp": "Cofnięcie trwa kilka sekund i ma znikomy wpływ.",
+      "modeAdvisoryHelp": "Ten profil działa według trybu MESA z Ustawień.",
+      "modeAutonomousHelp": "Agenci działają swobodnie.",
+      "modeConfirmHelp": "Akcje czekają na Twoje zatwierdzenie, gdy MESA działa w trybie wymuszonym.",
+      "modeEnforcedHelp": "Wymusza ten profil, nawet gdy tryb MESA w Ustawieniach to Doradczy.",
+      "modeInheritedHelp": "Profil pozostawia kontrolę innym profilom lub wbudowanej bazie bezpieczeństwa.",
+      "modeProhibitedHelp": "Agenci nie mogą na tym działać, gdy MESA działa w trybie wymuszonym. W trybie Doradczy MESA tylko ich ostrzega.",
+      "modeReadOnlyHelp": "Agenci nie mogą tego zmieniać w żadnym trybie MESA poza trybem Wyłączony.",
+      "reversibleNoHelp": "Zmiany nie można cofnąć, jak wysłania powiadomienia.",
+      "privNormalHelp": "Zwykłe urządzenie domowe, jak czujnik ruchu lub światło.",
+      "privPublicHelp": "Brak danych osobowych, jak w stacji pogodowej lub liczniku mediów.",
+      "privRestrictedHelp": "Bardzo osobiste lub krytyczne dla bezpieczeństwa. Profil Autonomiczny wymaga wtedy potwierdzenia.",
+      "privSensitiveHelp": "Dane osobowe, jak z kamery, mikrofonu lub czujnika obecności.",
+      "scopeDeploymentWideHelp": "Może wpływać przez sprzęt na cały dom.",
+      "scopeDeviceLocalizedHelp": "Może wpływać na inne encje tego samego urządzenia fizycznego.",
+      "scopeEntityOnlyHelp": "Wpływa tylko na tę encję.",
+      "scopeRoomLocalizedHelp": "Może wpływać przez sprzęt na inne encje w tym samym pomieszczeniu.",
+      "scopeZoneWideHelp": "Może wpływać przez sprzęt na encje w całej strefie.",
+      "trigDeploymentDefinedHelp": "Wiesz dokładnie, które automatyzacje w tym domu uruchamia.",
+      "trigLikelyHelp": "Zmiana prawdopodobnie uruchamia automatyzacje, więc agenci rozważają skutki pośrednie.",
+      "trigNoneHelp": "Zmiana nie uruchamia żadnych automatyzacji. MESA zgłasza każdą automatyzację, która nadal tego używa.",
+      "trigUnknownHelp": "Nie wiesz, czy zmiana uruchamia automatyzacje, więc agenci zachowują ostrożność.",
+      "unsetControlHelp": "Profil nie decyduje. Decydują inne profile lub wbudowana baza bezpieczeństwa.",
+      "unsetEffectHelp": "Nie daje agentom żadnej podpowiedzi w tej kwestii.",
+      "reversibleYesHelp": "Zmianę można cofnąć, jak wyłączenie światła."
     },
     "settings": {
       "addProviderFirst": "Najpierw dodaj konto dostawcy w Dostawcach AI.",
@@ -2343,7 +2388,13 @@
       "styleGrumpyTeenagerHelp": "Znudzony, urażony i wzdychający, ale i tak robi swoje. Tylko odpowiedzi po angielsku.",
       "styleNatureDocumentaryHelp": "Ściszony narrator filmu przyrodniczego, który obserwuje twój dom jak siedlisko. Tylko odpowiedzi po angielsku.",
       "styleStarshipComputerHelp": "Zwięzłe, formalne raporty stanu z komputera statku kosmicznego. Tylko odpowiedzi po angielsku.",
-      "styleNoirDetectiveHelp": "Znużony światem prywatny detektyw z lat 1940. z ponurymi ripostami. Tylko odpowiedzi po angielsku."
+      "styleNoirDetectiveHelp": "Znużony światem prywatny detektyw z lat 1940. z ponurymi ripostami. Tylko odpowiedzi po angielsku.",
+      "mesaModeAdvisoryHelp": "Większość reguł tylko ostrzega. Reguły prywatności, urządzenia tylko do odczytu i wymuszone profile nadal blokują.",
+      "mesaModeEnforcedHelp": "Zabronione akcje są blokowane, a akcje wymagające potwierdzenia czekają na Twoje zatwierdzenie.",
+      "mesaModeOffHelp": "MESA jest pomijany, a każda akcja jest dozwolona.",
+      "toolLoadingAutoHelp": "Wczytuje narzędzia partiami, gdy klucz dostępu ma ich około 75 lub więcej, w przeciwnym razie wysyła wszystkie.",
+      "toolLoadingAlwaysHelp": "Wczytuje narzędzia partiami bez względu na ich liczbę.",
+      "toolLoadingNeverHelp": "Wysyła wszystkie narzędzia, z wyjątkiem dostawców, którzy przyjmują tylko 128."
     },
     "approvalSummary": {
       "action.optionalReason": "Opcjonalny powód",
@@ -2908,7 +2959,25 @@
       "settingsHelp": "Pokaż lub ukryj rejestrowanie rozmów i ile historii przechowywać.",
       "limitEntriesHelp": "Maksymalna liczba wpisów w Dzienniku rozmów, od 1 do 2000 (domyślnie 100). Phoenix najpierw usuwa najstarsze.",
       "limitDaysHelp": "Phoenix usuwa wpisy starsze niż ta wartość, od 1 do 365 dni (domyślnie 7).",
-      "limitMbHelp": "Maksymalna ilość miejsca na dysku dla Dziennika rozmów, od 1 do 250 MB (domyślnie 25)."
+      "limitMbHelp": "Maksymalna ilość miejsca na dysku dla Dziennika rozmów, od 1 do 250 MB (domyślnie 25).",
+      "sourceHelp": {
+        "agentcli": "Tury wpisane w Agent Chat, z Twoimi słowami, odpowiedzią i każdym wywołaniem narzędzia.",
+        "voice": "Tury wypowiedziane do Agenta głosowego, z tym, co powiedziano, odpowiedzią i każdym wywołaniem narzędzia.",
+        "ai_task": "Żądania z Zadania AI, z instrukcjami, wynikiem i każdym wywołaniem narzędzia.",
+        "assist": "Wywołania narzędzi z Assist. Wypowiedź osoby nie jest przekazywana.",
+        "mcp": "Wywołania narzędzi z klientów MCP. Tekst wpisany przez osobę nie jest przekazywany.",
+        "home_companion": "Żądania z kluczy Home Companion, z każdym wywołaniem narzędzia i jego wynikiem."
+      },
+      "outcomeHelp": {
+        "completed": "Zakończono bez błędów.",
+        "failed": "Zakończono błędem albo akcja się nie powiodła.",
+        "denied": "Uprawnienia lub MESA odmówiły akcji albo jej zatwierdzenie zostało odrzucone.",
+        "pending_approval": "Akcja czeka na Twoje zatwierdzenie.",
+        "cancelled": "Zatrzymano przed zakończeniem.",
+        "interrupted": "Zapisywanie przerwano przed końcem, na przykład przy ponownym uruchomieniu.",
+        "unknown": "Akcja mogła zostać wykonana, ale Phoenix nie ma jej potwierdzenia. Sprawdź Home Assistant.",
+        "running": "Nadal trwa."
+      }
     },
     "attention": {
       "actionTitle": "Sprawdź wcześniejsze działanie",

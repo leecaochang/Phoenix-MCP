@@ -851,7 +851,15 @@
       "todoRemovalWarning": "移除待辦事項是永久性的。Phoenix 不保留副本，因此無法還原。",
       "todoStatusCompleted": "已完成",
       "todoStatusNeedsAction": "未完成",
-      "reviewedActions": "需要您審核，因為它新增了：{actions}"
+      "reviewedActions": "需要您審核，因為它新增了：{actions}",
+      "scopeAllHelp": "所有請求，無論待處理還是已決定。",
+      "scopeApprovedHelp": "您核准的請求。",
+      "scopeRejectedHelp": "您拒絕的請求。",
+      "scopeFailedHelp": "在最後一次檢查時被拒絕，或操作傳回了錯誤。",
+      "scopeExpiredHelp": "一小時內無人決定的請求。",
+      "scopeCancelledHelp": "未經決定即關閉的請求，例如存取金鑰被撤銷時。",
+      "scopeHistoryHelp": "所有已決定的請求。",
+      "scopePendingHelp": "等待您決定的請求。"
     },
     "audit": {
       "accessPassThrough": "直通",
@@ -900,7 +908,16 @@
       "rowResource": "資源",
       "rowTime": "時間",
       "outcomeCancelled": "已取消",
-      "outcomeUnknown": "結果未知"
+      "outcomeUnknown": "結果未知",
+      "outcomeAllowedHelp": "已執行。",
+      "outcomeDeniedHelp": "被權限或 MESA 拒絕，或核准請求被拒絕、已過期或已取消。",
+      "outcomeInvalidRequestHelp": "格式錯誤，或 Phoenix 無法確認的變更，該變更可能已生效。",
+      "outcomeNotFoundHelp": "指定的對象不存在。",
+      "outcomeNotImplementedHelp": "請求了 Phoenix 不提供的功能。",
+      "outcomePendingApprovalHelp": "等待您的核准。",
+      "outcomeRateLimitedHelp": "存取金鑰傳送的請求過多。",
+      "outcomeCancelledHelp": "應用程式在請求完成前已中斷連線。未對您的家庭執行任何操作。",
+      "outcomeUnknownHelp": "應用程式在完成前已中斷連線或失去權限。變更可能已執行。"
     },
     "caps": {
       "cap_automation_write": {
@@ -1599,7 +1616,35 @@
       "viewAutomationsHelp": "顯示或隱藏 MESA 只能部分檢查的自動化，因為它們使用了模板或藍圖。",
       "openOrphanHelp": "在策略編輯器中開啟此策略，您可以在那裡刪除它。它涵蓋的對象已不存在。",
       "dismissNoticeHelp": "在此瀏覽器中隱藏此提示。「恢復已忽略的提示」可將其恢復。",
-      "comboMatchCount": "符合項目：{count}"
+      "comboMatchCount": "符合項目：{count}",
+      "costHighHelp": "可以撤銷，但會產生實際後果。",
+      "costModerateHelp": "撤銷會有輕微副作用，例如警報需要一段時間才能重新設防。",
+      "costNoneHelp": "撤銷沒有副作用，例如燈或一般開關。",
+      "costTrivialHelp": "撤銷只需幾秒，影響可忽略不計。",
+      "modeAdvisoryHelp": "此策略交由「設定」中的 MESA 模式決定。",
+      "modeAutonomousHelp": "智慧體可自由操作。",
+      "modeConfirmHelp": "MESA 處於強制模式時，操作需等待您的核准。",
+      "modeEnforcedHelp": "即使「設定」中的 MESA 模式為「建議」，也強制執行此策略。",
+      "modeInheritedHelp": "此策略將控制權交給其他策略或內建基線。",
+      "modeProhibitedHelp": "MESA 處於強制模式時，智慧體無法對其操作。在「建議」模式下只會警告智慧體。",
+      "modeReadOnlyHelp": "除「關閉」外，在任何 MESA 模式下智慧體都無法變更它。",
+      "reversibleNoHelp": "變更無法撤銷，例如傳送通知。",
+      "privNormalHelp": "一般家用裝置，例如動作感測器或燈。",
+      "privPublicHelp": "不含個人資料，例如氣象站或水電瓦斯表。",
+      "privRestrictedHelp": "高度私密或攸關安全。此時「自主」策略也需要確認。",
+      "privSensitiveHelp": "個人資料，例如攝影機、麥克風或存在感測器。",
+      "scopeDeploymentWideHelp": "可能透過硬體影響整個家庭。",
+      "scopeDeviceLocalizedHelp": "可能影響同一實體裝置上的其他實體。",
+      "scopeEntityOnlyHelp": "僅影響此實體。",
+      "scopeRoomLocalizedHelp": "可能透過硬體影響同一房間內的其他實體。",
+      "scopeZoneWideHelp": "可能透過硬體影響整個區域內的實體。",
+      "trigDeploymentDefinedHelp": "您確切知道它會驅動此家庭中的哪些自動化。",
+      "trigLikelyHelp": "變更它可能會觸發自動化，因此智慧體會權衡連帶影響。",
+      "trigNoneHelp": "變更它不會觸發任何自動化。MESA 會標記仍在使用它的任何自動化。",
+      "trigUnknownHelp": "您無法判斷變更它是否會觸發自動化，因此智慧體會謹慎操作。",
+      "unsetControlHelp": "此策略不做決定，由其他策略或內建基線決定。",
+      "unsetEffectHelp": "不向智慧體提供這方面的提示。",
+      "reversibleYesHelp": "變更可以撤銷，例如關燈。"
     },
     "mesaSuggestion": {
       "baseline_note": "「禁止」與該域的內建基線一致，因此該策略只是把這一意圖寫明。如果希望改為在管理員核准後允許智慧體控制，請在儲存前於「策略編輯器」中選擇「確認」；核准在 MESA 處於「強制」時生效。",
@@ -2108,7 +2153,13 @@
       "styleGrumpyTeenagerHelp": "無聊、委屈、唉聲嘆氣，但還是會把事辦完。僅限英文回覆。",
       "styleNatureDocumentaryHelp": "像自然紀錄片的旁白，壓低聲音把您的家當作棲息地來觀察。僅限英文回覆。",
       "styleStarshipComputerHelp": "星艦電腦式的簡短、正式的狀態報告。僅限英文回覆。",
-      "styleNoirDetectiveHelp": "厭倦世事的 1940 年代私家偵探，滿口陰鬱的俏皮話。僅限英文回覆。"
+      "styleNoirDetectiveHelp": "厭倦世事的 1940 年代私家偵探，滿口陰鬱的俏皮話。僅限英文回覆。",
+      "mesaModeAdvisoryHelp": "大多數規則只發出警告。隱私規則、唯讀裝置和強制策略仍會阻止。",
+      "mesaModeEnforcedHelp": "禁止的操作會被阻止，需要確認的操作會等待您的核准。",
+      "mesaModeOffHelp": "略過 MESA，允許所有操作。",
+      "toolLoadingAutoHelp": "存取金鑰有約 75 個或更多工具時分批載入，否則全部傳送。",
+      "toolLoadingAlwaysHelp": "無論工具數量多少，都分批載入工具。",
+      "toolLoadingNeverHelp": "傳送所有工具，但只接受 128 個工具的提供者除外。"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -2763,7 +2814,25 @@
       "settingsHelp": "顯示或隱藏對話記錄功能以及保留多少歷史記錄。",
       "limitEntriesHelp": "對話記錄最多保留的條目數，1 到 2,000（預設 100）。Phoenix 會先刪除最早的條目。",
       "limitDaysHelp": "Phoenix 會刪除早於此時長的條目，1 到 365 天（預設 7）。",
-      "limitMbHelp": "對話記錄最多使用的磁碟空間，1 到 250 MB（預設 25）。"
+      "limitMbHelp": "對話記錄最多使用的磁碟空間，1 到 250 MB（預設 25）。",
+      "sourceHelp": {
+        "agentcli": "在 Agent Chat 中輸入的對話輪次，包括您的話、回覆和每次工具呼叫。",
+        "voice": "對語音智慧體說出的對話輪次，包括所說內容、回覆和每次工具呼叫。",
+        "ai_task": "AI 任務請求，包括指令、結果和每次工具呼叫。",
+        "assist": "來自 Assist 的工具呼叫。使用者所說的內容不會傳入。",
+        "mcp": "來自 MCP 用戶端的工具呼叫。使用者輸入的內容不會傳入。",
+        "home_companion": "來自 Home Companion 金鑰的請求，包括每次工具呼叫及其結果。"
+      },
+      "outcomeHelp": {
+        "completed": "已完成，沒有錯誤。",
+        "failed": "以錯誤結束，或某個操作失敗。",
+        "denied": "某個操作被權限或 MESA 拒絕，或其核准請求被拒絕。",
+        "pending_approval": "某個操作正在等待您的核准。",
+        "cancelled": "在完成前已停止。",
+        "interrupted": "記錄在結束前停止，例如因重新啟動。",
+        "unknown": "某個操作可能已執行，但 Phoenix 無法確認。請檢查 Home Assistant。",
+        "running": "仍在進行中。"
+      }
     },
     "attention": {
       "actionTitle": "核對先前的操作",

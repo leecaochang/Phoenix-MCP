@@ -1047,7 +1047,15 @@
       "todoRemovalWarning": "Tehtävien poistaminen on pysyvää. Phoenix ei säilytä niistä kopiota, joten niitä ei voi palauttaa.",
       "todoStatusCompleted": "Valmis",
       "todoStatusNeedsAction": "Ei valmis",
-      "reviewedActions": "Vaatii tarkistuksen, koska se lisää: {actions}"
+      "reviewedActions": "Vaatii tarkistuksen, koska se lisää: {actions}",
+      "scopeAllHelp": "Kaikki pyynnöt, odottavat tai ratkaistut.",
+      "scopeApprovedHelp": "Hyväksymäsi pyynnöt.",
+      "scopeRejectedHelp": "Hylkäämäsi pyynnöt.",
+      "scopeFailedHelp": "Torjuttiin viimeisessä tarkistuksessa, tai toiminto palautti virheen.",
+      "scopeExpiredHelp": "Pyynnöt, joita kukaan ei ratkaissut tunnin kuluessa.",
+      "scopeCancelledHelp": "Ilman ratkaisua suljetut pyynnöt, esimerkiksi kun käyttöavain mitätöitiin.",
+      "scopeHistoryHelp": "Kaikki jo ratkaistut pyynnöt.",
+      "scopePendingHelp": "Pyynnöt, jotka odottavat ratkaisuasi."
     },
     "attention": {
       "actionTitle": "Tarkista aiempi toiminto",
@@ -1120,7 +1128,16 @@
       "rowResource": "Resurssi",
       "rowTime": "Aika",
       "outcomeCancelled": "Peruutettu",
-      "outcomeUnknown": "Tulos tuntematon"
+      "outcomeUnknown": "Tulos tuntematon",
+      "outcomeAllowedHelp": "Suoritettu.",
+      "outcomeDeniedHelp": "Käyttöoikeudet tai MESA torjui, tai hyväksyntä hylättiin, vanheni tai peruttiin.",
+      "outcomeInvalidRequestHelp": "Virheellinen, tai muutos, jota Phoenix ei voinut vahvistaa ja joka on voinut toteutua.",
+      "outcomeNotFoundHelp": "Viittasi johonkin, jota ei ole olemassa.",
+      "outcomeNotImplementedHelp": "Pyysi jotain, mitä Phoenix ei tee.",
+      "outcomePendingApprovalHelp": "Odottaa hyväksyntääsi.",
+      "outcomeRateLimitedHelp": "Käyttöavain lähetti liian monta pyyntöä.",
+      "outcomeCancelledHelp": "Sovellus katkaisi yhteyden ennen kuin pyyntö valmistui. Mikään ei päätynyt kotiisi.",
+      "outcomeUnknownHelp": "Sovellus katkaisi yhteyden tai menetti käyttöoikeuden ennen valmistumista. Muutos on voinut suorittua."
     },
     "caps": {
       "cap_automation_write": {
@@ -1585,7 +1602,25 @@
       "settingsHelp": "Näytä tai piilota keskustelujen tallennus ja se, kuinka paljon historiaa säilytetään.",
       "limitEntriesHelp": "Keskustelulokin merkintöjen enimmäismäärä, 1-2 000 (oletus 100). Phoenix poistaa vanhimmat ensin.",
       "limitDaysHelp": "Phoenix poistaa tätä vanhemmat merkinnät, 1-365 päivää (oletus 7).",
-      "limitMbHelp": "Keskustelulokin käyttämän levytilan enimmäismäärä, 1-250 MB (oletus 25)."
+      "limitMbHelp": "Keskustelulokin käyttämän levytilan enimmäismäärä, 1-250 MB (oletus 25).",
+      "sourceHelp": {
+        "agentcli": "Agent Chatissa kirjoitetut vuorot, mukana sanasi, vastaus ja jokainen työkalukutsu.",
+        "voice": "Ääniagentille puhutut vuorot, mukana sanottu, vastaus ja jokainen työkalukutsu.",
+        "ai_task": "Tekoälytehtävän pyynnöt, mukana ohjeet, tulos ja jokainen työkalukutsu.",
+        "assist": "Assistin työkalukutsut. Henkilön sanomaa ei välitetä.",
+        "mcp": "MCP-asiakasohjelmien työkalukutsut. Henkilön kirjoittamaa ei välitetä.",
+        "home_companion": "Home Companion -avainten pyynnöt, mukana jokainen työkalukutsu ja sen tulos."
+      },
+      "outcomeHelp": {
+        "completed": "Päättyi ilman virheitä.",
+        "failed": "Päättyi virheeseen, tai jokin toiminto epäonnistui.",
+        "denied": "Käyttöoikeudet tai MESA torjui toiminnon, tai sen hyväksyntä hylättiin.",
+        "pending_approval": "Toiminto odottaa hyväksyntääsi.",
+        "cancelled": "Pysäytettiin ennen kuin se valmistui.",
+        "interrupted": "Tallennus pysähtyi ennen keskustelun loppua, esimerkiksi uudelleenkäynnistyksessä.",
+        "unknown": "Toiminto on voinut suorittua, mutta Phoenix ei voinut vahvistaa sitä. Tarkista Home Assistant.",
+        "running": "Yhä käynnissä."
+      }
     },
     "diff": {
       "blueprint.create": "Luo {domain}-mallipohja '{rel}'",
@@ -2008,7 +2043,35 @@
       "viewAutomationsHelp": "Näytä tai piilota automaatiot, jotka MESA pystyi tarkistamaan vain osittain, koska ne käyttävät malleja tai mallipohjia.",
       "openOrphanHelp": "Avaa tämä profiili Profiilieditori-ikkunassa, jossa voit poistaa sen. Sen kattamaa kohdetta ei ole enää olemassa.",
       "dismissNoticeHelp": "Piilota tämä ilmoitus tässä selaimessa. Palauta sivuutetut ilmoitukset tuo sen takaisin.",
-      "comboMatchCount": "Osumat: {count}"
+      "comboMatchCount": "Osumat: {count}",
+      "costHighHelp": "Peruminen on mahdollista, mutta sillä on todellisia seurauksia.",
+      "costModerateHelp": "Perumisella on pieniä sivuvaikutuksia, kuten hälytin, jonka uudelleenviritys vie aikaa.",
+      "costNoneHelp": "Perumisella ei ole sivuvaikutuksia, kuten valolla tai tavallisella kytkimellä.",
+      "costTrivialHelp": "Peruminen vie sekunteja, ja sen vaikutus on mitätön.",
+      "modeAdvisoryHelp": "Jättää tämän profiilin Asetusten MESA-tilan varaan.",
+      "modeAutonomousHelp": "Agentit toimivat vapaasti.",
+      "modeConfirmHelp": "Toiminnot odottavat hyväksyntääsi, kun MESA on pakotettu.",
+      "modeEnforcedHelp": "Pakottaa tämän profiilin silloinkin, kun Asetusten MESA-tila on Neuvova.",
+      "modeInheritedHelp": "Profiili jättää ohjauksen muille profiileille tai sisäänrakennetulle turvatasolle.",
+      "modeProhibitedHelp": "Agentit eivät voi ohjata sitä, kun MESA on pakotettu. Neuvova-tilassa niitä vain varoitetaan.",
+      "modeReadOnlyHelp": "Agentit eivät voi muuttaa sitä missään MESA-tilassa paitsi Pois.",
+      "reversibleNoHelp": "Muutosta ei voi perua, kuten ilmoituksen lähettämistä.",
+      "privNormalHelp": "Tavallinen kodin laite, kuten liiketunnistin tai valo.",
+      "privPublicHelp": "Ei henkilötietoja, kuten sääasema tai kulutusmittari.",
+      "privRestrictedHelp": "Hyvin henkilökohtainen tai turvallisuuskriittinen. Autonominen profiili vaatii silloin vahvistuksen.",
+      "privSensitiveHelp": "Henkilötietoja, kuten kamera, mikrofoni tai läsnäolotunnistin.",
+      "scopeDeploymentWideHelp": "Voi vaikuttaa koko kotiin laitteiston kautta.",
+      "scopeDeviceLocalizedHelp": "Voi vaikuttaa saman fyysisen laitteen muihin entiteetteihin.",
+      "scopeEntityOnlyHelp": "Vaikuttaa vain tähän entiteettiin.",
+      "scopeRoomLocalizedHelp": "Voi vaikuttaa saman huoneen muihin entiteetteihin laitteiston kautta.",
+      "scopeZoneWideHelp": "Voi vaikuttaa koko vyöhykkeen entiteetteihin laitteiston kautta.",
+      "trigDeploymentDefinedHelp": "Tiedät tarkalleen, mitä tämän kodin automaatioita se ohjaa.",
+      "trigLikelyHelp": "Muutos käynnistää todennäköisesti automaatioita, joten agentit punnitsevat seurannaisvaikutuksia.",
+      "trigNoneHelp": "Muutos ei käynnistä automaatioita. MESA merkitsee jokaisen automaation, joka silti käyttää sitä.",
+      "trigUnknownHelp": "Et tiedä, käynnistääkö muutos automaatioita, joten agentit ovat varovaisia.",
+      "unsetControlHelp": "Profiili ei päätä. Päätöksen tekevät muut profiilit tai sisäänrakennettu turvataso.",
+      "unsetEffectHelp": "Ei anna agenteille vihjettä tästä.",
+      "reversibleYesHelp": "Muutoksen voi perua, kuten valon sammuttamisen."
     },
     "mesaSuggestion": {
       "baseline_note": " Estetty vastaa tämän verkkotunnuksen sisäänrakennettua turvatasoa, joten profiili tekee tarkoituksesta eksplisiittisen. Jos haluat sen sijaan sallia agentin ohjauksen ylläpitäjän hyväksynnän takana, valitse Profiilieditorissa Vahvista ennen tallentamista; hyväksyntä on käytössä, kun MESA on pakotettu.",
@@ -2588,7 +2651,13 @@
       "styleGrumpyTeenagerHelp": "Tylsistynyt, nyrpeä ja huokaileva, mutta hoitaa työn silti. Vain englanninkielisiin vastauksiin.",
       "styleNatureDocumentaryHelp": "Kuiskaava luontodokumentin kertoja, joka tarkkailee kotiasi elinympäristönä. Vain englanninkielisiin vastauksiin.",
       "styleStarshipComputerHelp": "Lyhyitä, muodollisia tilaraportteja tähtialuksen tietokoneelta. Vain englanninkielisiin vastauksiin.",
-      "styleNoirDetectiveHelp": "Elämään väsynyt 1940-luvun yksityisetsivä synkkine sutkauksineen. Vain englanninkielisiin vastauksiin."
+      "styleNoirDetectiveHelp": "Elämään väsynyt 1940-luvun yksityisetsivä synkkine sutkauksineen. Vain englanninkielisiin vastauksiin.",
+      "mesaModeAdvisoryHelp": "Useimmat säännöt vain varoittavat. Tietosuojasäännöt, vain luku -laitteet ja pakotetut profiilit estävät silti.",
+      "mesaModeEnforcedHelp": "Kielletyt toiminnot estetään, ja vahvistusta vaativat toiminnot odottavat hyväksyntääsi.",
+      "mesaModeOffHelp": "MESA ohitetaan, ja kaikki toiminnot sallitaan.",
+      "toolLoadingAutoHelp": "Lataa työkalut osissa, kun käyttöavaimella on noin 75 tai enemmän, muuten lähettää kaikki.",
+      "toolLoadingAlwaysHelp": "Lataa työkalut osissa työkalujen määrästä riippumatta.",
+      "toolLoadingNeverHelp": "Lähettää kaikki työkalut, paitsi palveluntarjoajille, jotka hyväksyvät vain 128."
     },
     "shell": {
       "agentChat": "Agent Chat",

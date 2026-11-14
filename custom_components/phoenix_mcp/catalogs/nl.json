@@ -414,7 +414,16 @@
       "rowResource": "Resource",
       "rowTime": "Tijd",
       "outcomeCancelled": "Geannuleerd",
-      "outcomeUnknown": "Uitkomst onbekend"
+      "outcomeUnknown": "Uitkomst onbekend",
+      "outcomeAllowedHelp": "Uitgevoerd.",
+      "outcomeDeniedHelp": "Geweigerd door machtigingen of MESA, of een goedkeuring die is afgewezen, verlopen of geannuleerd.",
+      "outcomeInvalidRequestHelp": "Onjuist opgebouwd, of een wijziging die Phoenix niet kon bevestigen en die mogelijk is doorgevoerd.",
+      "outcomeNotFoundHelp": "Noemde iets dat niet bestaat.",
+      "outcomeNotImplementedHelp": "Vroeg om iets wat Phoenix niet doet.",
+      "outcomePendingApprovalHelp": "Wacht op je goedkeuring.",
+      "outcomeRateLimitedHelp": "De toegangssleutel stuurde te veel verzoeken.",
+      "outcomeCancelledHelp": "De app verbrak de verbinding voordat het verzoek klaar was. Niets heeft je huis bereikt.",
+      "outcomeUnknownHelp": "De app verbrak de verbinding of verloor zijn machtiging vóór het einde. De wijziging is mogelijk uitgevoerd."
     },
     "caps": {
       "cap_automation_write": {
@@ -884,7 +893,15 @@
       "todoRemovalWarning": "Het verwijderen van takenlijstitems is definitief. Phoenix bewaart geen kopie, dus ze kunnen niet worden hersteld.",
       "todoStatusCompleted": "Voltooid",
       "todoStatusNeedsAction": "Niet voltooid",
-      "reviewedActions": "Moet worden beoordeeld omdat dit wordt toegevoegd: {actions}"
+      "reviewedActions": "Moet worden beoordeeld omdat dit wordt toegevoegd: {actions}",
+      "scopeAllHelp": "Elke aanvraag, in afwachting of beslist.",
+      "scopeApprovedHelp": "Aanvragen die je hebt goedgekeurd.",
+      "scopeRejectedHelp": "Aanvragen die je hebt afgewezen.",
+      "scopeFailedHelp": "Geweigerd bij de laatste controle, of de actie gaf een fout terug.",
+      "scopeExpiredHelp": "Aanvragen waarover niemand binnen een uur besliste.",
+      "scopeCancelledHelp": "Aanvragen die zonder beslissing zijn gesloten, bijvoorbeeld toen de toegangssleutel werd ingetrokken.",
+      "scopeHistoryHelp": "Elke aanvraag waarover al is beslist.",
+      "scopePendingHelp": "Aanvragen die op je beslissing wachten."
     },
     "agentchat": {
       "accessKey": "Toegangssleutel",
@@ -1933,7 +1950,35 @@
       "viewAutomationsHelp": "Toon of verberg de automatiseringen die MESA maar deels kon controleren, omdat ze sjablonen of blueprints gebruiken.",
       "openOrphanHelp": "Open dit profiel in de Profieleditor, waar je het kunt verwijderen. Wat het dekte, bestaat niet meer.",
       "dismissNoticeHelp": "Verberg deze melding in deze browser. Genegeerde meldingen herstellen haalt hem terug.",
-      "comboMatchCount": "Overeenkomsten: {count}"
+      "comboMatchCount": "Overeenkomsten: {count}",
+      "costHighHelp": "Ongedaan maken kan, maar heeft echte gevolgen.",
+      "costModerateHelp": "Ongedaan maken heeft kleine bijwerkingen, zoals een alarm dat tijd nodig heeft om opnieuw in te schakelen.",
+      "costNoneHelp": "Ongedaan maken heeft geen bijwerkingen, zoals bij een lamp of een eenvoudige schakelaar.",
+      "costTrivialHelp": "Ongedaan maken duurt seconden en heeft verwaarloosbare impact.",
+      "modeAdvisoryHelp": "Laat dit profiel over aan de MESA-modus in Instellingen.",
+      "modeAutonomousHelp": "Agents handelen vrij.",
+      "modeConfirmHelp": "Acties wachten op je goedkeuring zolang MESA Afgedwongen is.",
+      "modeEnforcedHelp": "Dwingt dit profiel af, ook als de MESA-modus in Instellingen Adviserend is.",
+      "modeInheritedHelp": "Het profiel laat de controle over aan andere profielen of de ingebouwde basislijn.",
+      "modeProhibitedHelp": "Agents kunnen er niet op handelen zolang MESA Afgedwongen is. In Adviserend worden ze alleen gewaarschuwd.",
+      "modeReadOnlyHelp": "Agents kunnen het niet wijzigen, in elke MESA-modus behalve Uit.",
+      "reversibleNoHelp": "De wijziging is onomkeerbaar, zoals een melding versturen.",
+      "privNormalHelp": "Een gewoon apparaat in huis, zoals een bewegingssensor of een lamp.",
+      "privPublicHelp": "Geen persoonsgegevens, zoals een weerstation of een verbruiksmeter.",
+      "privRestrictedHelp": "Zeer persoonlijk of veiligheidskritisch. Een Autonoom profiel vraagt dan om bevestiging.",
+      "privSensitiveHelp": "Persoonsgegevens, zoals een camera, een microfoon of een aanwezigheidssensor.",
+      "scopeDeploymentWideHelp": "Kan via de hardware het hele huis beïnvloeden.",
+      "scopeDeviceLocalizedHelp": "Kan andere entiteiten op hetzelfde fysieke apparaat beïnvloeden.",
+      "scopeEntityOnlyHelp": "Beïnvloedt alleen deze entiteit.",
+      "scopeRoomLocalizedHelp": "Kan via de hardware andere entiteiten in dezelfde kamer beïnvloeden.",
+      "scopeZoneWideHelp": "Kan via de hardware entiteiten in een hele zone beïnvloeden.",
+      "trigDeploymentDefinedHelp": "Je weet precies welke automatiseringen in dit huis het aanstuurt.",
+      "trigLikelyHelp": "Dit wijzigen start waarschijnlijk automatiseringen, dus agents wegen de kettingeffecten af.",
+      "trigNoneHelp": "Dit wijzigen start geen automatiseringen. MESA markeert elke automatisering die het toch gebruikt.",
+      "trigUnknownHelp": "Je kunt niet zeggen of het wijzigen hiervan automatiseringen start, dus agents zijn voorzichtig.",
+      "unsetControlHelp": "Het profiel beslist niet. Andere profielen of de ingebouwde basislijn doen dat.",
+      "unsetEffectHelp": "Geeft agents hierover geen hint.",
+      "reversibleYesHelp": "De wijziging kan ongedaan worden gemaakt, zoals een lamp uitzetten."
     },
     "settings": {
       "addProviderFirst": "Voeg eerst een provideraccount toe in AI-providers.",
@@ -2289,7 +2334,13 @@
       "styleGrumpyTeenagerHelp": "Verveeld, gepikeerd en zuchtend, maar doet het werk toch. Alleen antwoorden in het Engels.",
       "styleNatureDocumentaryHelp": "Een fluisterende natuurfilmverteller die je huis als habitat observeert. Alleen antwoorden in het Engels.",
       "styleStarshipComputerHelp": "Korte, formele statusrapporten van de boordcomputer van een ruimteschip. Alleen antwoorden in het Engels.",
-      "styleNoirDetectiveHelp": "Een gedesillusioneerde privédetective uit de jaren 1940 met sombere oneliners. Alleen antwoorden in het Engels."
+      "styleNoirDetectiveHelp": "Een gedesillusioneerde privédetective uit de jaren 1940 met sombere oneliners. Alleen antwoorden in het Engels.",
+      "mesaModeAdvisoryHelp": "De meeste regels waarschuwen alleen. Privacyregels, alleen-lezen apparaten en afgedwongen profielen blokkeren nog steeds.",
+      "mesaModeEnforcedHelp": "Verboden acties worden geblokkeerd en acties die bevestiging nodig hebben, wachten op je goedkeuring.",
+      "mesaModeOffHelp": "MESA wordt overgeslagen en elke actie is toegestaan.",
+      "toolLoadingAutoHelp": "Laadt tools in delen als de toegangssleutel er ongeveer 75 of meer heeft, anders worden ze allemaal verstuurd.",
+      "toolLoadingAlwaysHelp": "Laadt tools in delen, ongeacht het aantal tools.",
+      "toolLoadingNeverHelp": "Verstuurt elke tool, behalve naar providers die er maar 128 accepteren."
     },
     "approvalSummary": {
       "action.optionalReason": "Optionele reden",
@@ -2842,7 +2893,25 @@
       "settingsHelp": "Toon of verberg het vastleggen van gesprekken en hoeveel geschiedenis wordt bewaard.",
       "limitEntriesHelp": "Het maximale aantal items dat het Gesprekslogboek bewaart, 1 tot 2.000 (standaard 100). Phoenix verwijdert de oudste eerst.",
       "limitDaysHelp": "Phoenix verwijdert items die ouder zijn dan dit, 1 tot 365 dagen (standaard 7).",
-      "limitMbHelp": "De maximale schijfruimte die het Gesprekslogboek gebruikt, 1 tot 250 MB (standaard 25)."
+      "limitMbHelp": "De maximale schijfruimte die het Gesprekslogboek gebruikt, 1 tot 250 MB (standaard 25).",
+      "sourceHelp": {
+        "agentcli": "Beurten getypt in Agent Chat, met je woorden, het antwoord en elke toolaanroep.",
+        "voice": "Beurten uitgesproken tegen de Spraakagent, met wat er werd gezegd, het antwoord en elke toolaanroep.",
+        "ai_task": "AI-taakverzoeken, met de instructies, het resultaat en elke toolaanroep.",
+        "assist": "Toolaanroepen vanuit Assist. Wat de persoon zei, wordt niet doorgegeven.",
+        "mcp": "Toolaanroepen van MCP-clients. Wat de persoon typte, wordt niet doorgegeven.",
+        "home_companion": "Verzoeken van Home Companion-sleutels, met elke toolaanroep en het resultaat ervan."
+      },
+      "outcomeHelp": {
+        "completed": "Zonder fouten afgerond.",
+        "failed": "Geëindigd met een fout, of een actie is mislukt.",
+        "denied": "Een actie werd geweigerd door machtigingen of MESA, of de goedkeuring werd afgewezen.",
+        "pending_approval": "Een actie wacht op je goedkeuring.",
+        "cancelled": "Gestopt voordat het klaar was.",
+        "interrupted": "Het vastleggen stopte voordat het gesprek eindigde, bijvoorbeeld bij een herstart.",
+        "unknown": "Een actie is mogelijk uitgevoerd, maar Phoenix kon dit niet bevestigen. Controleer Home Assistant.",
+        "running": "Nog bezig."
+      }
     },
     "attention": {
       "actionTitle": "Een eerdere actie controleren",

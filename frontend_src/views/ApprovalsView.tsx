@@ -26,6 +26,18 @@ import { localizedApprovalReason } from "../utils/approval_reason";
 import { friendlyApprovalSummary } from "../utils/approval_summary";
 import { isImeKey } from "../utils/ime";
 
+/** What each Show choice lists, for the Help window. */
+const SCOPE_HELP_KEYS: Record<ApprovalsScope, string> = {
+  pending: "approvals.scopePendingHelp",
+  history: "approvals.scopeHistoryHelp",
+  all: "approvals.scopeAllHelp",
+  approved: "approvals.scopeApprovedHelp",
+  rejected: "approvals.scopeRejectedHelp",
+  failed: "approvals.scopeFailedHelp",
+  expired: "approvals.scopeExpiredHelp",
+  cancelled: "approvals.scopeCancelledHelp",
+};
+
 const SCOPE_LABEL_KEYS: Record<ApprovalsScope, string> = {
   pending: "approvals.tabPending",
   history: "approvals.tabHistory",
@@ -193,7 +205,7 @@ export function ApprovalsListWindow() {
       {!onToolbar && <InlineTools groups={groups} />}
       <div className="phx-filters"><div className="filter-row">
         <select className="input input-auto" data-guide="window.approvals#show" data-help="help.approvalsShow" aria-label={t("approvals.show")} value={a.scope} onChange={(e) => a.setScope(e.target.value as ApprovalsScope)}>
-          {APPROVALS_SCOPES.map((scope) => <option key={scope} value={scope}>{scopeLabel(scope)}</option>)}
+          {APPROVALS_SCOPES.map((scope) => <option key={scope} value={scope} data-help={SCOPE_HELP_KEYS[scope]}>{scopeLabel(scope)}</option>)}
         </select>
         <input type="search" className="input" data-guide="window.approvals#search" data-help="help.approvalsSearch" placeholder={t("approvals.searchPlaceholder")} aria-label={t("approvals.searchAria")}
           value={a.search} onChange={(e) => a.setSearch(e.target.value)} />

@@ -172,7 +172,15 @@
       "todoRemovalWarning": "La suppression d’éléments de liste de tâches est définitive. Phoenix n’en conserve aucune copie, ils ne peuvent donc pas être restaurés.",
       "todoStatusCompleted": "Terminé",
       "todoStatusNeedsAction": "Non terminé",
-      "reviewedActions": "À vérifier, car cela ajoute : {actions}"
+      "reviewedActions": "À vérifier, car cela ajoute : {actions}",
+      "scopeAllHelp": "Toutes les demandes, en attente ou tranchées.",
+      "scopeApprovedHelp": "Demandes que vous avez approuvées.",
+      "scopeRejectedHelp": "Demandes que vous avez rejetées.",
+      "scopeFailedHelp": "Refusée à la dernière vérification, ou l’action a renvoyé une erreur.",
+      "scopeExpiredHelp": "Demandes que personne n’a tranchées dans l’heure.",
+      "scopeCancelledHelp": "Demandes fermées sans décision, par exemple quand la clé d’accès a été révoquée.",
+      "scopeHistoryHelp": "Toutes les demandes déjà tranchées.",
+      "scopePendingHelp": "Demandes qui attendent votre décision."
     },
     "caps": {
       "cap_config_read": {
@@ -793,7 +801,16 @@
       "rowResource": "Ressource",
       "rowTime": "Heure",
       "outcomeCancelled": "Annulé",
-      "outcomeUnknown": "Résultat inconnu"
+      "outcomeUnknown": "Résultat inconnu",
+      "outcomeAllowedHelp": "Exécuté.",
+      "outcomeDeniedHelp": "Refusé par les autorisations ou MESA, ou une approbation rejetée, expirée ou annulée.",
+      "outcomeInvalidRequestHelp": "Mal formée, ou une modification que Phoenix n’a pas pu confirmer et qui a pu aboutir.",
+      "outcomeNotFoundHelp": "Désignait quelque chose qui n’existe pas.",
+      "outcomeNotImplementedHelp": "Demandait quelque chose que Phoenix ne fait pas.",
+      "outcomePendingApprovalHelp": "En attente de votre approbation.",
+      "outcomeRateLimitedHelp": "La clé d’accès a envoyé trop de requêtes.",
+      "outcomeCancelledHelp": "L’application s’est déconnectée avant la fin de la requête. Rien n’a atteint votre maison.",
+      "outcomeUnknownHelp": "L’application s’est déconnectée ou a perdu l’autorisation avant la fin. La modification a pu s’exécuter."
     },
     "wizard": {
       "accessSub": "Sélectionnez le triangle à côté de <code>light</code> pour ouvrir le groupe des lumières. Il liste vos appareils d'éclairage ; sélectionnez le triangle à côté d'un appareil pour voir ses entités. Ou saisissez le nom de votre lumière dans le champ de filtre. Sélectionnez ensuite <strong>W</strong> sur une lumière que vous pouvez vérifier, pour que l'agent puisse la lire et la commander. Vous pourrez ajouter d'autres autorisations plus tard.",
@@ -1239,7 +1256,35 @@
       "viewAutomationsHelp": "Affichez ou masquez les automatisations que MESA n’a pu vérifier qu’en partie, car elles utilisent des modèles ou des blueprints.",
       "openOrphanHelp": "Ouvrez ce profil dans l’éditeur de profil, où vous pouvez le supprimer. Ce qu’il couvrait n’existe plus.",
       "dismissNoticeHelp": "Masquez cet avis dans ce navigateur. Restaurer les avis rejetés le ramène.",
-      "comboMatchCount": "Correspondances : {count}"
+      "comboMatchCount": "Correspondances : {count}",
+      "costHighHelp": "L’annulation est possible mais a de réelles conséquences.",
+      "costModerateHelp": "L’annulation a des effets secondaires mineurs, comme une alarme longue à réarmer.",
+      "costNoneHelp": "L’annulation n’a aucun effet secondaire, comme pour une lumière ou un simple interrupteur.",
+      "costTrivialHelp": "L’annulation prend quelques secondes et a un impact négligeable.",
+      "modeAdvisoryHelp": "Laisse ce profil au mode MESA des Paramètres.",
+      "modeAutonomousHelp": "Les agents agissent librement.",
+      "modeConfirmHelp": "Les actions attendent votre approbation lorsque MESA est appliqué.",
+      "modeEnforcedHelp": "Applique ce profil même lorsque le mode MESA des Paramètres est Consultatif.",
+      "modeInheritedHelp": "Le profil laisse le contrôle à d’autres profils ou à la ligne de base intégrée.",
+      "modeProhibitedHelp": "Les agents ne peuvent pas agir dessus lorsque MESA est appliqué. En Consultatif, ils sont seulement avertis.",
+      "modeReadOnlyHelp": "Les agents ne peuvent pas le modifier, dans aucun mode MESA sauf Désactivé.",
+      "reversibleNoHelp": "La modification ne peut pas être annulée, comme l’envoi d’une notification.",
+      "privNormalHelp": "Un appareil domestique ordinaire, comme un détecteur de mouvement ou une lumière.",
+      "privPublicHelp": "Aucune donnée personnelle, comme une station météo ou un compteur de consommation.",
+      "privRestrictedHelp": "Très personnel ou critique pour la sécurité. Un profil Autonome exige alors une confirmation.",
+      "privSensitiveHelp": "Données personnelles, comme une caméra, un micro ou un détecteur de présence.",
+      "scopeDeploymentWideHelp": "Peut affecter toute la maison via le matériel.",
+      "scopeDeviceLocalizedHelp": "Peut affecter d’autres entités du même appareil physique.",
+      "scopeEntityOnlyHelp": "N’affecte que cette entité.",
+      "scopeRoomLocalizedHelp": "Peut affecter d’autres entités de la même pièce via le matériel.",
+      "scopeZoneWideHelp": "Peut affecter des entités de toute une zone via le matériel.",
+      "trigDeploymentDefinedHelp": "Vous savez exactement quelles automatisations de cette maison il pilote.",
+      "trigLikelyHelp": "Le modifier déclenche probablement des automatisations, donc les agents pèsent les effets en chaîne.",
+      "trigNoneHelp": "Le modifier ne déclenche aucune automatisation. MESA signale toute automatisation qui l’utilise encore.",
+      "trigUnknownHelp": "Vous ne savez pas si le modifier déclenche des automatisations, donc les agents restent prudents.",
+      "unsetControlHelp": "Le profil ne décide pas. D’autres profils ou la ligne de base intégrée décident.",
+      "unsetEffectHelp": "Ne donne aux agents aucune indication à ce sujet.",
+      "reversibleYesHelp": "La modification peut être annulée, comme éteindre une lumière."
     },
     "selectBy": {
       "area": "Pièce",
@@ -1618,7 +1663,13 @@
       "styleGrumpyTeenagerHelp": "Blasé, excédé et soupirant, mais fait quand même le travail. Réponses en anglais uniquement.",
       "styleNatureDocumentaryHelp": "Un narrateur animalier qui, à voix basse, observe votre maison comme un habitat. Réponses en anglais uniquement.",
       "styleStarshipComputerHelp": "Rapports d’état brefs et formels de l’ordinateur d’un vaisseau spatial. Réponses en anglais uniquement.",
-      "styleNoirDetectiveHelp": "Un détective privé des années 1940, revenu de tout, aux répliques sombres. Réponses en anglais uniquement."
+      "styleNoirDetectiveHelp": "Un détective privé des années 1940, revenu de tout, aux répliques sombres. Réponses en anglais uniquement.",
+      "mesaModeAdvisoryHelp": "La plupart des règles ne font qu’avertir. Règles de confidentialité, appareils en lecture seule et profils appliqués bloquent toujours.",
+      "mesaModeEnforcedHelp": "Les actions interdites sont bloquées, et celles qui exigent une confirmation attendent votre approbation.",
+      "mesaModeOffHelp": "MESA est ignoré, et toute action est autorisée.",
+      "toolLoadingAutoHelp": "Charge les outils par parties quand la clé d’accès en a environ 75 ou plus, sinon les envoie tous.",
+      "toolLoadingAlwaysHelp": "Charge les outils par parties, quel que soit leur nombre.",
+      "toolLoadingNeverHelp": "Envoie tous les outils, sauf aux fournisseurs qui n’en acceptent que 128."
     },
     "agentchat": {
       "accessKey": "Clé d’accès",
@@ -2757,7 +2808,25 @@
       "settingsHelp": "Affichez ou masquez l’enregistrement des conversations et la durée d’historique conservée.",
       "limitEntriesHelp": "Nombre maximal d’entrées conservées dans le journal des conversations, de 1 à 2 000 (100 par défaut). Phoenix supprime d’abord les plus anciennes.",
       "limitDaysHelp": "Phoenix supprime les entrées plus anciennes que cela, de 1 à 365 jours (7 par défaut).",
-      "limitMbHelp": "Espace disque maximal utilisé par le journal des conversations, de 1 à 250 MB (25 par défaut)."
+      "limitMbHelp": "Espace disque maximal utilisé par le journal des conversations, de 1 à 250 MB (25 par défaut).",
+      "sourceHelp": {
+        "agentcli": "Tours saisis dans Agent Chat, avec vos mots, la réponse et chaque appel d’outil.",
+        "voice": "Tours adressés oralement à l’Agent vocal, avec ce qui a été dit, la réponse et chaque appel d’outil.",
+        "ai_task": "Demandes de Tâche d’IA, avec les instructions, le résultat et chaque appel d’outil.",
+        "assist": "Appels d’outils depuis Assist. Ce que la personne a dit n’est pas transmis.",
+        "mcp": "Appels d’outils depuis des clients MCP. Ce que la personne a tapé n’est pas transmis.",
+        "home_companion": "Demandes des clés Home Companion, avec chaque appel d’outil et son résultat."
+      },
+      "outcomeHelp": {
+        "completed": "Terminé sans erreur.",
+        "failed": "Terminé par une erreur, ou une action a échoué.",
+        "denied": "Une action a été refusée par les autorisations ou MESA, ou son approbation a été rejetée.",
+        "pending_approval": "Une action attend votre approbation.",
+        "cancelled": "Arrêté avant la fin.",
+        "interrupted": "L’enregistrement s’est arrêté avant la fin, par exemple lors d’un redémarrage.",
+        "unknown": "Une action a pu s’exécuter, mais Phoenix n’a pas pu le confirmer. Vérifiez Home Assistant.",
+        "running": "Toujours en cours."
+      }
     },
     "attention": {
       "actionTitle": "Vérifier une action précédente",

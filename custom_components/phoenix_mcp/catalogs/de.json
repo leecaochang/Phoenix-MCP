@@ -138,7 +138,15 @@
       "todoRemovalWarning": "Das Entfernen von To-do-Einträgen ist endgültig. Phoenix behält keine Kopie, daher können sie nicht wiederhergestellt werden.",
       "todoStatusCompleted": "Erledigt",
       "todoStatusNeedsAction": "Unerledigt",
-      "reviewedActions": "Muss geprüft werden, weil es Folgendes hinzufügt: {actions}"
+      "reviewedActions": "Muss geprüft werden, weil es Folgendes hinzufügt: {actions}",
+      "scopeAllHelp": "Jede Anfrage, ausstehend oder entschieden.",
+      "scopeApprovedHelp": "Von Ihnen genehmigte Anfragen.",
+      "scopeRejectedHelp": "Von Ihnen abgelehnte Anfragen.",
+      "scopeFailedHelp": "Bei der letzten Prüfung abgewiesen, oder die Aktion hat einen Fehler zurückgegeben.",
+      "scopeExpiredHelp": "Anfragen, über die niemand binnen einer Stunde entschied.",
+      "scopeCancelledHelp": "Ohne Entscheidung geschlossene Anfragen, etwa wenn der Zugriffsschlüssel widerrufen wurde.",
+      "scopeHistoryHelp": "Jede bereits entschiedene Anfrage.",
+      "scopePendingHelp": "Anfragen, die auf Ihre Entscheidung warten."
     },
     "inject": {
       "profileSet": "MESA-Profil für {key} festgelegt - zum Bearbeiten klicken",
@@ -1159,7 +1167,35 @@
       "viewAutomationsHelp": "Die Automationen ein- oder ausblenden, die MESA nur teilweise prüfen konnte, weil sie Templates oder Blueprints verwenden.",
       "openOrphanHelp": "Dieses Profil im Profileditor öffnen, wo Sie es löschen können. Was es abdeckte, existiert nicht mehr.",
       "dismissNoticeHelp": "Diesen Hinweis in diesem Browser ausblenden. Verworfene Hinweise wiederherstellen holt ihn zurück.",
-      "comboMatchCount": "Treffer: {count}"
+      "comboMatchCount": "Treffer: {count}",
+      "costHighHelp": "Rückgängig machen ist möglich, hat aber echte Folgen.",
+      "costModerateHelp": "Rückgängig machen hat kleine Nebenwirkungen, etwa eine Alarmanlage, die Zeit zum Scharfschalten braucht.",
+      "costNoneHelp": "Rückgängig machen hat keine Nebenwirkungen, etwa bei Licht oder einem einfachen Schalter.",
+      "costTrivialHelp": "Rückgängig machen dauert Sekunden und hat vernachlässigbare Auswirkungen.",
+      "modeAdvisoryHelp": "Überlässt dieses Profil dem MESA-Modus in den Einstellungen.",
+      "modeAutonomousHelp": "Agenten handeln frei.",
+      "modeConfirmHelp": "Aktionen warten auf Ihre Genehmigung, solange MESA erzwungen wird.",
+      "modeEnforcedHelp": "Erzwingt dieses Profil, auch wenn der MESA-Modus in den Einstellungen Beratend ist.",
+      "modeInheritedHelp": "Das Profil überlässt die Steuerung anderen Profilen oder der integrierten Grundlinie.",
+      "modeProhibitedHelp": "Agenten können nicht darauf einwirken, solange MESA erzwungen wird. Im Modus Beratend werden sie nur gewarnt.",
+      "modeReadOnlyHelp": "Agenten können es in keinem MESA-Modus außer Aus ändern.",
+      "reversibleNoHelp": "Lässt sich nicht rückgängig machen, etwa eine gesendete Benachrichtigung.",
+      "privNormalHelp": "Ein gewöhnliches Gerät im Haushalt, etwa ein Bewegungsmelder oder ein Licht.",
+      "privPublicHelp": "Keine personenbezogenen Daten, etwa eine Wetterstation oder ein Verbrauchszähler.",
+      "privRestrictedHelp": "Sehr persönlich oder sicherheitskritisch. Ein Autonom-Profil braucht dann eine Bestätigung.",
+      "privSensitiveHelp": "Personenbezogene Daten, etwa eine Kamera, ein Mikrofon oder ein Präsenzmelder.",
+      "scopeDeploymentWideHelp": "Kann über die Hardware das ganze Zuhause betreffen.",
+      "scopeDeviceLocalizedHelp": "Kann andere Entitäten auf demselben physischen Gerät betreffen.",
+      "scopeEntityOnlyHelp": "Betrifft nur diese Entität.",
+      "scopeRoomLocalizedHelp": "Kann über die Hardware andere Entitäten im selben Raum betreffen.",
+      "scopeZoneWideHelp": "Kann über die Hardware Entitäten in einer ganzen Zone betreffen.",
+      "trigDeploymentDefinedHelp": "Sie wissen genau, welche Automationen in diesem Zuhause es steuert.",
+      "trigLikelyHelp": "Eine Änderung startet wahrscheinlich Automationen, daher wägen Agenten die Folgewirkungen ab.",
+      "trigNoneHelp": "Eine Änderung startet keine Automationen. MESA meldet jede Automation, die es trotzdem nutzt.",
+      "trigUnknownHelp": "Sie können nicht sagen, ob eine Änderung Automationen startet, daher sind Agenten vorsichtig.",
+      "unsetControlHelp": "Das Profil entscheidet nicht. Das tun andere Profile oder die integrierte Grundlinie.",
+      "unsetEffectHelp": "Gibt Agenten keinen Hinweis dazu.",
+      "reversibleYesHelp": "Lässt sich rückgängig machen, etwa ein ausgeschaltetes Licht."
     },
     "settings": {
       "addProviderFirst": "Fügen Sie zuerst unter KI-Anbieter ein Anbieterkonto hinzu.",
@@ -1515,7 +1551,13 @@
       "styleGrumpyTeenagerHelp": "Gelangweilt, genervt und seufzend, erledigt die Aufgabe aber trotzdem. Nur für englische Antworten.",
       "styleNatureDocumentaryHelp": "Ein gedämpfter Naturfilm-Erzähler, der Ihr Zuhause als Lebensraum beobachtet. Nur für englische Antworten.",
       "styleStarshipComputerHelp": "Knappe, förmliche Statusmeldungen vom Bordcomputer eines Raumschiffs. Nur für englische Antworten.",
-      "styleNoirDetectiveHelp": "Ein abgeklärter Privatdetektiv der 1940er-Jahre mit düsteren Sprüchen. Nur für englische Antworten."
+      "styleNoirDetectiveHelp": "Ein abgeklärter Privatdetektiv der 1940er-Jahre mit düsteren Sprüchen. Nur für englische Antworten.",
+      "mesaModeAdvisoryHelp": "Die meisten Regeln warnen nur. Datenschutzregeln, schreibgeschützte Geräte und erzwungene Profile blockieren weiterhin.",
+      "mesaModeEnforcedHelp": "Verbotene Aktionen werden blockiert, und Aktionen, die eine Bestätigung brauchen, warten auf Ihre Genehmigung.",
+      "mesaModeOffHelp": "MESA wird übersprungen, und jede Aktion ist erlaubt.",
+      "toolLoadingAutoHelp": "Lädt Tools in Teilen, wenn der Zugriffsschlüssel etwa 75 oder mehr hat, sonst werden alle gesendet.",
+      "toolLoadingAlwaysHelp": "Lädt Tools in Teilen, unabhängig von der Anzahl der Tools.",
+      "toolLoadingNeverHelp": "Sendet jedes Tool, außer an Anbieter, die nur 128 annehmen."
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",
@@ -2421,7 +2463,16 @@
       "rowResource": "Ressource",
       "rowTime": "Zeit",
       "outcomeCancelled": "Abgebrochen",
-      "outcomeUnknown": "Ergebnis unbekannt"
+      "outcomeUnknown": "Ergebnis unbekannt",
+      "outcomeAllowedHelp": "Ausgeführt.",
+      "outcomeDeniedHelp": "Von Berechtigungen oder MESA abgewiesen, oder eine Genehmigung wurde abgelehnt, lief ab oder wurde abgebrochen.",
+      "outcomeInvalidRequestHelp": "Fehlerhaft, oder eine Änderung, die Phoenix nicht bestätigen konnte und die eventuell wirksam wurde.",
+      "outcomeNotFoundHelp": "Nannte etwas, das nicht existiert.",
+      "outcomeNotImplementedHelp": "Verlangte etwas, das Phoenix nicht tut.",
+      "outcomePendingApprovalHelp": "Wartet auf Ihre Genehmigung.",
+      "outcomeRateLimitedHelp": "Der Zugriffsschlüssel hat zu viele Anfragen gesendet.",
+      "outcomeCancelledHelp": "Die App trennte sich vor dem Ende der Anfrage. Nichts hat Ihr Zuhause erreicht.",
+      "outcomeUnknownHelp": "Die App trennte sich oder verlor die Berechtigung vor dem Ende. Die Änderung ist eventuell erfolgt."
     },
     "selectBy": {
       "area": "Bereich",
@@ -2757,7 +2808,25 @@
       "settingsHelp": "Die Gesprächsaufzeichnung und die Dauer des aufbewahrten Verlaufs ein- oder ausblenden.",
       "limitEntriesHelp": "Die maximale Zahl an Einträgen im Gesprächsprotokoll, 1 bis 2.000 (Standard 100). Phoenix löscht die ältesten zuerst.",
       "limitDaysHelp": "Phoenix löscht Einträge, die älter sind, 1 bis 365 Tage (Standard 7).",
-      "limitMbHelp": "Der maximale Speicherplatz des Gesprächsprotokolls, 1 bis 250 MB (Standard 25)."
+      "limitMbHelp": "Der maximale Speicherplatz des Gesprächsprotokolls, 1 bis 250 MB (Standard 25).",
+      "sourceHelp": {
+        "agentcli": "In Agent Chat getippte Gesprächsrunden, mit Ihren Worten, der Antwort und jedem Werkzeugaufruf.",
+        "voice": "Zum Sprachagenten gesprochene Gesprächsrunden, mit dem Gesagten, der Antwort und jedem Werkzeugaufruf.",
+        "ai_task": "Anfragen von KI-Aufgabe, mit den Anweisungen, dem Ergebnis und jedem Werkzeugaufruf.",
+        "assist": "Werkzeugaufrufe aus Assist. Was die Person gesagt hat, wird nicht weitergegeben.",
+        "mcp": "Werkzeugaufrufe von MCP-Clients. Was die Person eingetippt hat, wird nicht weitergegeben.",
+        "home_companion": "Anfragen von Home Companion-Schlüsseln, mit jedem Werkzeugaufruf und seinem Ergebnis."
+      },
+      "outcomeHelp": {
+        "completed": "Ohne Fehler beendet.",
+        "failed": "Mit Fehler beendet, oder eine Aktion schlug fehl.",
+        "denied": "Eine Aktion wurde von Berechtigungen oder MESA abgewiesen, oder ihre Genehmigung wurde abgelehnt.",
+        "pending_approval": "Eine Aktion wartet auf Ihre Genehmigung.",
+        "cancelled": "Vor dem Abschluss gestoppt.",
+        "interrupted": "Die Aufzeichnung stoppte vor dem Ende des Gesprächs, etwa bei einem Neustart.",
+        "unknown": "Eine Aktion wurde eventuell ausgeführt, aber Phoenix konnte es nicht bestätigen. Prüfen Sie Home Assistant.",
+        "running": "Läuft noch."
+      }
     },
     "attention": {
       "actionTitle": "Eine frühere Aktion prüfen",

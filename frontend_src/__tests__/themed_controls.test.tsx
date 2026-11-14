@@ -213,3 +213,39 @@ it("heads a group's choices with its label and keeps arrow keys on the choices",
   fireEvent.keyDown(list, { key: "Enter" });
   expect(pick).toHaveBeenCalledExactlyOnceWith("b");
 });
+
+it("tells Help what a choice means, never just its name", () => {
+  function Described() {
+    const [root, setRoot] = useState<HTMLDivElement | null>(null);
+    return (
+      <div ref={setRoot}>
+        <SelectPopupHost root={root} />
+        <div data-help-text="How replies sound." data-help-controls="">
+          <select className="input" aria-label="Style" defaultValue="warm">
+            <option value="warm" data-help-text="Friendly and personal.">Warm</option>
+            <option value="plain">Plain</option>
+          </select>
+        </div>
+        <select className="input" aria-label="Key" data-help-text="The access key to use." defaultValue="a">
+          <option value="a">kitchen_key</option>
+        </select>
+        <select className="input" aria-label="Model" defaultValue="m">
+          <option value="m">model-one</option>
+        </select>
+      </div>
+    );
+  }
+  render(<Described />);
+  const rowsOf = (name: string) => {
+    fireEvent.pointerDown(screen.getByRole("combobox", { name }), { button: 0, pointerType: "mouse" });
+    const help = within(screen.getByRole("listbox")).getAllByRole("option").map((o) => o.getAttribute("data-help-text"));
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
+    return help;
+  };
+  // Its own description, named; otherwise the help of the settings row it sits in.
+  expect(rowsOf("Style")).toEqual(["Warm: Friendly and personal.", "How replies sound."]);
+  // A choice whose name is the information says what the dropdown is for.
+  expect(rowsOf("Key")).toEqual(["The access key to use."]);
+  // With no help anywhere, the dropdown's name still says more than the choice's own.
+  expect(rowsOf("Model")).toEqual(["Model"]);
+});

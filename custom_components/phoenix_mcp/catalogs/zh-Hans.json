@@ -555,7 +555,35 @@
       "viewAutomationsHelp": "显示或隐藏 MESA 只能部分检查的自动化，因为它们使用了模板或蓝图。",
       "openOrphanHelp": "在策略编辑器中打开此策略，您可以在那里删除它。它覆盖的对象已不存在。",
       "dismissNoticeHelp": "在此浏览器中隐藏此提示。“恢复已忽略的提示”可将其恢复。",
-      "comboMatchCount": "匹配项：{count}"
+      "comboMatchCount": "匹配项：{count}",
+      "costHighHelp": "可以撤销，但会产生实际后果。",
+      "costModerateHelp": "撤销会有轻微副作用，例如警报需要一段时间才能重新布防。",
+      "costNoneHelp": "撤销没有副作用，例如灯或普通开关。",
+      "costTrivialHelp": "撤销只需几秒，影响可忽略不计。",
+      "modeAdvisoryHelp": "此策略交由“设置”中的 MESA 模式决定。",
+      "modeAutonomousHelp": "智能体可自由操作。",
+      "modeConfirmHelp": "MESA 处于强制模式时，操作需等待您的审批。",
+      "modeEnforcedHelp": "即使“设置”中的 MESA 模式为“建议”，也强制执行此策略。",
+      "modeInheritedHelp": "此策略将控制权交给其他策略或内置基线。",
+      "modeProhibitedHelp": "MESA 处于强制模式时，智能体无法对其操作。在“建议”模式下只会警告智能体。",
+      "modeReadOnlyHelp": "除“关闭”外，在任何 MESA 模式下智能体都无法更改它。",
+      "reversibleNoHelp": "更改无法撤销，例如发送通知。",
+      "privNormalHelp": "普通家用设备，例如运动传感器或灯。",
+      "privPublicHelp": "不含个人数据，例如气象站或水电燃气表。",
+      "privRestrictedHelp": "高度私密或对安全至关重要。此时“自主”策略也需要确认。",
+      "privSensitiveHelp": "个人数据，例如摄像头、麦克风或存在传感器。",
+      "scopeDeploymentWideHelp": "可能通过硬件影响整个家庭。",
+      "scopeDeviceLocalizedHelp": "可能影响同一物理设备上的其他实体。",
+      "scopeEntityOnlyHelp": "仅影响此实体。",
+      "scopeRoomLocalizedHelp": "可能通过硬件影响同一房间内的其他实体。",
+      "scopeZoneWideHelp": "可能通过硬件影响整个地点内的实体。",
+      "trigDeploymentDefinedHelp": "您确切知道它会驱动此家庭中的哪些自动化。",
+      "trigLikelyHelp": "更改它可能会触发自动化，因此智能体会权衡连带影响。",
+      "trigNoneHelp": "更改它不会触发任何自动化。MESA 会标记仍在使用它的任何自动化。",
+      "trigUnknownHelp": "您无法判断更改它是否会触发自动化，因此智能体会谨慎操作。",
+      "unsetControlHelp": "此策略不做决定，由其他策略或内置基线决定。",
+      "unsetEffectHelp": "不向智能体提供这方面的提示。",
+      "reversibleYesHelp": "更改可以撤销，例如关灯。"
     },
     "selectBy": {
       "area": "区域",
@@ -858,7 +886,16 @@
       "rowResource": "资源",
       "rowTime": "时间",
       "outcomeCancelled": "已取消",
-      "outcomeUnknown": "结果未知"
+      "outcomeUnknown": "结果未知",
+      "outcomeAllowedHelp": "已执行。",
+      "outcomeDeniedHelp": "被权限或 MESA 拒绝，或审批被拒绝、已过期或已取消。",
+      "outcomeInvalidRequestHelp": "格式错误，或 Phoenix 无法确认的更改，该更改可能已生效。",
+      "outcomeNotFoundHelp": "指定的对象不存在。",
+      "outcomeNotImplementedHelp": "请求了 Phoenix 不提供的功能。",
+      "outcomePendingApprovalHelp": "等待您的审批。",
+      "outcomeRateLimitedHelp": "访问密钥发送的请求过多。",
+      "outcomeCancelledHelp": "应用在请求完成前已断开。未对您的家庭执行任何操作。",
+      "outcomeUnknownHelp": "应用在完成前已断开或失去权限。更改可能已执行。"
     },
     "changes": {
       "added": "已添加",
@@ -1308,7 +1345,15 @@
       "todoRemovalWarning": "移除待办事项是永久性的。Phoenix 不保留副本，因此无法还原。",
       "todoStatusCompleted": "已完成",
       "todoStatusNeedsAction": "未完成",
-      "reviewedActions": "需要您审核，因为它添加了：{actions}"
+      "reviewedActions": "需要您审核，因为它添加了：{actions}",
+      "scopeAllHelp": "所有请求，无论待处理还是已决定。",
+      "scopeApprovedHelp": "您批准的请求。",
+      "scopeRejectedHelp": "您拒绝的请求。",
+      "scopeFailedHelp": "在最后一次检查时被拒绝，或操作返回了错误。",
+      "scopeExpiredHelp": "一小时内无人决定的请求。",
+      "scopeCancelledHelp": "未经决定即关闭的请求，例如访问密钥被吊销时。",
+      "scopeHistoryHelp": "所有已决定的请求。",
+      "scopePendingHelp": "等待您决定的请求。"
     },
     "accessKeys": {
       "announceAllHelp": "向此密钥的智能体提供所有工具，包括它无法使用的工具。仅用于排查问题；会消耗更多 token。",
@@ -1860,7 +1905,13 @@
       "styleGrumpyTeenagerHelp": "无聊、委屈、唉声叹气，但还是会把事办完。仅限英语回复。",
       "styleNatureDocumentaryHelp": "像自然纪录片的旁白，压低声音把您的家当作栖息地来观察。仅限英语回复。",
       "styleStarshipComputerHelp": "星舰计算机式的简短、正式的状态报告。仅限英语回复。",
-      "styleNoirDetectiveHelp": "厌倦世事的 1940 年代私家侦探，满口阴郁的俏皮话。仅限英语回复。"
+      "styleNoirDetectiveHelp": "厌倦世事的 1940 年代私家侦探，满口阴郁的俏皮话。仅限英语回复。",
+      "mesaModeAdvisoryHelp": "大多数规则只发出警告。隐私规则、只读设备和强制策略仍会阻止。",
+      "mesaModeEnforcedHelp": "禁止的操作会被阻止，需要确认的操作会等待您的审批。",
+      "mesaModeOffHelp": "跳过 MESA，允许所有操作。",
+      "toolLoadingAutoHelp": "访问密钥有约 75 个或更多工具时分批加载，否则全部发送。",
+      "toolLoadingAlwaysHelp": "无论工具数量多少，都分批加载工具。",
+      "toolLoadingNeverHelp": "发送所有工具，但只接受 128 个工具的提供商除外。"
     },
     "agentchat": {
       "accessKey": "访问密钥",
@@ -2757,7 +2808,25 @@
       "settingsHelp": "显示或隐藏对话记录功能以及保留多少历史记录。",
       "limitEntriesHelp": "对话日志最多保留的条目数，1 到 2,000（默认 100）。Phoenix 先删除最早的条目。",
       "limitDaysHelp": "Phoenix 会删除早于此时长的条目，1 到 365 天（默认 7）。",
-      "limitMbHelp": "对话日志最多使用的磁盘空间，1 到 250 MB（默认 25）。"
+      "limitMbHelp": "对话日志最多使用的磁盘空间，1 到 250 MB（默认 25）。",
+      "sourceHelp": {
+        "agentcli": "在 Agent Chat 中输入的对话轮次，包括您的话、回复和每次工具调用。",
+        "voice": "对语音智能体说出的对话轮次，包括所说内容、回复和每次工具调用。",
+        "ai_task": "AI 任务请求，包括指令、结果和每次工具调用。",
+        "assist": "来自 Assist 的工具调用。用户所说的内容不会传入。",
+        "mcp": "来自 MCP 客户端的工具调用。用户输入的内容不会传入。",
+        "home_companion": "来自 Home Companion 密钥的请求，包括每次工具调用及其结果。"
+      },
+      "outcomeHelp": {
+        "completed": "已完成，没有错误。",
+        "failed": "以错误结束，或某个操作失败。",
+        "denied": "某个操作被权限或 MESA 拒绝，或其审批被拒绝。",
+        "pending_approval": "某个操作正在等待您的审批。",
+        "cancelled": "在完成前已停止。",
+        "interrupted": "记录在结束前停止，例如因重启。",
+        "unknown": "某个操作可能已执行，但 Phoenix 无法确认。请检查 Home Assistant。",
+        "running": "仍在进行中。"
+      }
     },
     "attention": {
       "actionTitle": "核对之前的操作",

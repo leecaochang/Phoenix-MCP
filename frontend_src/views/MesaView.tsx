@@ -64,57 +64,58 @@ const FALLBACK_TAG_ROOTS = ["space", "zone", "diagnostic"];
 // (what mesa-core expects); the label is only for display.
 type Opt = { value: string; label: string };
 // A fixed option set instead carries the catalog key for its label.
-type LabeledOpt = { value: string; labelKey: string };
+/** `helpKey` describes the choice in the Help window while the list is open. */
+type LabeledOpt = { value: string; labelKey: string; helpKey: string };
 
 // "" leaves control_mode undeclared, so the profile makes no control decision
 // and the inherited or built-in mode applies.
 const CONTROL_MODES: LabeledOpt[] = [
-  { value: "", labelKey: "mesa.unset" },
-  { value: "autonomous", labelKey: "mesa.modeAutonomous" },
-  { value: "confirm", labelKey: "mesa.modeConfirmOption" },
-  { value: "read_only", labelKey: "mesa.modeReadOnly" },
-  { value: "prohibited", labelKey: "mesa.modeProhibited" },
+  { value: "", labelKey: "mesa.unset", helpKey: "mesa.unsetControlHelp" },
+  { value: "autonomous", labelKey: "mesa.modeAutonomous", helpKey: "mesa.modeAutonomousHelp" },
+  { value: "confirm", labelKey: "mesa.modeConfirmOption", helpKey: "mesa.modeConfirmHelp" },
+  { value: "read_only", labelKey: "mesa.modeReadOnly", helpKey: "mesa.modeReadOnlyHelp" },
+  { value: "prohibited", labelKey: "mesa.modeProhibited", helpKey: "mesa.modeProhibitedHelp" },
 ];
 const TRIGGERS: LabeledOpt[] = [
-  { value: "unknown", labelKey: "mesa.trigUnknown" },
-  { value: "none", labelKey: "mesa.trigNone" },
-  { value: "likely", labelKey: "mesa.trigLikely" },
-  { value: "deployment_defined", labelKey: "mesa.trigDeploymentDefined" },
+  { value: "unknown", labelKey: "mesa.trigUnknown", helpKey: "mesa.trigUnknownHelp" },
+  { value: "none", labelKey: "mesa.trigNone", helpKey: "mesa.trigNoneHelp" },
+  { value: "likely", labelKey: "mesa.trigLikely", helpKey: "mesa.trigLikelyHelp" },
+  { value: "deployment_defined", labelKey: "mesa.trigDeploymentDefined", helpKey: "mesa.trigDeploymentDefinedHelp" },
 ];
 const REVERSIBILITY_COSTS: LabeledOpt[] = [
-  { value: "", labelKey: "mesa.unset" },
-  { value: "none", labelKey: "mesa.costNone" },
-  { value: "trivial", labelKey: "mesa.costTrivial" },
-  { value: "moderate", labelKey: "mesa.costModerate" },
-  { value: "high", labelKey: "mesa.costHigh" },
+  { value: "", labelKey: "mesa.unset", helpKey: "mesa.unsetEffectHelp" },
+  { value: "none", labelKey: "mesa.costNone", helpKey: "mesa.costNoneHelp" },
+  { value: "trivial", labelKey: "mesa.costTrivial", helpKey: "mesa.costTrivialHelp" },
+  { value: "moderate", labelKey: "mesa.costModerate", helpKey: "mesa.costModerateHelp" },
+  { value: "high", labelKey: "mesa.costHigh", helpKey: "mesa.costHighHelp" },
 ];
 const SCOPES: LabeledOpt[] = [
-  { value: "", labelKey: "mesa.unset" },
-  { value: "entity_only", labelKey: "mesa.scopeEntityOnly" },
-  { value: "device_localized", labelKey: "mesa.scopeDeviceLocalized" },
-  { value: "room_localized", labelKey: "mesa.scopeRoomLocalized" },
-  { value: "zone_wide", labelKey: "mesa.scopeZoneWide" },
-  { value: "deployment_wide", labelKey: "mesa.scopeDeploymentWide" },
+  { value: "", labelKey: "mesa.unset", helpKey: "mesa.unsetEffectHelp" },
+  { value: "entity_only", labelKey: "mesa.scopeEntityOnly", helpKey: "mesa.scopeEntityOnlyHelp" },
+  { value: "device_localized", labelKey: "mesa.scopeDeviceLocalized", helpKey: "mesa.scopeDeviceLocalizedHelp" },
+  { value: "room_localized", labelKey: "mesa.scopeRoomLocalized", helpKey: "mesa.scopeRoomLocalizedHelp" },
+  { value: "zone_wide", labelKey: "mesa.scopeZoneWide", helpKey: "mesa.scopeZoneWideHelp" },
+  { value: "deployment_wide", labelKey: "mesa.scopeDeploymentWide", helpKey: "mesa.scopeDeploymentWideHelp" },
 ];
 const PRIVACY_LEVELS: LabeledOpt[] = [
-  { value: "public", labelKey: "mesa.privPublic" },
-  { value: "normal", labelKey: "mesa.privNormal" },
-  { value: "sensitive", labelKey: "mesa.privSensitive" },
-  { value: "restricted", labelKey: "mesa.privRestricted" },
+  { value: "public", labelKey: "mesa.privPublic", helpKey: "mesa.privPublicHelp" },
+  { value: "normal", labelKey: "mesa.privNormal", helpKey: "mesa.privNormalHelp" },
+  { value: "sensitive", labelKey: "mesa.privSensitive", helpKey: "mesa.privSensitiveHelp" },
+  { value: "restricted", labelKey: "mesa.privRestricted", helpKey: "mesa.privRestrictedHelp" },
 ];
 const REVERSIBLE: LabeledOpt[] = [
-  { value: "", labelKey: "mesa.unset" },
-  { value: "true", labelKey: "mesa.yes" },
-  { value: "false", labelKey: "mesa.no" },
+  { value: "", labelKey: "mesa.unset", helpKey: "mesa.unsetEffectHelp" },
+  { value: "true", labelKey: "mesa.yes", helpKey: "mesa.reversibleYesHelp" },
+  { value: "false", labelKey: "mesa.no", helpKey: "mesa.reversibleNoHelp" },
 ];
 const ENFORCEMENT_MODES: LabeledOpt[] = [
-  { value: "advisory", labelKey: "mesa.modeAdvisory" },
-  { value: "enforced", labelKey: "mesa.modeEnforced" },
+  { value: "advisory", labelKey: "mesa.modeAdvisory", helpKey: "mesa.modeAdvisoryHelp" },
+  { value: "enforced", labelKey: "mesa.modeEnforced", helpKey: "mesa.modeEnforcedHelp" },
 ];
 
 // Scope help is keyed by the scope union so a new level cannot be forgotten;
 // the field help below it is a plain map with no such constraint.
-const SCOPE_HELP: Record<ProfileScope, string> = {
+export const SCOPE_HELP: Record<ProfileScope, string> = {
   entity: "mesa.helpEntity",
   device: "mesa.helpDevice",
   area: "mesa.helpArea",
@@ -385,7 +386,7 @@ function SelectField({
       <FieldLabel id={id} text={label} help={t(helpKey)} />
       {/* The field's explanation also shows in the Help window while it has the pointer or focus. */}
       <select id={id} data-field={field} className="input" value={value} data-help={helpKey} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
+        {options.map((o) => <option key={o.value} value={o.value} data-help={o.helpKey}>{t(o.labelKey)}</option>)}
       </select>
     </div>
   );
