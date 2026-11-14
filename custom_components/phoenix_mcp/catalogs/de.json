@@ -248,7 +248,8 @@
         "unreachable": "Home Assistant war nicht erreichbar, daher wurde dies nicht abgeschlossen. Was auf Ihre Genehmigung wartete, wurde abgebrochen.",
         "upstream": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "provider_slow": "Der Anbieter hat innerhalb von {seconds} s nicht geantwortet.",
-        "result_withheld": "Ein Ergebnis mit {length} Byte passte nicht in den Kontext der Anfrage und wurde dem Modell nicht übergeben."
+        "result_withheld": "Ein Ergebnis mit {length} Byte passte nicht in den Kontext der Anfrage und wurde dem Modell nicht übergeben.",
+        "request_over_minute_limit": "Diese Anfrage ist größer als das Token-Limit pro Minute dieses Groq-Kontos, daher hilft Warten nicht. Die kostenlose Stufe von Groq ist für Phoenix zu klein: Verwenden Sie eine kostenpflichtige Groq-Stufe oder einen anderen Anbieter. Die Details nennen die Zahlen von Groq. Es wird nicht erneut versucht."
       },
       "options": "Optionen",
       "popIn": "Zurück in Home Assistant einblenden",

@@ -479,6 +479,10 @@ def _http_failure(
         # Google lists a model for any valid key, but refuses inference for a project without the
         # API enabled, billing or verification; that is not a rejected key.
         code, retryable = "gemini_project_refused", False
+    elif kind == "groq" and status == 413 and "rate_limit_exceeded" in codes:
+        # Groq refuses a single request larger than the account's per-minute token limit. Waiting
+        # does not help, so it is not retried, and the operator is told it is the plan, not the request.
+        code, retryable = "request_over_minute_limit", False
     elif kind == "meta" and status == 504:
         # Meta: the first event did not arrive in time, and the same request usually times out again.
         retryable = False

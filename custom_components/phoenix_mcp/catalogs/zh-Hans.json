@@ -2006,7 +2006,8 @@
         "unreachable": "无法连接 Home Assistant，因此未能完成。等待你批准的内容已取消。",
         "upstream": "提供商暂时不可用。",
         "provider_slow": "提供商在 {seconds} 秒内没有回复。",
-        "result_withheld": "{length} 字节的结果超出了请求的上下文容量，未提供给模型。"
+        "result_withheld": "{length} 字节的结果超出了请求的上下文容量，未提供给模型。",
+        "request_over_minute_limit": "此请求超出了该 Groq 账户每分钟的 Token 上限，等待也无济于事。Groq 的免费套餐对 Phoenix 来说太小：请使用 Groq 的付费套餐或其他提供商。详细信息中有 Groq 给出的数值。不会重试。"
       },
       "options": "选项",
       "popIn": "移回 Home Assistant",

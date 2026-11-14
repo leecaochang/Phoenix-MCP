@@ -5,6 +5,7 @@ later state observations can verify the requested device settings.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 import json
 from typing import Any
@@ -263,7 +264,8 @@ def _verification_exceptions(evidence: ResponseEvidence, unmatched: set[str], la
 
 def _voiced(key: str, style: str) -> str:
     """The character style's own version of a plain spoken sentence, when it has one."""
-    return HOME_COMPANION_CHARACTER_TEMPLATES.get(style, {}).get(key, key)
+    voiced: Mapping[str, str] = HOME_COMPANION_CHARACTER_TEMPLATES.get(style) or {}
+    return voiced.get(key, key)
 
 
 def build_report(status: str, model_message: str, evidence: ResponseEvidence, language: object,

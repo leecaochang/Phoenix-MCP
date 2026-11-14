@@ -1764,7 +1764,8 @@
         "unreachable": "Home Assistant était injoignable, donc ceci n'a pas abouti. Tout ce qui attendait votre approbation a été annulé.",
         "upstream": "Le fournisseur est temporairement indisponible.",
         "provider_slow": "Le fournisseur n'a pas répondu dans un délai de {seconds} s.",
-        "result_withheld": "Un résultat de {length} octets ne tenait pas dans le contexte de la requête et n'a pas été transmis au modèle."
+        "result_withheld": "Un résultat de {length} octets ne tenait pas dans le contexte de la requête et n'a pas été transmis au modèle.",
+        "request_over_minute_limit": "Cette requête dépasse la limite de jetons par minute de ce compte Groq, donc attendre n’y changera rien. L’offre gratuite de Groq est trop petite pour Phoenix : utilisez une offre payante de Groq ou un autre fournisseur. Les détails donnent les chiffres de Groq. Aucune nouvelle tentative ne sera faite."
       },
       "options": "Réglages",
       "popIn": "Réintégrer dans Home Assistant",

@@ -829,7 +829,8 @@
         "unreachable": "No se pudo contactar con Home Assistant, así que esto no terminó. Todo lo que esperaba tu aprobación se canceló.",
         "upstream": "El proveedor no está disponible temporalmente.",
         "provider_slow": "El proveedor no respondió en {seconds} s.",
-        "result_withheld": "Un resultado de {length} bytes no cabía en el contexto de la solicitud y no se entregó al modelo."
+        "result_withheld": "Un resultado de {length} bytes no cabía en el contexto de la solicitud y no se entregó al modelo.",
+        "request_over_minute_limit": "Esta solicitud supera el límite de tokens por minuto de esta cuenta de Groq, así que esperar no servirá. El nivel gratuito de Groq es demasiado pequeño para Phoenix: usa un nivel de pago de Groq u otro proveedor. Los detalles indican las cifras de Groq. No se volverá a intentar."
       },
       "options": "Opciones",
       "popIn": "Volver a incrustar en Home Assistant",

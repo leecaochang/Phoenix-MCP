@@ -97,6 +97,18 @@ def test_a_gemini_403_names_the_project_not_the_key():
     assert _failure("chatgpt", 403, {"message": "x"})["code"] == "auth"
 
 
+def test_a_groq_413_over_the_minute_limit_names_the_plan():
+    # Groq's answer when one request is larger than the account's tokens-per-minute limit.
+    error = {"message": "Request too large for model `openai/gpt-oss-120b` on tokens per minute (TPM): "
+                        "Limit 8000, Requested 15367", "type": "tokens", "code": "rate_limit_exceeded"}
+    event = _failure("groq", 413, error)
+    assert (event["code"], event["retryable"]) == ("request_over_minute_limit", False)
+    assert "Limit 8000" in event["provider_detail"]
+    # The same code on a 429 is an ordinary rate limit, and another provider's 413 stays a refusal.
+    assert _failure("groq", 429, error)["code"] == "rate_limit"
+    assert _failure("chatgpt", 413, error)["code"] == "provider_rejected"
+
+
 @pytest.mark.parametrize(("error", "expected"), [
     ({"code": 402, "message": "x", "metadata": {"error_type": "payment_required"}}, ("quota", False)),
     ({"code": "payment_required", "message": "x"}, ("quota", False)),

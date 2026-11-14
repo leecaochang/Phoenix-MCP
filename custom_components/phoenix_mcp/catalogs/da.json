@@ -526,7 +526,8 @@
         "unreachable": "Home Assistant kunne ikke nås, så dette blev ikke færdigt. Alt, der ventede på din godkendelse, blev annulleret.",
         "upstream": "Udbyderen er midlertidigt utilgængelig.",
         "provider_slow": "Udbyderen svarede ikke inden for {seconds} s.",
-        "result_withheld": "Et resultat på {length} byte var for stort til anmodningens kontekst og blev ikke sendt til modellen."
+        "result_withheld": "Et resultat på {length} byte var for stort til anmodningens kontekst og blev ikke sendt til modellen.",
+        "request_over_minute_limit": "Denne anmodning er større end denne Groq-kontos tokengrænse pr. minut, så det hjælper ikke at vente. Groqs gratis niveau er for lille til Phoenix: brug et betalt Groq-niveau eller en anden udbyder. Detaljerne giver Groqs tal. Det bliver ikke forsøgt igen."
       },
       "options": "Indstillinger",
       "popIn": "Åbn igen i Home Assistant",

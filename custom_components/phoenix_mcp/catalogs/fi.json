@@ -526,7 +526,8 @@
         "unreachable": "Home Assistantiin ei saatu yhteyttä, joten tämä ei valmistunut. Kaikki hyväksyntääsi odottanut peruutettiin.",
         "upstream": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
         "provider_slow": "Palveluntarjoaja ei vastannut {seconds} sekunnin kuluessa.",
-        "result_withheld": "{length} tavun tulos ei mahtunut pyynnön kontekstiin, eikä sitä annettu mallille."
+        "result_withheld": "{length} tavun tulos ei mahtunut pyynnön kontekstiin, eikä sitä annettu mallille.",
+        "request_over_minute_limit": "Tämä pyyntö on suurempi kuin tämän Groq-tilin minuuttikohtainen tunnusraja, joten odottaminen ei auta. Groqin ilmainen taso on liian pieni Phoenixille: käytä Groqin maksullista tasoa tai toista palveluntarjoajaa. Tiedoissa on Groqin luvut. Yritystä ei toisteta."
       },
       "options": "Asetukset",
       "popIn": "Palauta takaisin Home Assistantiin",

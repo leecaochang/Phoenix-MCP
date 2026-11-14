@@ -526,7 +526,8 @@
         "unreachable": "Home Assistant gick inte att nå, så detta slutfördes inte. Allt som väntade på ditt godkännande avbröts.",
         "upstream": "Leverantören är tillfälligt otillgänglig.",
         "provider_slow": "Leverantören svarade inte inom {seconds} s.",
-        "result_withheld": "Ett resultat på {length} byte fick inte plats i begärans kontext och skickades inte till modellen."
+        "result_withheld": "Ett resultat på {length} byte fick inte plats i begärans kontext och skickades inte till modellen.",
+        "request_over_minute_limit": "Den här begäran är större än tokengränsen per minut för det här Groq-kontot, så det hjälper inte att vänta. Groqs gratisnivå är för liten för Phoenix: använd en betald Groq-nivå eller en annan leverantör. Detaljerna anger Groqs siffror. Det görs inget nytt försök."
       },
       "options": "Alternativ",
       "popIn": "Fäst tillbaka i Home Assistant",

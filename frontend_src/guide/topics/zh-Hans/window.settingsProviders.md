@@ -81,6 +81,8 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 
 Groq、Mistral AI 和 Z.ai 每个请求最多接受 128 个工具，Phoenix 对 Gemini、Kimi、OpenRouter、Infron 和 Cloudflare Workers AI 也采用同样的上限。访问密钥的工具更多时，无论[工具加载](guide:#tool-loading)如何设置，Phoenix 都会为它们分批加载工具。
 
+Groq 的免费套餐限制每个模型每分钟接受的 Token 数，而单个 Phoenix 请求就超过了这个上限。Groq 会拒绝该请求，等待也无济于事。请使用 Groq 的付费套餐或其他提供商。
+
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 
 Phoenix 会不时重新读取每个账户的模型列表。这能让列表保持最新，使 **{{label:settings.agentcliModelAuto}}** 可以切换到更新的模型。

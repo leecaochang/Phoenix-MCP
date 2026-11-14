@@ -2133,6 +2133,7 @@
         "provider_transient": "The provider is temporarily unavailable.",
         "quota": "The provider account has run out of credit or reached its spending limit. It will not be retried.",
         "rate_limit": "The provider is temporarily unavailable.",
+        "request_over_minute_limit": "This request is larger than this Groq account's per-minute token limit, so waiting won't help. Groq's free tier is too small for Phoenix: use a paid Groq tier or another provider. The details give Groq's numbers. It will not be retried.",
         "request_too_large": "This message is too large to send. Shorten it, remove images, or start a new conversation with /clear.",
         "too_many_tools": "This access key announces {count} tools, but {provider} accepts at most {limit} in one request. Narrow the access key's capabilities or choose another provider.",
         "tool_call_cut": "The connection to the model ended in the middle of a tool call, so the action was not run. Nothing was applied and the request itself was not at fault; send it again.",

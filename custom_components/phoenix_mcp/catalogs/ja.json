@@ -1361,7 +1361,8 @@
         "unreachable": "Home Assistant に接続できなかったため、完了しませんでした。承認待ちのものはキャンセルされました。",
         "upstream": "プロバイダーは一時的に利用できません。",
         "provider_slow": "プロバイダーから {seconds} 秒以内に応答がありませんでした。",
-        "result_withheld": "{length} バイトの結果はリクエストのコンテキストに収まらなかったため、モデルに渡されませんでした。"
+        "result_withheld": "{length} バイトの結果はリクエストのコンテキストに収まらなかったため、モデルに渡されませんでした。",
+        "request_over_minute_limit": "このリクエストは、この Groq アカウントの毎分のトークン上限を超えているため、待っても解決しません。Groq の無料プランは Phoenix には小さすぎます。Groq の有料プランか別のプロバイダーを使ってください。詳細に Groq の数値が示されています。再試行はしません。"
       },
       "options": "オプション",
       "popIn": "Home Assistant 内に戻す",
