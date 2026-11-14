@@ -30,7 +30,7 @@ from ..provider_constants import (
     AGENT_CHAT_DEEPSEEK_MAX_TOKENS, AGENT_CHAT_NVIDIA_MAX_TOKENS, AGENT_CHAT_OPENCODE_CHAT_MODELS,
     AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL, AGENT_CHAT_OPENCODE_LEGACY_CHAT_EXCEPTIONS,
     AGENT_CHAT_OLLAMA_REPLY_SHARE, AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS, AGENT_CHAT_PROMPT_CHARS_PER_TOKEN,
-    AGENT_CHAT_REASONING_PROBE_MAX_TOKENS,
+    AGENT_CHAT_REASONING_PROBE_MAX_TOKENS, AGENT_CHAT_CLOUDFLARE_MODELS_QUERY,
 )
 
 
@@ -79,6 +79,26 @@ def _filter_together_models(data: list[dict]) -> list[str]:
         if model.get("id") and model.get("type") == "chat"
     )
     return chat or sorted(str(model["id"]) for model in data if model.get("id"))
+
+
+def _filter_cloudflare_models(data: list) -> list[str]:
+    """Workers AI text-generation models that can call tools.
+
+    The search lists every task's models under their @cf/ names. When the catalog marks
+    function calling, only those models qualify, since an agent turn needs tools.
+    """
+    rows = [row for row in data if isinstance(row, dict) and isinstance(row.get("name"), str)
+            and row["name"].startswith("@")
+            and (not isinstance(row.get("task"), dict) or row["task"].get("name") == "Text Generation")]
+
+    def tools(row: dict) -> bool | None:
+        for prop in row.get("properties") or []:
+            if isinstance(prop, dict) and prop.get("property_id") == "function_calling":
+                return str(prop.get("value")).lower() == "true"
+        return None
+
+    declared = any(tools(row) is not None for row in rows)
+    return sorted({row["name"] for row in rows if not declared or tools(row)})
 
 
 def _strip_models_prefix(model_id: str) -> str:
@@ -304,6 +324,8 @@ class OpenAICompatProvider:
             else f"{self.cfg.base_url}/chat/completions"
 
     def _models_url(self) -> str:
+        if self.definition.models_shape == "cloudflare" and self.cfg.base_url.endswith("/v1"):
+            return f"{self.cfg.base_url[:-len('v1')]}{AGENT_CHAT_CLOUDFLARE_MODELS_QUERY}"
         for choice in self.definition.endpoints:
             if choice.base_url == self.cfg.base_url and choice.models_url:
                 return choice.models_url
@@ -484,9 +506,12 @@ class OpenAICompatProvider:
                 body = await _read_json(resp)
             data = (
                 body if self.definition.models_shape == "list" and isinstance(body, list)
+                else body.get("result", []) if self.definition.models_shape == "cloudflare" and isinstance(body, dict)
                 else body.get("data", []) if isinstance(body, dict)
                 else []
             )
+            if self.definition.models_shape == "cloudflare":
+                return _filter_cloudflare_models(data if isinstance(data, list) else []) or self._model_fallback()
             if self.definition.model_filter == "opencode":
                 data = [row for row in (data if isinstance(data, list) else []) if isinstance(row, dict)
                         and isinstance(row.get("id"), str) and row["id"]]

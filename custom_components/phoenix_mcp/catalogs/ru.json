@@ -309,7 +309,10 @@
       "oauthSignInNotFound": "Этот вход больше не существует.",
       "oauthSaveFailed": "Не удалось удалить вход. Повторите попытку.",
       "oauthNoHttps": "У Home Assistant нет адреса HTTPS, поэтому приложения не могут войти. Сначала задайте внешний URL с HTTPS.",
-      "providerAccountIdInvalid": "Введите ваш 32-символьный ID аккаунта."
+      "providerAccountIdInvalid": "Введите ваш 32-символьный ID аккаунта.",
+      "decisionThresholdInvalid": "Введите порог от {min} до {max} с точностью до сотых.",
+      "decisionThresholdAlone": "Измените порог отдельно.",
+      "decisionThresholdConversation": "Порог есть только у учётных записей решений."
     },
     "agentchat": {
       "accessKey": "Ключ доступа",
@@ -2011,6 +2014,7 @@
       "providerAccount": "Учётная запись провайдера",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2637,7 +2641,9 @@
       "accountChoiceHelp": "Использовать эту учётную запись как провайдера решений. Выберите её снова, чтобы показать или скрыть «Изменить модель» и «Удалить».",
       "changeModelHelp": "Выберите, какая модель этой учётной записи принимает решения о маршрутизации.",
       "saveModelHelp": "С этого момента использовать выбранную модель для решений о маршрутизации.",
-      "connectionSettingsHelp": "Показать или скрыть, сколько Phoenix ждёт решения и сколько запросов решений может отправить в час."
+      "connectionSettingsHelp": "Показать или скрыть, сколько Phoenix ждёт решения и сколько запросов решений может отправить в час.",
+      "decisionThreshold": "Порог уверенности",
+      "decisionThresholdHelp": "Насколько уверенной должна быть эта учётная запись перед выполнением команды, от 0,70 до 1,00. По умолчанию 0,90."
     },
     "routingStats": {
       "title": "Статистика маршрутизации",

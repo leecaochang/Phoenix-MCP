@@ -127,6 +127,7 @@ def _probability(value: Any) -> bool:
 _DECISION_PROTOCOLS = frozenset({
     ("typesafe", "systemone"), ("opencode_decision", "systemone"),
     ("cloudflare_decision", "systemone"), ("gemini_decision", "gemini_decisions"),
+    ("openai_decision", "openai_decisions"),
 })
 _CLOUDFLARE_PREFIX, _CLOUDFLARE_SUFFIX = DECISION_CLOUDFLARE_BASE_URL.split("{account_id}")
 
@@ -180,7 +181,131 @@ def gemini_request(model: str, state: Any, questions: Mapping[str, Any]) -> dict
     return {"model": model, "input": "state = " + _gemini_text(state), "questions": converted}
 
 
-def normalized_response(kind: str, model: str, body: Any) -> Any:
+_OPENAI_QUESTION_TYPES = {"noul": "predicate", "choice": "choice", "score": "score"}
+
+
+# OpenAI's documented bounds on one input_json part; a larger state is sent as text.
+_OPENAI_JSON_MAX_BYTES = 256 * 1024
+_OPENAI_JSON_MAX_VALUES = 10_000
+_OPENAI_JSON_MAX_DEPTH = 32
+
+
+def _json_fits(value: Any) -> bool:
+    """Whether a state stays within the input_json limits on bytes, values and nesting."""
+    count = 0
+
+    def walk(item: Any, depth: int) -> bool:
+        nonlocal count
+        count += 1
+        if count > _OPENAI_JSON_MAX_VALUES or depth > _OPENAI_JSON_MAX_DEPTH:
+            return False
+        if isinstance(item, dict):
+            return all(walk(child, depth + 1) for child in item.values())
+        if isinstance(item, list):
+            return all(walk(child, depth + 1) for child in item)
+        return True
+
+    return (isinstance(value, dict) and walk(value, 0)
+            and len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()) <= _OPENAI_JSON_MAX_BYTES)
+
+
+def _target_label(state: Any, key: str) -> str:
+    """A catalog entry's name, aliases and area as a choice description, or "".
+
+    OpenAI's guide advises meaningful labels: the model reads each value and its
+    description, and an entity id alone says little about which device it is.
+    """
+    targets = state.get("targets") if isinstance(state, dict) else None
+    entry = targets.get(key) if isinstance(targets, dict) else None
+    fields = state.get("target_fields")
+    if isinstance(entry, list) and isinstance(fields, list) and len(entry) == len(fields):
+        entry = dict(zip(fields, entry))
+    if not isinstance(entry, dict) or not isinstance(entry.get("name"), str) or not entry["name"]:
+        return ""
+    parts = [entry["name"]]
+    aliases = [alias for alias in entry.get("aliases") or [] if isinstance(alias, str) and alias]
+    if aliases:
+        parts.append("also called " + ", ".join(aliases))
+    if isinstance(entry.get("area"), str) and entry["area"]:
+        parts.append("in " + entry["area"])
+    return "; ".join(parts)
+
+
+def openai_request(model: str, state: Any, questions: Mapping[str, Any]) -> dict:
+    """A System One request in OpenAI's Decisions shape: questions in order, each named by its key.
+
+    A state within the input_json limits goes as structured JSON in a user message, as the
+    guide suggests; instructions that cite state fields name its keys.
+    """
+    converted: list[dict[str, Any]] = []
+    for name, spec in questions.items():
+        question: dict[str, Any] = {"type": _OPENAI_QUESTION_TYPES[spec["type"]], "name": name,
+                                    "instructions": _gemini_text(spec.get("instructions"))}
+        criteria = spec.get("criteria")
+        if spec["type"] == "choice" and isinstance(criteria, Mapping):
+            question["choices"] = []
+            for key, text in criteria.items():
+                description = _gemini_text(text) if text else _target_label(state, key)
+                question["choices"].append({"value": key, **({"description": description} if description else {})})
+        elif spec["type"] == "score" and isinstance(criteria, list):
+            question["levels"] = [{"label": _gemini_text(text)} for text in criteria]
+        elif spec["type"] == "noul" and isinstance(criteria, Mapping):
+            # A predicate takes no criteria; what yes and no mean joins its instructions.
+            meaning = " ".join(f"{key.capitalize()} means: {_gemini_text(criteria[key])}"
+                               for key in ("true", "false") if key in criteria)
+            if meaning:
+                question["instructions"] = f"{question['instructions']} {meaning}"
+        converted.append(question)
+    if _json_fits(state):
+        shared: Any = [{"role": "user", "content": [
+            {"type": "input_text", "text": "The JSON below is the state the questions refer to."},
+            {"type": "input_json", "data": state}]}]
+    else:
+        shared = "state = " + _gemini_text(state)
+    return {"model": model, "input": shared, "questions": converted}
+
+
+def _openai_answers(body: dict, names: list[str]) -> dict:
+    """OpenAI's ordered answers keyed by question, as System One returns them.
+
+    Every question needs exactly one answer of its name, in order. A refusal is no
+    confident answer. Probabilities stay as given, so the usual checks still apply.
+    """
+    answers = body.get("answers")
+    if not isinstance(answers, list) or len(answers) != len(names):
+        raise DecisionValidationError("answer_shape")
+    keyed: dict[str, dict] = {}
+    for name, answer in zip(names, answers):
+        if not isinstance(answer, dict) or answer.get("name") != name:
+            raise DecisionValidationError("answer_shape")
+        kind = answer.get("type")
+        if kind == "refusal":
+            raise DecisionError("low_probability")
+        if kind == "predicate":
+            keyed[name] = {"type": "noul", "noul": answer.get("probability")}
+            continue
+        rows = answer.get("probabilities")
+        if kind not in ("choice", "score") or not isinstance(rows, list):
+            raise DecisionValidationError("answer_shape")
+        probabilities: dict[str, Any] = {}
+        legend: dict[str, Any] = {}
+        for row in rows:
+            value = row.get("value") if isinstance(row, dict) else None
+            if kind == "score" and type(value) is int:
+                value, legend[str(value)] = str(value), row.get("label")
+            if not isinstance(value, str) or value in probabilities:
+                raise DecisionValidationError("probability_keys")
+            probabilities[value] = row.get("probability")
+        converted = {"type": kind, "confidence": answer.get("confidence"), "probabilities": probabilities}
+        if kind == "choice":
+            converted["choice"] = answer.get("choice")
+        else:
+            converted.update(score=answer.get("score"), legend=legend)
+        keyed[name] = converted
+    return keyed
+
+
+def normalized_response(kind: str, model: str, body: Any, questions: list[str] | None = None) -> Any:
     """A provider's successful body in System One's shape, without changing any answer.
 
     Cloudflare wraps the answer in its API envelope. Google names no model and
@@ -190,6 +315,8 @@ def normalized_response(kind: str, model: str, body: Any) -> Any:
         if body["success"] is not True or not isinstance(body["result"], dict):
             raise DecisionError("malformed")
         return body["result"]
+    if kind == "openai_decision" and isinstance(body, dict) and questions is not None:
+        return {**body, "answers": _openai_answers(body, questions)}
     if kind == "gemini_decision" and isinstance(body, dict):
         if "model" in body:
             raise DecisionError("malformed")
@@ -251,7 +378,7 @@ def checked_model(body: Mapping[str, Any]) -> str:
 
 
 def parse_choice(body: Any, choices: Mapping[str, str], question: str = "route", *,
-                 rounding_error: float = 0) -> dict:
+                 rounding_error: float = 0, min_probability: float | None = None) -> dict:
     """Require the complete requested distribution; keep confidence provider-defined."""
     if not isinstance(body, dict) or not isinstance(body.get("answers"), dict):
         raise DecisionValidationError("response_shape")
@@ -275,8 +402,12 @@ def parse_choice(body: Any, choices: Mapping[str, str], question: str = "route",
     if probabilities[selected] < max(probabilities.values()):
         raise DecisionValidationError("selected_not_highest")
     model = checked_model(body)
-    return {"choice": selected, "confidence": answer["confidence"],
-            "probabilities": probabilities, "model": model}
+    parsed = {"choice": selected, "confidence": answer["confidence"],
+              "probabilities": probabilities, "model": model}
+    if min_probability is not None:
+        # The account's own bar travels with its answer to every admission check.
+        parsed["min_probability"] = min_probability
+    return parsed
 
 
 class DecisionProvider:
@@ -301,7 +432,8 @@ class DecisionProvider:
         return DECISION_PROBABILITY_ROUNDING.get((self.cfg.kind, decision_endpoint(self.cfg), self.protocol), 0)
 
     def _parse_choice(self, body: Any, choices: Mapping[str, str], question: str = "route") -> dict:
-        return parse_choice(body, choices, question, rounding_error=self.rounding_error)
+        return parse_choice(body, choices, question, rounding_error=self.rounding_error,
+                            min_probability=self.cfg.decision_threshold)
 
     def _group_choices(self, payload: dict, *, sequential: bool = False, choice_limit: int = DECISION_MAX_TARGETS + 1) -> dict[str, list[str]]:
         """Keep all candidates in shared state; partition only bounded Choice answers."""
@@ -367,8 +499,10 @@ class DecisionProvider:
         if response.status == 529 or response.status >= 500:
             # TypeSafe's 529 is "temporarily overloaded"; a 5xx is a server failure, neither a refusal.
             return "unavailable"
-        # OpenCode serves JEV and relays TypeSafe's error body.
-        if response.status != 400 or self.cfg.kind not in ("typesafe", "opencode_decision") or self.protocol != "systemone":
+        # OpenCode serves JEV and relays TypeSafe's error body; OpenAI uses its usual error object;
+        # Google answers an invalid or unusable key with 400 rather than 401.
+        if response.status != 400 or self.cfg.kind not in (
+                "typesafe", "opencode_decision", "openai_decision", "gemini_decision"):
             return "http_error"
         try:
             raw = bytearray()
@@ -377,6 +511,15 @@ class DecisionProvider:
                 if len(raw) > DECISION_MAX_ERROR_BYTES:
                     return "http_error"
             body = json.loads(raw, object_pairs_hook=_object)
+            if self.cfg.kind == "gemini_decision":
+                error = body.get("error") if isinstance(body, dict) else None
+                details = error.get("details") if isinstance(error, dict) else None
+                reasons = {item.get("reason") for item in details if isinstance(item, dict)} if isinstance(details, list) else set()
+                return "authentication" if "API_KEY_INVALID" in reasons else "http_error"
+            if self.cfg.kind == "openai_decision":
+                error = body.get("error") if isinstance(body, dict) else None
+                code = error.get("code") if isinstance(error, dict) else None
+                return "provider_context_limit" if code == "context_length_exceeded" else "http_error"
             detail = body.get("detail") if isinstance(body, dict) else None
             code = detail.get("error_type") if isinstance(detail, dict) else None
             if isinstance(code, str):
@@ -419,6 +562,9 @@ class DecisionProvider:
             elif self.cfg.kind == "gemini_decision":
                 url = f"{self.cfg.base_url}/decisions"
                 wire = gemini_request(payload["model"], payload["state"], payload["questions"])
+            elif self.cfg.kind == "openai_decision":
+                url = f"{self.cfg.base_url}/decisions"
+                wire = openai_request(payload["model"], payload["state"], payload["questions"])
         started = monotonic()
         parsed = None
         statistics = begin_decision(self.metric_scope) if method == "POST" and payload is not None else None
@@ -450,8 +596,9 @@ class DecisionProvider:
                         raw.extend(chunk)
                         if len(raw) > DECISION_MAX_RESPONSE_BYTES:
                             raise DecisionError("response_too_large")
-                    parsed = normalized_response(self.cfg.kind, self.cfg.model,
-                                                 json.loads(raw, object_pairs_hook=_object))
+                    parsed = normalized_response(
+                        self.cfg.kind, self.cfg.model, json.loads(raw, object_pairs_hook=_object),
+                        list(payload["questions"]) if method == "POST" and payload is not None else None)
                     if not isinstance(parsed, dict):
                         raise DecisionError("malformed")
                     return parsed

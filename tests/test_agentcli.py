@@ -7225,3 +7225,57 @@ def test_cache_breakpoints_skip_tool_search_blocks():
     marked = llm_base._cache_marked_message(message)
     assert "cache_control" in marked["content"][0]
     assert all("cache_control" not in block for block in marked["content"][1:])
+
+
+_CF_BASE = "https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/ai/v1"
+
+
+def _cf_model(name, task="Text Generation", tools=None):
+    row = {"id": name.rsplit("/", 1)[-1], "name": name, "task": {"name": task}, "properties": []}
+    if tools is not None:
+        row["properties"].append({"property_id": "function_calling", "value": "true" if tools else "false"})
+    return row
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rows,expected", [
+    # Where the catalog marks function calling, only those models can run an agent turn.
+    ([_cf_model("@cf/openai/gpt-oss-120b", tools=True), _cf_model("@cf/meta/llama-3.1-8b-instruct", tools=False),
+      _cf_model("@cf/baai/bge-m3", task="Text Embeddings"), _cf_model("@cf/qwen/qwen3.8-27b", tools=True)],
+     ["@cf/openai/gpt-oss-120b", "@cf/qwen/qwen3.8-27b"]),
+    # A catalog that marks nothing keeps every text-generation model.
+    ([_cf_model("@cf/b/two"), _cf_model("@cf/a/one"), {"name": "not-a-model"}], ["@cf/a/one", "@cf/b/two"]),
+])
+async def test_cloudflare_lists_tool_capable_models_from_the_account_search(rows, expected):
+    cfg = ProviderConfig(kind="cloudflare", model="", base_url=_CF_BASE, api_key="cf-token")
+    provider = llm_factory.build_provider(cfg)
+    session = _FakeSession(_FakeResp(200, b"", json_data={"result": rows, "success": True, "errors": [], "messages": []}))
+    assert await provider.list_models(session) == expected
+    assert session.calls[0][1]["url"].startswith(_CF_BASE[:-len("v1")] + "models/search?task=Text%20Generation")
+
+
+@pytest.mark.asyncio
+async def test_cloudflare_chat_posts_to_the_openai_compatible_address():
+    cfg = ProviderConfig(kind="cloudflare", model="@cf/openai/gpt-oss-120b", base_url=_CF_BASE, api_key="cf-token")
+    provider = OpenAICompatProvider(cfg)
+    session = _FakeSession(_FakeResp(200, _sse("data: [DONE]")))
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=[], tools=[], options={}))
+    method, call = session.calls[0]
+    assert method == "POST" and call["url"] == _CF_BASE + "/chat/completions"
+    assert provider._headers()["Authorization"] == "Bearer cf-token"
+    assert call["json"]["stream_options"] == {"include_usage": True}
+
+
+@pytest.mark.parametrize("status,code,expected,retryable", [
+    (429, 3036, "quota", False),
+    (429, 4006, "quota", False),
+    (403, 5035, "quota", False),
+    (429, 3040, "rate_limit", True),
+])
+def test_cloudflare_error_envelope_is_read_and_account_limits_are_not_retried(status, code, expected, retryable):
+    from custom_components.phoenix_mcp.llm.base import _http_failure, _http_failure_code
+    body = json.dumps({"errors": [{"code": code, "message": f"Cloudflare says {code}."}], "success": False,
+                       "result": None, "messages": []})
+    event = _http_failure("cloudflare", status, body, code=_http_failure_code(status), retryable=status == 429)
+    assert (event["code"], event["retryable"]) == (expected, retryable)
+    assert event["provider_detail"] == f"Cloudflare says {code}." and event["provider_code"] == str(code)

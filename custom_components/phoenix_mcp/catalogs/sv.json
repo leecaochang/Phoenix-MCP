@@ -428,7 +428,10 @@
       "oauthSignInNotFound": "Den inloggningen finns inte längre.",
       "oauthSaveFailed": "Inloggningen kunde inte tas bort. Försök igen.",
       "oauthNoHttps": "Home Assistant har ingen HTTPS-adress, så appar kan inte logga in. Ange först en extern HTTPS-URL.",
-      "providerAccountIdInvalid": "Ange ditt konto-ID på 32 tecken."
+      "providerAccountIdInvalid": "Ange ditt konto-ID på 32 tecken.",
+      "decisionThresholdInvalid": "Ange en tröskel från {min} till {max} i hundradelar.",
+      "decisionThresholdAlone": "Ändra tröskeln separat.",
+      "decisionThresholdConversation": "Bara beslutskonton har en tröskel."
     },
     "agentchat": {
       "accessKey": "Åtkomstnyckel",
@@ -2159,7 +2162,9 @@
       "accountChoiceHelp": "Använd kontot som beslutsleverantör. Välj det igen för att visa eller dölja Byt modell och Ta bort.",
       "changeModelHelp": "Välj vilken av kontots modeller som fattar routningsbeslut.",
       "saveModelHelp": "Använd den valda modellen för routningsbeslut från och med nu.",
-      "connectionSettingsHelp": "Visa eller dölj hur länge Phoenix väntar på ett beslut och hur många beslutsbegäranden den får skicka per timme."
+      "connectionSettingsHelp": "Visa eller dölj hur länge Phoenix väntar på ett beslut och hur många beslutsbegäranden den får skicka per timme.",
+      "decisionThreshold": "Säkerhetströskel",
+      "decisionThresholdHelp": "Hur säkert det här kontot måste vara innan det utför ett kommando, från 0,70 till 1,00. Standard 0,90."
     },
     "routingStats": {
       "cancelled": "Avbruten",
@@ -2390,6 +2395,7 @@
       "providerAccount": "Leverantörskonto",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerChecksHelp": "Kontrollera leverantörer efter nya och indragna modeller enligt ett schema. På som standard.",
       "providerChecksHoursHelp": "Hur ofta Phoenix kontrollerar varje leverantör efter modelländringar, {min} till {max} timmar (standard {default}).",
       "providerChecksHoursLabel": "Kontrollintervall (timmar)",

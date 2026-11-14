@@ -1293,7 +1293,10 @@
       "oauthSignInNotFound": "Die aanmelding bestaat niet meer.",
       "oauthSaveFailed": "De aanmelding kon niet worden verwijderd. Probeer het opnieuw.",
       "oauthNoHttps": "Home Assistant heeft geen HTTPS-adres, dus apps kunnen zich niet aanmelden. Stel eerst een externe HTTPS-URL in.",
-      "providerAccountIdInvalid": "Voer je account-ID van 32 tekens in."
+      "providerAccountIdInvalid": "Voer je account-ID van 32 tekens in.",
+      "decisionThresholdInvalid": "Voer een drempel in van {min} tot {max}, in honderdsten.",
+      "decisionThresholdAlone": "Wijzig de drempel afzonderlijk.",
+      "decisionThresholdConversation": "Alleen beslissingsaccounts hebben een drempel."
     },
     "wizard": {
       "accessSub": "Selecteer het driehoekje naast <code>light</code> om de lichtgroep te openen. Daarin staan je lichtapparaten; selecteer het driehoekje naast een apparaat om de entiteiten te zien. Of typ de naam van je licht in het filterveld. Selecteer daarna <strong>W</strong> bij een licht dat je kunt controleren, zodat de agent het kan lezen en bedienen. Je kunt later meer machtigingen toevoegen.",
@@ -2071,6 +2074,7 @@
       "providerAccount": "Provideraccount",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2587,7 +2591,9 @@
       "accountChoiceHelp": "Gebruik dit account als beslissingsprovider. Selecteer het opnieuw om Model wijzigen en Verwijderen te tonen of te verbergen.",
       "changeModelHelp": "Kies welk model van dit account de routeringsbeslissingen neemt.",
       "saveModelHelp": "Gebruik voortaan het gekozen model voor routeringsbeslissingen.",
-      "connectionSettingsHelp": "Toon of verberg hoe lang Phoenix op een beslissing wacht en hoeveel beslissingsverzoeken het per uur mag sturen."
+      "connectionSettingsHelp": "Toon of verberg hoe lang Phoenix op een beslissing wacht en hoeveel beslissingsverzoeken het per uur mag sturen.",
+      "decisionThreshold": "Zekerheidsdrempel",
+      "decisionThresholdHelp": "Hoe zeker dit account moet zijn voordat het een opdracht uitvoert, van 0,70 tot 1,00. Standaard 0,90."
     },
     "routingStats": {
       "title": "Routeringsstatistieken",

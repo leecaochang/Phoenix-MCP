@@ -319,7 +319,30 @@ export function ProviderAddForm({
           {termsKey && <div className="agentcli-settings-hint text-warning" role="note">{t(termsKey)}</div>}
           {adding.fields.map((field, index) => {
             const id = `${idPrefix}-${adding.kind}-${field.id}`;
-            const row = (
+            // Validate and Cancel sit in the last field's own row, the API key on most providers,
+            // so they center with its input instead of aligning to the field's label.
+            const trailing = compact && !form.validated && index === adding.fields.length - 1 ? validateActions : null;
+            const typed = field.type !== "choice" && field.type !== "secret" && (
+              <BusyInput
+                id={id}
+                ref={index === 0 ? (element) => { firstFieldRef.current = element; } : undefined}
+                type={field.type === "text" ? "text" : "url"}
+                spellCheck={field.type === "text" ? false : undefined}
+                autoComplete={field.type === "text" ? "off" : undefined}
+                placeholder={field.placeholder ?? fieldLabel(field)}
+                value={form.values[field.id] ?? ""}
+                busy={form.validating || form.saving}
+                aria-describedby={form.error ? `${idPrefix}-error` : undefined}
+                aria-invalid={form.error ? true : undefined}
+                onChange={(event) => setValue(field.id, event.target.value)}
+              />
+            );
+            const row = typed && trailing ? (
+              <div className="agentcli-settings-field" key={field.id}>
+                <label htmlFor={id}>{fieldLabel(field)}</label>
+                <span className="agentcli-secret-row">{typed}{trailing}</span>
+              </div>
+            ) : (
               <label className="agentcli-settings-field" htmlFor={id} key={field.id}>
                 <span>{fieldLabel(field)}</span>
                 {field.type === "choice" ? (
@@ -339,21 +362,7 @@ export function ProviderAddForm({
                       </option>
                     ))}
                   </BusySelect>
-                ) : field.type === "secret" ? null : (
-                  <BusyInput
-                    id={id}
-                    ref={index === 0 ? (element) => { firstFieldRef.current = element; } : undefined}
-                    type={field.type === "text" ? "text" : "url"}
-                    spellCheck={field.type === "text" ? false : undefined}
-                    autoComplete={field.type === "text" ? "off" : undefined}
-                    placeholder={field.placeholder ?? fieldLabel(field)}
-                    value={form.values[field.id] ?? ""}
-                    busy={form.validating || form.saving}
-                    aria-describedby={form.error ? `${idPrefix}-error` : undefined}
-                    aria-invalid={form.error ? true : undefined}
-                    onChange={(event) => setValue(field.id, event.target.value)}
-                  />
-                )}
+                ) : typed || null}
               </label>
             );
             // A key is hidden as it is typed, with a button to check what was pasted. The browser
@@ -382,12 +391,13 @@ export function ProviderAddForm({
                     onClick={() => setRevealed((current) => { const next = new Set(current); if (shown) next.delete(field.id); else next.add(field.id); return next; })}>
                     <Icon name="preview" size={16} />
                   </button>
+                  {trailing}
                 </span>
               </div>
             );
             const fieldRow = secret || row;
-            // Validate and Cancel beside the last field, the API key on most providers.
-            return compact && !form.validated && index === adding.fields.length - 1
+            // A last field with no row of its own (a choice) keeps Validate beside it.
+            return trailing && field.type === "choice"
               ? <Fragment key={field.id}>{inline(fieldRow, validateActions)}</Fragment>
               : fieldRow;
           })}

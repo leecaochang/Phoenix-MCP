@@ -46,6 +46,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `infron` | 对话 | `api_key` |
 | `together` | 对话 | `api_key` |
 | `cerebras` | 对话 | `api_key` |
+| `cloudflare`（Cloudflare Workers AI） | 对话 | `account_id`、`api_key` |
 | `fireworks` | 对话 | `api_key` |
 | `qwen` | 对话 | `api_key`、`base_url` |
 | `zai` | 对话 | `api_key`、`endpoint_id`：`standard`、`coding`、`china` |
@@ -53,6 +54,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `opencode_decision`（OpenCode） | 决策 | `api_key`、`model`：`jev-1.13`、`gemini-decision-1`、`gpt-6-luna-decision` |
 | `gemini_decision`（Google） | 决策 | `api_key`、`model`：`gemini-decision-1` |
 | `cloudflare_decision`（Cloudflare） | 决策 | `account_id`、`api_key`、`model`：`clef-flash`、`clef` |
+| `openai_decision`（OpenAI） | 决策 | `api_key`、`model`：`gpt-6-luna` |
 
 ### 设置字段 {#setup-fields}
 
@@ -64,7 +66,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `api_key` | string | 除 `ollama` 外每种类型都必填。最多 4096 个字符，不能包含控制字符。Phoenix 绝不返回它。 |
 | `base_url` | string | `ollama` 和 `qwen` 必填。只有 `ollama` 可以使用私有地址。其他每种类型都使用固定端点，并忽略此字段。 |
 | `endpoint_id` | string | 仅用于带端点的类型。省略它表示默认值。 |
-| `account_id` | string | `cloudflare_decision` 必填：32 个字符的 Cloudflare 账户 ID。Phoenix 用它构建端点。 |
+| `account_id` | string | `cloudflare` 和 `cloudflare_decision` 必填：32 个字符的 Cloudflare 账户 ID。Phoenix 用它构建端点。 |
 | `model` | string | 对话类型可选；留空表示自动跟随提供商。决策类型必填：最多 200 个字符，且必须在提供商当前列表中。 |
 
 ### 列出账户 {#list-providers}
@@ -129,16 +131,20 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `model` | string | 要使用的模型。对话账户接受任何模型 ID。决策账户需要提供商当前列出的模型。 |
 | `auto` | boolean | `true` 会自动跟随提供商的模型。决策账户拒绝此项。 |
 | `tool_loading` | string | `auto`、`always` 或 `never`：账户的对话轮次如何获得访问密钥的工具。决策账户拒绝此项。 |
+| `decision_threshold` | number | 仅限决策账户：账户执行前回答必须达到的确定程度，0.70 到 1.00，精确到百分位。请单独发送。 |
 
 发送 `model` 或 `auto: true`，不要同时发送。`tool_loading` 可以单独发送，也可以与其中任一项一起发送。使用 `auto: true` 时，Phoenix 会立即读取模型列表，因此响应会显示它选择的模型。
 
-响应为 `200`，仅包含 `{"instance": {"id": ..., "model": ..., "model_mode": ...}}`，而不是完整账户。只发送 `tool_loading` 时，响应为 `{"instance": {"id": ..., "tool_loading": ...}}`。
+响应为 `200`，仅包含 `{"instance": {"id": ..., "model": ..., "model_mode": ...}}`，而不是完整账户。只发送 `tool_loading` 时，响应为 `{"instance": {"id": ..., "tool_loading": ...}}`；发送 `decision_threshold` 时为 `{"instance": {"id": ..., "decision_threshold": ...}}`。
 
 | 状态 | `error` | `message_key` | 条件 |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.unknownFields` | 正文包含 `model`、`auto` 和 `tool_loading` 以外的字段。 |
 | 400 | `invalid_request` | `adminError.toolLoadingInvalid` | `tool_loading` 不是 `auto`、`always` 或 `never`。 |
 | 400 | `invalid_request` | `adminError.toolLoadingDecision` | `tool_loading` 发送给了决策账户，而决策账户不使用工具。 |
+| 400 | `invalid_request` | `adminError.decisionThresholdInvalid` | `decision_threshold` 不是 0.70 到 1.00 之间精确到百分位的数字。 |
+| 400 | `invalid_request` | `adminError.decisionThresholdAlone` | `decision_threshold` 与其他字段一起发送。 |
+| 400 | `invalid_request` | `adminError.decisionThresholdConversation` | `decision_threshold` 发送给了对话账户。 |
 | 400 | `invalid_request` | `adminError.booleanRequired` | `auto` 不是布尔值。 |
 | 400 | `invalid_request` | `adminError.providerModelOrAuto` | `model` 和 `auto: true` 同时发送。 |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | 两者都没有发送。 |

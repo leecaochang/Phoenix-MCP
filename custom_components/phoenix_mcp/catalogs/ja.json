@@ -1246,7 +1246,10 @@
       "oauthSignInNotFound": "そのログインはもう存在しません。",
       "oauthSaveFailed": "ログインを削除できませんでした。もう一度お試しください。",
       "oauthNoHttps": "Home Assistant に HTTPS アドレスがないため、アプリはログインできません。先に HTTPS の外部 URL を設定してください。",
-      "providerAccountIdInvalid": "32 文字のアカウント ID を入力してください。"
+      "providerAccountIdInvalid": "32 文字のアカウント ID を入力してください。",
+      "decisionThresholdInvalid": "しきい値は {min}〜{max} の範囲で、百分の一単位で入力してください。",
+      "decisionThresholdAlone": "しきい値は単独で変更してください。",
+      "decisionThresholdConversation": "しきい値があるのは判断アカウントだけです。"
     },
     "agentchat": {
       "accessKey": "アクセスキー",
@@ -1691,6 +1694,7 @@
       "providerAccount": "プロバイダーアカウント",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2504,7 +2508,9 @@
       "accountChoiceHelp": "このアカウントを判断プロバイダーとして使います。もう一度選ぶと「モデルを変更」と「削除」を表示または非表示にします。",
       "changeModelHelp": "このアカウントのどのモデルでルーティングを判断するかを選びます。",
       "saveModelHelp": "今後のルーティング判断に選んだモデルを使います。",
-      "connectionSettingsHelp": "Phoenix が判断を待つ時間と、一時間に送信できる判断リクエストの数を表示または非表示にします。"
+      "connectionSettingsHelp": "Phoenix が判断を待つ時間と、一時間に送信できる判断リクエストの数を表示または非表示にします。",
+      "decisionThreshold": "信頼度のしきい値",
+      "decisionThresholdHelp": "このアカウントがコマンドを実行する前に必要な確信度です。0.70〜1.00。既定は 0.90 です。"
     },
     "routingStats": {
       "title": "ルーティング統計",

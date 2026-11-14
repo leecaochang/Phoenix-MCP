@@ -1076,7 +1076,10 @@
       "oauthSignInNotFound": "해당 로그인이 더 이상 존재하지 않습니다.",
       "oauthSaveFailed": "로그인을 제거할 수 없습니다. 다시 시도하세요.",
       "oauthNoHttps": "Home Assistant에 HTTPS 주소가 없어 앱이 로그인할 수 없습니다. 먼저 HTTPS 외부 URL을 설정하세요.",
-      "providerAccountIdInvalid": "32자리 계정 ID를 입력하십시오."
+      "providerAccountIdInvalid": "32자리 계정 ID를 입력하십시오.",
+      "decisionThresholdInvalid": "{min}~{max} 범위에서 소수점 둘째 자리까지 임계값을 입력하십시오.",
+      "decisionThresholdAlone": "임계값은 단독으로 변경하십시오.",
+      "decisionThresholdConversation": "임계값은 결정 계정에만 있습니다."
     },
     "mesa": {
       "addAreaProfile": "영역 프로필 추가",
@@ -1516,6 +1519,7 @@
       "providerAccount": "제공업체 계정",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2510,7 +2514,9 @@
       "accountChoiceHelp": "이 계정을 결정 제공업체로 사용합니다. 다시 선택하면 모델 변경과 제거를 표시하거나 숨깁니다.",
       "changeModelHelp": "이 계정의 어느 모델이 라우팅을 결정할지 선택합니다.",
       "saveModelHelp": "앞으로 라우팅 결정에 선택한 모델을 사용합니다.",
-      "connectionSettingsHelp": "Phoenix가 결정을 기다리는 시간과 시간당 보낼 수 있는 결정 요청 수를 표시하거나 숨깁니다."
+      "connectionSettingsHelp": "Phoenix가 결정을 기다리는 시간과 시간당 보낼 수 있는 결정 요청 수를 표시하거나 숨깁니다.",
+      "decisionThreshold": "신뢰도 임계값",
+      "decisionThresholdHelp": "이 계정이 명령을 실행하기 전에 필요한 확신 정도로, 0.70~1.00입니다. 기본값 0.90."
     },
     "routingStats": {
       "title": "라우팅 통계",

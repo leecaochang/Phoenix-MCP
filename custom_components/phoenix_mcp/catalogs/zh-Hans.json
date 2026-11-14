@@ -806,7 +806,10 @@
       "oauthSignInNotFound": "该登录已不存在。",
       "oauthSaveFailed": "无法移除该登录。请重试。",
       "oauthNoHttps": "Home Assistant 没有 HTTPS 地址，因此应用无法登录。请先设置 HTTPS 外部网址。",
-      "providerAccountIdInvalid": "请输入 32 个字符的账户 ID。"
+      "providerAccountIdInvalid": "请输入 32 个字符的账户 ID。",
+      "decisionThresholdInvalid": "请输入 {min} 到 {max} 之间的阈值，精确到百分位。",
+      "decisionThresholdAlone": "请单独更改阈值。",
+      "decisionThresholdConversation": "只有决策账户才有阈值。"
     },
     "audit": {
       "accessPassThrough": "直通",
@@ -1689,6 +1692,7 @@
       "providerOllamaLocal": "Ollama（本地）",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2504,7 +2508,9 @@
       "accountChoiceHelp": "使用此账户作为决策提供商。再次选择可显示或隐藏“更改模型”和“移除”。",
       "changeModelHelp": "选择此账户的哪个模型负责路由决策。",
       "saveModelHelp": "从现在起使用所选模型进行路由决策。",
-      "connectionSettingsHelp": "显示或隐藏 Phoenix 等待决策的时长，以及每小时最多可发送多少个决策请求。"
+      "connectionSettingsHelp": "显示或隐藏 Phoenix 等待决策的时长，以及每小时最多可发送多少个决策请求。",
+      "decisionThreshold": "置信度阈值",
+      "decisionThresholdHelp": "此账户执行命令前必须达到的确定程度，范围 0.70 到 1.00。默认 0.90。"
     },
     "routingStats": {
       "title": "路由统计",

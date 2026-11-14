@@ -3376,8 +3376,8 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 }
 .agentcli-settings-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 /* An API key field with its Show button beside it. */
-.agentcli-secret-row { display: flex; gap: 6px; align-items: center; }
-.agentcli-secret-row > input { flex: 1; min-width: 0; }
+.agentcli-secret-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.agentcli-secret-row > input { flex: 1 1 160px; min-width: 0; }
 .agentcli-secret-show { flex: none; display: inline-flex; align-items: center; justify-content: center; }
 .agentcli-settings-field > :is(span, label) { color: var(--phx-text-2); font-weight: 600; }
 .agentcli-settings-field > input:not([type="number"]) { width: 100%; min-width: 0; }
@@ -3394,6 +3394,7 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .routing-account-choice input[type="radio"] { accent-color: var(--phx-accent); flex: none; }
 .routing-account-choice > span { min-width: 0; overflow-wrap: anywhere; }
 .routing-account-model { color: var(--phx-text-2); }
+.routing-add-account { margin-top: 12px; }
 .routing-provider-section .agentcli-add-row { margin-top: 12px; }
 /* No Decision Provider and the accounts are one radio group; an account's options open under it. */
 .routing-choices { display: flex; flex-direction: column; gap: 8px; }
@@ -3411,6 +3412,10 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0;
   font-size: 13px; color: var(--phx-text-2);
 }
+.agentcli-settings-tool-loading > select { margin-left: auto; }
+/* Named like every other Settings row. */
+.agentcli-settings-tool-loading > :is(label, span:not(.phx-number)) { font-size: 14px; font-weight: 500; color: var(--phx-text); }
+.agentcli-settings-tool-loading > .phx-number { margin-left: auto; }
 .agentcli-settings-probe-opt {
   display: flex; align-items: center; gap: 8px; min-width: 0;
   color: var(--phx-text-2); line-height: 1.4;
@@ -3450,11 +3455,15 @@ hui-card, .dash-preview-card-slot { display: block; min-width: 0; }
 .agentcli-settings-model-actions > .agentcli-settings-probe-opt { flex: 1 1 280px; }
 /* In Settings a row's buttons sit beside it, along the bottom of its field. */
 .agentcli-add-inline { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; width: 100%; }
-.agentcli-add-inline > :is(.agentcli-settings-field, .agentcli-settings-model-row) { flex: 1 1 220px; min-width: 0; }
+.agentcli-add-inline > .agentcli-settings-field { flex: 1 1 220px; min-width: 0; }
+/* The model choice fills its line, so Done and Cancel follow below it. */
+.agentcli-add-inline > .agentcli-settings-model-row { flex: 1 1 100%; min-width: 0; }
+/* Label on the left, select at the right edge; a select too wide for the line drops below its label. */
 .agentcli-settings-model-row {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
   font-size: 13px;
 }
+.agentcli-settings-model-row > select { margin-left: auto; max-width: 100%; }
 .agentcli-settings-model-row > span { color: var(--phx-text-2); font-weight: 600; }
 /* Post-create "how will you use this access key" choices: plain rows with an icon. */
 .post-create-choices { display: flex; flex-direction: column; margin: 0; border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); overflow: hidden; }

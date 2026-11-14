@@ -92,7 +92,8 @@ describe("what redraws", () => {
       emit("assistant_delta", { text: " second" });
       finish();
     });
-    expect(screen.getByText("first second")).toBeTruthy();
+    // The last fold may land a tick after the stream ends; a lost token would never appear.
+    expect(await screen.findByText("first second")).toBeTruthy();
   });
 });
 

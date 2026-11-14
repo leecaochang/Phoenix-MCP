@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API key", "model", "LLM", "account", "credit", "TypeSafe", "JEV", "Clef", "Gemini Decision"], "sectionKeywords": { "provider-add": ["new account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "offline", "local model", "price", "pricing", "billing"], "decision-provider": ["TypeSafe", "JEV", "fast path", "OpenCode", "System One", "Gemini Decision", "GPT Luna Decision", "Cloudflare", "Workers AI", "Clef", "Clef Flash", "account ID"], "tool-loading": ["load_tools", "deferred tools", "tool search", "tokens", "too many tools", "context"] }, "covers": ["frontend_src/components/LlmProviderSettings.tsx", "frontend_src/components/ProviderAddForm.tsx", "frontend_src/components/DecisionProviderSettings.tsx", "custom_components/phoenix_mcp/tool_loading.py", "custom_components/phoenix_mcp/model_selection.py", "custom_components/phoenix_mcp/routing/decision_budget.py"] }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API key", "model", "LLM", "account", "credit", "TypeSafe", "JEV", "Clef", "Gemini Decision"], "sectionKeywords": { "provider-add": ["new account", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Cloudflare Workers AI", "Workers AI", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "offline", "local model", "price", "pricing", "billing"], "decision-threshold": ["threshold", "confidence", "probability", "0.90"], "decision-provider": ["TypeSafe", "JEV", "fast path", "OpenCode", "System One", "Gemini Decision", "GPT Luna Decision", "Cloudflare", "Workers AI", "Clef", "Clef Flash", "account ID", "OpenAI Decisions", "gpt-6-luna"], "tool-loading": ["load_tools", "deferred tools", "tool search", "tokens", "too many tools", "context"] }, "covers": ["frontend_src/components/LlmProviderSettings.tsx", "frontend_src/components/ProviderAddForm.tsx", "frontend_src/components/DecisionProviderSettings.tsx", "custom_components/phoenix_mcp/tool_loading.py", "custom_components/phoenix_mcp/model_selection.py", "custom_components/phoenix_mcp/routing/decision_budget.py"] }
 ---
 Add the AI accounts Phoenix uses. Each account needs an API key or, for a local model, a server address.
 
@@ -49,11 +49,9 @@ Decides how Agent Chat, the Voice Agent and AI Task give this account's model th
 
 Loading in parts sends far fewer tokens with each request, with the same results. A request that needs a tool not loaded yet takes one extra step. The Voice Agent starts with the device control tools, so spoken commands don't wait for that step.
 
-With a recent Claude model, Phoenix uses Anthropic's own tool search instead, whatever the number of tools. The model searches for the tools it needs, and Phoenix sends the same list on every request, so the provider's cache keeps working.
-
 **{{label:settings.toolLoadingAlways}}** loads in parts whatever the size. **{{label:settings.toolLoadingNever}}** always sends every tool, except to providers that accept only 128 tools.
 
-Loading never gives the model more access. The list shows only the access key's own tools, and Phoenix checks every call as usual. Home Companion keys always get their full set of tools.
+Tool loading never gives the model more access, Phoenix checks every call as usual. Home Companion keys are not affected by the **{{label:settings.toolLoadingLabel}}** setting.
 
 ## Adding an account {#provider-add}
 
@@ -74,11 +72,12 @@ Most providers need only an API key. Some also need to know where your account i
 - OpenCode: the Zen or Console route. You can add a key on one route only.
 - Z.ai: Standard API, Coding Plan or China. You can save the same key once for each plan.
 - Qwen: your workspace's base URL, a public HTTPS address, as well as the API key.
+- Cloudflare Workers AI: your Cloudflare account ID and an API token with Workers AI permissions. Phoenix lists only models marked for tool use. The free plan has a small daily allowance, and some models need Workers Paid.
 - Ollama (local): your Ollama server's address. Home Assistant connects to it, so use an address the Home Assistant host can reach. Plain `http://` traffic isn't encrypted; see [What leaves your home](guide:topic.security#leaves-home).
 
 Some plans are for coding tools only: Z.ai's Coding Plan, Xiaomi MiMo's Token Plan, and Alibaba Cloud's Coding Plan and Token Plan. Their terms forbid use from an app such as Home Assistant, and the provider may throttle or block the key. Phoenix warns when you choose one. For Voice, AI Task and Agent Chat, use the provider's pay-as-you-go API.
 
-Groq, Mistral AI and Z.ai accept at most 128 tools per request, and Phoenix applies the same limit to Gemini, Kimi, OpenRouter and Infron. When the access key has more, Phoenix always loads tools in parts for them, whatever the [Tool loading](guide:#tool-loading) setting.
+Groq, Mistral AI and Z.ai accept at most 128 tools per request, and Phoenix applies the same limit to Gemini, Kimi, OpenRouter, Infron and Cloudflare Workers AI. When the access key has more, Phoenix always loads tools in parts for them, whatever the [Tool loading](guide:#tool-loading) setting.
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 
@@ -92,7 +91,7 @@ When it's off, Phoenix still reads a list when it needs one: for a new account, 
 
 ### {{label:settings.providerChecksHoursLabel}} {#provider-checks-hours}
 
-How old a model list can get before Phoenix rereads it: 6 to 720 hours (default 24). Greyed out while checks are off.
+Phoenix will re-check the provider's model list on a schedule: 6 to 720 hours (default 24).
 
 ## {{label:routing.providerSection}} {#decision-provider}
 
@@ -104,22 +103,29 @@ Choose from these decision providers:
 
 - TypeSafe / JEV: TypeSafe's JEV model, with a TypeSafe API key.
 - OpenCode / System One: JEV, Gemini Decision or GPT Luna Decision, with an OpenCode Console API key.
-- Google / Gemini Decision: Google's Gemini Decision model, with a Gemini API key. Use a key from a paid project, since Google may use free-tier requests to improve its products.
+- Google / Gemini Decision: Google's Gemini Decision model, with a Gemini API key.
 - Cloudflare / Clef: Clef or Clef Flash on Workers AI, with your Cloudflare account ID and an API token.
+- OpenAI / Decisions: OpenAI's gpt-6-luna decision model, with an OpenAI API key.
 
-Add an account and select its model. Use **{{label:settings.addAccount}}** to add more accounts, then choose the one to use. Only one decision provider is in use at a time, everywhere in Phoenix. Each account shows its model beside its name.
+Add an account and select its model. Only one decision provider can be in use at a time. Each account shows its model beside its name.
 
-A decision account is separate from any AI provider account of the same company. Add its key here, even if you already use that key for chat.
+A decision account is separate from any AI provider account from the same company. You must add its key here again if you already use that key for AI Provider.
 
-Only TypeSafe's own JEV models handle follow-up messages that depend on the conversation. Other models leave those to your AI model. See [Follow-up messages](guide:topic.commandRouting#follow-ups).
+Every decision provider except Cloudflare / Clef also handles follow-up messages that depend on the conversation. Clef leaves those to your AI provider. See [Follow-up messages](guide:topic.commandRouting#follow-ups).
 
-The jev-latest model follows each new JEV release, so a TypeSafe update can change which commands it carries out and how it answers, without a Phoenix update. To keep one release, choose a fixed version such as jev-1.13.0. The jev-preview model only observes and never carries out commands.
+The jev-preview model only observes and never carries out commands.
 
 To use it, choose its account. Choose **{{label:routing.noProvider}}** to stop using it; commands then rely on sentence matching alone.
 
 It can also answer Home Assistant's Evaluate action for automations and scripts: see [Decisions](guide:window.settingsHome#ai-decisions).
 
 Related: [How a command is routed](guide:topic.commandRouting)
+
+### {{label:routing.decisionThreshold}} {#decision-threshold}
+
+How sure a decision account must be before it carries out a command, from 0.70 to 1.00 (default 0.90). Select the account to show it. Each account keeps its own.
+
+A lower threshold lets the decision provider handle more commands itself, and routes fewer commands to your AI provider. This can potentially let more mistakes through, as each model differs.
 
 ## {{label:routing.connectionSettings}} {#decision-connection}
 

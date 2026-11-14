@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import ipaddress
 import json
 import logging
+import math
 import re
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -29,7 +30,7 @@ from .helpers import get_client_ip
 from .catalog_text import LocalizedReason
 from .home_companion import is_companion
 from .net_guard import ip_is_blocked
-from .routing.routing_tables import DECISION_CLOUDFLARE_ACCOUNT_ID
+from .routing.routing_tables import DECISION_CLOUDFLARE_ACCOUNT_ID, DECISION_THRESHOLD_MAX, DECISION_THRESHOLD_MIN
 from .llm.accounts import (
     _default_base_url, _default_model, _get_secret_store, _provider_catalog,
     DuplicateProviderError, PROVIDER_DEFINITIONS, provider_purpose, ProviderConfig,
@@ -581,10 +582,15 @@ class PhoenixAgentCliProviderView(PhoenixView):
         body = await _read_body(request, rid)
         if isinstance(body, web.Response):
             return body
-        if unknown := set(body) - {"model", "auto", "tool_loading"}:
+        if unknown := set(body) - {"model", "auto", "tool_loading", "decision_threshold"}:
             fields = ", ".join(sorted(unknown))
             return _err("invalid_request", f"The request contains fields Phoenix does not recognize: {fields}.", 400, rid,
                         key="unknownFields", params={"fields": fields})
+        if "decision_threshold" in body:
+            if set(body) != {"decision_threshold"}:
+                return _err("invalid_request", "Send decision_threshold on its own.", 400, rid,
+                            key="decisionThresholdAlone")
+            return await self._set_decision_threshold(request, rid, instance_id, body["decision_threshold"])
         if "tool_loading" in body:
             response = await self._set_tool_loading(request, rid, instance_id, body.get("tool_loading"))
             if response is not None or not set(body) - {"tool_loading"}:
@@ -642,6 +648,27 @@ class PhoenixAgentCliProviderView(PhoenixView):
             "id": instance_id, "model": (current or {}).get("model", model),
             "model_mode": "auto" if auto is True else "fixed",
         }}, request_id=rid)
+
+    async def _set_decision_threshold(self, request: web.Request, rid: str, instance_id: str,
+                                      value: object) -> web.Response:
+        """Store a decision account's bar, a number from the minimum to the maximum in hundredths."""
+        if (not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value)
+                or not DECISION_THRESHOLD_MIN <= value <= DECISION_THRESHOLD_MAX
+                or round(value, 2) != value):
+            return _err("invalid_request",
+                        f"decision_threshold must be a number from {DECISION_THRESHOLD_MIN:.2f} to {DECISION_THRESHOLD_MAX:.2f}.",
+                        400, rid, key="decisionThresholdInvalid",
+                        params={"min": f"{DECISION_THRESHOLD_MIN:.2f}", "max": f"{DECISION_THRESHOLD_MAX:.2f}"})
+        store = await _get_secret_store(self.hass)
+        record = store.get(instance_id)
+        if record is None:
+            return _err("not_found", "Provider account not found.", 404, rid, key="providerAccountNotFound")
+        if not await store.set_decision_threshold(instance_id, float(value)):
+            return _err("invalid_request", "Only decision accounts have a threshold.", 400, rid,
+                        key="decisionThresholdConversation")
+        if self.hass.data.get(DOMAIN) is not None:
+            _audit_admin(self.hass, request, rid, f"provider:{instance_id}")
+        return _ok({"instance": {"id": instance_id, "decision_threshold": float(value)}}, request_id=rid)
 
     async def _set_tool_loading(self, request: web.Request, rid: str, instance_id: str, mode: object) -> web.Response | None:
         """Store a conversation account's tool-loading setting; the refusal, or None once saved."""

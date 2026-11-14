@@ -232,7 +232,10 @@
       "oauthSignInNotFound": "該登入已不存在。",
       "oauthSaveFailed": "無法移除該登入。請再試一次。",
       "oauthNoHttps": "Home Assistant 沒有 HTTPS 位址，因此應用程式無法登入。請先設定 HTTPS 外部 URL。",
-      "providerAccountIdInvalid": "請輸入 32 個字元的帳戶 ID。"
+      "providerAccountIdInvalid": "請輸入 32 個字元的帳戶 ID。",
+      "decisionThresholdInvalid": "請輸入 {min} 到 {max} 之間的閾值，精確到百分位。",
+      "decisionThresholdAlone": "請單獨變更閾值。",
+      "decisionThresholdConversation": "只有決策帳戶才有閾值。"
     },
     "agentchat": {
       "accessKey": "存取金鑰",
@@ -1892,6 +1895,7 @@
       "providerAccount": "提供者帳戶",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2510,7 +2514,9 @@
       "accountChoiceHelp": "使用此帳戶作為決策提供者。再次選擇可顯示或隱藏「更改模型」和「移除」。",
       "changeModelHelp": "選擇此帳戶的哪個模型負責路由決策。",
       "saveModelHelp": "從現在起使用所選模型進行路由決策。",
-      "connectionSettingsHelp": "顯示或隱藏 Phoenix 等待決策的時長，以及每小時最多可傳送多少個決策請求。"
+      "connectionSettingsHelp": "顯示或隱藏 Phoenix 等待決策的時長，以及每小時最多可傳送多少個決策請求。",
+      "decisionThreshold": "信心閾值",
+      "decisionThresholdHelp": "此帳戶執行命令前必須達到的確定程度，範圍 0.70 到 1.00。預設 0.90。"
     },
     "routingStats": {
       "title": "路由統計",

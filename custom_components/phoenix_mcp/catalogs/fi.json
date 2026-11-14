@@ -428,7 +428,10 @@
       "oauthSignInNotFound": "Kyseistä kirjautumista ei ole enää olemassa.",
       "oauthSaveFailed": "Kirjautumista ei voitu poistaa. Yritä uudelleen.",
       "oauthNoHttps": "Home Assistantilla ei ole HTTPS-osoitetta, joten sovellukset eivät voi kirjautua. Aseta ensin ulkoinen HTTPS-URL-osoite.",
-      "providerAccountIdInvalid": "Anna tilisi 32-merkkinen tunnus."
+      "providerAccountIdInvalid": "Anna tilisi 32-merkkinen tunnus.",
+      "decisionThresholdInvalid": "Anna kynnys väliltä {min} ja {max} sadasosina.",
+      "decisionThresholdAlone": "Muuta kynnystä erikseen.",
+      "decisionThresholdConversation": "Vain päätöstileillä on kynnys."
     },
     "agentchat": {
       "accessKey": "Käyttöavain",
@@ -2159,7 +2162,9 @@
       "accountChoiceHelp": "Käytä tätä tiliä päätöstarjoajana. Valitse se uudelleen näyttääksesi tai piilottaaksesi Vaihda malli ja Poista.",
       "changeModelHelp": "Valitse, mikä tämän tilin malleista tekee reitityspäätökset.",
       "saveModelHelp": "Käytä valittua mallia reitityspäätöksiin tästä lähtien.",
-      "connectionSettingsHelp": "Näytä tai piilota, kuinka kauan Phoenix odottaa päätöstä ja montako päätöspyyntöä se saa lähettää tunnissa."
+      "connectionSettingsHelp": "Näytä tai piilota, kuinka kauan Phoenix odottaa päätöstä ja montako päätöspyyntöä se saa lähettää tunnissa.",
+      "decisionThreshold": "Varmuuskynnys",
+      "decisionThresholdHelp": "Kuinka varma tämän tilin on oltava ennen kuin se suorittaa komennon, välillä 0,70 ja 1,00. Oletus 0,90."
     },
     "routingStats": {
       "cancelled": "Peruutettu",
@@ -2390,6 +2395,7 @@
       "providerAccount": "Palveluntarjoajan tili",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerChecksHelp": "Tarkista palveluntarjoajilta uudet ja poistuneet mallit säännöllisesti. Oletuksena käytössä.",
       "providerChecksHoursHelp": "Kuinka usein Phoenix tarkistaa kunkin palveluntarjoajan mallimuutokset, {min}-{max} tuntia (oletus {default}).",
       "providerChecksHoursLabel": "Tarkista joka (tuntia)",

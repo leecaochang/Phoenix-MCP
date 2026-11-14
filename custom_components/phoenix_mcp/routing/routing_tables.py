@@ -330,7 +330,11 @@ DECISION_CLOUDFLARE_MODELS = ("clef-flash", "clef")
 # Google's own Decisions API: the same question types, with the state sent as text input.
 DECISION_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 DECISION_GEMINI_MODELS = ("gemini-decision-1",)
+# OpenAI's own Decisions API: the same question types in ordered arrays, with predicate for yes/no.
+DECISION_OPENAI_BASE_URL = "https://api.openai.com/v1"
+DECISION_OPENAI_MODELS = ("gpt-6-luna",)
 DECISION_FIXED_MODELS = MappingProxyType({
+    "openai_decision": DECISION_OPENAI_MODELS,
     "opencode_decision": DECISION_OPENCODE_MODELS,
     "cloudflare_decision": DECISION_CLOUDFLARE_MODELS,
     "gemini_decision": DECISION_GEMINI_MODELS,
@@ -370,12 +374,29 @@ DECISION_CONTEXT_CHECKS = _sealed_groups({
     },
 })
 DECISION_CONTEXT_REQUIRED_CHOICES = MappingProxyType({"request": "immediate", "constraints": "clear"})
+# Hosted models that chose no wrong target on the inert corpus JEV was measured with; the operator
+# picks among them. Each answers with its own id.
+DECISION_HOSTED_EXECUTION_MODELS = MappingProxyType({
+    ("opencode_decision", DECISION_OPENCODE_BASE_URL, "jev-1.13"): frozenset({"jev-1.13"}),
+    ("opencode_decision", DECISION_OPENCODE_BASE_URL, "gemini-decision-1"): frozenset({"gemini-decision-1"}),
+    ("opencode_decision", DECISION_OPENCODE_BASE_URL, "gpt-6-luna-decision"): frozenset({"gpt-6-luna-decision"}),
+    ("gemini_decision", DECISION_GEMINI_BASE_URL, "gemini-decision-1"): frozenset({"gemini-decision-1"}),
+    ("openai_decision", DECISION_OPENAI_BASE_URL, "gpt-6-luna"): frozenset({"gpt-6-luna"}),
+    ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL, "clef-flash"): frozenset({"clef-flash"}),
+    ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL, "clef"): frozenset({"clef"}),
+})
+# Those that also gave no wrong answer on the inert follow-up corpus (context, reference and
+# decision follow-ups). Clef has not been measured on it and acts on single requests only.
+DECISION_HOSTED_FOLLOWUP_MODELS = MappingProxyType({
+    key: revisions for key, revisions in DECISION_HOSTED_EXECUTION_MODELS.items() if key[0] != "cloudflare_decision"
+})
 # Singular references have separate qualification from self-contained commands.
 DECISION_REFERENCE_LANGUAGES = frozenset(_COMMAND_ROUTING_LANGUAGES.values())
 DECISION_REFERENCE_INTENTS = frozenset({"HassTurnOn", "HassTurnOff", "HassGetState"})
 DECISION_REFERENCE_EXECUTION_MODELS = MappingProxyType({
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
+    **DECISION_HOSTED_FOLLOWUP_MODELS,
 })
 DECISION_REFERENCE_CHECKS = _sealed_groups({
     "route": {
@@ -397,23 +418,14 @@ DECISION_REFERENCE_CHECKS = _sealed_groups({
 DECISION_CONTEXT_EXECUTION_MODELS = MappingProxyType({
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
+    **DECISION_HOSTED_FOLLOWUP_MODELS,
 })
 DECISION_CONTEXT_EXECUTION_LANGUAGES = frozenset(_COMMAND_ROUTING_LANGUAGES.values())
 # Combining decision-derived candidates with context review is qualified separately.
 DECISION_FOLLOWUP_EXECUTION_MODELS = MappingProxyType({
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
-})
-# Hosted models that chose no wrong target on the inert corpus JEV was measured with; the operator
-# picks among them. Each answers with its own id. They act on single requests only: context,
-# reference and follow-up review stay with the JEV revisions qualified for them.
-DECISION_HOSTED_EXECUTION_MODELS = MappingProxyType({
-    ("opencode_decision", DECISION_OPENCODE_BASE_URL, "jev-1.13"): frozenset({"jev-1.13"}),
-    ("opencode_decision", DECISION_OPENCODE_BASE_URL, "gemini-decision-1"): frozenset({"gemini-decision-1"}),
-    ("opencode_decision", DECISION_OPENCODE_BASE_URL, "gpt-6-luna-decision"): frozenset({"gpt-6-luna-decision"}),
-    ("gemini_decision", DECISION_GEMINI_BASE_URL, "gemini-decision-1"): frozenset({"gemini-decision-1"}),
-    ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL, "clef-flash"): frozenset({"clef-flash"}),
-    ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL, "clef"): frozenset({"clef"}),
+    **DECISION_HOSTED_FOLLOWUP_MODELS,
 })
 # Joint routing has its own qualification, independent of context and numeric decisions.
 DECISION_BATCH_EXECUTION_MODELS = MappingProxyType({
@@ -456,6 +468,7 @@ DECISION_EXACT_PERCENTAGE_ENDPOINTS = frozenset({
     ("opencode_decision", DECISION_OPENCODE_BASE_URL, "systemone"),
     ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL, "systemone"),
     ("gemini_decision", DECISION_GEMINI_BASE_URL, "gemini_decisions"),
+    ("openai_decision", DECISION_OPENAI_BASE_URL, "openai_decisions"),
 })
 # TypeSafe's direct API rounds probabilities to two decimal places.
 DECISION_PROBABILITY_ROUNDING = MappingProxyType({("typesafe", DECISION_TYPESAFE_BASE_URL, "systemone"): 0.005})
@@ -466,7 +479,7 @@ DECISION_PERCENTAGE_CHOICES = MappingProxyType({
     "none": "No single explicit absolute whole percentage from 0 through 100 is requested for this operation.",
 })
 
-DECISION_PROVIDERS = frozenset({"typesafe", "opencode_decision", "cloudflare_decision", "gemini_decision"})
+DECISION_PROVIDERS = frozenset({"typesafe", "opencode_decision", "cloudflare_decision", "gemini_decision", "openai_decision"})
 _DECISION_TARGET_INTENTS = {
     "light_on": "HassTurnOn", "light_off": "HassTurnOff",
     "light_brightness": "HassLightSet", "state_query": "HassGetState",
@@ -529,6 +542,9 @@ DECISION_MAX_TARGET_TEXT = 256
 DECISION_MAX_TARGET_ALIASES = 8
 # Experimental admission heuristic, not a calibrated accuracy claim.
 DECISION_MIN_CHOICE_PROBABILITY = 0.90
+# An account may set its own bar within these bounds; the default above applies everywhere else.
+DECISION_THRESHOLD_MIN = 0.70
+DECISION_THRESHOLD_MAX = 1.00
 # Sequential numeric decisions remain preview-only; joint execution needs source evidence.
 DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness", "media_volume", "cover_position", *DECISION_ADDITIONAL_NUMERIC})
 # Value evidence is independent of model qualification and never grants execution.

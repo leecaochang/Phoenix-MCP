@@ -235,7 +235,8 @@ def _usage_int(value: Any) -> int:
 # the Anthropic and OpenAI-compatible surfaces. Variants: Gemini wraps the
 # envelope in a one-item list; some backends put a bare string under "error", or
 # their code, type and message at the top level (xAI, Cerebras, Mistral); NVIDIA
-# has used an RFC 7807 problem body with "detail".
+# has used an RFC 7807 problem body with "detail"; Cloudflare's API answers with
+# an "errors" list of {code, message}.
 def _error_envelope(text: str) -> dict | None:
     """The error body as a dict, unwrapping Gemini's one-item list; None if not JSON."""
     try:
@@ -273,7 +274,9 @@ def _envelope_message(obj: dict | None) -> str:
     if obj is None:
         return ""
     err = obj.get("error")
-    for message in ((err.get("message") if isinstance(err, dict) else err), obj.get("message"), obj.get("detail")):
+    errors = obj.get("errors")
+    listed = errors[0].get("message") if isinstance(errors, list) and errors and isinstance(errors[0], dict) else None
+    for message in ((err.get("message") if isinstance(err, dict) else err), obj.get("message"), obj.get("detail"), listed):
         text = _detail_text(message)
         if text:
             return text
@@ -291,9 +294,11 @@ def _provider_error_codes(obj: dict | None) -> list[str]:
     err: dict = obj["error"] if isinstance(obj.get("error"), dict) else {}
     details: dict = err["details"] if isinstance(err.get("details"), dict) else {}
     metadata: dict = err["metadata"] if isinstance(err.get("metadata"), dict) else {}
+    errors = obj.get("errors")
+    listed: dict = errors[0] if isinstance(errors, list) and errors and isinstance(errors[0], dict) else {}
     out: list[str] = []
     for value in (err.get("code"), err.get("type"), details.get("error_code"), metadata.get("limit_source"),
-                  metadata.get("error_type"), err.get("status"), obj.get("code"), obj.get("type")):
+                  metadata.get("error_type"), err.get("status"), obj.get("code"), obj.get("type"), listed.get("code")):
         if isinstance(value, bool) or not isinstance(value, (str, int)):
             continue
         code = str(value).strip().lower()
@@ -359,6 +364,10 @@ _PROVIDER_BILLING: dict[str, tuple[frozenset[str], tuple[str, ...]]] = {
     "opencode": (frozenset({"creditserror", "monthlylimiterror", "userlimiterror"}), ("policy budget exceeded",)),
     "openrouter": (frozenset({"openrouter_credits", "openrouter_key_limit"}), ("key limit exceeded",)),
     "ollama_cloud": (frozenset(), ("requires a subscription",)),
+    # Workers AI: the free plan's daily allowance, reset at midnight UTC (3036 on /ai/run, 4006 on the
+    # OpenAI-compatible endpoint), and a model that needs Workers Paid (5035). Both answer 429 or 403,
+    # and no retry clears either.
+    "cloudflare": (frozenset({"3036", "4006", "5035"}), ("daily free allocation", "not available on the workers free plan")),
     # Infron's free-tier balance refusal is an HTTP 429 with only a generic type, so the sentence names it.
     "infron": (frozenset({"insufficient_user_quota"}), ("current credits have been used up", "free model requires")),
     # 1314: the enterprise package expired (sent as HTTP 429).

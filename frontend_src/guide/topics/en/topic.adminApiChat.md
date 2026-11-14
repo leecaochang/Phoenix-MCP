@@ -46,6 +46,7 @@ Every account has a `kind`. Kinds with endpoints take an `endpoint_id`; the firs
 | `infron` | conversation | `api_key` |
 | `together` | conversation | `api_key` |
 | `cerebras` | conversation | `api_key` |
+| `cloudflare` (Cloudflare Workers AI) | conversation | `account_id`, `api_key` |
 | `fireworks` | conversation | `api_key` |
 | `qwen` | conversation | `api_key`, `base_url` |
 | `zai` | conversation | `api_key`, `endpoint_id`: `standard`, `coding`, `china` |
@@ -53,6 +54,7 @@ Every account has a `kind`. Kinds with endpoints take an `endpoint_id`; the firs
 | `opencode_decision` (OpenCode) | decision | `api_key`, `model`: `jev-1.13`, `gemini-decision-1`, `gpt-6-luna-decision` |
 | `gemini_decision` (Google) | decision | `api_key`, `model`: `gemini-decision-1` |
 | `cloudflare_decision` (Cloudflare) | decision | `account_id`, `api_key`, `model`: `clef-flash`, `clef` |
+| `openai_decision` (OpenAI) | decision | `api_key`, `model`: `gpt-6-luna` |
 
 ### Setup fields {#setup-fields}
 
@@ -64,7 +66,7 @@ Adding an account and checking a setup take the same body.
 | `api_key` | string | Required for every kind except `ollama`. At most 4096 characters, with no control characters. Phoenix never returns it. |
 | `base_url` | string | Required for `ollama` and `qwen`. Only `ollama` may use a private address. Every other kind uses a fixed endpoint and ignores this field. |
 | `endpoint_id` | string | Only for kinds with endpoints. Leave it out for the default. |
-| `account_id` | string | Required for `cloudflare_decision`: the 32-character Cloudflare account ID. Phoenix builds the endpoint from it. |
+| `account_id` | string | Required for `cloudflare` and `cloudflare_decision`: the 32-character Cloudflare account ID. Phoenix builds the endpoint from it. |
 | `model` | string | Optional for conversation kinds; leave it empty to follow the provider automatically. Required for decision kinds: at most 200 characters, and in the provider's current list. |
 
 ### List accounts {#list-providers}
@@ -129,16 +131,20 @@ The response is `201` with `{"instance": {...}}`, holding the account fields abo
 | `model` | string | The model to use. Conversation accounts accept any model ID. Decision accounts need one the provider lists now. |
 | `auto` | boolean | `true` follows the provider's model automatically. Decision accounts refuse it. |
 | `tool_loading` | string | `auto`, `always` or `never`: how the account's turns get the access key's tools. Decision accounts refuse it. |
+| `decision_threshold` | number | Decision accounts only: how sure an answer must be before the account acts, from 0.70 to 1.00 in hundredths. Send it alone. |
 
 Send `model` or `auto: true`, not both. `tool_loading` can come alone or with either. With `auto: true`, Phoenix reads the model list straight away, so the response shows the model it picked.
 
-The response is `200` with only `{"instance": {"id": ..., "model": ..., "model_mode": ...}}`, not the full account. When `tool_loading` comes alone, it's `{"instance": {"id": ..., "tool_loading": ...}}`.
+The response is `200` with only `{"instance": {"id": ..., "model": ..., "model_mode": ...}}`, not the full account. When `tool_loading` comes alone, it's `{"instance": {"id": ..., "tool_loading": ...}}`, and for `decision_threshold` it's `{"instance": {"id": ..., "decision_threshold": ...}}`.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.unknownFields` | The body has fields other than `model`, `auto` and `tool_loading`. |
 | 400 | `invalid_request` | `adminError.toolLoadingInvalid` | `tool_loading` isn't `auto`, `always` or `never`. |
 | 400 | `invalid_request` | `adminError.toolLoadingDecision` | `tool_loading` went to a decision account, which uses no tools. |
+| 400 | `invalid_request` | `adminError.decisionThresholdInvalid` | `decision_threshold` isn't a number from 0.70 to 1.00 in hundredths. |
+| 400 | `invalid_request` | `adminError.decisionThresholdAlone` | `decision_threshold` came with other fields. |
+| 400 | `invalid_request` | `adminError.decisionThresholdConversation` | `decision_threshold` went to a conversation account. |
 | 400 | `invalid_request` | `adminError.booleanRequired` | `auto` isn't a boolean. |
 | 400 | `invalid_request` | `adminError.providerModelOrAuto` | Both `model` and `auto: true` were sent. |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | Neither was sent. |

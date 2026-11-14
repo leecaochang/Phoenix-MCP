@@ -1313,7 +1313,10 @@
       "oauthSignInNotFound": "To logowanie już nie istnieje.",
       "oauthSaveFailed": "Nie można usunąć logowania. Spróbuj ponownie.",
       "oauthNoHttps": "Home Assistant nie ma adresu HTTPS, więc aplikacje nie mogą się zalogować. Najpierw ustaw zewnętrzny adres URL HTTPS.",
-      "providerAccountIdInvalid": "Wpisz swój 32-znakowy identyfikator konta."
+      "providerAccountIdInvalid": "Wpisz swój 32-znakowy identyfikator konta.",
+      "decisionThresholdInvalid": "Wpisz próg od {min} do {max}, z dokładnością do setnych.",
+      "decisionThresholdAlone": "Zmień próg osobno.",
+      "decisionThresholdConversation": "Tylko konta decyzyjne mają próg."
     },
     "wizard": {
       "accessSub": "Wybierz trójkąt obok <code>light</code>, aby otworzyć grupę świateł. Zawiera ona Twoje urządzenia oświetleniowe; wybierz trójkąt obok urządzenia, aby zobaczyć jego encje. Możesz też wpisać nazwę światła w polu filtra. Następnie wybierz <strong>W</strong> przy świetle, które możesz sprawdzić, aby agent mógł je odczytywać i nim sterować. Więcej uprawnień możesz dodać później.",
@@ -2123,6 +2126,7 @@
       "providerAccount": "Konto dostawcy",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2641,7 +2645,9 @@
       "accountChoiceHelp": "Użyj tego konta jako dostawcy decyzji. Wybierz je ponownie, aby pokazać lub ukryć Zmień model i Usuń.",
       "changeModelHelp": "Wybierz, który model tego konta podejmuje decyzje routingu.",
       "saveModelHelp": "Od teraz używaj wybranego modelu do decyzji routingu.",
-      "connectionSettingsHelp": "Pokaż lub ukryj, jak długo Phoenix czeka na decyzję i ile żądań decyzji może wysłać na godzinę."
+      "connectionSettingsHelp": "Pokaż lub ukryj, jak długo Phoenix czeka na decyzję i ile żądań decyzji może wysłać na godzinę.",
+      "decisionThreshold": "Próg pewności",
+      "decisionThresholdHelp": "Jak pewne musi być to konto, zanim wykona polecenie, od 0,70 do 1,00. Domyślnie 0,90."
     },
     "routingStats": {
       "title": "Statystyki routingu",

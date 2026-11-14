@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 密钥", "模型", "LLM", "账户", "额度", "TypeSafe", "JEV", "Clef", "Gemini Decision"], "sectionKeywords": { "provider-add": ["新账户", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通义千问", "千问", "阿里云百炼", "百炼", "智谱", "月之暗面", "腾讯云", "小米", "谷歌", "离线", "本地模型", "价格", "计费"], "decision-provider": ["TypeSafe", "JEV", "快速路径", "OpenCode", "System One", "Gemini Decision", "GPT Luna Decision", "Cloudflare", "Workers AI", "Clef", "Clef Flash", "账户 ID", "谷歌"], "tool-loading": ["load_tools", "延迟加载", "工具搜索", "token", "工具太多", "上下文"] } }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 密钥", "模型", "LLM", "账户", "额度", "TypeSafe", "JEV", "Clef", "Gemini Decision"], "sectionKeywords": { "provider-add": ["新账户", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Cloudflare Workers AI", "Workers AI", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通义千问", "千问", "阿里云百炼", "百炼", "智谱", "月之暗面", "腾讯云", "小米", "谷歌", "离线", "本地模型", "价格", "计费"], "decision-threshold": ["threshold", "confidence", "probability", "0.90"], "decision-provider": ["TypeSafe", "JEV", "快速路径", "OpenCode", "System One", "Gemini Decision", "GPT Luna Decision", "Cloudflare", "Workers AI", "Clef", "Clef Flash", "账户 ID", "谷歌", "OpenAI Decisions", "gpt-6-luna"], "tool-loading": ["load_tools", "延迟加载", "工具搜索", "token", "工具太多", "上下文"] } }
 ---
 添加 Phoenix 使用的 AI 账户。每个账户需要 API 密钥，或者对于本地模型，需要服务器地址。
 
@@ -51,11 +51,9 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 
 分批加载让每个请求发送的 token 少得多，结果相同。请求需要尚未加载的工具时，会多一步。语音智能体一开始就带有设备控制工具，因此语音命令不用等这一步。
 
-使用较新的 Claude 模型时，无论工具多少，Phoenix 都改用 Anthropic 自带的工具搜索。模型会搜索所需的工具，Phoenix 每次请求都发送同一份列表，因此提供商的缓存仍然有效。
-
 **{{label:settings.toolLoadingAlways}}** 无论工具多少都分批加载。**{{label:settings.toolLoadingNever}}** 总是发送全部工具，但只接受 128 个工具的提供商除外。
 
-加载不会给模型更多权限。列表只显示该访问密钥自己的工具，Phoenix 照常检查每次调用。Home Companion 密钥始终获得完整的工具集。
+工具加载不会给模型更多权限，Phoenix 照常检查每次调用。Home Companion 密钥不受 **{{label:settings.toolLoadingLabel}}** 设置影响。
 
 ## 添加账户 {#provider-add}
 
@@ -76,11 +74,12 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 - OpenCode：Zen 或 Console 路径。你只能在其中一条路径上添加密钥。
 - Z.ai：Standard API、Coding Plan 或 China。同一个密钥可以为每个方案各保存一次。
 - Qwen：除了 API 密钥，还需要你的工作区基础 URL，即一个公开的 HTTPS 地址。
+- Cloudflare Workers AI：你的 Cloudflare 账户 ID，以及具有 Workers AI 权限的 API 令牌。Phoenix 只列出标记为可使用工具的模型。免费方案每天只有少量额度，部分模型需要 Workers Paid。
 - Ollama（本地）：你的 Ollama 服务器地址。Home Assistant 会连接它，因此请使用 Home Assistant 主机可以访问的地址。普通 `http://` 流量不加密；请参阅[哪些数据会离开你的家](guide:topic.security#leaves-home)。
 
 有些方案只供编程工具使用：Z.ai 的 Coding Plan、Xiaomi MiMo 的 Token Plan，以及阿里云的 Coding Plan 和 Token Plan。它们的条款禁止在 Home Assistant 这类应用中使用，提供商可能会限流或封禁密钥。选择这些方案时 Phoenix 会给出警告。语音、AI Task 和 Agent Chat 请使用提供商的按量付费 API。
 
-Groq、Mistral AI 和 Z.ai 每个请求最多接受 128 个工具，Phoenix 对 Gemini、Kimi、OpenRouter 和 Infron 也采用同样的上限。访问密钥的工具更多时，无论[工具加载](guide:#tool-loading)如何设置，Phoenix 都会为它们分批加载工具。
+Groq、Mistral AI 和 Z.ai 每个请求最多接受 128 个工具，Phoenix 对 Gemini、Kimi、OpenRouter、Infron 和 Cloudflare Workers AI 也采用同样的上限。访问密钥的工具更多时，无论[工具加载](guide:#tool-loading)如何设置，Phoenix 都会为它们分批加载工具。
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 
@@ -94,7 +93,7 @@ Phoenix 会不时重新读取每个账户的模型列表。这能让列表保持
 
 ### {{label:settings.providerChecksHoursLabel}} {#provider-checks-hours}
 
-模型列表在 Phoenix 重新读取前可以有多旧：6 到 720 小时（默认 24）。检查关闭时显示为灰色。
+Phoenix 会按计划重新检查提供商的模型列表：6 到 720 小时（默认 24）。
 
 ## {{label:routing.providerSection}} {#decision-provider}
 
@@ -106,22 +105,29 @@ Phoenix 会不时重新读取每个账户的模型列表。这能让列表保持
 
 - TypeSafe / JEV：TypeSafe 的 JEV 模型，使用 TypeSafe API 密钥。
 - OpenCode / System One：JEV、Gemini Decision 或 GPT Luna Decision，使用 OpenCode Console API 密钥。
-- Google / Gemini Decision：Google 的 Gemini Decision 模型，使用 Gemini API 密钥。请使用付费项目的密钥，因为 Google 可能会用免费层级的请求来改进其产品。
+- Google / Gemini Decision：Google 的 Gemini Decision 模型，使用 Gemini API 密钥。
 - Cloudflare / Clef：Workers AI 上的 Clef 或 Clef Flash，使用你的 Cloudflare 账户 ID 和 API 令牌。
+- OpenAI / Decisions：OpenAI 的 gpt-6-luna 决策模型，使用 OpenAI API 密钥。
 
-添加一个账户并选择其模型。使用 **{{label:settings.addAccount}}** 添加更多账户，然后选择要使用的那一个。整个 Phoenix 中同一时间只使用一个决策提供商。每个账户的名称旁会显示其模型。
+添加一个账户并选择其模型。同一时间只能使用一个决策提供商。每个账户的名称旁会显示其模型。
 
-决策账户与同一家公司的任何 AI 提供商账户相互独立。即使你已经在聊天中使用该密钥，也要在此添加它。
+决策账户与同一家公司的任何 AI 提供商账户相互独立。如果你已经在 AI 提供商中使用该密钥，也必须在此再次添加。
 
-只有 TypeSafe 自己的 JEV 模型会处理依赖对话内容的后续消息。其他模型会把这类消息交给你的 AI 模型。参见[后续消息](guide:topic.commandRouting#follow-ups)。
+除 Cloudflare / Clef 外，所有决策提供商也会处理依赖对话内容的后续消息。Clef 会把这类消息交给你的 AI 提供商。参见[后续消息](guide:topic.commandRouting#follow-ups)。
 
-jev-latest 模型会跟随每个新的 JEV 版本，因此 TypeSafe 的更新可能改变它执行哪些命令以及如何回答，而无需更新 Phoenix。要固定在一个版本，请选择 jev-1.13.0 这样的固定版本。jev-preview 模型只观察，从不执行命令。
+jev-preview 模型只观察，从不执行命令。
 
 要使用它，请选择其账户。选择 **{{label:routing.noProvider}}** 可停止使用它；命令随后只依赖句子匹配。
 
 它还可以为自动化和脚本回答 Home Assistant 的“评估”操作，请参阅[决策](guide:window.settingsHome#ai-decisions)。
 
 相关：[命令如何路由](guide:topic.commandRouting)
+
+### {{label:routing.decisionThreshold}} {#decision-threshold}
+
+决策账户执行命令前必须达到的确定程度，范围 0.70 到 1.00（默认 0.90）。选择账户即可显示此设置。每个账户各自保存。
+
+阈值越低，决策提供商自己处理的命令越多，转给你的 AI 提供商的命令越少。这可能会让更多错误通过，因为每个模型各不相同。
 
 ## {{label:routing.connectionSettings}} {#decision-connection}
 

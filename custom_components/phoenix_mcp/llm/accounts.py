@@ -19,7 +19,7 @@ from homeassistant.util.dt import utcnow
 
 from ..model_selection import effective_model
 from ..provider_constants import (
-    AGENT_CHAT_CEREBRAS_BASE_URL, AGENT_CHAT_CLAUDE_BASE_URL, AGENT_CHAT_DEEPSEEK_BASE_URL,
+    AGENT_CHAT_CEREBRAS_BASE_URL, AGENT_CHAT_CLAUDE_BASE_URL, AGENT_CHAT_CLOUDFLARE_BASE_URL, AGENT_CHAT_DEEPSEEK_BASE_URL,
     AGENT_CHAT_FIREWORKS_BASE_URL, AGENT_CHAT_GEMINI_BASE_URL, AGENT_CHAT_GROK_BASE_URL,
     AGENT_CHAT_GROK_US_BASE_URL, AGENT_CHAT_GROQ_BASE_URL, AGENT_CHAT_INFRON_BALANCE_URL,
     AGENT_CHAT_INFRON_BASE_URL, AGENT_CHAT_KIMI_BASE_URL,
@@ -40,8 +40,9 @@ from ..provider_constants import (
     AGENT_CHAT_ZAI_CHINA_BASE_URL, AGENT_CHAT_ZAI_CODING_BASE_URL,
 )
 from ..routing.routing_tables import (
-    DECISION_CLOUDFLARE_BASE_URL, DECISION_GEMINI_BASE_URL, DECISION_OPENCODE_BASE_URL,
+    DECISION_CLOUDFLARE_BASE_URL, DECISION_GEMINI_BASE_URL, DECISION_OPENAI_BASE_URL, DECISION_OPENCODE_BASE_URL,
     DECISION_TYPESAFE_BASE_URL, DECISION_TYPESAFE_MODEL,
+    DECISION_MIN_CHOICE_PROBABILITY, DECISION_THRESHOLD_MAX, DECISION_THRESHOLD_MIN,
 )
 from ..time_text import parse_datetime
 
@@ -147,6 +148,8 @@ class ProviderConfig:
     effort: bool | None = None
     # The account's tool-loading setting: auto, always or never (provider_constants).
     tool_loading: str = "auto"
+    # The probability a decision account's answer must reach to act; conversation accounts ignore it.
+    decision_threshold: float = DECISION_MIN_CHOICE_PROBABILITY
 
 
 @dataclass(frozen=True)
@@ -233,6 +236,10 @@ class ProviderDefinition:
 
 _API_KEY_FIELD = ProviderField(
     "api_key", "secret", "settings.agentcliApiKey",
+)
+# Cloudflare addresses carry the account id; Phoenix builds the address from it.
+_CLOUDFLARE_ACCOUNT_FIELD = ProviderField(
+    "account_id", "text", "settings.agentcliAccountId", placeholder="0123456789abcdef0123456789abcdef",
 )
 _OLLAMA_URL_FIELD = ProviderField(
     "base_url", "url", "settings.agentcliServerUrl", placeholder="http://host:11434",
@@ -349,6 +356,7 @@ _PROVIDER_LABEL_KEYS = {
     "openrouter": "settings.providerOpenRouter",
     "together": "settings.providerTogether",
     "cerebras": "settings.providerCerebras",
+    "cloudflare": "settings.providerCloudflare",
     "fireworks": "settings.providerFireworks",
     "qwen": "settings.providerQwen",
     "zai": "settings.providerZai",
@@ -436,6 +444,12 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
             model_filter="together", models_shape="list",
         ),
         _definition("cerebras", "Cerebras", AGENT_CHAT_CEREBRAS_BASE_URL),
+        # Workers AI accepts stream_options and reasoning_effort; it documents no cap on tools,
+        # so the OpenAI limit is kept as a precaution.
+        _definition("cloudflare", "Cloudflare Workers AI", AGENT_CHAT_CLOUDFLARE_BASE_URL,
+                    fields=(_CLOUDFLARE_ACCOUNT_FIELD, _API_KEY_FIELD), include_usage=True,
+                    reasoning="probed_effort", model_filter="cloudflare", models_shape="cloudflare",
+                    max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
         _definition(
             "fireworks", "Fireworks", AGENT_CHAT_FIREWORKS_BASE_URL,
             validation_error="fireworks",
@@ -465,9 +479,13 @@ PROVIDER_DEFINITIONS["opencode_decision"] = ProviderDefinition(
 PROVIDER_DEFINITIONS["cloudflare_decision"] = ProviderDefinition(
     kind="cloudflare_decision", label="Cloudflare / Clef", adapter="systemone",
     base_url=DECISION_CLOUDFLARE_BASE_URL, model="clef-flash",
-    fields=(ProviderField("account_id", "text", "settings.agentcliAccountId",
-                          placeholder="0123456789abcdef0123456789abcdef"), _API_KEY_FIELD),
+    fields=(_CLOUDFLARE_ACCOUNT_FIELD, _API_KEY_FIELD),
     purpose="decision",
+)
+PROVIDER_DEFINITIONS["openai_decision"] = ProviderDefinition(
+    kind="openai_decision", label="OpenAI / Decisions", adapter="openai_decisions",
+    base_url=DECISION_OPENAI_BASE_URL, model="gpt-6-luna",
+    fields=(_API_KEY_FIELD,), purpose="decision",
 )
 PROVIDER_DEFINITIONS["gemini_decision"] = ProviderDefinition(
     kind="gemini_decision", label="Google / Gemini Decision", adapter="gemini_decisions",
@@ -697,6 +715,16 @@ class AgentCliStore:
             await self._save()
             return True
 
+    async def set_decision_threshold(self, instance_id: str, value: float) -> bool:
+        """Change one decision account's bar. False if the account is unknown or not a decision account."""
+        async with self._lock:
+            cfg = self._data.get(instance_id)
+            if not isinstance(cfg, dict) or provider_purpose(cfg.get("kind", "")) != "decision":
+                return False
+            cfg["decision_threshold"] = value
+            await self._save()
+            return True
+
     async def set_tool_loading(self, instance_id: str, mode: str) -> bool:
         """Change one account's tool-loading setting. False if the account is unknown."""
         async with self._lock:
@@ -835,6 +863,7 @@ class AgentCliStore:
                 "base_url": inst.get("base_url", ""),
                 "endpoint_id": inst.get("endpoint_id") or None,
                 "tool_loading": _tool_loading(inst),
+                **({"decision_threshold": decision_threshold(inst)} if decision else {}),
                 "capabilities": _with_learned(inst),
                 "capabilities_checked_at": inst.get("capabilities_checked_at") or None,
             })
@@ -885,7 +914,17 @@ class AgentCliStore:
             endpoint_id=endpoint_id, vision=vision, thinking_off=thinking_off, effort=effort,
             tool_loading=_tool_loading(cfg),
             decision_routing_revision=str(cfg.get("decision_routing_revision") or "") if purpose == "decision" else "",
+            decision_threshold=decision_threshold(cfg) if purpose == "decision" else DECISION_MIN_CHOICE_PROBABILITY,
         )
+
+
+def decision_threshold(cfg: dict) -> float:
+    """A decision account's stored bar, or the default for anything unset or out of bounds."""
+    value = cfg.get("decision_threshold")
+    if (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and DECISION_THRESHOLD_MIN <= value <= DECISION_THRESHOLD_MAX):
+        return float(value)
+    return DECISION_MIN_CHOICE_PROBABILITY
 
 
 def _tool_loading(cfg: dict) -> str:

@@ -9,6 +9,10 @@ import { ProviderAddForm } from "./ProviderAddForm";
 import type { AgentCliInstance, AgentCliProviderType, GlobalSettings } from "../types";
 import { NumberField } from "../ui/NumberField";
 
+const THRESHOLD_DEFAULT = 0.9;
+const THRESHOLD_MIN = 0.7;
+const THRESHOLD_MAX = 1;
+
 export function DecisionProviderSettings({ settings, onChange, saving }: {
   settings: GlobalSettings;
   onChange: (key: keyof GlobalSettings, value: string | number | boolean) => void;
@@ -38,6 +42,8 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   const [budget, setBudget] = useState(String(settings.decision_timeout_ms ?? 5000));
   useEffect(() => { setBudget(String(settings.decision_timeout_ms ?? 5000)); }, [settings.decision_timeout_ms]);
   const [requestLimit, setRequestLimit] = useState(String(settings.decision_request_budget ?? 0));
+  // The threshold draft of the open account; saved when the field loses focus.
+  const [thresholdDraft, setThresholdDraft] = useState("");
   useEffect(() => { setRequestLimit(String(settings.decision_request_budget ?? 0)); }, [settings.decision_request_budget]);
 
   async function load() {
@@ -115,6 +121,28 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
     } finally {
       if (mounted.current) { setBusy(false); setRefreshing(null); }
     }
+  }
+  async function saveThreshold(account: AgentCliInstance) {
+    const value = Number(thresholdDraft);
+    const current = account.decision_threshold ?? THRESHOLD_DEFAULT;
+    // Only a whole hundredth within the bounds is sent; anything else restores the saved value.
+    if (!thresholdDraft.trim() || !Number.isFinite(value) || value < THRESHOLD_MIN || value > THRESHOLD_MAX
+        || Math.round(value * 100) !== value * 100) {
+      setThresholdDraft(current.toFixed(2));
+      return;
+    }
+    if (value === current) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.setDecisionThreshold(account.id, value);
+      if (mounted.current) await load();
+    } catch (cause) {
+      if (mounted.current) {
+        setError(cause instanceof Error ? cause.message : t("routing.failed"));
+        setThresholdDraft(current.toFixed(2));
+      }
+    } finally { if (mounted.current) setBusy(false); }
   }
   async function remove(id: string) {
     setBusy(true);
@@ -208,6 +236,14 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
           helpText={t("routing.removeAccountHelp", { name: account.name })} busy={saving || busy}
           onClick={() => { setConfirmRemove(account.id); setError(""); }} />}
       </div>}
+      {/* How sure this account must be before it acts; the default suits every provider tested. */}
+      <label className="agentcli-settings-tool-loading routing-threshold" htmlFor={`${uid}threshold-${account.id}`}
+        data-guide="window.settingsProviders#decision-threshold" {...helpRow(t("routing.decisionThresholdHelp"))}>
+        <span>{t("routing.decisionThreshold")}</span>
+        <NumberField id={`${uid}threshold-${account.id}`} className="input" min={THRESHOLD_MIN} max={THRESHOLD_MAX} step={0.01}
+          value={thresholdDraft} busy={saving || busy}
+          onChange={event => setThresholdDraft(event.target.value)} onBlur={() => void saveThreshold(account)} />
+      </label>
       {error && editing !== account.id && <p className="banner banner-error" role="alert">{error}</p>}
     </div>;
   };
@@ -232,14 +268,17 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
           <BusyInput type="radio" name="decision-account"
             checked={inUse && account.id === settings.decision_provider_id} busy={saving || busy} data-help="routing.accountChoiceHelp"
             onChange={() => use(account.id)}
-            onClick={() => { if (open === account.id) closeOptions(); else { closeOptions(); setOpen(account.id); } }} />
+            onClick={() => {
+            if (open === account.id) closeOptions();
+            else { closeOptions(); setOpen(account.id); setThresholdDraft((account.decision_threshold ?? THRESHOLD_DEFAULT).toFixed(2)); }
+          }} />
           {/* Accounts at different providers can answer with different models, so each names its own. */}
           <span>{account.name}{account.model && <>{" "}<span className="routing-account-model">{account.model}</span></>}</span>
         </label>
         {open === account.id && accountOptions(account)}
       </div>)}
     </div>
-    {accountsLoaded && hasAccounts && !adding && <div className="phx-window-actions">
+    {accountsLoaded && hasAccounts && !adding && <div className="phx-window-actions routing-add-account">
       <ActionButton icon="add" label={t("settings.addAccount")} className="btn btn-outline btn-sm" help="settings.addAccountHelp"
         busy={saving || busy} onClick={() => { closeOptions(); setAdding(true); }} />
     </div>}
@@ -249,8 +288,8 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       onClose={hasAccounts ? () => setAdding(false) : undefined}
       onCreated={async instance => {
         if (!mounted.current) return;
-        // A first account is selected and put in use, as adding it always did; a further one waits to be chosen.
-        if (!hasAccounts && selectionVersion.current === currentSelectionVersion) onChange("decision_provider_id", instance.id);
+        // A new account is put in use, the first and every one added after it; choose another to switch back.
+        if (selectionVersion.current === currentSelectionVersion) onChange("decision_provider_id", instance.id);
         setAdding(false);
         await load();
       }} />}

@@ -1405,6 +1405,7 @@
       "providerAccount": "Compte de fournisseur",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2168,7 +2169,10 @@
       "oauthSignInNotFound": "Cette connexion n’existe plus.",
       "oauthSaveFailed": "La connexion n’a pas pu être supprimée. Réessayez.",
       "oauthNoHttps": "Home Assistant n’a pas d’adresse HTTPS, les applications ne peuvent donc pas se connecter. Définissez d’abord une URL externe HTTPS.",
-      "providerAccountIdInvalid": "Saisissez votre ID de compte de 32 caractères."
+      "providerAccountIdInvalid": "Saisissez votre ID de compte de 32 caractères.",
+      "decisionThresholdInvalid": "Saisissez un seuil de {min} à {max}, au centième près.",
+      "decisionThresholdAlone": "Modifiez le seuil séparément.",
+      "decisionThresholdConversation": "Seuls les comptes de décision ont un seuil."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil rend donc cette intention explicite. Pour autoriser plutôt le contrôle de l'agent soumis à l'approbation de l'administrateur, choisissez Confirmer dans l'Éditeur de profil avant d'enregistrer ; l'approbation s'applique lorsque MESA est appliqué.",
@@ -2504,7 +2508,9 @@
       "accountChoiceHelp": "Utilisez ce compte comme fournisseur de décisions. Sélectionnez-le à nouveau pour afficher ou masquer Changer de modèle et Supprimer.",
       "changeModelHelp": "Choisissez lequel des modèles de ce compte prend les décisions de routage.",
       "saveModelHelp": "Utilisez désormais le modèle choisi pour les décisions de routage.",
-      "connectionSettingsHelp": "Affichez ou masquez combien de temps Phoenix attend une décision et combien de requêtes de décision il peut envoyer par heure."
+      "connectionSettingsHelp": "Affichez ou masquez combien de temps Phoenix attend une décision et combien de requêtes de décision il peut envoyer par heure.",
+      "decisionThreshold": "Seuil de confiance",
+      "decisionThresholdHelp": "Le degré de certitude requis de ce compte avant d'exécuter une commande, de 0,70 à 1,00. Par défaut 0,90."
     },
     "routingStats": {
       "title": "Statistiques de routage",

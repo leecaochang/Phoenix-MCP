@@ -246,7 +246,7 @@ export type AgentCliProviderKind =
   "claude" | "deepseek" | "chatgpt" | "gemini" | "grok" | "kimi" | "meta"
   | "minimax" | "mistral" | "openrouter" | "nvidia" | "ollama" | "ollama_cloud"
   | "zai" | "groq" | "together" | "cerebras" | "fireworks" | "qwen" | "opencode" | "mimo" | "tencent" | "infron"
-  | "typesafe" | "opencode_decision" | "cloudflare_decision" | "gemini_decision";
+  | "cloudflare" | "typesafe" | "opencode_decision" | "cloudflare_decision" | "gemini_decision" | "openai_decision";
 
 export interface AgentCliProviderChoice {
   value: string;
@@ -325,6 +325,8 @@ export interface AgentCliInstance {
   capabilities_checked_at?: string | null;
   /** Whether turns receive every tool at once or load them as needed; conversation accounts only. */
   tool_loading?: ToolLoadingMode;
+  /** How sure a decision account's answer must be before it acts; decision accounts only. */
+  decision_threshold?: number;
 }
 
 /** An account's tool loading: automatic by catalog size, always, or never (unless the provider's cap forces it). */

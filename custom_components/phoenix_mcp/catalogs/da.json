@@ -428,7 +428,10 @@
       "oauthSignInNotFound": "Det login findes ikke længere.",
       "oauthSaveFailed": "Login kunne ikke fjernes. Prøv igen.",
       "oauthNoHttps": "Home Assistant har ingen HTTPS-adresse, så apps kan ikke logge ind. Angiv først en ekstern HTTPS-webadresse.",
-      "providerAccountIdInvalid": "Angiv dit konto-id på 32 tegn."
+      "providerAccountIdInvalid": "Angiv dit konto-id på 32 tegn.",
+      "decisionThresholdInvalid": "Angiv en tærskel fra {min} til {max} i hundrededele.",
+      "decisionThresholdAlone": "Skift tærsklen for sig selv.",
+      "decisionThresholdConversation": "Kun beslutningskonti har en tærskel."
     },
     "agentchat": {
       "accessKey": "Adgangsnøgle",
@@ -2159,7 +2162,9 @@
       "accountChoiceHelp": "Brug denne konto som beslutningsudbyder. Vælg den igen for at vise eller skjule Skift model og Fjern.",
       "changeModelHelp": "Vælg, hvilken af kontoens modeller der træffer routingbeslutninger.",
       "saveModelHelp": "Brug den valgte model til routingbeslutninger fra nu af.",
-      "connectionSettingsHelp": "Vis eller skjul, hvor længe Phoenix venter på en beslutning, og hvor mange beslutningsanmodninger den må sende pr. time."
+      "connectionSettingsHelp": "Vis eller skjul, hvor længe Phoenix venter på en beslutning, og hvor mange beslutningsanmodninger den må sende pr. time.",
+      "decisionThreshold": "Sikkerhedstærskel",
+      "decisionThresholdHelp": "Hvor sikker denne konto skal være, før den udfører en kommando, fra 0,70 til 1,00. Standard 0,90."
     },
     "routingStats": {
       "cancelled": "Annulleret",
@@ -2390,6 +2395,7 @@
       "providerAccount": "Udbyderkonto",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerChecksHelp": "Tjek udbydere for nye og udgåede modeller efter en tidsplan. Slået til som standard.",
       "providerChecksHoursHelp": "Hvor ofte Phoenix tjekker hver udbyder for modelændringer, {min} til {max} timer (standard {default}).",
       "providerChecksHoursLabel": "Kontrollér hver (timer)",

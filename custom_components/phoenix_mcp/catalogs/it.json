@@ -226,7 +226,10 @@
       "oauthSignInNotFound": "Quell'accesso non esiste più.",
       "oauthSaveFailed": "Impossibile rimuovere l'accesso. Riprova.",
       "oauthNoHttps": "Home Assistant non ha un indirizzo HTTPS, quindi le app non possono accedere. Imposta prima un URL esterno HTTPS.",
-      "providerAccountIdInvalid": "Inserisci il tuo ID account di 32 caratteri."
+      "providerAccountIdInvalid": "Inserisci il tuo ID account di 32 caratteri.",
+      "decisionThresholdInvalid": "Inserisci una soglia da {min} a {max}, in centesimi.",
+      "decisionThresholdAlone": "Modifica la soglia da sola.",
+      "decisionThresholdConversation": "Solo gli account decisionali hanno una soglia."
     },
     "agentchat": {
       "accessKey": "Chiave di accesso",
@@ -1639,6 +1642,7 @@
       "providerAccount": "Account del provider",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2504,7 +2508,9 @@
       "accountChoiceHelp": "Usa questo account come fornitore di decisioni. Selezionalo di nuovo per mostrare o nascondere Cambia modello e Rimuovi.",
       "changeModelHelp": "Scegli quale modello di questo account prende le decisioni di instradamento.",
       "saveModelHelp": "Usa d'ora in poi il modello scelto per le decisioni di instradamento.",
-      "connectionSettingsHelp": "Mostra o nascondi quanto Phoenix attende una decisione e quante richieste di decisione può inviare ogni ora."
+      "connectionSettingsHelp": "Mostra o nascondi quanto Phoenix attende una decisione e quante richieste di decisione può inviare ogni ora.",
+      "decisionThreshold": "Soglia di confidenza",
+      "decisionThresholdHelp": "Quanto deve essere sicuro questo account prima di eseguire un comando, da 0,70 a 1,00. Predefinito 0,90."
     },
     "routingStats": {
       "title": "Statistiche di instradamento",

@@ -274,7 +274,11 @@ async def test_context_wire_requires_both_named_questions_in_one_request(protoco
     async with TestServer(app) as server, ClientSession() as session:
         cfg = llm_accounts.ProviderConfig('typesafe', 'test-model', str(server.make_url('')).rstrip('/'))
         response = await DecisionProvider(cfg, protocol).review_context(session, state, 1000)
-    assert response == answer() and len(seen) == 1
+    # Each check carries the account's threshold, the default here.
+    expected = answer()
+    for check in expected['checks'].values():
+        check['min_probability'] = 0.9
+    assert response == expected and len(seen) == 1
     assert seen[0]['state'] == state and set(seen[0]['questions']) == {'request', 'constraints'}
     for question, criteria in DECISION_CONTEXT_CHECKS.items():
         assert seen[0]['questions'][question]['criteria'] == criteria

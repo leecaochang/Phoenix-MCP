@@ -167,6 +167,7 @@ ALLOW_IDENTICAL = frozenset({
     "panel.settings.agentcliOpenCodeConsole",
     "panel.settings.providerAnthropic",
     "panel.settings.providerCerebras",
+    "panel.settings.providerCloudflare",
     "panel.settings.providerDeepSeek",
     "panel.settings.providerFireworks",
     "panel.settings.providerGemini",

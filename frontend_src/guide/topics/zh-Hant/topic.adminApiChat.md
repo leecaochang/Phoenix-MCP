@@ -46,6 +46,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `infron` | 對話 | `api_key` |
 | `together` | 對話 | `api_key` |
 | `cerebras` | 對話 | `api_key` |
+| `cloudflare`（Cloudflare Workers AI） | 對話 | `account_id`、`api_key` |
 | `fireworks` | 對話 | `api_key` |
 | `qwen` | 對話 | `api_key`、`base_url` |
 | `zai` | 對話 | `api_key`、`endpoint_id`：`standard`、`coding`、`china` |
@@ -53,6 +54,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `opencode_decision`（OpenCode） | 決策 | `api_key`、`model`：`jev-1.13`、`gemini-decision-1`、`gpt-6-luna-decision` |
 | `gemini_decision`（Google） | 決策 | `api_key`、`model`：`gemini-decision-1` |
 | `cloudflare_decision`（Cloudflare） | 決策 | `account_id`、`api_key`、`model`：`clef-flash`、`clef` |
+| `openai_decision`（OpenAI） | 決策 | `api_key`、`model`：`gpt-6-luna` |
 
 ### 設定欄位 {#setup-fields}
 
@@ -64,7 +66,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `api_key` | string | 除 `ollama` 外每種類型都必填。最多 4096 個字元，不能包含控制字元。Phoenix 絕不傳回它。 |
 | `base_url` | string | `ollama` 和 `qwen` 必填。只有 `ollama` 可以使用私有位址。其他每種類型都使用固定端點，並忽略此欄位。 |
 | `endpoint_id` | string | 僅用於帶端點的類型。省略它表示預設值。 |
-| `account_id` | string | `cloudflare_decision` 必填：32 個字元的 Cloudflare 帳戶 ID。Phoenix 用它建構端點。 |
+| `account_id` | string | `cloudflare` 和 `cloudflare_decision` 必填：32 個字元的 Cloudflare 帳戶 ID。Phoenix 用它建構端點。 |
 | `model` | string | 對話類型選填；留空表示自動跟隨提供者。決策類型必填：最多 200 個字元，且必須在提供者目前清單中。 |
 
 ### 列出帳戶 {#list-providers}
@@ -129,16 +131,20 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `model` | string | 要使用的模型。對話帳戶接受任何模型 ID。決策帳戶需要提供者目前列出的模型。 |
 | `auto` | boolean | `true` 會自動跟隨提供者的模型。決策帳戶拒絕此項。 |
 | `tool_loading` | string | `auto`、`always` 或 `never`：帳戶的對話輪次如何取得存取金鑰的工具。決策帳戶拒絕此項。 |
+| `decision_threshold` | number | 僅限決策帳戶：帳戶執行前回答必須達到的確定程度，0.70 到 1.00，精確到百分位。請單獨傳送。 |
 
 傳送 `model` 或 `auto: true`，不要同時傳送。`tool_loading` 可以單獨傳送，也可以與其中任一項一起傳送。使用 `auto: true` 時，Phoenix 會立即讀取模型清單，因此回應會顯示它選擇的模型。
 
-回應為 `200`，僅包含 `{"instance": {"id": ..., "model": ..., "model_mode": ...}}`，而不是完整帳戶。只傳送 `tool_loading` 時，回應為 `{"instance": {"id": ..., "tool_loading": ...}}`。
+回應為 `200`，僅包含 `{"instance": {"id": ..., "model": ..., "model_mode": ...}}`，而不是完整帳戶。只傳送 `tool_loading` 時，回應為 `{"instance": {"id": ..., "tool_loading": ...}}`；傳送 `decision_threshold` 時為 `{"instance": {"id": ..., "decision_threshold": ...}}`。
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.unknownFields` | 本文包含 `model`、`auto` 和 `tool_loading` 以外的欄位。 |
 | 400 | `invalid_request` | `adminError.toolLoadingInvalid` | `tool_loading` 不是 `auto`、`always` 或 `never`。 |
 | 400 | `invalid_request` | `adminError.toolLoadingDecision` | `tool_loading` 傳送給了決策帳戶，而決策帳戶不使用工具。 |
+| 400 | `invalid_request` | `adminError.decisionThresholdInvalid` | `decision_threshold` 不是 0.70 到 1.00 之間精確到百分位的數字。 |
+| 400 | `invalid_request` | `adminError.decisionThresholdAlone` | `decision_threshold` 與其他欄位一起傳送。 |
+| 400 | `invalid_request` | `adminError.decisionThresholdConversation` | `decision_threshold` 傳送給了對話帳戶。 |
 | 400 | `invalid_request` | `adminError.booleanRequired` | `auto` 不是布林值。 |
 | 400 | `invalid_request` | `adminError.providerModelOrAuto` | `model` 和 `auto: true` 同時傳送。 |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | 兩者都沒有傳送。 |

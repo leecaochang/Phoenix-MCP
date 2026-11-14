@@ -428,7 +428,10 @@
       "oauthSignInNotFound": "Den påloggingen finnes ikke lenger.",
       "oauthSaveFailed": "Kunne ikke fjerne påloggingen. Prøv igjen.",
       "oauthNoHttps": "Home Assistant har ingen HTTPS-adresse, så apper kan ikke logge på. Angi først en ekstern HTTPS-URL.",
-      "providerAccountIdInvalid": "Skriv inn konto-ID-en din på 32 tegn."
+      "providerAccountIdInvalid": "Skriv inn konto-ID-en din på 32 tegn.",
+      "decisionThresholdInvalid": "Skriv inn en terskel fra {min} til {max} i hundredeler.",
+      "decisionThresholdAlone": "Endre terskelen for seg selv.",
+      "decisionThresholdConversation": "Bare beslutningskontoer har en terskel."
     },
     "agentchat": {
       "accessKey": "Tilgangsnøkkel",
@@ -2159,7 +2162,9 @@
       "accountChoiceHelp": "Bruk denne kontoen som beslutningsleverandør. Velg den igjen for å vise eller skjule Endre modell og Fjern.",
       "changeModelHelp": "Velg hvilken av modellene til denne kontoen som tar rutingbeslutninger.",
       "saveModelHelp": "Bruk den valgte modellen til rutingbeslutninger fra nå av.",
-      "connectionSettingsHelp": "Vis eller skjul hvor lenge Phoenix venter på en beslutning, og hvor mange beslutningsforespørsler den kan sende per time."
+      "connectionSettingsHelp": "Vis eller skjul hvor lenge Phoenix venter på en beslutning, og hvor mange beslutningsforespørsler den kan sende per time.",
+      "decisionThreshold": "Sikkerhetsterskel",
+      "decisionThresholdHelp": "Hvor sikker denne kontoen må være før den utfører en kommando, fra 0,70 til 1,00. Standard 0,90."
     },
     "routingStats": {
       "cancelled": "Avbrutt",
@@ -2390,6 +2395,7 @@
       "providerAccount": "Leverandørkonto",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerChecksHelp": "Sjekk leverandører for nye og utgåtte modeller etter en tidsplan. På som standard.",
       "providerChecksHoursHelp": "Hvor ofte Phoenix sjekker hver leverandør for modellendringer, {min} til {max} timer (standard {default}).",
       "providerChecksHoursLabel": "Sjekk hver (timer)",

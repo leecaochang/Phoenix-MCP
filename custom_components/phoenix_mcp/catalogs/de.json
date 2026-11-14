@@ -1302,6 +1302,7 @@
       "providerAccount": "Anbieterkonto",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -1848,7 +1849,10 @@
       "oauthSignInNotFound": "Diese Anmeldung existiert nicht mehr.",
       "oauthSaveFailed": "Die Anmeldung konnte nicht entfernt werden. Versuchen Sie es erneut.",
       "oauthNoHttps": "Home Assistant hat keine HTTPS-Adresse, daher können sich Apps nicht anmelden. Legen Sie zuerst eine externe HTTPS-URL fest.",
-      "providerAccountIdInvalid": "Geben Sie Ihre 32-stellige Konto-ID ein."
+      "providerAccountIdInvalid": "Geben Sie Ihre 32-stellige Konto-ID ein.",
+      "decisionThresholdInvalid": "Geben Sie eine Schwelle von {min} bis {max} in Hundertsteln ein.",
+      "decisionThresholdAlone": "Ändern Sie die Schwelle für sich allein.",
+      "decisionThresholdConversation": "Nur Entscheidungskonten haben eine Schwelle."
     },
     "approvalSummary": {
       "action.optionalReason": "Optionaler Grund",
@@ -2504,7 +2508,9 @@
       "accountChoiceHelp": "Dieses Konto als Entscheidungsanbieter verwenden. Erneut auswählen blendet Modell ändern und Entfernen ein oder aus.",
       "changeModelHelp": "Wählen, welches Modell dieses Kontos die Routing-Entscheidungen trifft.",
       "saveModelHelp": "Das gewählte Modell ab jetzt für Routing-Entscheidungen verwenden.",
-      "connectionSettingsHelp": "Ein- oder ausblenden, wie lange Phoenix auf eine Entscheidung wartet und wie viele Entscheidungsanfragen es pro Stunde senden darf."
+      "connectionSettingsHelp": "Ein- oder ausblenden, wie lange Phoenix auf eine Entscheidung wartet und wie viele Entscheidungsanfragen es pro Stunde senden darf.",
+      "decisionThreshold": "Konfidenzschwelle",
+      "decisionThresholdHelp": "Wie sicher dieses Konto sein muss, bevor es einen Befehl ausführt, von 0,70 bis 1,00. Standard 0,90."
     },
     "routingStats": {
       "title": "Routing-Statistik",

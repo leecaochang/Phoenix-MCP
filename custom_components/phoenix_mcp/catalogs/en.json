@@ -1780,6 +1780,7 @@
       "providerAccount": "Provider account",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2538,7 +2539,10 @@
       "oauthSignInNotFound": "That sign-in no longer exists.",
       "oauthSaveFailed": "The sign-in could not be removed. Try again.",
       "oauthNoHttps": "Home Assistant has no HTTPS address, so apps can't sign in. Set an HTTPS external URL first.",
-      "providerAccountIdInvalid": "Enter your 32-character account ID."
+      "providerAccountIdInvalid": "Enter your 32-character account ID.",
+      "decisionThresholdInvalid": "Enter a threshold from {min} to {max}, in hundredths.",
+      "decisionThresholdAlone": "Change the threshold on its own.",
+      "decisionThresholdConversation": "Only decision accounts have a threshold."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the profile makes that intent explicit. To allow agent control behind admin approval instead, choose Confirm in Profile Editor before saving; approval applies while MESA is enforced.",
@@ -2874,7 +2878,9 @@
       "accountChoiceHelp": "Use this account as the decision provider. Select it again to show or hide Change Model and Remove.",
       "changeModelHelp": "Choose which of this account's models makes routing decisions.",
       "saveModelHelp": "Use the chosen model for routing decisions from now on.",
-      "connectionSettingsHelp": "Show or hide how long Phoenix waits for a decision and how many decision requests it may send per hour."
+      "connectionSettingsHelp": "Show or hide how long Phoenix waits for a decision and how many decision requests it may send per hour.",
+      "decisionThreshold": "Confidence threshold",
+      "decisionThresholdHelp": "How sure this account must be before it carries out a command, from 0.70 to 1.00. Default 0.90."
     },
     "routingStats": {
       "title": "Routing Statistics",

@@ -4,7 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import type { GlobalSettings } from "../types";
 import { t } from "../i18n";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn(), probe: vi.fn(), models: vi.fn(), setModel: vi.fn(), refresh: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn(), probe: vi.fn(), models: vi.fn(), setModel: vi.fn(), refresh: vi.fn(), threshold: vi.fn() }));
 vi.mock("../api", () => ({ api: {
   getDecisionProviders: mocks.list,
   refreshAgentCliProvider: mocks.refresh,
@@ -13,6 +13,7 @@ vi.mock("../api", () => ({ api: {
   setAgentCliProviderModel: mocks.setModel,
   createAgentCliProvider: mocks.create,
   deleteAgentCliProvider: mocks.remove,
+  setDecisionThreshold: mocks.threshold,
 } }));
 import { DecisionProviderSettings } from "../components/DecisionProviderSettings";
 const types = [
@@ -447,7 +448,7 @@ const hosted = [
   ] },
 ];
 
-it("adds a further account beside the one in use without changing which is in use", async () => {
+it("adds a further account beside the one in use and puts the new one in use", async () => {
   mocks.list.mockResolvedValue({ instances: [{ id: "jev", kind: "typesafe", name: "TypeSafe / JEV", model: "jev-latest" }], provider_types: hosted });
   mocks.probe.mockResolvedValue({ ok: true, models: ["clef", "clef-flash"] });
   mocks.create.mockResolvedValue({ instance: { id: "clef", kind: "cloudflare_decision", name: "Cloudflare / Clef", model: "clef-flash" } });
@@ -470,9 +471,8 @@ it("adds a further account beside the one in use without changing which is in us
     { id: "clef", kind: "cloudflare_decision", name: "Cloudflare / Clef", model: "clef" },
   ], provider_types: hosted });
   fireEvent.click(screen.getByText("Done"));
-  expect(await screen.findByRole("radio", { name: "Cloudflare / Clef clef" })).not.toBeChecked();
-  expect(screen.getByRole("radio", { name: "TypeSafe / JEV jev-latest" })).toBeChecked();
-  expect(onChange).not.toHaveBeenCalledWith("decision_provider_id", "clef");
+  expect(await screen.findByRole("radio", { name: "Cloudflare / Clef clef" })).toBeInTheDocument();
+  expect(onChange).toHaveBeenCalledWith("decision_provider_id", "clef");
   expect(screen.queryByLabelText("Provider type")).toBeNull();
 });
 
@@ -487,4 +487,37 @@ it("closes the further-account form without adding one", async () => {
   await waitFor(() => expect(screen.queryByLabelText("Provider type")).toBeNull());
   expect(screen.getByRole("button", { name: "Add Account" })).toBeInTheDocument();
   expect(mocks.create).not.toHaveBeenCalled();
+});
+
+it("keeps Validate and Cancel in the last field's row, beside its input", async () => {
+  mocks.list.mockResolvedValue({ instances: [{ id: "jev", kind: "typesafe", name: "TypeSafe / JEV", model: "jev-latest" }], provider_types: hosted });
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "jev", decision_provider_default_id: "jev" }} onChange={vi.fn()} saving={false} />);
+  await screen.findByRole("radio", { name: "TypeSafe / JEV jev-latest" });
+  expect(screen.getByRole("button", { name: "Add Account" }).closest(".routing-add-account")).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Add Account" }));
+  fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "cloudflare_decision" } });
+  const row = screen.getByLabelText("API key").closest(".agentcli-secret-row");
+  expect(row).not.toBeNull();
+  expect(row!.contains(screen.getByText("Validate"))).toBe(true);
+  // The account ID is not the last field, so it has no actions of its own.
+  expect(screen.getByLabelText("Account ID").closest(".agentcli-secret-row")).toBeNull();
+});
+
+
+it("saves an account's own threshold in hundredths from 0.70 to 1.00", async () => {
+  mocks.list.mockResolvedValue({ instances: [{ id: "jev", kind: "typesafe", name: "TypeSafe / JEV", model: "jev-latest", decision_threshold: 0.9 }], provider_types: types });
+  mocks.threshold.mockResolvedValue({ instance: { id: "jev", decision_threshold: 0.8 } });
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "jev", decision_provider_default_id: "jev" }} onChange={vi.fn()} saving={false} />);
+  fireEvent.click(await screen.findByRole("radio", { name: "TypeSafe / JEV jev-latest" }));
+  const field = await screen.findByLabelText("Confidence threshold");
+  expect(field).toHaveValue(0.9);
+  for (const value of ["0.65", "1.01", "0.805", ""]) {
+    fireEvent.change(field, { target: { value } });
+    fireEvent.blur(field);
+    expect(field).toHaveValue(0.9);
+  }
+  expect(mocks.threshold).not.toHaveBeenCalled();
+  fireEvent.change(field, { target: { value: "0.8" } });
+  fireEvent.blur(field);
+  await waitFor(() => expect(mocks.threshold).toHaveBeenCalledExactlyOnceWith("jev", 0.8));
 });

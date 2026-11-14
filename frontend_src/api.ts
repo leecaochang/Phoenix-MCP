@@ -495,6 +495,10 @@ export const api = {
   setAgentCliProviderToolLoading: (id: string, toolLoading: ToolLoadingMode) =>
     req<{ instance: { id: string; tool_loading: ToolLoadingMode } }>(
       "PATCH", `/agentcli/providers/${encodeURIComponent(id)}`, { tool_loading: toolLoading }),
+  /** How sure a decision account must be before it acts, from 0.70 to 1.00. */
+  setDecisionThreshold: (id: string, threshold: number) =>
+    req<{ instance: { id: string; decision_threshold: number } }>(
+      "PATCH", `/agentcli/providers/${encodeURIComponent(id)}`, { decision_threshold: threshold }),
   deleteAgentCliProvider: (id: string) =>
     req<{ deleted: string }>("DELETE", `/agentcli/providers/${encodeURIComponent(id)}`),
   getAgentCliModels: (id: string) =>

@@ -1247,7 +1247,10 @@
       "oauthSignInNotFound": "Ese inicio de sesión ya no existe.",
       "oauthSaveFailed": "No se pudo eliminar el inicio de sesión. Inténtelo de nuevo.",
       "oauthNoHttps": "Home Assistant no tiene una dirección HTTPS, así que las aplicaciones no pueden iniciar sesión. Configure primero una URL externa HTTPS.",
-      "providerAccountIdInvalid": "Introduzca su ID de cuenta de 32 caracteres."
+      "providerAccountIdInvalid": "Introduzca su ID de cuenta de 32 caracteres.",
+      "decisionThresholdInvalid": "Introduzca un umbral de {min} a {max}, en centésimas.",
+      "decisionThresholdAlone": "Cambie el umbral por separado.",
+      "decisionThresholdConversation": "Solo las cuentas de decisión tienen umbral."
     },
     "accessKeys": {
       "announceAllHelp": "Ofrezca a los agentes de esta clave todas las herramientas, incluso las que no puede usar. Solo para solucionar problemas; consume más tokens.",
@@ -1883,6 +1886,7 @@
       "providerAccount": "Cuenta de proveedor",
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
+      "providerCloudflare": "Cloudflare Workers AI",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2504,7 +2508,9 @@
       "accountChoiceHelp": "Use esta cuenta como proveedor de decisiones. Selecciónela de nuevo para mostrar u ocultar Cambiar modelo y Eliminar.",
       "changeModelHelp": "Elija qué modelo de esta cuenta toma las decisiones de enrutamiento.",
       "saveModelHelp": "Use a partir de ahora el modelo elegido para las decisiones de enrutamiento.",
-      "connectionSettingsHelp": "Muestre u oculte cuánto espera Phoenix una decisión y cuántas solicitudes de decisión puede enviar por hora."
+      "connectionSettingsHelp": "Muestre u oculte cuánto espera Phoenix una decisión y cuántas solicitudes de decisión puede enviar por hora.",
+      "decisionThreshold": "Umbral de confianza",
+      "decisionThresholdHelp": "Qué tan seguro debe estar esta cuenta antes de ejecutar un comando, de 0,70 a 1,00. Predeterminado 0,90."
     },
     "routingStats": {
       "title": "Estadísticas de enrutamiento",

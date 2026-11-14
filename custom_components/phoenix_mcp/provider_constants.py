@@ -25,7 +25,7 @@ PROVIDER_API_KEY_MAX_LENGTH = 4096
 AGENT_CHAT_PROVIDERS = frozenset({
     "claude", "deepseek", "chatgpt", "gemini", "grok", "kimi", "meta",
     "minimax", "mistral", "openrouter", "nvidia", "ollama", "ollama_cloud",
-    "zai", "groq", "together", "cerebras", "fireworks", "qwen", "opencode", "mimo", "tencent", "infron"})
+    "zai", "groq", "together", "cerebras", "cloudflare", "fireworks", "qwen", "opencode", "mimo", "tencent", "infron"})
 # Default endpoints/models; the panel may override the model per conversation.
 AGENT_CHAT_CLAUDE_BASE_URL = "https://api.anthropic.com"
 AGENT_CHAT_ANTHROPIC_VERSION = "2023-06-01"
@@ -96,6 +96,10 @@ AGENT_CHAT_ZAI_CODING_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
 AGENT_CHAT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 AGENT_CHAT_TOGETHER_BASE_URL = "https://api.together.ai/v1"
 AGENT_CHAT_CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
+# Workers AI's OpenAI-compatible address carries the operator's account id. Its model list is the
+# account API's model search, one level up; text generation is the only task a chat account uses.
+AGENT_CHAT_CLOUDFLARE_BASE_URL = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
+AGENT_CHAT_CLOUDFLARE_MODELS_QUERY = "models/search?task=Text%20Generation&per_page=100"
 AGENT_CHAT_FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1"
 AGENT_CHAT_MIMO_BASE_URL = "https://api.xiaomimimo.com/v1"
 AGENT_CHAT_TENCENT_SINGAPORE_BASE_URL = "https://tokenhub-intl.tencentcloudmaas.com/v1"
