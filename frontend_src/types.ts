@@ -249,7 +249,7 @@ export type AgentCliProviderKind =
   "claude" | "deepseek" | "chatgpt" | "gemini" | "grok" | "kimi" | "meta"
   | "minimax" | "mistral" | "openrouter" | "nvidia" | "ollama" | "ollama_cloud"
   | "zai" | "groq" | "together" | "cerebras" | "fireworks" | "qwen" | "opencode" | "mimo" | "tencent" | "infron"
-  | "cloudflare" | "typesafe" | "opencode_decision" | "cloudflare_decision" | "gemini_decision" | "openai_decision";
+  | "cloudflare" | "local_openai" | "typesafe" | "opencode_decision" | "cloudflare_decision" | "gemini_decision" | "openai_decision";
 
 export interface AgentCliProviderChoice {
   value: string;

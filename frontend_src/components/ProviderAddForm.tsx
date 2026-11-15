@@ -6,6 +6,7 @@ import { useClickAway } from "../ui/useClickAway";
 import { Fragment, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { api, localizedApiMessage } from "../api";
 import { t } from "../i18n";
+import { modelLabel } from "../utils";
 import type {
   AgentCliInstance,
   AgentCliProviderField,
@@ -52,7 +53,7 @@ export interface ProviderAddFormProps {
   compact?: boolean;
   onActiveChange?: (active: boolean) => void;
   /**
-   * The form is shown on request (Settings' Add Account): Cancel, a
+   * The form is shown on request (Settings' Add Provider): Cancel, a
    * finished account and a click elsewhere close it, and the provider list takes the focus
    * when it opens. A click on `opener`, the control that shows it, leaves that to the control.
    */
@@ -283,7 +284,7 @@ export function ProviderAddForm({
       >
         {allowAutomatic && <option value="">{t("settings.agentcliModelAuto")}</option>}
         {form.models.length
-          ? form.models.map((model) => <option key={model} value={model}>{model}</option>)
+          ? form.models.map((model) => <option key={model} value={model}>{modelLabel(adding?.kind, model)}</option>)
           : !allowAutomatic && <option value="">{t("settings.agentcliNoModels")}</option>}
       </BusySelect>
     </label>

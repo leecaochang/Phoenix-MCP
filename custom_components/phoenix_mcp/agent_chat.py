@@ -40,7 +40,8 @@ from .llm.base import (
 from .llm.provider_claude import ClaudeProvider
 from .llm.provider_openai import OpenAICompatProvider
 from .provider_constants import (
-    AGENT_CHAT_MAX_ITERATIONS, AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS, AGENT_CHAT_MAX_TURN_OUTPUT_BYTES,
+    AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_CHAT_MAX_ITERATIONS, AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS,
+    AGENT_CHAT_MAX_TURN_OUTPUT_BYTES,
 )
 from .routing.chat_routing import async_route_chat_command
 from .routing.command_routing import RoutingAuthority
@@ -470,10 +471,11 @@ async def async_run_voice_turn(
         ),
         seed=user_text, client_ip=VOICE_AGENT_CLIENT_IP, max_iterations=max_iterations,
         detect_focus_refusal=home_focused, routing_surface="voice", routing_language=language,
-        # A local Ollama server's first reply includes loading the model and
-        # reading the whole prompt on the operator's own hardware, which can take
-        # minutes; only the silent-stream bound applies there.
-        first_reply_seconds=None if getattr(provider, "kind", "") == "ollama" else VOICE_FIRST_REPLY_SECONDS,
+        # A local server's first reply includes loading the model and reading the
+        # whole prompt on the operator's own hardware, which can take minutes;
+        # only the silent-stream bound applies there.
+        first_reply_seconds=(None if getattr(provider, "kind", "") in AGENT_CHAT_LOCAL_SERVER_KINDS
+                             else VOICE_FIRST_REPLY_SECONDS),
         still_bound=still_bound,
     )
     voice_result(turn.outcome, bool(turn.review_urls), bool(turn.text.strip()))

@@ -58,6 +58,7 @@ from .provider_constants import (
     AGENT_CHAT_MAX_TURN_OUTPUT_BYTES, AGENT_CHAT_PROGRESS_INTERVAL_SECONDS,
     AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS, AGENT_CHAT_STATUS_INTERVAL_SECONDS,
     AGENT_CHAT_TOOL_RESULT_MAX_CHARS, AGENT_HEADLESS_CALL_SECONDS, AGENT_HEADLESS_LOCAL_CALL_SECONDS,
+    AGENT_CHAT_LOCAL_SERVER_KINDS,
 )
 from .request_authority import AuthorityChangedError, household_authority
 from .routing.routing_statistics import provider_events
@@ -1869,8 +1870,8 @@ async def _stream_headless_round(
 
 
 def _headless_call_seconds(provider: ClaudeProvider | OpenAICompatProvider) -> float:
-    """The longest one headless model call may take; longer for a local Ollama server."""
-    if getattr(provider, "kind", "") == "ollama":
+    """The longest one headless model call may take; longer for a server the operator runs."""
+    if getattr(provider, "kind", "") in AGENT_CHAT_LOCAL_SERVER_KINDS:
         return AGENT_HEADLESS_LOCAL_CALL_SECONDS
     return AGENT_HEADLESS_CALL_SECONDS
 

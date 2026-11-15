@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   formatDate, formatDateTime, accessKeyStatus, copyToClipboard, HIGH_RISK_DOMAINS,
-  friendlyToolName, friendlyResource,
+  friendlyToolName, friendlyResource, modelLabel,
 } from "../utils";
 import type { AccessKeyRecord } from "../types";
 
@@ -212,5 +212,17 @@ describe("approval status and reason labels", () => {
     expect(localizedApprovalReason("Configuration changed; replaced by a fresh review."))
       .toBe(localizedApprovalReason("recovery_review_replaced"));
     expect(localizedApprovalReason("The admin's own words")).toBe("The admin's own words");
+  });
+});
+
+describe("modelLabel", () => {
+  it("shows a local server's model file by its name and keeps other ids", () => {
+    expect(modelLabel("local_openai", "/models/chat/example-7b-instruct-Q4_K_M.gguf")).toBe("example-7b-instruct-Q4_K_M");
+    expect(modelLabel("local_openai", "C:\\models\\example-70b-Q4_K_M-00001-of-00002.gguf")).toBe("example-70b-Q4_K_M");
+    expect(modelLabel("local_openai", "lmstudio-community/example-3b-mlx")).toBe("lmstudio-community/example-3b-mlx");
+    expect(modelLabel("local_openai", "models/example-7b.gguf")).toBe("example-7b");
+    expect(modelLabel("local_openai", "example-alias")).toBe("example-alias");
+    expect(modelLabel("together", "meta-llama/Llama-3.3-70B-Instruct")).toBe("meta-llama/Llama-3.3-70B-Instruct");
+    expect(modelLabel(undefined, "/a/b.gguf")).toBe("/a/b.gguf");
   });
 });

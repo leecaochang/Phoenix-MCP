@@ -4,7 +4,7 @@ import { api } from "../api";
 import { ActionButton } from "../ui/ActionButton";
 import { useClickAway } from "../ui/useClickAway";
 import { ConfigTable, type Column } from "../ui/table/ConfigTable";
-import { effortLevelLabel, formatDateTime } from "../utils";
+import { effortLevelLabel, formatDateTime, modelLabel } from "../utils";
 import type { AgentCliInstance, AgentCliProviderType, GlobalSettings, ToolLoadingMode } from "../types";
 import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
@@ -68,6 +68,8 @@ function WarningBadge({ text, onShow }: { text: string; onShow: () => void }) {
 type CardResult =
   | { kind: "refreshed"; models: number; declared: boolean }
   | { kind: "probed"; calls: number; levels?: string[]; effortCheckable: boolean; answered: boolean;
+      /** A local model's thinking, present only when the check looked at it. */
+      thinking?: "switch" | "always" | "none";
       /** The image check's finding, present only when it ran. */
       vision?: "seen" | "unseen" | "inconclusive" }
   | { kind: "failed"; message: string };
@@ -101,6 +103,7 @@ function probedCard(r: Awaited<ReturnType<typeof api.probeAgentCliCapabilities>>
     answered: r.answered === true,
     levels,
     effortCheckable: r.effort_checkable === true,
+    ...(r.thinking === "switch" || r.thinking === "always" || r.thinking === "none" ? { thinking: r.thinking } : {}),
     ...(r.vision_checked === true ? {
       vision: r.probed.vision === true ? "seen" : r.probed.vision === false ? "unseen" : "inconclusive",
     } as const : {}),
@@ -121,6 +124,9 @@ function cardResultText(r: CardResult): string {
     ? t("settings.agentcliProbedLevels", {
         levels: r.levels.map(effortLevelLabel).join(t("common.listSeparator")),
       })
+    : r.thinking === "switch" ? t("settings.agentcliProbedThinkingSwitch")
+    : r.thinking === "always" ? t("settings.agentcliProbedThinkingAlways")
+    : r.thinking === "none" ? t("settings.agentcliProbedThinkingNone")
     : r.effortCheckable
       ? t("settings.agentcliProbedNothing")
       : t("settings.agentcliProbedNoLevels");
@@ -138,7 +144,7 @@ interface Props {
   settings: GlobalSettings;
   onChange: (key: keyof GlobalSettings, value: string | number | boolean) => void;
   saving: boolean;
-  /** The form adding an account is shown; the toolbar's Add Account shows and hides it. */
+  /** The form adding an account is shown; the toolbar's Add Provider shows and hides it. */
   adding: boolean;
   onAddingChange: (adding: boolean) => void;
 }
@@ -441,13 +447,13 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
     { id: "provider", label: t("settings.colProvider"), cell: (inst) => typeLabel(inst.kind), sortValue: (inst) => typeLabel(inst.kind) },
     {
       id: "model", label: t("settings.colModel"), maxWidth: 320, sortValue: (inst) => inst.model ?? "",
-      cell: (inst) => inst.model_mode === "auto" ? t("settings.modelWithMode", { model: inst.model || t("settings.agentcliNotSet"), mode: t("settings.modelAutomatic") }) : (inst.model || t("settings.agentcliNotSet")),
+      cell: (inst) => inst.model_mode === "auto" ? t("settings.modelWithMode", { model: inst.model ? modelLabel(inst.kind, inst.model) : t("settings.agentcliNotSet"), mode: t("settings.modelAutomatic") }) : (inst.model ? modelLabel(inst.kind, inst.model) : t("settings.agentcliNotSet")),
     },
   ];
 
   /** The chosen account's options, under its row: a line for what an action found, then the actions. */
   const options = (inst: AgentCliInstance) => {
-    const probeHelp = tPlain("settings.agentcliProbeBody", { model: inst.model, name: inst.name });
+    const probeHelp = tPlain("settings.agentcliProbeBody", { model: modelLabel(inst.kind, inst.model), name: inst.name });
     const removeHelp = tPlain("settings.agentcliRemoveBody", { name: inst.name });
     const retiredBadge = modelIsStale(inst) && isDismissed(inst, "retired");
     const noToolsBadge = Boolean(inst.model && cannotCallTools(inst, inst.model) && isDismissed(inst, "notools"));
@@ -455,26 +461,26 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
       <section ref={panel} className="phx-provider-account" aria-label={inst.name}>
         {modelIsStale(inst) && !isDismissed(inst, "retired") && (
           <DismissibleWarning
-            text={t("settings.agentcliModelRetired", { model: inst.model })}
+            text={t("settings.agentcliModelRetired", { model: modelLabel(inst.kind, inst.model) })}
             onDismiss={() => setDismissedFlag(inst, "retired", true)}
           />
         )}
         {inst.model && cannotCallTools(inst, inst.model) && !isDismissed(inst, "notools") && (
           <DismissibleWarning
-            text={t("settings.agentcliDefaultNoTools", { model: inst.model })}
+            text={t("settings.agentcliDefaultNoTools", { model: modelLabel(inst.kind, inst.model) })}
             onDismiss={() => setDismissedFlag(inst, "notools", true)}
           />
         )}
         {/* What the last action found; the line is hidden while there is nothing to say. */}
         <div className="agentcli-settings-hint phx-provider-info" role="status">
-          {inst.model_replaced_from && <p>{t("settings.agentcliModelReplaced", { retired: inst.model_replaced_from, model: inst.model })}</p>}
+          {inst.model_replaced_from && <p>{t("settings.agentcliModelReplaced", { retired: modelLabel(inst.kind, inst.model_replaced_from), model: modelLabel(inst.kind, inst.model) })}</p>}
           {refreshResult[inst.id] && <p>{cardResultText(refreshResult[inst.id]!)}</p>}
           {retiredBadge && (
-            <WarningBadge text={t("settings.agentcliModelRetired", { model: inst.model })}
+            <WarningBadge text={t("settings.agentcliModelRetired", { model: modelLabel(inst.kind, inst.model) })}
                           onShow={() => setDismissedFlag(inst, "retired", false)} />
           )}
           {noToolsBadge && (
-            <WarningBadge text={t("settings.agentcliDefaultNoTools", { model: inst.model })}
+            <WarningBadge text={t("settings.agentcliDefaultNoTools", { model: modelLabel(inst.kind, inst.model) })}
                           onShow={() => setDismissedFlag(inst, "notools", false)} />
           )}
         </div>
@@ -488,7 +494,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                 <option value={AUTO_MODEL}>{t("settings.agentcliModelAuto")}</option>
                 {(liveModels[inst.id] ?? []).map((m) => (
                   <option key={m} value={m} disabled={cannotCallTools(inst, m)}>
-                    {cannotCallTools(inst, m) ? t("settings.agentcliModelNoTools", { model: m }) : m}
+                    {cannotCallTools(inst, m) ? t("settings.agentcliModelNoTools", { model: modelLabel(inst.kind, m) }) : modelLabel(inst.kind, m)}
                   </option>
                 ))}
                 {/* The stored model when the provider no longer lists it. It has
@@ -497,7 +503,7 @@ export function LlmProviderSettings({ settings, onChange, saving, adding, onAddi
                     a deleted model could be re-selected. */}
                 {modelIsStale(inst) && (
                   <option value={inst.model} disabled>
-                    {t("settings.agentcliModelUnavailable", { model: inst.model })}
+                    {t("settings.agentcliModelUnavailable", { model: modelLabel(inst.kind, inst.model) })}
                   </option>
                 )}
               </BusySelect>

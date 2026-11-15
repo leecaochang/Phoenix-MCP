@@ -25,7 +25,29 @@ PROVIDER_API_KEY_MAX_LENGTH = 4096
 AGENT_CHAT_PROVIDERS = frozenset({
     "claude", "deepseek", "chatgpt", "gemini", "grok", "kimi", "meta",
     "minimax", "mistral", "openrouter", "nvidia", "ollama", "ollama_cloud",
-    "zai", "groq", "together", "cerebras", "cloudflare", "fireworks", "qwen", "opencode", "mimo", "tencent", "infron"})
+    "zai", "groq", "together", "cerebras", "cloudflare", "fireworks", "qwen", "opencode", "mimo", "tencent", "infron",
+    "local_openai"})
+# Kinds whose models run on a server the operator supplies (often on the home network), so its
+# address may be private and its first reply includes loading the model on the operator's hardware.
+AGENT_CHAT_LOCAL_SERVER_KINDS = frozenset({"ollama", "local_openai"})
+# Bionic's own model list, beside its OpenAI one: it gives each model's type, and leaves out the voice
+# model its OpenAI list still names. Read from the server root, the address without /v1.
+AGENT_CHAT_LOCAL_NATIVE_MODELS_PATH = "/api/v1/models"
+# The software behind a local server, shown in its account name so two accounts can be told apart.
+# Bionic answers the typed list above; llama.cpp and vLLM name themselves in every model's owned_by.
+AGENT_CHAT_LOCAL_NATIVE_SERVER = "Bionic"
+# Bionic's declared reasoning options on the reasoning_effort wire: its "off" is "none", and its "on"
+# (the model's default) has no value, so it is left out. The other options are already wire levels.
+AGENT_CHAT_LOCAL_REASONING_WIRE = MappingProxyType({"off": "none"})
+# Ways to turn a local server's thinking off, tried in order by Check Options on a model whose server
+# declared nothing; the first that stops it is stored as the model's off method. llama.cpp and Bionic
+# read reasoning_effort "none"; a template such as Qwen's on another server reads enable_thinking.
+AGENT_CHAT_LOCAL_THINKING_OFF_METHODS = ("reasoning_effort", "enable_thinking")
+# llama.cpp's report on its loaded model, read from the server root: image support, and its chat
+# template's tool support and effort levels. It describes one model, so a multi-model list skips it.
+AGENT_CHAT_LOCAL_PROPS_PATH = "/props"
+AGENT_CHAT_LOCAL_SERVER_OWNERS = MappingProxyType({"llamacpp": "llama.cpp", "vllm": "vLLM"})
+AGENT_CHAT_LOCAL_SERVER_NAMES = frozenset({AGENT_CHAT_LOCAL_NATIVE_SERVER, *AGENT_CHAT_LOCAL_SERVER_OWNERS.values()})
 # Default endpoints/models; the panel may override the model per conversation.
 AGENT_CHAT_CLAUDE_BASE_URL = "https://api.anthropic.com"
 AGENT_CHAT_ANTHROPIC_VERSION = "2023-06-01"

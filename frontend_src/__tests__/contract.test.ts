@@ -156,6 +156,7 @@ const PROVIDER_KINDS = {
   gemini_decision: true,
   openai_decision: true,
   cloudflare: true,
+  local_openai: true,
 } satisfies Record<AgentCliProviderKind, true>;
 
 describe("frontend/backend agentCLI provider contract", () => {

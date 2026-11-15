@@ -30,7 +30,10 @@ from ..provider_constants import (
     AGENT_CHAT_DEEPSEEK_MAX_TOKENS, AGENT_CHAT_NVIDIA_MAX_TOKENS, AGENT_CHAT_OPENCODE_CHAT_MODELS,
     AGENT_CHAT_OPENCODE_CONSOLE_BASE_URL, AGENT_CHAT_OPENCODE_LEGACY_CHAT_EXCEPTIONS,
     AGENT_CHAT_OLLAMA_REPLY_SHARE, AGENT_CHAT_PROBE_IMAGE_MAX_TOKENS, AGENT_CHAT_PROMPT_CHARS_PER_TOKEN,
-    AGENT_CHAT_REASONING_PROBE_MAX_TOKENS, AGENT_CHAT_CLOUDFLARE_MODELS_QUERY,
+    AGENT_CHAT_REASONING_PROBE_MAX_TOKENS, AGENT_CHAT_CLOUDFLARE_MODELS_QUERY, AGENT_CHAT_LOCAL_NATIVE_MODELS_PATH,
+    AGENT_CHAT_LOCAL_NATIVE_SERVER, AGENT_CHAT_LOCAL_REASONING_WIRE, AGENT_CHAT_LOCAL_SERVER_OWNERS,
+    AGENT_CHAT_LOCAL_PROPS_PATH, AGENT_CHAT_LOCAL_THINKING_OFF_METHODS,
+    AGENT_CHAT_EFFORT_LEVEL_ORDER,
 )
 
 
@@ -69,6 +72,79 @@ _NON_CHAT_MODEL_RE = re.compile(
 def _filter_generic_chat_models(models: list[str]) -> list[str]:
     """Drop catalog entries whose identifiers prove they are not chat models."""
     chat = sorted(model for model in models if not _NON_CHAT_MODEL_RE.search(model))
+    return chat or sorted(models)
+
+
+def _bionic_capabilities(rows: list[dict]) -> dict[str, dict]:
+    """What Bionic declares for each language model: vision, tool training and reasoning options.
+
+    Its reasoning options become effort levels on the reasoning_effort wire; a model offering only off
+    and on gets an on/off switch. A model not trained for tools can still try them, so only a trained
+    one is marked. A model that declares capabilities but no reasoning does not reason.
+    """
+    out: dict[str, dict] = {}
+    for row in rows:
+        caps = row.get("capabilities")
+        if row.get("type") != "llm" or not isinstance(caps, dict):
+            continue
+        entry: dict[str, Any] = {}
+        if isinstance(caps.get("vision"), bool):
+            entry["vision"] = caps["vision"]
+        if caps.get("trained_for_tool_use") is True:
+            entry["tools"] = True
+        reasoning: dict = caps["reasoning"] if isinstance(caps.get("reasoning"), dict) else {}
+        options = reasoning.get("allowed_options")
+        if isinstance(options, list):
+            wire = {AGENT_CHAT_LOCAL_REASONING_WIRE.get(option, option) for option in options if isinstance(option, str)}
+            levels = [level for level in AGENT_CHAT_EFFORT_LEVEL_ORDER if level in wire]
+            entry["thinking"] = True
+            if any(level != "none" for level in levels):
+                entry["effort_levels"] = levels
+                default = reasoning.get("default")
+                default = AGENT_CHAT_LOCAL_REASONING_WIRE.get(default, default) if isinstance(default, str) else None
+                if default in levels:
+                    entry["thinking_default"] = default
+            else:
+                entry["effort"] = False
+        elif "reasoning" not in caps:
+            entry["thinking"] = False
+        out[row["key"]] = entry
+    return out
+
+
+def _llamacpp_capabilities(props: dict | None) -> dict:
+    """What llama.cpp reports about its loaded model: image support, tool support, effort levels.
+
+    Its effort levels are those its chat template reads, sent as reasoning_effort. A template without
+    native tool calls still gets llama.cpp's generic format, so only native support is marked.
+    """
+    entry: dict[str, Any] = {}
+    modalities = props.get("modalities") if isinstance(props, dict) else None
+    if isinstance(modalities, dict) and isinstance(modalities.get("vision"), bool):
+        entry["vision"] = modalities["vision"]
+    caps = props.get("chat_template_caps") if isinstance(props, dict) else None
+    if isinstance(caps, dict):
+        if caps.get("supports_tool_calls") is True:
+            entry["tools"] = True
+        levels = caps.get("reasoning_effort_levels")
+        if caps.get("supports_reasoning_effort") is True and isinstance(levels, list):
+            ordered = [level for level in AGENT_CHAT_EFFORT_LEVEL_ORDER if level in levels]
+            if ordered:
+                entry["thinking"] = True
+                entry["effort_levels"] = ordered
+    return entry
+
+
+def local_thinking_off(method: str) -> dict:
+    """The request fields that turn a local server's thinking off by one of its off methods."""
+    if method == "enable_thinking":
+        return {"chat_template_kwargs": {"enable_thinking": False}}
+    return {"reasoning_effort": "none"}
+
+
+def _filter_local_models(models: list[str]) -> list[str]:
+    """A local server's chat models, judged by file name: llama.cpp lists a model by its path."""
+    chat = sorted(model for model in models if not _NON_CHAT_MODEL_RE.search(re.split(r"[/\\]", model)[-1]))
     return chat or sorted(models)
 
 
@@ -304,6 +380,8 @@ class OpenAICompatProvider:
         self.model_created: dict[str, float] = {}
         # Filled by list_models on a local Ollama server: listed models that run on ollama.com.
         self.model_remote: set[str] = set()
+        # Filled by list_models on a local server: the software it runs, when its list says so.
+        self.server_name: str | None = None
 
     @property
     def _is_ollama(self) -> bool:
@@ -481,6 +559,17 @@ class OpenAICompatProvider:
                     "- 'localhost' here means the HA server, not your PC.",
                     "providerOllamaUnreachable", url=self.cfg.base_url, detail=str(exc),
                 )
+            if self.kind == "local_openai":
+                return False, LocalizedReason(
+                    f"Could not reach the server at {self.cfg.base_url}.\n"
+                    f"({exc})\n\n"
+                    "Phoenix MCP connects from the Home Assistant server, not your browser, so "
+                    "the server must be reachable from that host:\n"
+                    "- The server is running and listening on a reachable address, not only 127.0.0.1.\n"
+                    "- The firewall allows the server's port.\n"
+                    "- 'localhost' here means the HA server, not your PC.",
+                    "providerLocalServerUnreachable", url=self.cfg.base_url, detail=str(exc),
+                )
             if self._is_ollama_cloud:
                 return False, LocalizedReason(f"Could not reach Ollama Cloud at {self.cfg.base_url}. ({exc})", "providerOllamaCloudUnreachable", url=self.cfg.base_url, detail=str(exc))
             return False, LocalizedReason(f"Could not reach the provider: {exc}", "providerUnreachable", detail=str(exc))
@@ -548,9 +637,57 @@ class OpenAICompatProvider:
                 models = _filter_meta_models(models)
             elif self.definition.model_filter == "chat":
                 models = _filter_generic_chat_models(models)
+            elif self.definition.model_filter == "local":
+                models = _filter_local_models(models)
+                chat = await self._native_chat_models(session)
+                owners = {row["owned_by"] for row in data if isinstance(row, dict) and isinstance(row.get("owned_by"), str)}
+                if chat is not None:
+                    models = [m for m in models if m in chat]
+                    self.server_name = AGENT_CHAT_LOCAL_NATIVE_SERVER
+                elif len(owners) == 1 and (owner := owners.pop()) in AGENT_CHAT_LOCAL_SERVER_OWNERS:
+                    self.server_name = AGENT_CHAT_LOCAL_SERVER_OWNERS[owner]
             return models or ([self.cfg.model] if self.cfg.model else [])
         except (ClientError, asyncio.TimeoutError, ValueError):
             return self._model_fallback()
+
+    async def _native_chat_models(self, session: ClientSession) -> set[str] | None:
+        """The models a Bionic server types as language models; None when the server has no such list.
+
+        Its OpenAI list also names the voice and embedding models it bundles for itself, which cannot chat.
+        """
+        rows = await self._native_rows(session)
+        return {row["key"] for row in rows if row["type"] == "llm"} if rows is not None else None
+
+    async def _server_props(self, session: ClientSession) -> dict | None:
+        """llama.cpp's report on its loaded model; None when the server has none."""
+        if not self.cfg.base_url.endswith("/v1"):
+            return None
+        url = f"{self.cfg.base_url[:-len('/v1')]}{AGENT_CHAT_LOCAL_PROPS_PATH}"
+        try:
+            async with session.get(url, headers=self._headers(), timeout=_PROBE_TIMEOUT, allow_redirects=False) as resp:
+                if resp.status != 200:
+                    return None
+                body = await _read_json(resp)
+        except (ClientError, asyncio.TimeoutError, ValueError):
+            return None
+        return body if isinstance(body, dict) else None
+
+    async def _native_rows(self, session: ClientSession) -> list[dict] | None:
+        """Bionic's typed model rows (each with a string key and type); None when it has none."""
+        if not self.cfg.base_url.endswith("/v1"):
+            return None
+        url = f"{self.cfg.base_url[:-len('/v1')]}{AGENT_CHAT_LOCAL_NATIVE_MODELS_PATH}"
+        try:
+            async with session.get(url, headers=self._headers(), timeout=_PROBE_TIMEOUT, allow_redirects=False) as resp:
+                if resp.status != 200:
+                    return None
+                body = await _read_json(resp)
+        except (ClientError, asyncio.TimeoutError, ValueError):
+            return None
+        rows = body.get("models") if isinstance(body, dict) else None
+        typed = [row for row in rows or [] if isinstance(row, dict)
+                 and isinstance(row.get("key"), str) and isinstance(row.get("type"), str)]
+        return typed or None
 
     async def probe_image(self, session: ClientSession, image: str, question: str) -> tuple[int | None, str]:
         """Status and reply text for one question about an attached PNG (see async_probe_vision)."""
@@ -582,10 +719,14 @@ class OpenAICompatProvider:
 
     async def probe_reasoning(self, session: ClientSession, effort: str) -> tuple[int | None, bool]:
         """Status for a small question at this effort, and whether the model visibly reasoned."""
+        return await self.probe_thinking(session, {"reasoning": {"effort": effort}})
+
+    async def probe_thinking(self, session: ClientSession, extra: dict) -> tuple[int | None, bool]:
+        """Status for a small question carrying `extra`, and whether the model visibly reasoned."""
         body = {
             "model": self.cfg.model, "max_tokens": AGENT_CHAT_REASONING_PROBE_MAX_TOKENS, "stream": False,
             "messages": [{"role": "user", "content": "What is 17 times 23? Answer with the number."}],
-            "reasoning": {"effort": effort},
+            **extra,
         }
         try:
             async with session.post(self._chat_url(), headers=self._headers(), json=body,
@@ -633,6 +774,14 @@ class OpenAICompatProvider:
             if self._is_ollama:
                 return await _ollama_capabilities(
                     session, self.cfg.base_url, self._headers(), models)
+            if self.definition.model_filter == "local":
+                rows = await self._native_rows(session)
+                if rows is not None:
+                    return {model: row for model, row in _bionic_capabilities(rows).items() if model in models}
+                if len(models) == 1:
+                    found = _llamacpp_capabilities(await self._server_props(session))
+                    return {models[0]: found} if found else {}
+                return {}
             if self.definition.model_filter in ("openrouter", "infron"):
                 async with session.get(
                     f"{self.cfg.base_url}/models", headers=self._headers(),
@@ -765,6 +914,10 @@ class OpenAICompatProvider:
                 body["reasoning"] = {"effort": effort}
             elif effort:
                 body["reasoning_effort"] = effort
+            elif thinking is False and self.kind == "local_openai":
+                # An on/off model on a local server: its off method turns it off, and on is its default.
+                method = self.cfg.thinking_off if self.cfg.thinking_off in AGENT_CHAT_LOCAL_THINKING_OFF_METHODS else ""
+                body.update(local_thinking_off(method))
         elif self.definition.reasoning == "meta":
             # Meta's Model API takes a top-level reasoning_effort (minimal/low/
             # medium/high/xhigh; "none" is rejected by Muse Spark, which always

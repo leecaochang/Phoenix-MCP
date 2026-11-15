@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 金鑰", "模型", "LLM", "帳戶", "額度", "TypeSafe", "JEV", "Clef", "Gemini Decision"], "sectionKeywords": { "provider-add": ["新帳戶", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenRouter", "Infron", "Together AI", "Cerebras", "Cloudflare Workers AI", "Workers AI", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通義千問", "千問", "阿里雲百煉", "百煉", "智譜", "月之暗面", "騰訊雲", "小米", "離線", "本機模型", "價格", "計費"], "decision-threshold": ["threshold", "confidence", "probability", "0.90"], "decision-provider": ["TypeSafe", "JEV", "快速路徑", "OpenCode", "System One", "Gemini Decision", "GPT Luna Decision", "Cloudflare", "Workers AI", "Clef", "Clef Flash", "帳戶 ID", "谷歌", "OpenAI Decisions", "gpt-6-luna"], "tool-loading": ["load_tools", "延遲載入", "工具搜尋", "token", "工具太多", "上下文"] } }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 金鑰", "模型", "LLM", "帳戶", "額度", "TypeSafe", "JEV", "Clef", "Gemini Decision"], "sectionKeywords": { "provider-add": ["新帳戶", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenAI-Compatible", "llama.cpp", "Bionic", "LM Studio", "vLLM", "LocalAI", "OpenRouter", "Infron", "Together AI", "Cerebras", "Cloudflare Workers AI", "Workers AI", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通義千問", "千問", "阿里雲百煉", "百煉", "智譜", "月之暗面", "騰訊雲", "小米", "離線", "本機模型", "價格", "計費"], "decision-threshold": ["threshold", "confidence", "probability", "0.90"], "decision-provider": ["TypeSafe", "JEV", "快速路徑", "OpenCode", "System One", "Gemini Decision", "GPT Luna Decision", "Cloudflare", "Workers AI", "Clef", "Clef Flash", "帳戶 ID", "谷歌", "OpenAI Decisions", "gpt-6-luna"], "tool-loading": ["load_tools", "延遲載入", "工具搜尋", "token", "工具太多", "上下文"] } }
 ---
 新增 Phoenix 使用的 AI 帳戶。每個帳戶需要 API 金鑰，或者對於本機模型，需要伺服器位址。
 
@@ -76,12 +76,13 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 - Qwen：除了 API 金鑰，還需要你的工作區基礎 URL，即一個公開的 HTTPS 位址。
 - Cloudflare Workers AI：你的 Cloudflare 帳戶 ID，以及具有 Workers AI 權限的 API 權杖。Phoenix 只列出標記為可使用工具的模型。免費方案每天只有少量額度，部分模型需要 Workers Paid。
 - Ollama（本機）：你的 Ollama 伺服器位址。Home Assistant 會連線它，因此請使用 Home Assistant 主機可以存取的位址。一般 `http://` 流量不加密；請參閱[哪些資料會離開你的家](guide:topic.security#leaves-home)。
+- {{label:settings.providerLocalOpenAI}}：你的 llama.cpp、vLLM、Bionic 或 LocalAI 伺服器位址，例如 `http://host:8080/v1`。位址沒有路徑時，Phoenix 會加上 `/v1`。只有伺服器需要時才填寫 API 金鑰。
 
 有些方案只供程式設計工具使用：Z.ai 的 Coding Plan、Xiaomi MiMo 的 Token Plan，以及阿里雲的 Coding Plan 和 Token Plan。它們的條款禁止在 Home Assistant 這類應用程式中使用，提供商可能會限流或封鎖金鑰。
 
 選擇這些方案時 Phoenix 會發出警告。語音、AI Task 和 Agent Chat 請使用提供商的按量付費 API。
 
-Groq、Mistral AI 和 Z.ai 每個請求最多接受 128 個工具，Phoenix 對 Gemini、Kimi、OpenRouter、Infron 和 Cloudflare Workers AI 也採用同樣的上限。存取金鑰的工具更多時，無論[工具載入](guide:#tool-loading)如何設定，Phoenix 都會為它們分批載入工具。
+Groq、Mistral AI 和 Z.ai 每個請求最多接受 128 個工具。Phoenix 對 Gemini、Kimi、OpenRouter、Infron、Cloudflare Workers AI 和本機 OpenAI 相容伺服器也採用同樣的上限。存取金鑰的工具更多時，無論[工具載入](guide:#tool-loading)如何設定，Phoenix 都會為它們分批載入工具。
 
 Groq 的免費方案限制每個模型每分鐘接受的 Token 數，而單一 Phoenix 請求就超過了這個上限。Groq 會拒絕該請求，等待也無濟於事。請使用 Groq 的付費方案或其他供應商。
 

@@ -13,6 +13,7 @@
     "groq",
     "infron",
     "kimi",
+    "local_openai",
     "meta",
     "mimo",
     "minimax",

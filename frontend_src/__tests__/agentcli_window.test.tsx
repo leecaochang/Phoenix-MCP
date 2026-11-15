@@ -2794,6 +2794,19 @@ describe("modelCaps with declared capabilities", () => {
     expect(c.thinking).toEqual([]);
   });
 
+  it("a local server: no control until declared, then its levels or an on/off switch", () => {
+    expect(modelCaps("local_openai", "example/chat-27b", false).thinking).toEqual([]);
+    const levels = modelCaps("local_openai", "example/chat-27b", false, {
+      thinking: true, effort_levels: ["none", "low", "medium", "xhigh"], thinking_default: "xhigh",
+    });
+    expect([levels.style, vals2(levels), levels.defaultLevel]).toEqual(["effort", ["none", "low", "medium", "xhigh"], "xhigh"]);
+    const onOff = modelCaps("local_openai", "example/chat-9b", false, { thinking: true, effort: false });
+    expect([onOff.style, vals2(onOff), onOff.defaultLevel]).toEqual(["boolean", ["off", "on"], "on"]);
+    expect(modelCaps("local_openai", "example/chat-3b", false, { thinking: false }).thinking).toEqual([]);
+    // Only the local kind gets a switch created from nothing.
+    expect(modelCaps("openrouter", "some/model", false, { thinking: true, effort: false }).thinking).toEqual([]);
+  });
+
   it("removes temperature when the provider declares it unsupported", () => {
     const c = modelCaps("openrouter", "some/model", false, { temperature: false });
     expect(c.temperature).toBe(false);

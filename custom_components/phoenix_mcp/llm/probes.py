@@ -15,9 +15,10 @@ from aiohttp import ClientSession
 from .accounts import ProviderConfig
 from .base import _IMAGE_REFUSAL, _REFUSAL_STATUSES
 from .factory import build_provider
+from .provider_openai import local_thinking_off
 from ..provider_constants import (
     AGENT_CHAT_EFFORT_LEVEL_ORDER, AGENT_CHAT_INFRON_EFFORT_LEVELS, AGENT_CHAT_PROBE_MAX_CALLS,
-    AGENT_CHAT_PROBE_SENTINEL,
+    AGENT_CHAT_LOCAL_THINKING_OFF_METHODS, AGENT_CHAT_PROBE_SENTINEL,
 )
 
 
@@ -120,13 +121,33 @@ async def _observed_effort_levels(provider: Any, session: ClientSession) -> tupl
     return [level for level in AGENT_CHAT_INFRON_EFFORT_LEVELS if stops or level != "none"], 2
 
 
+async def _local_thinking(provider: Any, session: ClientSession) -> tuple[dict, int]:
+    """How a local model's thinking is switched, from what it does; and the calls made.
+
+    A local server may accept any value without reading it, so only the model's behaviour counts: it
+    must think when nothing is sent, then stop under an off method. A model that thinks and stops under
+    none is stored as unable to stop; one that does not visibly think establishes nothing.
+    """
+    status, reasons = await provider.probe_thinking(session, {})
+    if status != 200 or not reasons:
+        return {}, 1
+    calls = 1
+    for method in AGENT_CHAT_LOCAL_THINKING_OFF_METHODS:
+        status, still = await provider.probe_thinking(session, local_thinking_off(method))
+        calls += 1
+        if status == 200 and not still:
+            return {"thinking": True, "effort": False, "thinking_off": method}, calls
+    return {"thinking": True, "thinking_off": ""}, calls
+
+
 async def async_probe_capabilities(
-    session: ClientSession, cfg: ProviderConfig,
+    session: ClientSession, cfg: ProviderConfig, declared: dict | None = None,
 ) -> tuple[dict, int, bool]:
     """What this model's API actually accepts, established by asking it.
 
     Returns (capabilities, calls_made, answered). A value not established is omitted, never guessed.
-    `answered` is False when the control request did not answer 200.
+    `answered` is False when the control request did not answer 200. `declared` is what the server
+    already said about the model; a local model's thinking is probed only when it said nothing.
     """
     # A key with no credit, a revoked key, a refused model or an unreachable host answers every
     # question alike, which must not read as a provider that does not validate its options. The
@@ -141,7 +162,11 @@ async def async_probe_capabilities(
         return caps, calls, False
 
     fragment = _effort_probe_body(cfg.kind, AGENT_CHAT_PROBE_SENTINEL)
-    if cfg.kind == "infron":
+    if cfg.kind == "local_openai" and "thinking" not in (declared or {}):
+        found, used = await _local_thinking(provider, session)
+        calls += used
+        caps.update(found)
+    elif cfg.kind == "infron":
         levels, used = await _observed_effort_levels(provider, session)
         calls += used
         if levels:

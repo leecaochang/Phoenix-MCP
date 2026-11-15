@@ -42,6 +42,7 @@ Every account has a `kind`. Kinds with endpoints take an `endpoint_id`; the firs
 | `opencode` | conversation | `api_key`, `endpoint_id`: `zen`, `console` |
 | `ollama_cloud` | conversation | `api_key` |
 | `ollama` (local) | conversation | `base_url` |
+| `local_openai` (local OpenAI-compatible server) | conversation | `base_url`, optional `api_key` |
 | `openrouter` | conversation | `api_key` |
 | `infron` | conversation | `api_key` |
 | `together` | conversation | `api_key` |
@@ -63,8 +64,8 @@ Adding an account and checking a setup take the same body.
 | Field | Type | Notes |
 |---|---|---|
 | `kind` | string | Required. One of the kinds above. |
-| `api_key` | string | Required for every kind except `ollama`. At most 4096 characters, with no control characters. Phoenix never returns it. |
-| `base_url` | string | Required for `ollama` and `qwen`. Only `ollama` may use a private address. Every other kind uses a fixed endpoint and ignores this field. |
+| `api_key` | string | Required for every kind except `ollama` and `local_openai`. At most 4096 characters, with no control characters. Phoenix never returns it. |
+| `base_url` | string | Required for `ollama`, `local_openai` and `qwen`. Only `ollama` and `local_openai` may use a private address. For `local_openai`, Phoenix adds `/v1` to an address without a path. Every other kind uses a fixed endpoint and ignores this field. |
 | `endpoint_id` | string | Only for kinds with endpoints. Leave it out for the default. |
 | `account_id` | string | Required for `cloudflare` and `cloudflare_decision`: the 32-character Cloudflare account ID. Phoenix builds the endpoint from it. |
 | `model` | string | Optional for conversation kinds; leave it empty to follow the provider automatically. Required for decision kinds: at most 200 characters, and in the provider's current list. |
@@ -114,7 +115,7 @@ The response is `201` with `{"instance": {...}}`, holding the account fields abo
 | 400 | `invalid_request` | `adminError.providerApiKeyRequired` | `api_key` is missing. |
 | 400 | `invalid_request` | `adminError.providerEndpointInvalid` | `endpoint_id` isn't one of the kind's values. |
 | 400 | `invalid_request` | `adminError.providerAccountIdInvalid` | `account_id` isn't 32 hexadecimal characters. |
-| 400 | `invalid_request` | `adminError.ollamaUrlRequired`, `adminError.providerBaseUrlRequired` | A required `base_url` is missing. |
+| 400 | `invalid_request` | `adminError.ollamaUrlRequired`, `adminError.providerServerUrlRequired`, `adminError.providerBaseUrlRequired` | A required `base_url` is missing. |
 | 400 | `invalid_request` | `adminError.providerUrlInvalid`, `adminError.providerUrlScheme`, `adminError.providerRemoteUrlScheme`, `adminError.providerUrlHostRequired`, `adminError.providerUrlCredentialsForbidden`, `adminError.providerUrlFragmentForbidden`, `adminError.providerUrlAddressForbidden`, `adminError.providerUrlResolutionForbidden`, `adminError.providerRemoteUrlAddressForbidden`, `adminError.providerRemoteUrlResolutionForbidden`, `adminError.providerRemoteUrlResolutionFailed` | `base_url` isn't an acceptable URL. |
 | 400 | `invalid_request` | `adminError.providerConnectionFailed`, or a key for the provider's own failure | The credential check failed. `adminError.providerConnectionFailed` comes with a `detail`. |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | A decision kind has no `model`. |
@@ -191,7 +192,7 @@ The response has `models`, `capabilities`, `declared` (whether the provider repo
 
 Phoenix sends up to 10 very short completions, plus one image check when image support is unknown. The result goes over the declared capabilities.
 
-The response has `model`, `probed`, `calls`, `checked_at`, `effort_checkable`, `answered` and `vision_checked`. `answered` is `false` when the provider declined every question.
+The response has `model`, `probed`, `calls`, `checked_at`, `effort_checkable`, `answered`, `vision_checked` and `thinking`. `answered` is `false` when the provider declined every question. `thinking` is `switch`, `always` or `none` when a `local_openai` model's thinking was checked, and `null` otherwise.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|

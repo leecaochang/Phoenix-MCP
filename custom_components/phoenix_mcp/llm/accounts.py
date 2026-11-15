@@ -21,7 +21,7 @@ from ..model_selection import effective_model
 from ..provider_constants import (
     AGENT_CHAT_CEREBRAS_BASE_URL, AGENT_CHAT_CLAUDE_BASE_URL, AGENT_CHAT_CLOUDFLARE_BASE_URL, AGENT_CHAT_DEEPSEEK_BASE_URL,
     AGENT_CHAT_FIREWORKS_BASE_URL, AGENT_CHAT_GEMINI_BASE_URL, AGENT_CHAT_GROK_BASE_URL,
-    AGENT_CHAT_GROK_US_BASE_URL, AGENT_CHAT_GROQ_BASE_URL, AGENT_CHAT_INFRON_BALANCE_URL,
+    AGENT_CHAT_GROK_US_BASE_URL, AGENT_CHAT_GROQ_BASE_URL, AGENT_CHAT_INFRON_BALANCE_URL, AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_CHAT_LOCAL_SERVER_NAMES,
     AGENT_CHAT_INFRON_BASE_URL, AGENT_CHAT_KIMI_BASE_URL,
     AGENT_CHAT_KIMI_CHINA_BASE_URL, AGENT_CHAT_LEARNABLE_OPTIONS, AGENT_CHAT_LEARNED_REFUSAL_TTL_DAYS,
     AGENT_CHAT_MAX_CATALOG_MODELS, AGENT_CHAT_MAX_MODEL_ID_LENGTH,
@@ -53,7 +53,9 @@ _MODEL_SEEN_LIMIT = 1000
 
 # What a probe finds and a provider's catalogue may not state, and the successor a provider named,
 # which must outlive the model's own row once the catalogue drops it.
-_PROBED_CAPABILITIES = ("effort_levels", "temperature", "replacement")
+# Probed facts a catalogue read does not retest, so they outlive it. A local model's thinking switch is
+# found only by Check Options, as its server declares nothing about it.
+_PROBED_CAPABILITIES = ("effort_levels", "temperature", "replacement", "thinking", "effort", "thinking_off")
 
 
 # Bounds on a stored capability row's own keys and text values; model ids use the catalogue's.
@@ -244,6 +246,13 @@ _CLOUDFLARE_ACCOUNT_FIELD = ProviderField(
 _OLLAMA_URL_FIELD = ProviderField(
     "base_url", "url", "settings.agentcliServerUrl", placeholder="http://host:11434",
 )
+# llama.cpp, vLLM, Bionic and LocalAI serve the OpenAI paths under /v1; a key is optional.
+_LOCAL_OPENAI_URL_FIELD = ProviderField(
+    "base_url", "url", "settings.agentcliServerUrl", placeholder="http://host:8080/v1",
+)
+_OPTIONAL_API_KEY_FIELD = ProviderField(
+    "api_key", "secret", "settings.agentcliApiKeyOptional", required=False,
+)
 _QWEN_URL_FIELD = ProviderField(
     "base_url", "url", "settings.agentcliBaseUrl",
     placeholder="https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
@@ -353,6 +362,7 @@ _PROVIDER_LABEL_KEYS = {
     "opencode": "settings.providerOpenCodeZen",
     "ollama_cloud": "settings.providerOllamaCloud",
     "ollama": "settings.providerOllamaLocal",
+    "local_openai": "settings.providerLocalOpenAI",
     "openrouter": "settings.providerOpenRouter",
     "together": "settings.providerTogether",
     "cerebras": "settings.providerCerebras",
@@ -431,6 +441,11 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         ),
         _definition("ollama_cloud", "Ollama (cloud)", AGENT_CHAT_OLLAMA_CLOUD_BASE_URL, include_usage=True, reasoning="ollama", ollama="cloud"),
         _definition("ollama", "Ollama (local)", "", fields=(_OLLAMA_URL_FIELD,), include_usage=True, reasoning="ollama", ollama="local"),
+        # A server the operator runs. It declares no capabilities, so tools, images and
+        # reasoning levels are learned from probes and refusals; the OpenAI cap is kept.
+        _definition("local_openai", "OpenAI-Compatible", "",
+                    fields=(_LOCAL_OPENAI_URL_FIELD, _OPTIONAL_API_KEY_FIELD), include_usage=True,
+                    reasoning="probed_effort", model_filter="local", max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
         # OpenRouter forwards the tools array to the routed provider, and OpenAI's
         # models behind it refuse more than 128.
         _definition("openrouter", "OpenRouter", AGENT_CHAT_OPENROUTER_BASE_URL, include_usage=True, reasoning="probed_effort",
@@ -545,14 +560,34 @@ def _host_of(url: str) -> str:
         return ""
 
 
+def _host_port_of(url: str) -> str:
+    """The host of a URL with its port when it names one; "" when unparseable."""
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except ValueError:
+        return ""
+    host = parsed.hostname or ""
+    if host and ":" in host:
+        host = f"[{host}]"
+    return f"{host}:{port}" if host and port else host
+
+
 def _instance_name(inst: dict, has_dupes: bool, instance_id: str) -> str:
     """Disambiguate accounts using server-owned identity or endpoint metadata."""
     kind = inst.get("kind", "")
     label = _KINDS.get(kind, {}).get("label", kind)
+    if kind == "local_openai":
+        # Named by the software it runs, and by address only beside another account of this kind.
+        server = _catalog_of(inst).get("server")
+        parts = [part for part in (server if server in AGENT_CHAT_LOCAL_SERVER_NAMES else "",
+                                   _host_port_of(inst.get("base_url", "")) if has_dupes else "") if part]
+        return f"{label} ({', '.join(parts)})" if parts else label
     if not has_dupes:
         return label
-    if kind == "ollama":
-        host = _host_of(inst.get("base_url", ""))
+    if kind in AGENT_CHAT_LOCAL_SERVER_KINDS:
+        # One computer can run several servers, so the port tells them apart.
+        host = _host_port_of(inst.get("base_url", ""))
         return f"{label} ({host})" if host else label
     if kind == "qwen":
         host = _host_of(inst.get("base_url", ""))
@@ -602,7 +637,7 @@ class DuplicateProviderError(ValueError):
 
 
 def _normalized_provider_url(value: object) -> str:
-    """Normalize an endpoint URL (Ollama, Qwen) for duplicate detection only."""
+    """Normalize an endpoint URL (local servers, Qwen) for duplicate detection only."""
     raw = str(value or "").strip()
     try:
         parsed = urlparse(raw)
@@ -627,10 +662,10 @@ def _normalized_provider_url(value: object) -> str:
 def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
     """Return the in-memory identity rejecting duplicate accounts; never stored or returned.
 
-    The endpoint for Ollama, the credential for most kinds, both for Qwen and endpoint-bound keys.
-    OpenCode keeps its credential across Zen and Console.
+    The endpoint for a local server, the credential for most kinds, both for Qwen and endpoint-bound
+    keys. OpenCode keeps its credential across Zen and Console.
     """
-    if kind == "ollama":
+    if kind in AGENT_CHAT_LOCAL_SERVER_KINDS:
         return kind, _normalized_provider_url(cfg.get("base_url"))
     if kind == "qwen":
         return kind, "\0".join((
@@ -755,13 +790,14 @@ class AgentCliStore:
 
     async def set_catalog(
         self, instance_id: str, models: list[str], created: dict[str, float], checked_at: str,
-        eligible: list[str] | None = None, remote: Any = (),
+        eligible: list[str] | None = None, remote: Any = (), server: str | None = None,
     ) -> bool:
         """Cache what the provider lists for this account; an empty listing is not recorded.
 
         `seen` accumulates every listed id, separating a retired model from a custom deployment the
         listing never held, which must be left alone. `remote` names listed models that run
-        elsewhere (a local Ollama server's cloud models), which no automatic choice may take.
+        elsewhere (a local Ollama server's cloud models), which no automatic choice may take. `server` is
+        the software a local server runs, kept only when it is one Phoenix names.
         """
         # The catalogue lets a request pick the newest model, or replace a retired one, without a
         # network call. An empty listing means the provider could not answer, not that every model
@@ -781,6 +817,7 @@ class AgentCliStore:
                 "created": {m: created[m] for m in models if m in created},
                 "eligible": [m for m in eligible or [] if m in models],
                 "remote": [m for m in models if m in set(remote or ())],
+                "server": server if server in AGENT_CHAT_LOCAL_SERVER_NAMES else None,
                 "checked_at": checked_at,
             }
             await self._save()

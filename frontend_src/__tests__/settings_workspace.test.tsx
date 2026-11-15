@@ -343,7 +343,7 @@ describe("Find Setting on the toolbar", () => {
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Log denied requests" })).toHaveFocus());
   });
 
-  it("shows and hides the add-account picker from AI Providers' Add Account tool", async () => {
+  it("shows and hides the add-account picker from AI Providers' Add Provider tool", async () => {
     vi.mocked(api.getAgentCliProviders).mockResolvedValue({ instances: [], provider_types: [{ kind: "claude", label: "Anthropic", fields: [] }] } as never);
     const { registry } = renderSettings();
     const add = () => toolsFor(registry).flatMap((g) => g.tools).find((t) => t.id === "addAccount");

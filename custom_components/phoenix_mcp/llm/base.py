@@ -814,9 +814,10 @@ def _transient_stream_error(error: dict) -> bool:
 
 
 # A request the model cannot take whole: OpenRouter's typed categories, OpenAI's code,
-# Z.ai's 1261 "Prompt too long" and TokenHub's 400003 (input over the model's context).
+# Z.ai's 1261 "Prompt too long", TokenHub's 400003 (input over the model's context) and
+# llama.cpp's type for a prompt over the context the server loaded.
 _CONTEXT_LIMIT_CODES = frozenset({"context_length_exceeded", "max_tokens_exceeded", "token_limit_exceeded",
-                                  "1261", "400003"})
+                                  "1261", "400003", "exceed_context_size_error"})
 # A credit problem reported inside a stream (OpenRouter's 402 and its typed category).
 _PAYMENT_CODES = frozenset({"402", "payment_required"})
 # OpenAI refusals of the request as sent, not of its content: a residency mismatch and image errors.

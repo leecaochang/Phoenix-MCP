@@ -47,7 +47,7 @@ The account whose model answers. Decision provider accounts aren't listed. Add a
 
 The model that answers. Choose the account first. If the provider retires the model, Phoenix switches to its [successor](guide:window.settingsProviders#change-model).
 
-The agent waits up to 30 seconds for the model to start answering, except on a local Ollama server. After that, it waits up to 3 minutes for anything new, and up to 10 minutes for each reply.
+The agent waits up to 30 seconds for the model to start answering, except on a local Ollama or OpenAI-compatible server. After that, it waits up to 3 minutes for anything new, and up to 10 minutes for each reply.
 
 ### {{label:routing.enableVoice}} {#voice-commands}
 

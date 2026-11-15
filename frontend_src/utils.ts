@@ -14,6 +14,18 @@ export const HIGH_RISK_DOMAINS = new Set([
 const MESA_APPROVED_EXECUTOR = "call_service_mesa_approved";
 const MESA_GATED_LABEL = () => t("common.mesaGatedAction");
 
+/**
+ * The name a model is shown by. A local OpenAI-compatible server (llama.cpp) may list a model by
+ * its file path, so it shows the file name without the folder, the .gguf extension or a shard
+ * suffix; requests keep the id.
+ */
+export function modelLabel(kind: string | undefined, id: string): string {
+  // Only a file path: "publisher/model" ids from other servers stay whole, or two publishers' builds would look alike.
+  if (kind !== "local_openai" || !/^(?:\/|[A-Za-z]:[\\/])|\.gguf$/i.test(id)) return id;
+  const name = id.split(/[/\\]/).pop()?.replace(/\.gguf$/i, "").replace(/-\d{5}-of-\d{5}$/, "");
+  return name || id;
+}
+
 /** Readable label for an approval's tool_name, humanizing the MESA sentinel. */
 export function friendlyToolName(toolName: string): string {
   return toolName === MESA_APPROVED_EXECUTOR ? MESA_GATED_LABEL() : toolName;

@@ -39,7 +39,7 @@ from .llm.base import AGENT_CHAT_HEARTBEAT_SECONDS, ProbeConfigError
 from .llm.factory import build_provider
 from .llm.probes import _effort_probe_body, async_probe_capabilities, async_probe_vision
 from .provider_constants import (
-    AGENT_CHAT_CLIENT_IP, AGENT_CHAT_PROBE_SENTINEL, AGENT_CHAT_REQUEST_BODY_BYTES,
+    AGENT_CHAT_CLIENT_IP, AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_CHAT_PROBE_SENTINEL, AGENT_CHAT_REQUEST_BODY_BYTES,
     PROVIDER_API_KEY_MAX_LENGTH,
     AGENT_CHAT_TOOL_LOADING_MODES,
 )
@@ -410,12 +410,17 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
                 return ProbeConfigError(
                     "Enter the Ollama server URL.", "ollamaUrlRequired",
                 )
+            if kind == "local_openai":
+                return ProbeConfigError("Enter the server URL.", "providerServerUrlRequired")
             return ProbeConfigError(
                 "Enter the provider base URL.", "providerBaseUrlRequired",
             )
-        err = await _validate_base_url(base_url, allow_private=kind == "ollama")
+        err = await _validate_base_url(base_url, allow_private=kind in AGENT_CHAT_LOCAL_SERVER_KINDS)
         if err:
             return err
+        if kind == "local_openai" and not urlparse(base_url).path:
+            # Every server this kind names serves the OpenAI paths under /v1, so a bare address means it.
+            base_url = f"{base_url}/v1"
     else:
         base_url = _default_base_url(kind, endpoint_id)
     model = str(body.get("model") or "").strip()
@@ -556,7 +561,7 @@ class PhoenixAgentCliProvidersView(PhoenixView):
                     instance_id, models, provider.model_created, checked_at,
                     [m for m in models if (capabilities.get(m) or {}).get("tools") is not False]
                     if capabilities else None,
-                    getattr(provider, "model_remote", ()),
+                    getattr(provider, "model_remote", ()), server=getattr(provider, "server_name", None),
                 )
         except Exception:  # capability discovery is best effort
             _LOGGER.debug("Initial Agent Chat capability discovery failed", exc_info=True)
@@ -826,7 +831,7 @@ async def async_refresh_catalog(hass: HomeAssistant, instance_id: str, *, force:
         eligible = [m for m in models if (capabilities.get(m) or {}).get("tools") is not False]
         await store.set_capabilities(instance_id, capabilities, checked_at)
     return await store.set_catalog(instance_id, models, provider.model_created, checked_at, eligible,
-                                   getattr(provider, "model_remote", ()))
+                                   getattr(provider, "model_remote", ()), server=getattr(provider, "server_name", None))
 
 
 async def async_refresh_all_catalogs(hass: HomeAssistant) -> None:
@@ -891,7 +896,7 @@ class PhoenixAgentCliRefreshView(PhoenixView):
                 instance_id, models, getattr(provider, "model_created", {}), checked_at,
                 [m for m in models if (capabilities.get(m) or {}).get("tools") is not False]
                 if capabilities else None,
-                getattr(provider, "model_remote", ()),
+                getattr(provider, "model_remote", ()), server=getattr(provider, "server_name", None),
             )
         if self.hass.data.get(DOMAIN) is not None:
             _audit_admin(self.hass, request, rid, f"provider_refresh:{instance_id}")
@@ -934,7 +939,10 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
                 key="providerChooseModel",
             )
         session = async_get_clientsession(self.hass)
-        probed, calls, answered = await async_probe_capabilities(session, cfg)
+        stored = store.get(instance_id) or {}
+        existing = dict(stored.get("capabilities") or {})
+        probed, calls, answered = await async_probe_capabilities(session, cfg, existing.get(cfg.model))
+        thinking_checked = cfg.kind == "local_openai" and "thinking" not in (existing.get(cfg.model) or {})
         # Image support is checked only when nothing has said what it is: a
         # provider's own declaration, or a refusal learned in conversation.
         vision_checked = answered and cfg.vision is None
@@ -948,8 +956,6 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
         # answer different questions (declared says what exists, probed says what
         # this endpoint accepts) and a probe that established nothing must leave
         # the declared answer standing.
-        stored = store.get(instance_id) or {}
-        existing = dict(stored.get("capabilities") or {})
         merged = {**(existing.get(cfg.model) or {}), **probed}
         existing[cfg.model] = merged
         checked_at = utcnow().isoformat()
@@ -970,6 +976,10 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
             # unknown options" from "there was nothing here to ask" (a backend
             # whose thinking control is a boolean flag).
             "effort_checkable": _effort_probe_body(cfg.kind, AGENT_CHAT_PROBE_SENTINEL) is not None,
+            # A local model's thinking, when the check looked: "switch" when an off method stopped it,
+            # "always" when it kept thinking, "none" when it did not visibly think. None when not checked.
+            "thinking": (("switch" if probed.get("thinking_off") else "always") if "thinking_off" in probed
+                         else "none" if thinking_checked and answered else None),
             # False when the provider declined every question (no credit, a bad
             # key, unreachable). Reporting that as a finding about the model
             # would blame the provider for an account problem.

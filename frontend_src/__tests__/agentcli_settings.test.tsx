@@ -102,7 +102,7 @@ function renderCard(settings: Partial<GlobalSettings> = {}) {
   // both render here so each test can reach whichever control it exercises.
   return render(
     <>
-      {/* The add form open, as after Add Account; it stays open here whatever the test clicks. */}
+      {/* The add form open, as after Add Provider; it stays open here whatever the test clicks. */}
       <LlmProviderSettings settings={settings as GlobalSettings} onChange={onSettingChange} saving={false} adding onAddingChange={() => {}} />
       <AgentCliSettings
         routingMode="off"
@@ -126,12 +126,12 @@ function renderCard(settings: Partial<GlobalSettings> = {}) {
   );
 }
 
-/** The accounts with Add Account's form shown and hidden as the toolbar would. */
+/** The accounts with Add Provider's form shown and hidden as the toolbar would. */
 function AddingHarness({ start }: { start: boolean }) {
   const [adding, setAdding] = useState(start);
   return <>
-    {/* Drawn as the toolbar draws Add Account, which is the control that toggles the form. */}
-    <button type="button" className="phx-toolbar-button" data-tool="addAccount" onClick={() => setAdding((open) => !open)}>Toggle Add Account</button>
+    {/* Drawn as the toolbar draws Add Provider, which is the control that toggles the form. */}
+    <button type="button" className="phx-toolbar-button" data-tool="addAccount" onClick={() => setAdding((open) => !open)}>Toggle Add Provider</button>
     <LlmProviderSettings settings={{} as GlobalSettings} onChange={onSettingChange} saving={false} adding={adding} onAddingChange={setAdding} />
   </>;
 }
@@ -456,21 +456,21 @@ describe("AgentCliSettings", () => {
 // The default model can be changed after creation, and the provider's model list
 // (a cheap authenticated GET) is fetched when the card is shown, so a retired model
 // is flagged where the operator can act on it.
-// Adding an account is shown on request from the toolbar's Add Account, which also leaves no
+// Adding an account is shown on request from the toolbar's Add Provider, which also leaves no
 // account chosen; Cancel and a click elsewhere hide it again.
-describe("Add Account form", () => {
+describe("Add Provider form", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAgentCliProviders.mockResolvedValue(instances());
   });
 
-  it("is hidden until Add Account shows it, and takes the focus when shown", async () => {
+  it("is hidden until Add Provider shows it, and takes the focus when shown", async () => {
     render(<AddingHarness start={false} />);
     await screen.findAllByRole("row", { name: /, / });
     expect(screen.queryByLabelText("Provider type")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Provider" }));
     await waitFor(() => expect(screen.getByLabelText("Provider type")).toHaveFocus());
-    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Provider" }));
     expect(screen.queryByLabelText("Provider type")).toBeNull();
   });
 
@@ -478,7 +478,7 @@ describe("Add Account form", () => {
     render(<AddingHarness start={false} />);
     await openAccount();
     expect(document.querySelector("tr.is-selected")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Provider" }));
     await screen.findByLabelText("Provider type");
     expect(document.querySelector("tr.is-selected")).toBeNull();
   });
@@ -488,7 +488,7 @@ describe("Add Account form", () => {
     await beginAdd();
     fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
     expect(screen.queryByLabelText("Provider type")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Account" }));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle Add Provider" }));
     await screen.findByLabelText("Provider type");
     fireEvent.click(document.body);
     await waitFor(() => expect(screen.queryByLabelText("Provider type")).toBeNull());

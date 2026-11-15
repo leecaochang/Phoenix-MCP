@@ -14,7 +14,7 @@ import {
   AGENT_CHAT_TEXT_SIZE_MIN_PT, AGENT_CHAT_TEXT_SIZE_MAX_PT, AGENT_CHAT_TEXT_SIZE_STEP_PT,
   normalizeAgentCliTextSize,
 } from "../utils/agentcli_state";
-import { approvalStatusLabel, effortLevelLabel } from "../utils";
+import { approvalStatusLabel, effortLevelLabel, modelLabel } from "../utils";
 import { clearReasonDraft, getReasonDraft } from "../utils/approval_reason_draft";
 import { localizedApprovalReason } from "../utils/approval_reason";
 import { chatNoticeText, failureDetailText } from "../utils/chat_notice";
@@ -304,8 +304,9 @@ function applyDeclared(
   const out = { ...caps };
   if (declared.thinking === false) out.thinking = [];
   if (declared.temperature === false) out.temperature = false;
-  if (declared.effort === false && out.thinking.length) {
-    // A model that thinks but takes no effort level: only on and off.
+  if (declared.effort === false && (out.thinking.length || (kind === "local_openai" && declared.thinking === true))) {
+    // A model that thinks but takes no effort level: only on and off. A local server's declaration
+    // creates the switch, as its kind has no built-in control; on is the model's default.
     out.style = "boolean";
     out.thinking = thinkOpts(["off", "on"]);
     out.defaultLevel = "on";
@@ -553,6 +554,7 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
     case "together":
     case "cerebras":
     case "fireworks":
+    case "local_openai":
       // The protocol accepts ordinary sampling controls. Reasoning remains
       // unknown until the account probe proves model-specific effort levels.
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
@@ -2366,7 +2368,7 @@ export function AgentCliWindow({
                     {noInstances
                       ? <option value="">{t("common.none")}</option>
                       : models.length
-                        ? models.map((m) => <option key={m} value={m}>{m}</option>)
+                        ? models.map((m) => <option key={m} value={m}>{modelLabel(kind, m)}</option>)
                         : <option value="">{t("agentchat.noModels")}</option>}
                   </select>
                 </label>

@@ -455,9 +455,9 @@ it("adds a further account beside the one in use and puts the new one in use", a
   const onChange = vi.fn();
   render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "jev", decision_provider_default_id: "jev" }} onChange={onChange} saving={false} />);
   await screen.findByRole("radio", { name: "TypeSafe / JEV jev-latest" });
-  // Setup stays folded away behind Add Account while an account exists.
+  // Setup stays folded away behind Add Provider while an account exists.
   expect(screen.queryByLabelText("Provider type")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Add Account" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
   fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "cloudflare_decision" } });
   const accountId = screen.getByLabelText("Account ID");
   expect(accountId).toHaveAttribute("type", "text");
@@ -480,12 +480,12 @@ it("closes the further-account form without adding one", async () => {
   mocks.list.mockResolvedValue({ instances: [{ id: "jev", kind: "typesafe", name: "TypeSafe / JEV", model: "jev-latest" }], provider_types: hosted });
   render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "jev", decision_provider_default_id: "jev" }} onChange={vi.fn()} saving={false} />);
   await screen.findByRole("radio", { name: "TypeSafe / JEV jev-latest" });
-  fireEvent.click(screen.getByRole("button", { name: "Add Account" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
   expect(screen.getByLabelText("Provider type")).toBeInTheDocument();
   fireEvent.keyDown(screen.getByLabelText("Provider type"), { key: "Escape" });
   fireEvent.click(document.body);
   await waitFor(() => expect(screen.queryByLabelText("Provider type")).toBeNull());
-  expect(screen.getByRole("button", { name: "Add Account" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Add Provider" })).toBeInTheDocument();
   expect(mocks.create).not.toHaveBeenCalled();
 });
 
@@ -493,8 +493,8 @@ it("keeps Validate and Cancel in the last field's row, beside its input", async 
   mocks.list.mockResolvedValue({ instances: [{ id: "jev", kind: "typesafe", name: "TypeSafe / JEV", model: "jev-latest" }], provider_types: hosted });
   render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "jev", decision_provider_default_id: "jev" }} onChange={vi.fn()} saving={false} />);
   await screen.findByRole("radio", { name: "TypeSafe / JEV jev-latest" });
-  expect(screen.getByRole("button", { name: "Add Account" }).closest(".routing-add-account")).not.toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Add Account" }));
+  expect(screen.getByRole("button", { name: "Add Provider" }).closest(".routing-add-account")).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
   fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "cloudflare_decision" } });
   const row = screen.getByLabelText("API key").closest(".agentcli-secret-row");
   expect(row).not.toBeNull();

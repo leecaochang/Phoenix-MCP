@@ -42,6 +42,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `opencode` | 对话 | `api_key`、`endpoint_id`：`zen`、`console` |
 | `ollama_cloud` | 对话 | `api_key` |
 | `ollama`（本地） | 对话 | `base_url` |
+| `local_openai`（本地 OpenAI 兼容服务器） | 对话 | `base_url`、可选的 `api_key` |
 | `openrouter` | 对话 | `api_key` |
 | `infron` | 对话 | `api_key` |
 | `together` | 对话 | `api_key` |
@@ -63,8 +64,8 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `kind` | string | 必填。上面的类型之一。 |
-| `api_key` | string | 除 `ollama` 外每种类型都必填。最多 4096 个字符，不能包含控制字符。Phoenix 绝不返回它。 |
-| `base_url` | string | `ollama` 和 `qwen` 必填。只有 `ollama` 可以使用私有地址。其他每种类型都使用固定端点，并忽略此字段。 |
+| `api_key` | string | 除 `ollama` 和 `local_openai` 外每种类型都必填。最多 4096 个字符，不能包含控制字符。Phoenix 绝不返回它。 |
+| `base_url` | string | `ollama`、`local_openai` 和 `qwen` 必填。只有 `ollama` 和 `local_openai` 可以使用私有地址。对于 `local_openai`，地址没有路径时 Phoenix 会加上 `/v1`。其他每种类型都使用固定端点，并忽略此字段。 |
 | `endpoint_id` | string | 仅用于带端点的类型。省略它表示默认值。 |
 | `account_id` | string | `cloudflare` 和 `cloudflare_decision` 必填：32 个字符的 Cloudflare 账户 ID。Phoenix 用它构建端点。 |
 | `model` | string | 对话类型可选；留空表示自动跟随提供商。决策类型必填：最多 200 个字符，且必须在提供商当前列表中。 |
@@ -114,7 +115,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | 400 | `invalid_request` | `adminError.providerApiKeyRequired` | 缺少 `api_key`。 |
 | 400 | `invalid_request` | `adminError.providerEndpointInvalid` | `endpoint_id` 不是该类型的值之一。 |
 | 400 | `invalid_request` | `adminError.providerAccountIdInvalid` | `account_id` 不是 32 个十六进制字符。 |
-| 400 | `invalid_request` | `adminError.ollamaUrlRequired`、`adminError.providerBaseUrlRequired` | 缺少必需的 `base_url`。 |
+| 400 | `invalid_request` | `adminError.ollamaUrlRequired`、`adminError.providerServerUrlRequired`、`adminError.providerBaseUrlRequired` | 缺少必需的 `base_url`。 |
 | 400 | `invalid_request` | `adminError.providerUrlInvalid`、`adminError.providerUrlScheme`、`adminError.providerRemoteUrlScheme`、`adminError.providerUrlHostRequired`、`adminError.providerUrlCredentialsForbidden`、`adminError.providerUrlFragmentForbidden`、`adminError.providerUrlAddressForbidden`、`adminError.providerUrlResolutionForbidden`、`adminError.providerRemoteUrlAddressForbidden`、`adminError.providerRemoteUrlResolutionForbidden`、`adminError.providerRemoteUrlResolutionFailed` | `base_url` 不是可接受的 URL。 |
 | 400 | `invalid_request` | `adminError.providerConnectionFailed`，或提供商自身失败的键 | 凭据检查失败。`adminError.providerConnectionFailed` 会带有 `detail`。 |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | 决策类型没有 `model`。 |
@@ -191,7 +192,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 
 Phoenix 最多发送 10 个非常简短的补全，并在图像支持未知时额外发送一次图像检查。结果会覆盖声明的能力。
 
-响应包含 `model`、`probed`、`calls`、`checked_at`、`effort_checkable`、`answered` 和 `vision_checked`。当提供商拒绝了每个问题时，`answered` 为 `false`。
+响应包含 `model`、`probed`、`calls`、`checked_at`、`effort_checkable`、`answered`、`vision_checked` 和 `thinking`。当提供商拒绝了每个问题时，`answered` 为 `false`。检查了 `local_openai` 模型的思考时，`thinking` 为 `switch`、`always` 或 `none`，否则为 `null`。
 
 | 状态 | `error` | `message_key` | 条件 |
 |---|---|---|---|

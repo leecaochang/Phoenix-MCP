@@ -2,6 +2,7 @@ import { BusyInput, BusySelect } from "./BusyButton";
 import { useEffect, useState, type ReactNode } from "react";
 import type { GlobalSettings, AgentCliInstance, AiTaskPreferredStatus } from "../types";
 import { api } from "../api";
+import { modelLabel } from "../utils";
 import { useAccessKeyList } from "../utils/access_key_list";
 import { t } from "../i18n";
 import { SettingLabel, helpRow } from "../ui/SettingLabel";
@@ -188,7 +189,7 @@ export function AiTaskSettings({
         >
           <option value="">{t("settings.noneChoice")}</option>
           {models.map((m) => (
-            <option key={m} value={m}>{m}</option>
+            <option key={m} value={m}>{modelLabel(instances.find((i) => i.id === providerId)?.kind, m)}</option>
           ))}
         </BusySelect>
       </div>

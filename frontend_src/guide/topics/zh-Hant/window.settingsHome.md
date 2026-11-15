@@ -47,7 +47,7 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 負責回答的模型。請先選擇帳戶。如果提供者停用該模型，Phoenix 會切換到其[後續模型](guide:window.settingsProviders#change-model)。
 
-智慧體最多等待 30 秒讓模型開始回答，本機 Ollama 伺服器除外。之後它最多等待 3 分鐘接收新內容，每次回覆最多等待 10 分鐘。
+智慧體最多等待 30 秒讓模型開始回答，本機 Ollama 或 OpenAI 相容伺服器除外。之後它最多等待 3 分鐘接收新內容，每次回覆最多等待 10 分鐘。
 
 ### {{label:routing.enableVoice}} {#voice-commands}
 
