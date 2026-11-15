@@ -26,7 +26,7 @@ from .routing_tables import (
     DECISION_PROBABILITY_ROUNDING, DECISION_PROBABILITY_SUM_TOLERANCE,
     DECISION_PROBABILITY_ROUNDING_EPSILON, DECISION_BATCH_MAX_TARGETS, DECISION_MAX_CHOICE_GROUPS,
     DECISION_BATCH_MAX_TARGET_BYTES, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
-    DECISION_TEMPORAL_CATEGORIES, COMMAND_SUMMARY_MODES,
+    DECISION_TEMPORAL_CATEGORIES, COMMAND_SUMMARY_MODES, DECISION_MIN_CHOICE_PROBABILITY,
 )
 from .routing_tables import TOOL_ROUTING_MAX_BYTES, TOOL_ROUTING_MAX_GROUPS
 from .routing_tables import (
@@ -431,9 +431,15 @@ class DecisionProvider:
         """Apply precision evidence only to the known TypeSafe endpoint."""
         return DECISION_PROBABILITY_ROUNDING.get((self.cfg.kind, decision_endpoint(self.cfg), self.protocol), 0)
 
-    def _parse_choice(self, body: Any, choices: Mapping[str, str], question: str = "route") -> dict:
-        return parse_choice(body, choices, question, rounding_error=self.rounding_error,
-                            min_probability=self.cfg.decision_threshold)
+    def _parse_choice(self, body: Any, choices: Mapping[str, str], question: str = "route", *,
+                      follow_up: bool = False) -> dict:
+        bar = self.cfg.decision_threshold
+        if follow_up:
+            # Follow-ups were qualified at the default bar: an account set lower keeps it for
+            # first messages only, since at 0.80 a qualified model let a command through
+            # after the user had asked for a translation.
+            bar = max(bar, DECISION_MIN_CHOICE_PROBABILITY)
+        return parse_choice(body, choices, question, rounding_error=self.rounding_error, min_probability=bar)
 
     def _group_choices(self, payload: dict, *, sequential: bool = False, choice_limit: int = DECISION_MAX_TARGETS + 1) -> dict[str, list[str]]:
         """Keep all candidates in shared state; partition only bounded Choice answers."""
@@ -796,7 +802,7 @@ class DecisionProvider:
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(DECISION_CONTEXT_CHECKS):
             raise DecisionError("malformed")
         checks = {question: self._parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
-                                         criteria, question)
+                                         criteria, question, follow_up=True)
                   for question, criteria in DECISION_CONTEXT_CHECKS.items()}
         if self.cfg.api_key and self.cfg.api_key in body["model"]:
             raise DecisionError("malformed")
@@ -848,7 +854,7 @@ class DecisionProvider:
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(DECISION_REFERENCE_CHECKS):
             raise DecisionError("malformed")
         checks = {name: self._parse_choice({"model": body.get("model"), "answers": {name: body["answers"][name]}},
-                                     choices, name) for name, choices in DECISION_REFERENCE_CHECKS.items()}
+                                     choices, name, follow_up=True) for name, choices in DECISION_REFERENCE_CHECKS.items()}
         if self.cfg.api_key and self.cfg.api_key in body["model"]:
             raise DecisionError("malformed")
         return {"checks": checks, "model": body["model"]}

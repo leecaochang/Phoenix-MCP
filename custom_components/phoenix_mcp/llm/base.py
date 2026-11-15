@@ -1098,7 +1098,9 @@ class _ThinkSplitter:
     """Split a streamed content string into ("text"|"think", segment) pieces.
 
     Handles <think>...</think> blocks whose tags may be split across streamed
-    chunks by holding back a short tail that could be the start of a tag.
+    chunks by holding back a short tail that could be the start of a tag. A
+    closing tag with no opening one (a model whose template opened the block in
+    the prompt) is dropped: what came before it has already streamed as text.
     """
 
     def __init__(self) -> None:
@@ -1106,12 +1108,19 @@ class _ThinkSplitter:
         self._carry = ""
 
     def _max_tail(self) -> int:
-        return len(_THINK_CLOSE if self._in_think else _THINK_OPEN) - 1
+        return len(_THINK_CLOSE) - 1
 
     def feed(self, chunk: str) -> list[tuple[str, str]]:
         out: list[tuple[str, str]] = []
         self._carry += chunk
         while self._carry:
+            stray = -1 if self._in_think else self._carry.find(_THINK_CLOSE)
+            opening = self._carry.find(_THINK_OPEN)
+            if stray != -1 and (opening == -1 or stray < opening):
+                if stray > 0:
+                    out.append(("text", self._carry[:stray]))
+                self._carry = self._carry[stray + len(_THINK_CLOSE):]
+                continue
             tag = _THINK_CLOSE if self._in_think else _THINK_OPEN
             kind = "think" if self._in_think else "text"
             idx = self._carry.find(tag)

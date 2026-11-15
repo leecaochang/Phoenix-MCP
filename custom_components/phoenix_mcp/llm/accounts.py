@@ -573,6 +573,12 @@ def _host_port_of(url: str) -> str:
     return f"{host}:{port}" if host and port else host
 
 
+def _decision_account_name(kind: str, instance_id: str, has_dupes: bool) -> str:
+    """A decision account's name: its company alone, since the model shows beside it; the id tells two apart."""
+    company = PROVIDER_DEFINITIONS[kind].label.split(" / ")[0]
+    return f"{company} ({instance_id[:8]})" if has_dupes else company
+
+
 def _instance_name(inst: dict, has_dupes: bool, instance_id: str) -> str:
     """Disambiguate accounts using server-owned identity or endpoint metadata."""
     kind = inst.get("kind", "")
@@ -886,9 +892,8 @@ class AgentCliStore:
             out.append({
                 "id": iid,
                 "kind": kind,
-                "name": (f"{PROVIDER_DEFINITIONS[kind].label} ({iid[:8]})"
-                         if provider_purpose(kind) == "decision" and counts[kind] > 1
-                         else _instance_name(inst, counts[kind] > 1, iid)),
+                "name": _decision_account_name(kind, iid, counts[kind] > 1) if decision
+                        else _instance_name(inst, counts[kind] > 1, iid),
                 # The model a request would use now. `model_mode` says whether the
                 # operator chose it ("fixed") or the account follows the provider's
                 # newest ("auto"); `model_replaced_from` names a chosen model the

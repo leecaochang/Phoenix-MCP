@@ -108,7 +108,7 @@ Phoenix 會按排程重新檢查提供者的模型清單：6 到 720 小時（�
 
 從以下決策提供者中選擇：
 
-- TypeSafe / JEV：TypeSafe 的 JEV 模型，使用 TypeSafe API 金鑰。
+- TypeSafe / JEV：TypeSafe 的 JEV 模型，使用 TypeSafe API 金鑰。其 jev-preview 模型只觀察，從不執行命令。
 - OpenCode / System One：JEV、Gemini Decision 或 GPT Luna Decision，使用 OpenCode Console API 金鑰。
 - Google / Gemini Decision：Google 的 Gemini Decision 模型，使用 Gemini API 金鑰。
 - Cloudflare / Clef：Workers AI 上的 Clef 或 Clef Flash，使用你的 Cloudflare 帳戶 ID 和 API 權杖。
@@ -118,9 +118,7 @@ Phoenix 會按排程重新檢查提供者的模型清單：6 到 720 小時（�
 
 決策帳戶與同一家公司的任何 AI 提供者帳戶彼此獨立。如果你已經在 AI 提供者中使用該金鑰，也必須在此再次新增。
 
-除 Cloudflare / Clef 外，所有決策提供者也會處理依賴對話內容的後續訊息。Clef 會把這類訊息交給你的 AI 提供者。參見[後續訊息](guide:topic.commandRouting#follow-ups)。
-
-jev-preview 模型只觀察，從不執行命令。
+所有決策提供者也會處理依賴對話內容的後續訊息。參見[後續訊息](guide:topic.commandRouting#follow-ups)。
 
 若要使用它，請選擇其帳戶。選擇 **{{label:routing.noProvider}}** 可停止使用它；命令隨後只依賴句子比對。
 
@@ -133,6 +131,10 @@ jev-preview 模型只觀察，從不執行命令。
 決策帳戶執行命令前必須達到的確定程度，範圍 0.70 到 1.00（預設 0.90）。選擇帳戶即可顯示此設定。每個帳戶各自保存。
 
 閾值越低，決策提供者自己處理的命令越多，轉給你的 AI 提供者的命令越少。這可能會讓更多錯誤通過，因為每個模型各不相同。
+
+後續訊息會先對照對話進行檢查：這則訊息是否是真正的請求、之前的指示是否排除了它，以及「它」指的是什麼。無論閾值是多少，這項檢查始終至少需要 0.90，因為更低的閾值曾讓對話中已排除的命令通過。
+
+決策提供者選擇裝置和操作時，仍然使用該閾值。
 
 ## {{label:routing.connectionSettings}} {#decision-connection}
 

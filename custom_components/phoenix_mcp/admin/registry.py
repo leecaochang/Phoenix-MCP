@@ -6,7 +6,8 @@ from ..view_base import PhoenixView
 from .access_keys import (
     PhoenixAdminAccessKeyConnectionView, PhoenixAdminAccessKeyPresetApplyView,
     PhoenixAdminAccessKeyPresetView, PhoenixAdminAccessKeyPresetsView,
-    PhoenixAdminAccessKeyRotateView, PhoenixAdminAccessKeyStatsView, PhoenixAdminAccessKeyView,
+    PhoenixAdminAccessKeyRotateView, PhoenixAdminAccessKeyStatsView, PhoenixAdminAccessKeyToolsView,
+    PhoenixAdminAccessKeyView,
     PhoenixAdminAccessKeysView, PhoenixAdminArchivedAccessKeyView,
     PhoenixAdminArchivedAccessKeysView,
 )
@@ -77,6 +78,7 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminEntityHintsView,
     PhoenixAdminEntityHintView,
     PhoenixAdminAccessKeyStatsView,
+    PhoenixAdminAccessKeyToolsView,
     PhoenixAdminAccessKeyConnectionView,
     PhoenixAdminAccessKeyOAuthView,
     PhoenixAdminAccessKeyOAuthWindowView,

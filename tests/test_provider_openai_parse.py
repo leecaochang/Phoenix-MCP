@@ -328,7 +328,7 @@ async def test_mistral_string_deltas_before_the_first_block_are_replayed_in_orde
     block = {"type": "text", "text": "Later"}
     events = await _events(_provider("mistral"), _frame({"content": "Hello there, friend"}), _frame({"content": [block]}),
                            _frame({"content": " after"}), _frame(finish="stop"))
-    assert [e["text"] for e in events[:-1]] == ["Hello there, ", "friend", "Later", " after"]
+    assert [e["text"] for e in events[:-1]] == ["Hello there,", " friend", "Later", " after"]
     assert events[-1]["assistant_msg"]["content"] == [
         {"type": "text", "text": "Hello there, friend"}, {"type": "text", "text": "Later after"},
     ]
@@ -897,3 +897,33 @@ async def test_infron_returns_a_signature_carried_on_the_call():
 async def test_gemini_thinking_tokens_count_as_output(kind, usage, output):
     events = await _events(_provider(kind), 'data: ' + json.dumps({"choices": [], "usage": usage}), _frame(finish="stop"))
     assert events[0]["output_tokens"] == output and events[0]["input_tokens"] == 100
+
+
+@pytest.mark.parametrize("kind, counts", [
+    # Workers AI sends the prompt first, then each chunk's own output tokens, then
+    # the call's totals: only the reports that raise a count go on, so it never drops.
+    ("cloudflare", [(9732, 0), (9732, 4), (9732, 256)]),
+    # Elsewhere every report is the call's running total and goes on as sent.
+    ("chatgpt", [(9732, 0), (0, 4), (0, 1), (0, 1), (9732, 256)]),
+])
+@pytest.mark.asyncio
+async def test_cloudflare_usage_increments_never_lower_the_count(kind, counts):
+    reports = [(9732, 0), (0, 4), (0, 1), (0, 1), (9732, 256)]
+    frames = [_frame({"content": "x"}, usage={"prompt_tokens": pt, "completion_tokens": ct}) for pt, ct in reports]
+    events = await _events(_provider(kind), *frames, _frame(finish="stop"))
+    assert [(e["input_tokens"], e["output_tokens"]) for e in events if e["type"] == EV_USAGE] == counts
+
+
+@pytest.mark.parametrize("chunks, text", [
+    # A template that opens the thinking block in the prompt leaves only the closing tag.
+    (["plan quietly</think>Answer"], "plan quietlyAnswer"),
+    (["plan quietly</th", "ink>Answer"], "plan quietlyAnswer"),
+    (["</think>Answer"], "Answer"),
+    # A complete block still becomes thinking, and a later stray tag is still dropped.
+    (["<think>private</think>Answer</think>!"], "Answer!"),
+])
+@pytest.mark.asyncio
+async def test_a_closing_think_tag_without_an_opening_one_never_reaches_the_reply(chunks, text):
+    events = await _events(_provider("cloudflare"), *[_frame({"content": c}) for c in chunks], _frame(finish="stop"))
+    assert "".join(e["text"] for e in events if e["type"] == EV_TEXT) == text
+    assert events[-1]["assistant_msg"]["content"] == text

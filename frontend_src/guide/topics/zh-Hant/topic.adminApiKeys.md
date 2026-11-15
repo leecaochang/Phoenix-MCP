@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.adminApiKeys", "title": "存取金鑰端點", "parent": "topic.adminApi", "order": 10, "keywords": ["存取金鑰 API", "權杖 API", "phx_", "建立金鑰", "權限 API", "能力 API"], "sectionKeywords": { "access-keys": ["存取金鑰記錄", "金鑰清單"], "capability-fields": ["cap_", "deny", "allow", "confirm", "能力欄位"], "oauth": ["OAuth", "登入", "連接器", "登入時段"], "key-create": ["新金鑰", "access_key", "原始值", "201"], "key-change": ["PATCH", "角色", "備註", "重新命名", "unknownFields"], "key-revoke": ["刪除金鑰", "撤銷", "phoenix_mcp_access_key_revoked"], "key-rotate": ["輪換", "新值", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-audit": ["稽核列", "結果篩選", "用戶端 IP"], "key-archived": ["已歸檔金鑰", "已過期金鑰", "已撤銷金鑰"], "presets": ["預設", "已儲存設定", "access_key_presets_enabled"], "permissions": ["權限樹", "節點", "域", "裝置", "實體"], "permissions-replace": ["PUT", "替換樹", "清除全部"], "permissions-node": ["單一節點", "設定狀態"], "bulk-select": ["分區", "分類", "整合", "選擇器"], "integration-options": ["設定條目", "整合清單"], "entity-hints": ["提示", "全域提示", "entity_hints"], "entities": ["實體樹", "範圍", "解析", "force_reload"], "resolve": ["resolution_path", "有效權限", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] } }
+{ "id": "topic.adminApiKeys", "title": "存取金鑰端點", "parent": "topic.adminApi", "order": 10, "keywords": ["存取金鑰 API", "權杖 API", "phx_", "建立金鑰", "權限 API", "能力 API"], "sectionKeywords": { "access-keys": ["存取金鑰記錄", "金鑰清單"], "capability-fields": ["cap_", "deny", "allow", "confirm", "能力欄位"], "oauth": ["OAuth", "登入", "連接器", "登入時段"], "key-create": ["新金鑰", "access_key", "原始值", "201"], "key-change": ["PATCH", "角色", "備註", "重新命名", "unknownFields"], "key-revoke": ["刪除金鑰", "撤銷", "phoenix_mcp_access_key_revoked"], "key-rotate": ["輪換", "新值", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-tools": ["tools/list", "工具目錄", "catalog_bytes", "loads_in_parts"], "key-audit": ["稽核列", "結果篩選", "用戶端 IP"], "key-archived": ["已歸檔金鑰", "已過期金鑰", "已撤銷金鑰"], "presets": ["預設", "已儲存設定", "access_key_presets_enabled"], "permissions": ["權限樹", "節點", "域", "裝置", "實體"], "permissions-replace": ["PUT", "替換樹", "清除全部"], "permissions-node": ["單一節點", "設定狀態"], "bulk-select": ["分區", "分類", "整合", "選擇器"], "integration-options": ["設定條目", "整合清單"], "entity-hints": ["提示", "全域提示", "entity_hints"], "entities": ["實體樹", "範圍", "解析", "force_reload"], "resolve": ["resolution_path", "有效權限", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] } }
 ---
 這些端點管理存取金鑰：建立金鑰、變更其設定和能力，以及設定每個金鑰可以讀取和控制什麼。每個路徑都以 `/api/phoenix-mcp/admin` 開頭，並且需要管理員。
 
@@ -17,6 +17,7 @@ PATCH  /api/phoenix-mcp/admin/access-keys/{id}
 DELETE /api/phoenix-mcp/admin/access-keys/{id}
 POST   /api/phoenix-mcp/admin/access-keys/{id}/rotate
 GET    /api/phoenix-mcp/admin/access-keys/{id}/stats
+GET    /api/phoenix-mcp/admin/access-keys/{id}/tools
 GET    /api/phoenix-mcp/admin/access-keys/{id}/connection
 GET    /api/phoenix-mcp/admin/access-keys/{id}/audit
 GET    /api/phoenix-mcp/admin/access-keys/{id}/oauth
@@ -234,6 +235,23 @@ PATCH 拒絕不在此表中的任何欄位，且 `expires_at` 根本無法變更
 | `rate_limit_hits` | integer | 自重新啟動以來因速率限制被拒絕的請求數。 |
 | `last_used_at` | string 或 null | |
 | `status` | string | `active` 或 `expired`。 |
+
+### 金鑰工具 {#key-tools}
+
+`GET /access-keys/{id}/tools` 列出使用此金鑰的智慧體可以使用的工具。它與此金鑰的 MCP 用戶端從 `tools/list` 取得的清單相同，由金鑰的角色、能力和寫入範圍決定。Agent Chat 不包含日期工具，因為每一輪都已帶有時間。
+
+| 欄位 | 類型 | 說明 |
+|---|---|---|
+| `access_key_id` | string | |
+| `persona` | string | 金鑰的角色。 |
+| `count` | integer | 提供的工具數量。 |
+| `catalog_bytes` | integer | 工具定義作為精簡 JSON 的大小。 |
+| `loads_in_parts` | boolean | Agent Chat 在{{label:settings.toolLoadingLabel}}為{{label:settings.toolLoadingAuto}}時是否分批載入此目錄。 |
+| `tools` | array | 每個工具一個物件：`name`、`read_only`（工具是否只讀取）和 `group`（Agent Chat 分批載入時載入它的分組，始終宣告的工具為 `null`）。 |
+
+| 狀態 | `error` | `key` | 何時 |
+|---|---|---|---|
+| 404 | `not_found` | `adminError.accessKeyNotFound` | 沒有使用此 ID 的有效金鑰。 |
 
 ### 連線檢查 {#key-connection}
 

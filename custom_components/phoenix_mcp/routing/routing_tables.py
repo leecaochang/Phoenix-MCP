@@ -386,10 +386,9 @@ DECISION_HOSTED_EXECUTION_MODELS = MappingProxyType({
     ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL, "clef"): frozenset({"clef"}),
 })
 # Those that also gave no wrong answer on the inert follow-up corpus (context, reference and
-# decision follow-ups). Clef has not been measured on it and acts on single requests only.
-DECISION_HOSTED_FOLLOWUP_MODELS = MappingProxyType({
-    key: revisions for key, revisions in DECISION_HOSTED_EXECUTION_MODELS.items() if key[0] != "cloudflare_decision"
-})
+# decision follow-ups) at the default bar, which follow-up reviews never go below. Every hosted
+# model has passed it.
+DECISION_HOSTED_FOLLOWUP_MODELS = MappingProxyType(dict(DECISION_HOSTED_EXECUTION_MODELS))
 # Singular references have separate qualification from self-contained commands.
 DECISION_REFERENCE_LANGUAGES = frozenset(_COMMAND_ROUTING_LANGUAGES.values())
 DECISION_REFERENCE_INTENTS = frozenset({"HassTurnOn", "HassTurnOff", "HassGetState"})

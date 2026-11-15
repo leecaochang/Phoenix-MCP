@@ -1907,7 +1907,7 @@ async def test_entity_tree_force_reload_bypasses_cache():
 
 
 def test_all_admin_views_exported():
-    assert len(ALL_ADMIN_VIEWS) == 75
+    assert len(ALL_ADMIN_VIEWS) == 76
 
 
 def test_archived_views_before_access_key_view():
@@ -3949,3 +3949,55 @@ async def test_ai_task_preferred_post_plain_setup_error_falls_back():
     assert resp.status == 400
     assert body["message_key"] == "adminError.aiTaskPreferredFailed"
     assert body["message"] == "Something unexpected."
+
+
+# --- the tools an access key is offered ---
+
+def _key_with_caps(caps: dict[str, str], persona: str) -> AccessKeyRecord:
+    access_key = _make_active_access_key(name=persona)
+    for cap, mode in caps.items():
+        setattr(access_key, cap, mode)
+    access_key.persona = persona
+    return access_key
+
+
+async def _tools_body(access_key: AccessKeyRecord | None, *, is_admin: bool = True, key_id: str = "missing"):
+    from custom_components.phoenix_mcp.admin.access_keys import PhoenixAdminAccessKeyToolsView
+    data = _make_data([access_key] if access_key else [])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    view = PhoenixAdminAccessKeyToolsView()
+    view.hass = _make_hass(data)
+    resp = await view.get(_make_admin_request(is_admin=is_admin), access_key_id=access_key.id if access_key else key_id)
+    return resp, json.loads(resp.text), data
+
+
+@pytest.mark.asyncio
+async def test_access_key_tools_are_the_catalog_the_agent_is_offered():
+    from custom_components.phoenix_mcp.const import CAP_DENY, CAPABILITY_NAMES, PERSONA_POWER_USER
+    from custom_components.phoenix_mcp.personas import get_persona_caps
+    from custom_components.phoenix_mcp.tool_catalog import build_mcp_tool_list
+    from custom_components.phoenix_mcp.tool_loading import catalog_bytes, tool_group
+    counts = {}
+    for persona, caps in (("custom", {cap: CAP_DENY for cap in CAPABILITY_NAMES}),
+                          (PERSONA_POWER_USER, get_persona_caps(PERSONA_POWER_USER))):
+        access_key = _key_with_caps(caps, persona)
+        resp, body, data = await _tools_body(access_key)
+        catalog = build_mcp_tool_list(access_key, data)
+        assert resp.status == 200 and body["persona"] == persona
+        assert [tool["name"] for tool in body["tools"]] == [tool["name"] for tool in catalog]
+        assert body["count"] == len(catalog) and body["catalog_bytes"] == catalog_bytes(catalog)
+        assert all(tool["group"] == tool_group(tool["name"]) for tool in body["tools"])
+        assert all(set(tool) == {"name", "read_only", "group"} for tool in body["tools"])
+        counts[persona] = body["count"]
+    # Denying every capability leaves only the reads that are always offered.
+    assert 0 < counts["custom"] < counts[PERSONA_POWER_USER]
+    denied = (await _tools_body(_key_with_caps({cap: CAP_DENY for cap in CAPABILITY_NAMES}, "custom")))[1]
+    assert all(tool["read_only"] for tool in denied["tools"])
+
+
+@pytest.mark.asyncio
+async def test_access_key_tools_refuse_an_unknown_key_and_a_non_admin():
+    resp, body, _ = await _tools_body(None)
+    assert resp.status == 404 and body["error"] == "not_found"
+    resp, body, _ = await _tools_body(_make_active_access_key(), is_admin=False)
+    assert resp.status == 403 and body["error"] == "forbidden"

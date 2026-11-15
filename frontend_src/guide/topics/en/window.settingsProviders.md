@@ -104,7 +104,7 @@ It works with **{{label:routing.enableChat}}** and **{{label:routing.enableVoice
 
 Choose from these decision providers:
 
-- TypeSafe / JEV: TypeSafe's JEV model, with a TypeSafe API key.
+- TypeSafe / JEV: TypeSafe's JEV model, with a TypeSafe API key. Its jev-preview model only observes and never carries out commands.
 - OpenCode / System One: JEV, Gemini Decision or GPT Luna Decision, with an OpenCode Console API key.
 - Google / Gemini Decision: Google's Gemini Decision model, with a Gemini API key.
 - Cloudflare / Clef: Clef or Clef Flash on Workers AI, with your Cloudflare account ID and an API token.
@@ -114,9 +114,7 @@ Add an account and select its model. Only one decision provider can be in use at
 
 A decision account is separate from any AI provider account from the same company. You must add its key here again if you already use that key for AI Provider.
 
-Every decision provider except Cloudflare / Clef also handles follow-up messages that depend on the conversation. Clef leaves those to your AI provider. See [Follow-up messages](guide:topic.commandRouting#follow-ups).
-
-The jev-preview model only observes and never carries out commands.
+Every decision provider also handles follow-up messages that depend on the conversation. See [Follow-up messages](guide:topic.commandRouting#follow-ups).
 
 To use it, choose its account. Choose **{{label:routing.noProvider}}** to stop using it; commands then rely on sentence matching alone.
 
@@ -129,6 +127,10 @@ Related: [How a command is routed](guide:topic.commandRouting)
 How sure a decision account must be before it carries out a command, from 0.70 to 1.00 (default 0.90). Select the account to show it. Each account keeps its own.
 
 A lower threshold lets the decision provider handle more commands itself, and routes fewer commands to your AI provider. This can potentially let more mistakes through, as each model differs.
+
+Follow-ups are first checked against the conversation: whether the message is a real request, whether an earlier instruction rules it out, and what "it" refers to. That check always needs at least 0.90, whatever the threshold, because a lower threshold let commands through that the conversation had ruled out.
+
+The threshold still applies when the provider chooses the device and action.
 
 ## {{label:routing.connectionSettings}} {#decision-connection}
 

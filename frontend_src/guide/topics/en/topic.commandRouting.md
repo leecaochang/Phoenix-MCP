@@ -21,7 +21,9 @@ It only applies to plain text messages. Messages for Home Companion keys always 
 
 ## Follow-up messages {#follow-ups}
 
-The first message in a conversation can go to the decision provider. A follow-up goes there too, in a language the model supports, with every decision provider except Cloudflare / Clef. Otherwise it goes to your AI model.
+Later messages in a conversation can go to the decision provider too. Each one is first checked against the conversation: whether it's a real request, and whether an earlier instruction rules it out. If that check isn't sure, the message goes to your AI model.
+
+A follow-up that says "it" instead of naming the device, such as "Now turn it off", works for one light: turning it on or off, or asking whether it's on.
 
 ## Actions the decision provider never runs {#risky-actions}
 

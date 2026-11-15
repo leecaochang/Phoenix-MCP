@@ -212,7 +212,7 @@ async def test_fixed_decision_endpoints_ignore_a_supplied_address():
     ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL.format(account_id=ACCOUNT), "clef-flash"),
     ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL.format(account_id=ACCOUNT), "clef"),
 ])
-def test_qualified_hosted_models_act_only_as_themselves_and_clef_only_on_single_requests(kind, base_url, model):
+def test_qualified_hosted_models_act_only_as_themselves_on_first_messages_and_follow_ups(kind, base_url, model):
     cfg = llm_accounts.ProviderConfig(kind, model, base_url)
     for registry in (DECISION_SEQUENTIAL_EXECUTION_MODELS, DECISION_BATCH_EXECUTION_MODELS,
                      DECISION_PERCENTAGE_EXECUTION_MODELS):
@@ -220,8 +220,8 @@ def test_qualified_hosted_models_act_only_as_themselves_and_clef_only_on_single_
         # No followed alias here: another revision, even a JEV one, is not admitted.
         assert not revision_admitted(registry, cfg, "jev-1.14.0")
     assert sequential_revision_admitted(cfg, model, model)
-    # Follow-ups were measured on every hosted model except Clef.
-    followups = kind != "cloudflare_decision"
+    # Every hosted model passed the follow-up corpus, Clef included.
+    followups = True
     for registry in (DECISION_CONTEXT_EXECUTION_MODELS, DECISION_REFERENCE_EXECUTION_MODELS,
                      DECISION_FOLLOWUP_EXECUTION_MODELS):
         assert (decision_key(cfg) in registry) is followups
@@ -389,6 +389,8 @@ async def test_store_keeps_a_decision_threshold_only_for_decision_accounts(hass)
     assert not await store.set_decision_threshold(chat, 0.8)
     rows = {row["id"]: row for row in store.list_instances()}
     assert rows[decision]["decision_threshold"] == 0.8 and "decision_threshold" not in rows[chat]
+    # A decision account is named by its company alone; its model shows beside it.
+    assert rows[decision]["name"] == "TypeSafe"
     # A stored value outside the bounds reads as the default.
     store._data[decision]["decision_threshold"] = 0.4
     assert store.resolve(decision, purpose="decision").decision_threshold == 0.90
@@ -448,3 +450,32 @@ async def test_google_reports_a_bad_key_as_400_and_phoenix_reads_it_as_a_rejecte
         cfg = llm_accounts.ProviderConfig("gemini_decision", "gemini-decision-1", str(server.make_url("/v1beta")), "bad")
         with pytest.raises(DecisionError, match="^" + expected + "$"):
             await DecisionProvider(cfg, "gemini_decisions").classify(session, "command", 1000)
+
+
+def _review_answers(checks: dict) -> dict:
+    """Answers to every question of a review table, each choosing its first choice at 0.85."""
+    answers = {}
+    for question, choices in checks.items():
+        first = next(iter(choices))
+        rest = round(0.15 / (len(choices) - 1), 6)
+        answers[question] = {"type": "choice", "choice": first, "confidence": 0.85,
+                             "probabilities": {key: 0.85 if key == first else rest for key in choices}}
+    return {"model": "jev-1.13", "answers": answers}
+
+
+@pytest.mark.parametrize("threshold, bar", [(0.80, 0.90), (0.70, 0.90), (0.95, 0.95)])
+async def test_follow_up_reviews_never_go_below_the_default_bar(socket_enabled, threshold, bar):
+    # Follow-ups were qualified at 0.90; at 0.80 a qualified model let a command through after
+    # the user had asked for a translation, so a lower account bar stops at first messages.
+    from custom_components.phoenix_mcp.routing.decision_types import confident_choice
+    from custom_components.phoenix_mcp.routing.routing_tables import (
+        DECISION_CONTEXT_CHECKS, DECISION_REFERENCE_CHECKS,
+    )
+    for checks, review in ((DECISION_CONTEXT_CHECKS, "review_context"), (DECISION_REFERENCE_CHECKS, "review_reference")):
+        app, _ = await _serve("/v1/systemone", lambda _, checks=checks: _review_answers(checks))
+        async with TestServer(app) as server, ClientSession() as session:
+            cfg = llm_accounts.ProviderConfig("opencode_decision", "jev-1.13", str(server.make_url("/v1")), "k",
+                                              decision_threshold=threshold)
+            result = await getattr(DecisionProvider(cfg, "systemone"), review)(session, {}, 1000)
+        for answer in result["checks"].values():
+            assert answer["min_probability"] == bar and confident_choice(answer) is False

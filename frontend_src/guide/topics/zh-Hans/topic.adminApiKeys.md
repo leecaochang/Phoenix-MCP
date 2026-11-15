@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.adminApiKeys", "title": "访问密钥端点", "parent": "topic.adminApi", "order": 10, "keywords": ["访问密钥 API", "令牌 API", "phx_", "创建密钥", "权限 API", "能力 API"], "sectionKeywords": { "access-keys": ["访问密钥记录", "密钥列表"], "capability-fields": ["cap_", "deny", "allow", "confirm", "能力字段"], "oauth": ["OAuth", "登录", "连接器", "登录窗口期"], "key-create": ["新密钥", "access_key", "原始值", "201"], "key-change": ["PATCH", "角色", "备注", "重命名", "unknownFields"], "key-revoke": ["删除密钥", "吊销", "phoenix_mcp_access_key_revoked"], "key-rotate": ["轮换", "新值", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-audit": ["审计行", "结果筛选", "客户端 IP"], "key-archived": ["已归档密钥", "已过期密钥", "已吊销密钥"], "presets": ["预设", "已保存设置", "access_key_presets_enabled"], "permissions": ["权限树", "节点", "域", "设备", "实体"], "permissions-replace": ["PUT", "替换树", "清除全部"], "permissions-node": ["单个节点", "设置状态"], "bulk-select": ["区域", "标签", "集成", "选择器"], "integration-options": ["配置条目", "集成列表"], "entity-hints": ["提示", "全局提示", "entity_hints"], "entities": ["实体树", "范围", "解析", "force_reload"], "resolve": ["resolution_path", "有效权限", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] } }
+{ "id": "topic.adminApiKeys", "title": "访问密钥端点", "parent": "topic.adminApi", "order": 10, "keywords": ["访问密钥 API", "令牌 API", "phx_", "创建密钥", "权限 API", "能力 API"], "sectionKeywords": { "access-keys": ["访问密钥记录", "密钥列表"], "capability-fields": ["cap_", "deny", "allow", "confirm", "能力字段"], "oauth": ["OAuth", "登录", "连接器", "登录窗口期"], "key-create": ["新密钥", "access_key", "原始值", "201"], "key-change": ["PATCH", "角色", "备注", "重命名", "unknownFields"], "key-revoke": ["删除密钥", "吊销", "phoenix_mcp_access_key_revoked"], "key-rotate": ["轮换", "新值", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-tools": ["tools/list", "工具目录", "catalog_bytes", "loads_in_parts"], "key-audit": ["审计行", "结果筛选", "客户端 IP"], "key-archived": ["已归档密钥", "已过期密钥", "已吊销密钥"], "presets": ["预设", "已保存设置", "access_key_presets_enabled"], "permissions": ["权限树", "节点", "域", "设备", "实体"], "permissions-replace": ["PUT", "替换树", "清除全部"], "permissions-node": ["单个节点", "设置状态"], "bulk-select": ["区域", "标签", "集成", "选择器"], "integration-options": ["配置条目", "集成列表"], "entity-hints": ["提示", "全局提示", "entity_hints"], "entities": ["实体树", "范围", "解析", "force_reload"], "resolve": ["resolution_path", "有效权限", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] } }
 ---
 这些端点管理访问密钥：创建密钥、更改其设置和能力，以及设置每个密钥可以读取和控制什么。每个路径都以 `/api/phoenix-mcp/admin` 开头，并且需要管理员。
 
@@ -17,6 +17,7 @@ PATCH  /api/phoenix-mcp/admin/access-keys/{id}
 DELETE /api/phoenix-mcp/admin/access-keys/{id}
 POST   /api/phoenix-mcp/admin/access-keys/{id}/rotate
 GET    /api/phoenix-mcp/admin/access-keys/{id}/stats
+GET    /api/phoenix-mcp/admin/access-keys/{id}/tools
 GET    /api/phoenix-mcp/admin/access-keys/{id}/connection
 GET    /api/phoenix-mcp/admin/access-keys/{id}/audit
 GET    /api/phoenix-mcp/admin/access-keys/{id}/oauth
@@ -234,6 +235,23 @@ PATCH 拒绝不在此表中的任何字段，且 `expires_at` 根本无法更改
 | `rate_limit_hits` | integer | 自重启以来因速率限制被拒绝的请求数。 |
 | `last_used_at` | string 或 null | |
 | `status` | string | `active` 或 `expired`。 |
+
+### 密钥工具 {#key-tools}
+
+`GET /access-keys/{id}/tools` 列出使用此密钥的智能体可以使用的工具。它与此密钥的 MCP 客户端从 `tools/list` 获得的列表相同，由密钥的角色、能力和写入范围决定。Agent Chat 不包含日期工具，因为每一轮都已带有时间。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `access_key_id` | string | |
+| `persona` | string | 密钥的角色。 |
+| `count` | integer | 提供的工具数量。 |
+| `catalog_bytes` | integer | 工具定义作为紧凑 JSON 的大小。 |
+| `loads_in_parts` | boolean | Agent Chat 在{{label:settings.toolLoadingLabel}}为{{label:settings.toolLoadingAuto}}时是否分批加载此目录。 |
+| `tools` | array | 每个工具一个对象：`name`、`read_only`（工具是否只读取）和 `group`（Agent Chat 分批加载时加载它的分组，始终声明的工具为 `null`）。 |
+
+| 状态 | `error` | `key` | 何时 |
+|---|---|---|---|
+| 404 | `not_found` | `adminError.accessKeyNotFound` | 没有使用此 ID 的有效密钥。 |
 
 ### 连接检查 {#key-connection}
 

@@ -30,7 +30,10 @@ from ..data import PhoenixData
 from ..helpers import cancel_expiry_timer
 from ..mesa import release_access_key_leases
 from ..oauth_flow import async_end_sign_ins, configured_public_url
+from ..provider_constants import AGENT_CHAT_TOOL_LOADING_MIN_BYTES
 from ..sensor import async_rename_access_key_sensors
+from ..tool_catalog import build_mcp_tool_list
+from ..tool_loading import catalog_bytes, tool_group
 from ..view_base import PhoenixView, _err
 from ..voice_agent import async_remove_assist_pipeline
 from .common import (
@@ -830,6 +833,41 @@ class PhoenixAdminAccessKeyStatsView(PhoenixView):
             "rate_limit_hits": counters["rate_limit_hits"],
             "last_used_at": last_used,
             "status": status,
+        }, request_id=rid)
+
+
+class PhoenixAdminAccessKeyToolsView(PhoenixView):
+    """GET /api/phoenix-mcp/admin/access-keys/{access_key_id}/tools - the tools this key is offered.
+
+    The same catalog MCP tools/list and Agent Chat build, so persona, capabilities, write
+    scope and MESA decide it exactly as they do for the agent. Read-only.
+    """
+
+    url = "/api/phoenix-mcp/admin/access-keys/{access_key_id}/tools"
+    name = "api:phoenix-mcp:admin:access-key_tools"
+    requires_auth = True
+
+    @require_admin
+    async def get(self, request: web.Request, access_key_id: str) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        data: PhoenixData = self.hass.data[DOMAIN]
+        access_key = data.store.get_access_key_by_id(access_key_id)
+        if access_key is None:
+            return _err("not_found", "Access key not found.", 404, rid, key="accessKeyNotFound")
+        catalog = build_mcp_tool_list(access_key, data)
+        size = catalog_bytes(catalog)
+        return _ok({
+            "access_key_id": access_key_id,
+            "persona": access_key.persona,
+            "count": len(catalog),
+            "catalog_bytes": size,
+            # Phoenix's own chat, on Automatic tool loading, declares a catalog this size in parts.
+            "loads_in_parts": size >= AGENT_CHAT_TOOL_LOADING_MIN_BYTES,
+            "tools": [{
+                "name": tool["name"],
+                "read_only": (tool.get("annotations") or {}).get("readOnlyHint") is True,
+                "group": tool_group(tool["name"]),
+            } for tool in catalog],
         }, request_id=rid)
 
 

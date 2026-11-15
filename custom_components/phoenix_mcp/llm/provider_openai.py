@@ -1087,6 +1087,8 @@ class OpenAICompatProvider:
     def _chunk_events(self, chunk: dict, stream: _ChatStream, show_thinking: bool) -> Iterator[dict]:
         """Fold one stream chunk into `stream`, yielding its events in the order they apply."""
         usage = _usage_event(chunk, total_counts_output=self.kind == "gemini")
+        if usage is not None and self.kind == "cloudflare":
+            usage = _raised_usage(usage, stream)
         if usage is not None:
             yield usage
         picked = _chunk_choice(chunk)
@@ -1204,6 +1206,9 @@ class _ChatStream:
         # OpenAI convention some compatible backends never send, and which would
         # therefore relabel their genuinely malformed calls as dropped ones.
         self.saw_finish = False
+        # The highest input and output counts reported so far, for providers whose
+        # usage chunks are increments (see _raised_usage).
+        self.usage_high = (0, 0)
         # Some local reasoning models (e.g. r1 via Ollama) emit their chain of
         # thought inline as <think>...</think> inside content rather than in a
         # separate reasoning field. Split it out so it is treated as thinking
@@ -1246,6 +1251,21 @@ def _usage_event(chunk: dict, *, total_counts_output: bool = False) -> dict | No
         if pt or ct:
             return _norm(EV_USAGE, input_tokens=pt, output_tokens=ct, cache_read_tokens=cached)
     return None
+
+
+def _raised_usage(usage: dict, stream: _ChatStream) -> dict | None:
+    """The usage event when it raises the input or output count, else None.
+
+    Workers AI reports the prompt on the first chunk, then each chunk's own output
+    tokens, then the whole call's totals on the last chunk. A usage event replaces
+    the call's count, so passing the increments on would make the count drop
+    mid-call; the highest counts seen are the call's totals at every point.
+    """
+    high = (max(stream.usage_high[0], usage["input_tokens"]), max(stream.usage_high[1], usage["output_tokens"]))
+    if high == stream.usage_high:
+        return None
+    stream.usage_high = high
+    return {**usage, "input_tokens": high[0], "output_tokens": high[1]}
 
 
 def _chunk_choice(chunk: dict) -> tuple[dict, dict] | None:

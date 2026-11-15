@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.adminApiKeys", "title": "Access Key Endpoints", "parent": "topic.adminApi", "order": 10, "keywords": ["access key API", "token API", "phx_", "create key", "permissions API", "capabilities API"], "sectionKeywords": { "access-keys": ["access key record", "key list"], "capability-fields": ["cap_", "deny", "allow", "confirm", "capability field"], "oauth": ["OAuth", "sign-in", "connector", "window"], "key-create": ["new key", "access_key", "raw value", "201"], "key-change": ["PATCH", "persona", "notes", "rename", "unknownFields"], "key-revoke": ["delete key", "revoke", "phoenix_mcp_access_key_revoked"], "key-rotate": ["rotate", "new value", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-audit": ["audit rows", "outcome filter", "client IP"], "key-archived": ["archived keys", "expired keys", "revoked keys"], "presets": ["preset", "saved settings", "access_key_presets_enabled"], "permissions": ["permission tree", "nodes", "domains", "devices", "entities"], "permissions-replace": ["PUT", "replace tree", "clear all"], "permissions-node": ["single node", "set state"], "bulk-select": ["area", "label", "integration", "selector"], "integration-options": ["config entry", "integration list"], "entity-hints": ["hint", "global hint", "entity_hints"], "entities": ["entity tree", "scope", "resolve", "force_reload"], "resolve": ["resolution_path", "effective permission", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] }, "covers": ["custom_components/phoenix_mcp/admin/access_keys.py", "custom_components/phoenix_mcp/admin/permissions.py", "custom_components/phoenix_mcp/access_key_store.py", "custom_components/phoenix_mcp/admin/oauth.py", "custom_components/phoenix_mcp/oauth_grants.py"] }
+{ "id": "topic.adminApiKeys", "title": "Access Key Endpoints", "parent": "topic.adminApi", "order": 10, "keywords": ["access key API", "token API", "phx_", "create key", "permissions API", "capabilities API"], "sectionKeywords": { "access-keys": ["access key record", "key list"], "capability-fields": ["cap_", "deny", "allow", "confirm", "capability field"], "oauth": ["OAuth", "sign-in", "connector", "window"], "key-create": ["new key", "access_key", "raw value", "201"], "key-change": ["PATCH", "persona", "notes", "rename", "unknownFields"], "key-revoke": ["delete key", "revoke", "phoenix_mcp_access_key_revoked"], "key-rotate": ["rotate", "new value", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-tools": ["tools/list", "tool catalog", "catalog_bytes", "loads_in_parts"], "key-audit": ["audit rows", "outcome filter", "client IP"], "key-archived": ["archived keys", "expired keys", "revoked keys"], "presets": ["preset", "saved settings", "access_key_presets_enabled"], "permissions": ["permission tree", "nodes", "domains", "devices", "entities"], "permissions-replace": ["PUT", "replace tree", "clear all"], "permissions-node": ["single node", "set state"], "bulk-select": ["area", "label", "integration", "selector"], "integration-options": ["config entry", "integration list"], "entity-hints": ["hint", "global hint", "entity_hints"], "entities": ["entity tree", "scope", "resolve", "force_reload"], "resolve": ["resolution_path", "effective permission", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] }, "covers": ["custom_components/phoenix_mcp/admin/access_keys.py", "custom_components/phoenix_mcp/admin/permissions.py", "custom_components/phoenix_mcp/access_key_store.py", "custom_components/phoenix_mcp/admin/oauth.py", "custom_components/phoenix_mcp/oauth_grants.py"] }
 ---
 These endpoints manage access keys: creating them, changing their settings and capabilities, and setting what each one may read and control. Every path starts with `/api/phoenix-mcp/admin` and needs an administrator.
 
@@ -17,6 +17,7 @@ PATCH  /api/phoenix-mcp/admin/access-keys/{id}
 DELETE /api/phoenix-mcp/admin/access-keys/{id}
 POST   /api/phoenix-mcp/admin/access-keys/{id}/rotate
 GET    /api/phoenix-mcp/admin/access-keys/{id}/stats
+GET    /api/phoenix-mcp/admin/access-keys/{id}/tools
 GET    /api/phoenix-mcp/admin/access-keys/{id}/connection
 GET    /api/phoenix-mcp/admin/access-keys/{id}/audit
 GET    /api/phoenix-mcp/admin/access-keys/{id}/oauth
@@ -234,6 +235,23 @@ Related: [{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)
 | `rate_limit_hits` | integer | Requests refused by the rate limit since the restart. |
 | `last_used_at` | string or null | |
 | `status` | string | `active` or `expired`. |
+
+### Key tools {#key-tools}
+
+`GET /access-keys/{id}/tools` lists the tools an agent using this key is offered. It's the same list the key's MCP clients get from `tools/list`, built from the key's persona, capabilities and write scope. Agent Chat leaves out the date tool, since every turn already carries the time.
+
+| Field | Type | Notes |
+|---|---|---|
+| `access_key_id` | string | |
+| `persona` | string | The key's persona. |
+| `count` | integer | How many tools are offered. |
+| `catalog_bytes` | integer | Size of the tool definitions as compact JSON. |
+| `loads_in_parts` | boolean | Whether Agent Chat, with {{label:settings.toolLoadingLabel}} set to {{label:settings.toolLoadingAuto}}, loads this catalog in parts. |
+| `tools` | array | One object per tool: `name`, `read_only` (whether the tool only reads) and `group` (the group Agent Chat loads it with when it loads in parts, or `null` for the tools it always declares). |
+
+| Status | `error` | `key` | When |
+|---|---|---|---|
+| 404 | `not_found` | `adminError.accessKeyNotFound` | No active key has this ID. |
 
 ### Connection check {#key-connection}
 
