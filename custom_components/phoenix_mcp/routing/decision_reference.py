@@ -22,7 +22,7 @@ from .routing_tables import (
 from .decision_batch import batch_catalog_digest, batch_execution_eligible, capture_batch_targets
 from .decision_history import context_history
 from .decision_history import history_texts
-from .decision_provider import DecisionProvider, _evaluate_guarded, decision_key, revision_admitted
+from .decision_provider import DecisionProvider, _evaluate_guarded, registry_covers, revision_admitted
 from .decision_types import DecisionError, confident_choice
 from ..redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 from ..llm.accounts import (
@@ -39,7 +39,7 @@ def reference_execution_eligible(hass: HomeAssistant, data: Any, language: objec
     cfg = loaded_decision_account(hass, account) if account else None
     return bool(effective_routing_mode(settings, "chat") == "hybrid"
                 and routing_language(language, preview=True) in DECISION_REFERENCE_LANGUAGES
-                and cfg and decision_key(cfg) in DECISION_REFERENCE_EXECUTION_MODELS)
+                and cfg and registry_covers(DECISION_REFERENCE_EXECUTION_MODELS, cfg))
 
 
 async def async_preview_reference(hass: HomeAssistant, data: Any, access_key: Any, sentence: str,

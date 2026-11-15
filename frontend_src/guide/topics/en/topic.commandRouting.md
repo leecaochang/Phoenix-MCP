@@ -11,6 +11,8 @@ Simple commands like "turn off the kitchen light" don't need a full AI model. Wh
 
 Once a step carries out a command, the later steps aren't used. When sentence matching or the decision provider changes something, the reply names the action that ran, so you hear what happened.
 
+Before the decision provider carries out a command, Phoenix also asks it whether you asked for the action now. When it judges a command negated, quoted, put off or conditional, such as "don't turn on the bed light", the command goes to your AI model instead.
+
 Related: [Decision provider](guide:window.settingsProviders#decision-provider)
 
 ## When it applies {#when}

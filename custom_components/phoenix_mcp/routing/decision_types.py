@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from .routing_tables import (
-    DECISION_MIN_CHOICE_PROBABILITY, DECISION_SUMMARY_COMPONENTS, DECISION_THRESHOLD_MAX, DECISION_THRESHOLD_MIN,
+    DECISION_ACT_NOW_CHOICES, DECISION_MIN_CHOICE_PROBABILITY, DECISION_SUMMARY_COMPONENTS,
+    DECISION_THRESHOLD_MAX, DECISION_THRESHOLD_MIN,
 )
 
 
@@ -30,3 +31,13 @@ def confident_choice(answer: dict) -> bool:
     selected = answer["probabilities"][answer["choice"]]
     return selected >= choice_threshold(answer) and sum(
         value == selected for value in answer["probabilities"].values()) == 1
+
+
+def act_now_confirmed(answer: object) -> bool:
+    """Whether the act-now answer says, at its own bar, that the sentence asks to act now.
+
+    A missing or malformed answer never confirms, so a request that did not ask cannot act.
+    """
+    return (isinstance(answer, dict) and answer.get("choice") == "act_now"
+            and isinstance(answer.get("probabilities"), dict) and set(answer["probabilities"]) == set(DECISION_ACT_NOW_CHOICES)
+            and confident_choice(answer))

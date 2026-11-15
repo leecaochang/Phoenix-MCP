@@ -29,7 +29,7 @@ from .routing_tables import (
     DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS,
 )
 from .decision_history import history_texts
-from .decision_provider import DecisionProvider, _evaluate_guarded, decision_key, revision_admitted
+from .decision_provider import DecisionProvider, _evaluate_guarded, registry_covers, revision_admitted
 from .decision_types import DecisionError, confident_choice
 from ..conversation_log import record_current
 from ..redaction import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
@@ -97,7 +97,7 @@ def context_execution_eligible(hass: HomeAssistant, data: Any, language: object)
     cfg = loaded_decision_account(hass, account) if account else None
     return bool(effective_routing_mode(settings, "chat") == "hybrid"
                 and routing_language(language, enabled=tuple(COMMAND_ROUTING_LANGUAGES)) in DECISION_CONTEXT_EXECUTION_LANGUAGES
-                and cfg and decision_key(cfg) in DECISION_CONTEXT_EXECUTION_MODELS)
+                and cfg and registry_covers(DECISION_CONTEXT_EXECUTION_MODELS, cfg))
 
 
 async def async_preview_context(hass: HomeAssistant, data: Any, access_key: Any, sentence: str,
@@ -310,7 +310,7 @@ async def _async_review_decision_context(hass: HomeAssistant, data: Any, access_
             cfg = store.resolve(account, purpose="decision") if account else None
             if cfg is None or account is None:
                 return result("not_configured")
-            if prepare and decision_key(cfg) not in DECISION_FOLLOWUP_EXECUTION_MODELS:
+            if prepare and not registry_covers(DECISION_FOLLOWUP_EXECUTION_MODELS, cfg):
                 return result("context_unverified")
             current = authority.current(hass)
             if current is None:

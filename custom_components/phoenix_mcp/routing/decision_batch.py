@@ -31,7 +31,7 @@ from .decision_identity import explicit_write_target, identity_competitors
 from .decision_provider import (
     DecisionValidationError, DecisionProvider, _evaluate_guarded, decision_key, revision_admitted,
 )
-from .decision_types import DecisionError, confident_choice
+from .decision_types import DecisionError, act_now_confirmed, confident_choice
 from .decision_targets import catalog_state, capture_targets, CatalogLimitError, TargetSnapshot
 from ..device_semantics import device_registry_snapshot
 from ..entity_commands import chosen_entity_value, literal_text
@@ -194,6 +194,8 @@ async def async_prepare_batch(hass: HomeAssistant, authority: RoutingAuthority, 
         return category, selection
     if not confident_choice(category):
         return category, {**selection, "reason": "low_probability"}
+    if not act_now_confirmed(answer.get("act")):
+        return category, {**selection, "reason": "not_immediate"}
     if category["choice"] in DECISION_PROVIDER_REFUSED_CATEGORIES:
         return category, {**selection, "reason": "operation_unconfirmed"}
     selection["decision"] = target
@@ -397,6 +399,8 @@ async def async_preview_batch(hass: HomeAssistant, data: Any, access_key: Any, s
                 return result("provider_fallback", decision=answer)
             if not all(confident_choice(choice) for choice in answer.values()):
                 return result("low_probability", decision=answer)
+            if not act_now_confirmed(answer.get("act")):
+                return result("not_immediate", decision=answer)
             if category["choice"] in DECISION_PROVIDER_REFUSED_CATEGORIES:
                 return result("operation_unconfirmed", decision=answer)
             descriptor = summaries.targets[target['choice']] if is_summary and summaries is not None else targets[target['choice']]
@@ -466,6 +470,8 @@ def temporal_proposal(answer: dict, targets: dict, source: dict, sentence: str, 
         return "provider_fallback", None
     if not all(confident_choice(check) for check in (route, target, value)):
         return "low_probability", None
+    if not act_now_confirmed(answer.get("act")):
+        return "not_immediate", None
     if route["model"] != target["model"] or route["model"] != value["model"]:
         return "model_unverified", None
     category = route["choice"]

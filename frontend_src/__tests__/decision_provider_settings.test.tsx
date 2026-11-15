@@ -521,3 +521,28 @@ it("saves an account's own threshold in hundredths from 0.70 to 1.00", async () 
   fireEvent.blur(field);
   await waitFor(() => expect(mocks.threshold).toHaveBeenCalledExactlyOnceWith("jev", 0.8));
 });
+
+it("names a local server's account Local, in the panel's language, with its model and without Ollama's default tag", async () => {
+  mocks.list.mockResolvedValue({ instances: [
+    { id: "one", kind: "local_decision", name: "Local", model: "clef-flash:latest" },
+    { id: "two", kind: "local_decision", name: "Local (192.168.1.104:8080)", model: "clef:27b-q8_0" },
+    { id: "three", kind: "typesafe", name: "TypeSafe", model: "jev-latest" },
+  ], provider_types: [...types, { kind: "local_decision", label: "Local / System One", label_key: "settings.providerLocalSystemOne",
+    fields: [{ id: "base_url", type: "url", label_key: "settings.agentcliServerUrl", required: true }] }] });
+  mocks.models.mockResolvedValue({ models: ["clef-flash:latest", "clef:latest"] });
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "one" }} onChange={vi.fn()} saving={false} />);
+  const first = await screen.findByRole("radio", { name: `${t("routing.localAccount")} clef-flash` });
+  expect(first).toBeChecked();
+  // A tag that says something, such as a quantization, stays.
+  screen.getByRole("radio", { name: `${t("routing.localAccount")} (192.168.1.104:8080) clef:27b-q8_0` });
+  screen.getByRole("radio", { name: "TypeSafe jev-latest" });
+  fireEvent.click(screen.getByRole("button", { name: t("settings.addAccount") }));
+  expect(within(await screen.findByLabelText("Provider type")).getByRole("option", { name: t("settings.providerLocalSystemOne") }))
+    .toHaveValue("local_decision");
+  fireEvent.click(document.body);
+  await waitFor(() => expect(screen.queryByLabelText("Provider type")).toBeNull());
+  fireEvent.click(first);
+  fireEvent.click(await screen.findByRole("button", { name: t("settings.accountChangeModel") }));
+  const picker = await screen.findByLabelText(t("routing.accountModel", { name: t("routing.localAccount") }));
+  await waitFor(() => expect(within(picker).getAllByRole("option").map(option => option.textContent)).toEqual(["clef-flash", "clef"]));
+});

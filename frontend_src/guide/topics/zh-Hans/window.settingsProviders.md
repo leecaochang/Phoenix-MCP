@@ -1,5 +1,5 @@
 ---
-{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 密钥", "模型", "LLM", "账户", "额度", "TypeSafe", "JEV", "Clef", "Gemini Decision"], "sectionKeywords": { "provider-add": ["新账户", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenAI-Compatible", "llama.cpp", "Bionic", "LM Studio", "vLLM", "LocalAI", "OpenRouter", "Infron", "Together AI", "Cerebras", "Cloudflare Workers AI", "Workers AI", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通义千问", "千问", "阿里云百炼", "百炼", "智谱", "月之暗面", "腾讯云", "小米", "谷歌", "离线", "本地模型", "价格", "计费"], "decision-threshold": ["threshold", "confidence", "probability", "0.90"], "decision-provider": ["TypeSafe", "JEV", "快速路径", "OpenCode", "System One", "Gemini Decision", "GPT Luna Decision", "Cloudflare", "Workers AI", "Clef", "Clef Flash", "账户 ID", "谷歌", "OpenAI Decisions", "gpt-6-luna"], "tool-loading": ["load_tools", "延迟加载", "工具搜索", "token", "工具太多", "上下文"] } }
+{ "id": "window.settingsProviders", "title": "{{label:workspace.aiProviders}}", "parent": "workspace.settings", "order": 1, "keywords": ["API 密钥", "模型", "LLM", "账户", "额度", "TypeSafe", "JEV", "Clef", "Gemini Decision"], "sectionKeywords": { "provider-add": ["新账户", "Anthropic", "Claude", "DeepSeek", "OpenAI", "ChatGPT", "GPT", "Gemini", "Google", "Grok", "xAI", "Groq", "Kimi", "Moonshot", "Meta", "Llama", "MiniMax", "Mistral AI", "NVIDIA NIM", "Xiaomi MiMo", "Tencent Cloud TokenHub", "OpenCode", "Ollama", "OpenAI-Compatible", "llama.cpp", "Bionic", "LM Studio", "vLLM", "LocalAI", "OpenRouter", "Infron", "Together AI", "Cerebras", "Cloudflare Workers AI", "Workers AI", "Fireworks AI", "Alibaba Cloud Model Studio", "Qwen", "DashScope", "Z.ai", "Zhipu", "GLM", "深度求索", "通义千问", "千问", "阿里云百炼", "百炼", "智谱", "月之暗面", "腾讯云", "小米", "谷歌", "离线", "本地模型", "价格", "计费"], "decision-threshold": ["threshold", "confidence", "probability", "0.90"], "decision-provider": ["TypeSafe", "JEV", "快速路径", "OpenCode", "System One", "Gemini Decision", "GPT Luna Decision", "Cloudflare", "Workers AI", "Clef", "Clef Flash", "账户 ID", "谷歌", "OpenAI Decisions", "gpt-6-luna", "Local / System One", "llama.cpp", "OLLAMA_KEEP_ALIVE", "本地 / System One"], "tool-loading": ["load_tools", "延迟加载", "工具搜索", "token", "工具太多", "上下文"] } }
 ---
 添加 Phoenix 使用的 AI 账户。每个账户需要 API 密钥，或者对于本地模型，需要服务器地址。
 
@@ -106,21 +106,24 @@ Phoenix 会按计划重新检查提供商的模型列表：6 到 720 小时（�
 
 从以下决策提供商中选择：
 
-- TypeSafe / JEV：TypeSafe 的 JEV 模型，使用 TypeSafe API 密钥。其 jev-preview 模型只观察，从不执行命令。
-- OpenCode / System One：JEV、Gemini Decision 或 GPT Luna Decision，使用 OpenCode Console API 密钥。
-- Google / Gemini Decision：Google 的 Gemini Decision 模型，使用 Gemini API 密钥。
 - Cloudflare / Clef：Workers AI 上的 Clef 或 Clef Flash，使用你的 Cloudflare 账户 ID 和 API 令牌。
+- Google / Gemini Decision：Google 的 Gemini Decision 模型，使用 Gemini API 密钥。
+- 本地 / System One：你自己服务器上的决策模型，例如 Ollama 或 llama.cpp，使用服务器地址。API 密钥可选。
 - OpenAI / Decisions：OpenAI 的 gpt-6-luna 决策模型，使用 OpenAI API 密钥。
+- OpenCode / System One：JEV、Gemini Decision 或 GPT Luna Decision，使用 OpenCode Console API 密钥。
+- TypeSafe / JEV：TypeSafe 的 JEV 模型，使用 TypeSafe API 密钥。其 jev-preview 模型只观察，从不执行命令。
 
 添加一个账户并选择其模型。同一时间只能使用一个决策提供商。每个账户的名称旁会显示其模型。
 
 决策账户与同一家公司的任何 AI 提供商账户相互独立。如果你已经在 AI 提供商中使用该密钥，也必须在此再次添加。
 
-所有决策提供商也会处理依赖对话内容的后续消息。参见[后续消息](guide:topic.commandRouting#follow-ups)。
+所有决策提供商也会处理依赖对话内容的后续消息；使用本地 / System One 时，只有 clef 模型会处理。参见[后续消息](guide:topic.commandRouting#follow-ups)。本地 / System One 还会把带数值的命令（例如亮度）交给你的 AI 模型。
 
 要使用它，请选择其账户。选择 **{{label:routing.noProvider}}** 可停止使用它；命令随后只依赖句子匹配。
 
 它还可以为自动化和脚本回答 Home Assistant 的“评估”操作，请参阅[决策](guide:window.settingsHome#ai-decisions)。
+
+Ollama 会在模型空闲 5 分钟后将其卸载。重新加载可能超过[决策超时](#decision-timeout)，因此停顿后的第一条命令会交给你的 AI 模型。要让模型保持加载，请在 Ollama 服务器上设置 `OLLAMA_KEEP_ALIVE`。
 
 相关：[命令如何路由](guide:topic.commandRouting)
 

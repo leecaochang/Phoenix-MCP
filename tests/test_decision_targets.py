@@ -33,6 +33,11 @@ def choice(selected, keys):
             "confidence": 1.0, "model": "test-model"}
 
 
+def route_choice(selected, keys):
+    """A parsed route answer carrying the act-now answer a real classify attaches."""
+    return {**choice(selected, keys), "act": choice("act_now", ["act_now", "not_now"])}
+
+
 @pytest.fixture
 async def target_home(hass, access_key_store):
     access_key, _ = await access_key_store.async_create_access_key("target_preview", "test")
@@ -64,7 +69,7 @@ async def preview(hass, home, **kwargs):
 
 
 def mocks(category="light_on", selected="t0"):
-    return (patch.object(DecisionProvider, "classify", AsyncMock(return_value=choice(category, DECISION_ROUTE_CHOICES))),
+    return (patch.object(DecisionProvider, "classify", AsyncMock(return_value=route_choice(category, DECISION_ROUTE_CHOICES))),
             patch.object(DecisionProvider, "select_target", AsyncMock(return_value=choice(selected, ["t0", "none"]))))
 
 
@@ -229,7 +234,7 @@ async def test_one_budget_for_both_requests_and_cancellation(hass, target_home):
     closed = asyncio.Event()
     async def classify(*args, **kwargs):
         await asyncio.sleep(0.17)
-        return choice("light_on", DECISION_ROUTE_CHOICES)
+        return route_choice("light_on", DECISION_ROUTE_CHOICES)
     async def select(*args):
         try:
             await asyncio.sleep(0.17)
@@ -449,7 +454,7 @@ async def test_target_selector_cannot_prepare_numeric_plan_even_with_matching_va
           patch_readers('custom_components.phoenix_mcp.routing.command_plan._capture_plan') as prepare):
         result = await data.decision_shadow._select_target(
             hass, RoutingAuthority.capture(data, access_key), provider, None, 'Set the lamp to 37 percent',
-            choice('light_brightness', DECISION_ROUTE_CHOICES), 1000, prepare=True,
+            route_choice('light_brightness', DECISION_ROUTE_CHOICES), 1000, prepare=True,
         )
     assert result['reason'] == 'numeric_unverified'
     select.assert_not_called()
@@ -466,7 +471,7 @@ async def test_multilingual_target_and_brightness_preview_keeps_language_and_no_
     payloads = []
     async def request(session, method, path, timeout, payload):
         payloads.append(payload)
-        selected = {"route": "light_brightness", "target": "t0", "percentage": "50"}
+        selected = {"act": "act_now", "route": "light_brightness", "target": "t0", "percentage": "50"}
         return {"model": "test-model", "answers": {
             question: {"type": "choice", **choice(selected[question], spec["criteria"])}
             for question, spec in payload["questions"].items()}}
@@ -505,7 +510,7 @@ async def test_jev_exact_percentage_preview_is_scoped_and_inert(hass, target_hom
         hass.states.async_set(entity_id, 'idle' if domain == 'media_player' else 'open', {'supported_features': feature})
         async_expose_entity(hass, 'conversation', entity_id, True)
     async def response(session, method, path, timeout, payload):
-        selected = {'route': category, 'target': 't0', 'percentage': str(percent)}
+        selected = {'act': 'act_now', 'route': category, 'target': 't0', 'percentage': str(percent)}
         if 'target' in payload['questions']:
             assert set(payload['questions']) == {'target', 'percentage'}
             assert len(payload['questions']['percentage']['criteria']) == 102
@@ -553,7 +558,7 @@ async def test_numeric_preview_requires_actual_device_support(hass, target_home,
     entry = er.async_get(hass).async_get_or_create(domain, 'test', 'unsupported')
     hass.states.async_set(entry.entity_id, 'on', {'supported_features': 0})
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
-    with (patch.object(DecisionProvider, 'classify', AsyncMock(return_value=choice(category, [category]))),
+    with (patch.object(DecisionProvider, 'classify', AsyncMock(return_value=route_choice(category, [category]))),
           patch.object(DecisionProvider, 'select_target') as select):
         result = await preview(hass, target_home)
     assert result['target_selection']['reason'] == 'no_target'

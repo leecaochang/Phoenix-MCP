@@ -56,6 +56,7 @@ Every account has a `kind`. Kinds with endpoints take an `endpoint_id`; the firs
 | `gemini_decision` (Google) | decision | `api_key`, `model`: `gemini-decision-1` |
 | `cloudflare_decision` (Cloudflare) | decision | `account_id`, `api_key`, `model`: `clef-flash`, `clef` |
 | `openai_decision` (OpenAI) | decision | `api_key`, `model`: `gpt-6-luna` |
+| `local_decision` (Local) | decision | `base_url`, `api_key` (optional), `model`: a decision model the server lists |
 
 ### Setup fields {#setup-fields}
 
@@ -64,8 +65,8 @@ Adding an account and checking a setup take the same body.
 | Field | Type | Notes |
 |---|---|---|
 | `kind` | string | Required. One of the kinds above. |
-| `api_key` | string | Required for every kind except `ollama` and `local_openai`. At most 4096 characters, with no control characters. Phoenix never returns it. |
-| `base_url` | string | Required for `ollama`, `local_openai` and `qwen`. Only `ollama` and `local_openai` may use a private address. For `local_openai`, Phoenix adds `/v1` to an address without a path. Every other kind uses a fixed endpoint and ignores this field. |
+| `api_key` | string | Required for every kind except `ollama`, `local_openai` and `local_decision`. At most 4096 characters, with no control characters. Phoenix never returns it. |
+| `base_url` | string | Required for `ollama`, `local_openai`, `local_decision` and `qwen`. Only `ollama`, `local_openai` and `local_decision` may use a private address. For `local_openai` and `local_decision`, Phoenix adds `/v1` to an address without a path. Every other kind uses a fixed endpoint and ignores this field. |
 | `endpoint_id` | string | Only for kinds with endpoints. Leave it out for the default. |
 | `account_id` | string | Required for `cloudflare` and `cloudflare_decision`: the 32-character Cloudflare account ID. Phoenix builds the endpoint from it. |
 | `model` | string | Optional for conversation kinds; leave it empty to follow the provider automatically. Required for decision kinds: at most 200 characters, and in the provider's current list. |

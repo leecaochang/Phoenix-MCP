@@ -83,7 +83,7 @@ Phoenix runs inside Home Assistant, but your AI model may not. Whatever Phoenix 
 - A decision provider receives what was said. For some checks it also gets recent messages and lists of devices or tools to choose from.
 - An external app sends what it reads to its own model. That app's settings decide where it goes.
 
-To keep everything at home, use a local model on Ollama or another local server, and no decision provider. With a cloud provider, give a key only the camera, log and YAML access you're happy to share.
+To keep everything at home, use a local model on Ollama or another local server, and either Local / System One or no decision provider. With a cloud provider, give a key only the camera, log and YAML access you're happy to share.
 
 An Ollama server signed in to ollama.com can also run cloud models, whose names end in `cloud`. Their requests leave your home. Phoenix never switches a local account to one by itself, but uses one you pick. Set `OLLAMA_NO_CLOUD=1` on the server to turn them off.
 

@@ -42,7 +42,7 @@ from ..provider_constants import (
 from ..routing.routing_tables import (
     DECISION_CLOUDFLARE_BASE_URL, DECISION_GEMINI_BASE_URL, DECISION_OPENAI_BASE_URL, DECISION_OPENCODE_BASE_URL,
     DECISION_TYPESAFE_BASE_URL, DECISION_TYPESAFE_MODEL,
-    DECISION_MIN_CHOICE_PROBABILITY, DECISION_THRESHOLD_MAX, DECISION_THRESHOLD_MIN,
+    DECISION_LOCAL_PROBE_CHOICES, DECISION_MIN_CHOICE_PROBABILITY, DECISION_THRESHOLD_MAX, DECISION_THRESHOLD_MIN,
 )
 from ..time_text import parse_datetime
 
@@ -55,7 +55,8 @@ _MODEL_SEEN_LIMIT = 1000
 # which must outlive the model's own row once the catalogue drops it.
 # Probed facts a catalogue read does not retest, so they outlive it. A local model's thinking switch is
 # found only by Check Options, as its server declares nothing about it.
-_PROBED_CAPABILITIES = ("effort_levels", "temperature", "replacement", "thinking", "effort", "thinking_off")
+_PROBED_CAPABILITIES = ("effort_levels", "temperature", "replacement", "thinking", "effort", "thinking_off",
+                        "choice_limit")
 
 
 # Bounds on a stored capability row's own keys and text values; model ids use the catalogue's.
@@ -152,6 +153,9 @@ class ProviderConfig:
     tool_loading: str = "auto"
     # The probability a decision account's answer must reach to act; conversation accounts ignore it.
     decision_threshold: float = DECISION_MIN_CHOICE_PROBABILITY
+    # The most choices one question may carry, as a local decision server was found to accept;
+    # None when not learned, and then the server's model list or the fallback format decides.
+    decision_choice_limit: int | None = None
 
 
 @dataclass(frozen=True)
@@ -252,6 +256,10 @@ _LOCAL_OPENAI_URL_FIELD = ProviderField(
 )
 _OPTIONAL_API_KEY_FIELD = ProviderField(
     "api_key", "secret", "settings.agentcliApiKeyOptional", required=False,
+)
+# Ollama, llama.cpp and laya-serve answer System One decisions under /v1.
+_LOCAL_DECISION_URL_FIELD = ProviderField(
+    "base_url", "url", "settings.agentcliServerUrl", placeholder="http://host:11434/v1",
 )
 _QWEN_URL_FIELD = ProviderField(
     "base_url", "url", "settings.agentcliBaseUrl",
@@ -502,6 +510,12 @@ PROVIDER_DEFINITIONS["openai_decision"] = ProviderDefinition(
     base_url=DECISION_OPENAI_BASE_URL, model="gpt-6-luna",
     fields=(_API_KEY_FIELD,), purpose="decision",
 )
+# A System One server the operator runs, such as Ollama or llama.cpp; any model it serves may decide.
+PROVIDER_DEFINITIONS["local_decision"] = ProviderDefinition(
+    kind="local_decision", label="Local / System One", label_key="settings.providerLocalSystemOne",
+    adapter="systemone", base_url="",
+    fields=(_LOCAL_DECISION_URL_FIELD, _OPTIONAL_API_KEY_FIELD), purpose="decision",
+)
 PROVIDER_DEFINITIONS["gemini_decision"] = ProviderDefinition(
     kind="gemini_decision", label="Google / Gemini Decision", adapter="gemini_decisions",
     base_url=DECISION_GEMINI_BASE_URL, model="gemini-decision-1",
@@ -573,10 +587,17 @@ def _host_port_of(url: str) -> str:
     return f"{host}:{port}" if host and port else host
 
 
-def _decision_account_name(kind: str, instance_id: str, has_dupes: bool) -> str:
-    """A decision account's name: its company alone, since the model shows beside it; the id tells two apart."""
+def _decision_account_name(inst: dict, instance_id: str, has_dupes: bool) -> str:
+    """A decision account's name: its company alone, since the model shows beside it.
+
+    The id tells two accounts apart; for local servers the address does.
+    """
+    kind = inst.get("kind", "")
     company = PROVIDER_DEFINITIONS[kind].label.split(" / ")[0]
-    return f"{company} ({instance_id[:8]})" if has_dupes else company
+    if not has_dupes:
+        return company
+    host = _host_port_of(inst.get("base_url", "")) if kind in AGENT_CHAT_LOCAL_SERVER_KINDS else ""
+    return f"{company} ({host or instance_id[:8]})"
 
 
 def _instance_name(inst: dict, has_dupes: bool, instance_id: str) -> str:
@@ -892,7 +913,7 @@ class AgentCliStore:
             out.append({
                 "id": iid,
                 "kind": kind,
-                "name": _decision_account_name(kind, iid, counts[kind] > 1) if decision
+                "name": _decision_account_name(inst, iid, counts[kind] > 1) if decision
                         else _instance_name(inst, counts[kind] > 1, iid),
                 # The model a request would use now. `model_mode` says whether the
                 # operator chose it ("fixed") or the account follows the provider's
@@ -957,7 +978,14 @@ class AgentCliStore:
             tool_loading=_tool_loading(cfg),
             decision_routing_revision=str(cfg.get("decision_routing_revision") or "") if purpose == "decision" else "",
             decision_threshold=decision_threshold(cfg) if purpose == "decision" else DECISION_MIN_CHOICE_PROBABILITY,
+            decision_choice_limit=_choice_limit(model_caps) if purpose == "decision" else None,
         )
+
+
+def _choice_limit(model_caps: dict) -> int | None:
+    """A learned choice limit within the formats Phoenix sends, or None."""
+    value = model_caps.get("choice_limit")
+    return value if type(value) is int and 2 <= value <= DECISION_LOCAL_PROBE_CHOICES else None
 
 
 def decision_threshold(cfg: dict) -> float:

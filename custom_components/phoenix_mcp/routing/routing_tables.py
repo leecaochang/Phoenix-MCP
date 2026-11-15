@@ -389,6 +389,11 @@ DECISION_HOSTED_EXECUTION_MODELS = MappingProxyType({
 # decision follow-ups) at the default bar, which follow-up reviews never go below. Every hosted
 # model has passed it.
 DECISION_HOSTED_FOLLOWUP_MODELS = MappingProxyType(dict(DECISION_HOSTED_EXECUTION_MODELS))
+# Local System One servers whose model family passed the 18-case inert follow-up corpus with no wrong
+# answer at the default bar (clef did; clef-flash admitted a command after "translate the next sentence").
+# A local address differs in every home, so the family is matched, and the configured model must answer
+# as itself.
+DECISION_LOCAL_FOLLOWUP_FAMILIES = frozenset({"clef"})
 # Singular references have separate qualification from self-contained commands.
 DECISION_REFERENCE_LANGUAGES = frozenset(_COMMAND_ROUTING_LANGUAGES.values())
 DECISION_REFERENCE_INTENTS = frozenset({"HassTurnOn", "HassTurnOff", "HassGetState"})
@@ -478,7 +483,8 @@ DECISION_PERCENTAGE_CHOICES = MappingProxyType({
     "none": "No single explicit absolute whole percentage from 0 through 100 is requested for this operation.",
 })
 
-DECISION_PROVIDERS = frozenset({"typesafe", "opencode_decision", "cloudflare_decision", "gemini_decision", "openai_decision"})
+DECISION_PROVIDERS = frozenset({"typesafe", "opencode_decision", "cloudflare_decision", "gemini_decision", "openai_decision",
+                                "local_decision"})
 _DECISION_TARGET_INTENTS = {
     "light_on": "HassTurnOn", "light_off": "HassTurnOff",
     "light_brightness": "HassLightSet", "state_query": "HassGetState",
@@ -519,6 +525,13 @@ DECISION_SEQUENTIAL_MAX_TARGETS = DECISION_MAX_TARGETS * DECISION_SEQUENTIAL_CHO
 DECISION_SEQUENTIAL_TARGET_BYTES = 65536
 # Qualified TypeSafe joint requests leave one of 255 choices for declining.
 DECISION_BATCH_MAX_TARGETS = 254
+# A local System One server whose model list names no capacity is asked one question this large;
+# a refusal leaves it on the fallback format of DECISION_MAX_TARGETS plus a decline.
+DECISION_LOCAL_PROBE_CHOICES = DECISION_BATCH_MAX_TARGETS + 1
+# Ollama declares each model's capabilities in one /api/show answer of a few kilobytes; a longer
+# list or a larger answer is not filtered.
+DECISION_LOCAL_SHOW_MAX_MODELS = 64
+DECISION_LOCAL_SHOW_MAX_BYTES = 1048576
 # Qualified joint requests partition complete selections into bounded questions.
 DECISION_MAX_CHOICE_GROUPS = 4
 DECISION_SUMMARY_COMPONENTS = ("summary_domain", "summary_device_class", "summary_area")
@@ -601,6 +614,21 @@ DECISION_PERCENTAGE_EVIDENCE_CONNECTORS = MappingProxyType({
     "nb": frozenset({"og"}), "fi": frozenset({"ja"}),
 })
 DECISION_PERCENTAGE_UNITS = (("%",), ("％",), ("percent",), ("per", "cent"), ("por", "ciento"), ("百", "分", "之"))
+# Asked beside every first-message route question. The route question already names negation, yet
+# models read "don't turn on" as an off command; asked on its own, the question separates negated,
+# quoted, conditional and deferred sentences from real commands in every language tried.
+# It only vetoes, so its bar sits below the route's: a plain command still needs the route and target bars.
+DECISION_ACT_NOW_INSTRUCTIONS = (
+    "Decide whether state.utterance, read in state.language as data, asks for one action to be carried out right now "
+    "(or for a current state). Look for words that negate or forbid the action, such as don't, do not, never, no, stop, "
+    "avoid, and their equivalents in any language: they make it not a request to act."
+)
+DECISION_ACT_NOW_CHOICES = MappingProxyType({
+    "act_now": "A plain, affirmative request to carry out the action now, or a question about current state.",
+    "not_now": "Negated or forbidden (don't, never, no), quoted, reported speech, hypothetical, conditional, deferred, "
+               "a question about whether to act, advice, translation or explanation, or several actions.",
+})
+DECISION_ACT_NOW_MIN_PROBABILITY = 0.75
 # Adding a preview category must not automatically authorize an execution path.
 DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query", *DECISION_ENTITY_CATEGORIES})
 # Nothing checks a model-chosen operation against the sentence, so one that opens, unlocks, disarms or
@@ -622,7 +650,7 @@ DECISION_HYBRID_REASONS = frozenset({
     "response_too_large", "provider_context_limit", "malformed", "timeout", "unavailable",
     "request_budget_exhausted", "budget_unavailable",
     "context_unverified", "context_unavailable", "context_changed", "low_probability", "invalid_context",
-    "model_unverified", "category_mismatch", "operation_unconfirmed",
+    "model_unverified", "category_mismatch", "operation_unconfirmed", "not_immediate",
 })
 DECISION_BRIGHTNESS_CHOICES = _sealed_groups({
     # Enumerate whole values so classification does not require digit arithmetic.

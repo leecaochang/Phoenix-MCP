@@ -155,7 +155,7 @@ async def test_jev_selects_query_phoenix_counts_via_real_dispatch(hass,summary_h
         payload=args[4]
         scopes=payload['state']['summary_scopes']
         key=next(key for key,item in scopes.items() if not item['summary_scope']['area_id'])
-        selected={'route':'state_summary','target':'none','summary_scope':key,'summary':mode}
+        selected={'act':'act_now','route':'state_summary','target':'none','summary_scope':key,'summary':mode}
         return {'model':'jev-1.13.0','answers':{
             name:{'type':'choice','choice':selected.get(name,'none'),'confidence':1,
                   'probabilities':{key:float(key==selected.get(name,'none')) for key in spec['criteria']}}
@@ -245,7 +245,7 @@ async def test_jev_summary_refusals(hass,summary_home,damage):
     async def response(*args):
         payload=args[4]
         key=next(key for key,item in payload['state']['summary_scopes'].items() if not item['summary_scope']['area_id'])
-        selected={'route':'state_summary','target':'none','summary_scope':key,'summary':'on'}
+        selected={'act':'act_now','route':'state_summary','target':'none','summary_scope':key,'summary':'on'}
         if damage=='single_target': selected['target']=next(iter(payload['state']['targets']))
         if damage=='wrong_filter': selected['summary']='playing'
         if damage=='unrequested_filter': selected.update(route='light_on',target=next(iter(payload['state']['targets'])),summary_scope='none')
@@ -278,7 +278,7 @@ async def test_jev_summary_with_history_binds_context_and_query(hass,summary_hom
         payload=args[4]
         if 'route' in payload['questions']:
             key=next(key for key,item in payload['state']['summary_scopes'].items() if not item['summary_scope']['area_id'])
-            selected={'route':'state_summary','target':'none','summary_scope':key,'summary':'breakdown'}
+            selected={'act':'act_now','route':'state_summary','target':'none','summary_scope':key,'summary':'breakdown'}
         else:
             assert payload['state']['history']==history
             assert payload['state']['candidate']['summary_mode']=='breakdown'
@@ -355,7 +355,7 @@ async def test_summary_question_instructions_are_independent_and_consistent():
         assert 'counts, comparisons' not in questions['route']['instructions']
         assert 'across the whole accessible home' in questions['summary_scope']['criteria']['s0'].lower()
         assert 'Independently select the requested count' in questions['summary']['instructions']
-        selected={'route':'state_summary','target':'none','summary_scope':'s0','summary':'on'}
+        selected={'act':'act_now','route':'state_summary','target':'none','summary_scope':'s0','summary':'on'}
         return {'model':'jev-1.13.0','answers':{
             name:{'type':'choice','choice':selected[name],'confidence':1,
                   'probabilities':{key:float(key==selected[name]) for key in question['criteria']}}

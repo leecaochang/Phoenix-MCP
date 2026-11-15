@@ -19,12 +19,15 @@ from custom_components.phoenix_mcp.routing.routing_tables import (
 )
 
 ACCOUNT = "0123456789abcdef0123456789abcdef"
+# The act-now answer every first-message classify request also asks for.
+ACT_NOW = {"type": "choice", "choice": "act_now", "confidence": 1, "probabilities": {"act_now": 1.0, "not_now": 0.0}}
 
 
 def _answer(model: str | None = "jev-1.13.0") -> dict:
     body = {"answers": {"route": {"type": "choice", "choice": "light_on", "confidence": 0.95,
                                   "probabilities": {key: 0.95 if key == "light_on" else 0.0125
-                                                    for key in DECISION_ROUTE_CHOICES}}},
+                                                    for key in DECISION_ROUTE_CHOICES}},
+                        "act": dict(ACT_NOW)},
             "usage": {"input_tokens": 10, "output_tokens": 0}}
     if model is not None:
         body["model"] = model
@@ -246,11 +249,15 @@ async def test_relayed_jev_capacity_refusal_is_recognized_only_where_jev_answers
             await DecisionProvider(cfg, "systemone").classify(session, "command", 1000)
 
 
+_OPENAI_ACT_NOW = {"type": "choice", "name": "act", "choice": "act_now", "confidence": 1,
+                   "probabilities": [{"value": "act_now", "probability": 1.0}, {"value": "not_now", "probability": 0.0}]}
+
+
 def _openai_answer(choice="light_on", name="route", **extra):
     return {"model": "gpt-6-luna", "answers": [{
         "type": "choice", "name": name, "choice": choice, "confidence": 0.95,
         "probabilities": [{"value": key, "probability": 0.95 if key == choice else 0.0125}
-                          for key in DECISION_ROUTE_CHOICES], **extra}],
+                          for key in DECISION_ROUTE_CHOICES], **extra}, _OPENAI_ACT_NOW],
         "usage": {"input_tokens": 50, "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
                   "output_tokens": 0, "output_tokens_details": {"reasoning_tokens": 0}, "total_tokens": 50}}
 
@@ -265,6 +272,7 @@ async def test_openai_sends_ordered_named_questions_and_reads_ordered_answers(so
     message = sent["body"]["input"][0]
     assert message["role"] == "user" and "state" not in sent["body"]
     assert message["content"][1]["type"] == "input_json" and message["content"][1]["data"]["utterance"] == "Turn on the lamp"
+    assert [question["name"] for question in sent["body"]["questions"]] == ["route", "act"]
     question = sent["body"]["questions"][0]
     assert question["type"] == "choice" and question["name"] == "route"
     assert [choice["value"] for choice in question["choices"]] == list(DECISION_ROUTE_CHOICES)
@@ -275,10 +283,10 @@ async def test_openai_sends_ordered_named_questions_and_reads_ordered_answers(so
 @pytest.mark.parametrize("body,reason", [
     (_openai_answer(name="other"), "malformed"),
     ({"model": "gpt-6-luna", "answers": []}, "malformed"),
-    ({"model": "gpt-6-luna", "answers": [{"type": "refusal", "name": "route"}]}, "low_probability"),
+    ({"model": "gpt-6-luna", "answers": [{"type": "refusal", "name": "route"}, _OPENAI_ACT_NOW]}, "low_probability"),
     ({**_openai_answer(), "answers": [{**_openai_answer()["answers"][0], "probabilities": [
-        {"value": "light_on", "probability": 0.5}, {"value": "light_on", "probability": 0.5}]}]}, "malformed"),
-    ({**_openai_answer(), "answers": [{**_openai_answer()["answers"][0], "choice": True}]}, "malformed"),
+        {"value": "light_on", "probability": 0.5}, {"value": "light_on", "probability": 0.5}]}, _OPENAI_ACT_NOW]}, "malformed"),
+    ({**_openai_answer(), "answers": [{**_openai_answer()["answers"][0], "choice": True}, _OPENAI_ACT_NOW]}, "malformed"),
 ])
 async def test_openai_answers_must_match_each_question(body, reason, socket_enabled):
     app, _ = await _serve("/v1/decisions", lambda _: body)
@@ -368,7 +376,7 @@ async def test_the_account_threshold_reaches_every_parsed_answer(socket_enabled)
     app, _ = await _serve("/v1/systemone", lambda _: {**_answer("jev-1.13"), "answers": {"route": {
         "type": "choice", "choice": "light_on", "confidence": 0.85,
         "probabilities": {key: 0.85 if key == "light_on" else round(0.15 / (len(DECISION_ROUTE_CHOICES) - 1), 6)
-                          for key in DECISION_ROUTE_CHOICES}}}})
+                          for key in DECISION_ROUTE_CHOICES}}, "act": dict(ACT_NOW)}})
     async with TestServer(app) as server, ClientSession() as session:
         for threshold, confident in ((0.90, False), (0.80, True)):
             cfg = llm_accounts.ProviderConfig("opencode_decision", "jev-1.13", str(server.make_url("/v1")), "k",

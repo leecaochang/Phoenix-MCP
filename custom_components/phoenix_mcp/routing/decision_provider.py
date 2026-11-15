@@ -33,6 +33,10 @@ from .routing_tables import (
     DECISION_SEQUENTIAL_MAX_TARGETS, DECISION_FOLLOWED_ALIASES, DECISION_FOLLOWED_REVISION,
     DECISION_SEQUENTIAL_EXECUTION_MODELS, DECISION_TYPESAFE_BASE_URL, DECISION_PINNABLE_MODELS,
     DECISION_CLOUDFLARE_BASE_URL, DECISION_CLOUDFLARE_ACCOUNT_ID, DECISION_FIXED_MODELS,
+    DECISION_ACT_NOW_CHOICES, DECISION_ACT_NOW_INSTRUCTIONS, DECISION_ACT_NOW_MIN_PROBABILITY,
+    DECISION_CONTEXT_EXECUTION_MODELS, DECISION_FOLLOWUP_EXECUTION_MODELS, DECISION_LOCAL_FOLLOWUP_FAMILIES,
+    DECISION_REFERENCE_EXECUTION_MODELS,
+    DECISION_LOCAL_PROBE_CHOICES, DECISION_LOCAL_SHOW_MAX_BYTES, DECISION_LOCAL_SHOW_MAX_MODELS, DECISION_TIMEOUT_MAX_MS,
 )
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
@@ -127,6 +131,7 @@ def _probability(value: Any) -> bool:
 _DECISION_PROTOCOLS = frozenset({
     ("typesafe", "systemone"), ("opencode_decision", "systemone"),
     ("cloudflare_decision", "systemone"), ("gemini_decision", "gemini_decisions"),
+    ("local_decision", "systemone"),
     ("openai_decision", "openai_decisions"),
 })
 _CLOUDFLARE_PREFIX, _CLOUDFLARE_SUFFIX = DECISION_CLOUDFLARE_BASE_URL.split("{account_id}")
@@ -329,12 +334,34 @@ def normalized_response(kind: str, model: str, body: Any, questions: list[str] |
     return body
 
 
+def local_followup_model(model: Any) -> bool:
+    """Whether a local server's model id names a family qualified for follow-ups, whatever its tag."""
+    if not isinstance(model, str):
+        return False
+    return model.rsplit("/", 1)[-1].split(":", 1)[0] in DECISION_LOCAL_FOLLOWUP_FAMILIES
+
+
+def _local_followup(registry: Mapping, cfg: Any) -> bool:
+    return (cfg.kind == "local_decision" and local_followup_model(cfg.model)
+            and any(registry is qualified for qualified in (
+                DECISION_CONTEXT_EXECUTION_MODELS, DECISION_REFERENCE_EXECUTION_MODELS,
+                DECISION_FOLLOWUP_EXECUTION_MODELS)))
+
+
+def registry_covers(registry: Mapping[tuple[str, str, str], frozenset[str]], cfg: Any) -> bool:
+    """Whether an execution registry names this account's endpoint and model, or its local family."""
+    return decision_key(cfg) in registry or _local_followup(registry, cfg)
+
+
 def revision_admitted(registry: Mapping[tuple[str, str, str], frozenset[str]], cfg: Any, returned: Any) -> bool:
     """Whether the answering revision may act for this account under one execution registry.
 
     The account's endpoint and configured model must be registered. A followed
-    alias admits any JEV revision; otherwise the revision must be listed.
+    alias admits any JEV revision; otherwise the revision must be listed. A local
+    server in a qualified follow-up family must answer as its configured model.
     """
+    if _local_followup(registry, cfg):
+        return isinstance(returned, str) and returned == cfg.model
     key = decision_key(cfg)
     if key not in registry or not isinstance(returned, str):
         return False
@@ -346,13 +373,14 @@ def sequential_revision_admitted(cfg: Any, classify_model: Any, target_model: An
     """Whether a sequential classify and target answer may act together for this account.
 
     Both answers must come from one revision. At a fixed hosted endpoint that revision must be
-    qualified for sequential execution; a custom TypeSafe address is the operator's own choice.
+    qualified for sequential execution; a custom TypeSafe address and a local System One server
+    are the operator's own choice, whatever model they serve.
     """
     if not isinstance(classify_model, str) or classify_model != target_model:
         return False
-    if cfg.kind != "typesafe" or cfg.base_url == DECISION_TYPESAFE_BASE_URL:
-        return revision_admitted(DECISION_SEQUENTIAL_EXECUTION_MODELS, cfg, classify_model)
-    return True
+    if cfg.kind == "local_decision" or (cfg.kind == "typesafe" and cfg.base_url != DECISION_TYPESAFE_BASE_URL):
+        return True
+    return revision_admitted(DECISION_SEQUENTIAL_EXECUTION_MODELS, cfg, classify_model)
 
 
 def distribution_fits(values: Iterable[float], rounding_error: float = 0) -> bool:
@@ -535,6 +563,16 @@ class DecisionProvider:
             pass
         return "http_error"
 
+    @staticmethod
+    def _act_now_question() -> dict:
+        return {"type": "choice", "instructions": DECISION_ACT_NOW_INSTRUCTIONS, "criteria": dict(DECISION_ACT_NOW_CHOICES)}
+
+    def _parse_act_now(self, body: Any) -> dict:
+        """The act-now answer, carrying its own bar rather than the account's."""
+        return parse_choice({"model": body.get("model"), "answers": {"act": body["answers"]["act"]}},
+                            DECISION_ACT_NOW_CHOICES, "act", rounding_error=self.rounding_error,
+                            min_probability=DECISION_ACT_NOW_MIN_PROBABILITY)
+
     async def request_evaluation(self, session: ClientSession, state: Any, questions: Mapping[str, Any],
                                  timeout_ms: int) -> dict:
         """Ask caller-written questions; the names and state reach neither metrics nor spans."""
@@ -636,7 +674,39 @@ class DecisionProvider:
             if not isinstance(name, str) or not name or len(name) > 200:
                 raise DecisionError("malformed")
             models.append(name)
+        if self.cfg.kind == "local_decision":
+            models = await self._ollama_decision_models(session, models)
         return sorted(set(models))
+
+    async def _ollama_decision_models(self, session: ClientSession, models: list[str]) -> list[str]:
+        """Keep the models an Ollama server declares as decision models; any other server's list is kept.
+
+        Ollama's OpenAI list also names its chat models. Its native /api/show, at the address
+        without /v1, declares each model's capabilities; a server without it is not Ollama.
+        """
+        root = self.cfg.base_url.removesuffix("/v1")
+        headers = {"Authorization": f"Bearer {self.cfg.api_key}"} if self.cfg.api_key else {}
+        kept = []
+        for model in models[:DECISION_LOCAL_SHOW_MAX_MODELS]:
+            try:
+                async with session.post(f"{root}/api/show", json={"model": model}, headers=headers,
+                                        allow_redirects=False,
+                                        timeout=ClientTimeout(total=DECISION_TIMEOUT_DEFAULT_MS / 1000)) as response:
+                    if response.status != 200:
+                        return models
+                    raw = bytearray()
+                    async for chunk in response.content.iter_chunked(65536):
+                        raw.extend(chunk)
+                        if len(raw) > DECISION_LOCAL_SHOW_MAX_BYTES:
+                            return models
+                capabilities = json.loads(raw).get("capabilities")
+            except (ClientError, TimeoutError, UnicodeError, json.JSONDecodeError, AttributeError, RecursionError):
+                return models
+            if not isinstance(capabilities, list):
+                return models
+            if "decision" in capabilities:
+                kept.append(model)
+        return kept
 
     def selectable(self, listed: list[str]) -> list[str]:
         """The listed models plus the fixed revisions reviewed at this endpoint, which the list may omit."""
@@ -644,9 +714,39 @@ class DecisionProvider:
                   if (kind, base_url) == (self.cfg.kind, decision_endpoint(self.cfg))}
         return sorted(set(listed) | pinned)
 
+    async def probe_choice_limit(self, session: ClientSession) -> int:
+        """The most choices the configured model accepts in one question, by asking it.
+
+        One question of the largest format Phoenix sends; a refusal is retried at the fallback
+        format. The answer's own content is not judged, only that a decision came back. Waits the
+        longest decision timeout, as the first request may load the model.
+        """
+        for size in (DECISION_LOCAL_PROBE_CHOICES, DECISION_MAX_TARGETS + 1):
+            criteria: dict[str, str | None] = {f"c{index}": None for index in range(size - 1)}
+            criteria["none"] = "None of the choices."
+            try:
+                body = await self._request(session, "POST", self.protocol, DECISION_TIMEOUT_MAX_MS, {
+                    "model": self.cfg.model, "state": {"check": "Phoenix capacity check."},
+                    "questions": {"check": {"type": "choice", "instructions": "Select none.", "criteria": criteria}},
+                }, operation="probe", input_facts={"choice_count": size})
+            except DecisionError as error:
+                if str(error) == "http_error" and size != DECISION_MAX_TARGETS + 1:
+                    continue
+                raise
+            if not isinstance(body.get("answers"), dict) or set(body["answers"]) != {"check"}:
+                raise DecisionError("malformed")
+            checked_model(body)
+            self.probed_choice_limit = size
+            return size
+        raise DecisionError("http_error")
+
     async def validate(self, session: ClientSession) -> tuple[bool, str]:
         try:
-            if self.cfg.kind in DECISION_FIXED_MODELS:
+            if self.cfg.kind == "local_decision":
+                # The model list proves the address; one question proves the model decides.
+                await self.list_models(session)
+                await self.probe_choice_limit(session)
+            elif self.cfg.kind in DECISION_FIXED_MODELS:
                 # No model list proves the key here, so one small decision does.
                 await self.request_evaluation(session, "Phoenix connection check.", {"check": {
                     "type": "choice", "instructions": "Select ready.",
@@ -658,7 +758,11 @@ class DecisionProvider:
             return False, decision_error_reason(str(error))
 
     async def list_model_capabilities(self, session: ClientSession, models: list[str]) -> dict:
-        return {}
+        """A local server's choice limit for the configured model; nothing for hosted providers."""
+        if self.cfg.kind != "local_decision" or not self.cfg.model or self.cfg.model not in models:
+            return {}
+        limit = getattr(self, "probed_choice_limit", None) or await self.probe_choice_limit(session)
+        return {self.cfg.model: {"choice_limit": limit}}
 
     async def target_choice_limit(self, session: ClientSession, timeout_ms: int) -> int:
         """Use advertised format capacity, never as evidence of model accuracy."""
@@ -672,7 +776,8 @@ class DecisionProvider:
                    and item.get("name", item.get("id")) == self.cfg.model]
         if len(matches) != 1:
             raise DecisionError("model_unverified")
-        limit = matches[0].get("x_max_choice_options", DECISION_MAX_TARGETS + 1)
+        # A local server's model list may name no capacity; what it accepted at setup stands in.
+        limit = matches[0].get("x_max_choice_options", self.cfg.decision_choice_limit or DECISION_MAX_TARGETS + 1)
         if type(limit) is not int or not 2 <= limit <= DECISION_BATCH_MAX_TARGETS + 1:
             raise DecisionError("malformed")
         return limit
@@ -694,7 +799,7 @@ class DecisionProvider:
                 "including 0 percent and 100 percent; classify the requested setting, not its on/off effect. "
                 "Missing, relative, fractional or out-of-range brightness values belong to provider. This classification "
                 "does not identify a target or grant permission to execute."
-            ), "criteria": dict(DECISION_ROUTE_CHOICES)}},
+            ), "criteria": dict(DECISION_ROUTE_CHOICES)}, "act": self._act_now_question()},
         }
         criteria: Mapping[str, str] = DECISION_ROUTE_CHOICES
         if numeric_preview and self.supports_exact_percentages():
@@ -708,9 +813,14 @@ class DecisionProvider:
         # One attempt. Decision routing must not amplify outages or rate limits.
         async with asyncio.timeout(timeout_ms / 1000):
             body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
-        answer = self._parse_choice(body, criteria)
+        if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
+            raise DecisionValidationError("question_set")
+        answer = self._parse_choice({"model": body.get("model"), "answers": {"route": body["answers"]["route"]}}, criteria)
         if self.cfg.api_key and self.cfg.api_key in answer["model"]:
             raise DecisionError("malformed")
+        answer["act"] = self._parse_act_now(body)
+        if answer["act"]["model"] != answer["model"]:
+            raise DecisionValidationError("model_identifier")
         return answer
 
     async def select_tool(self, session: ClientSession, state: dict, timeout_ms: int) -> dict:
@@ -1159,12 +1269,16 @@ class DecisionProvider:
             for question in payload["questions"].values():
                 question["instructions"] = question["instructions"].replace(format_hint, "")
         groups = self._group_choices(payload)
+        payload["questions"]["act"] = self._act_now_question()
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
             raise DecisionValidationError("question_set")
         answers = {question: self._parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
                                          spec["criteria"], question)
-                   for question, spec in payload["questions"].items()}
+                   for question, spec in payload["questions"].items() if question != "act"}
+        answers["act"] = self._parse_act_now(body)
+        if answers["act"]["model"] != answers["route"]["model"]:
+            raise DecisionValidationError("model_identifier")
         if self.cfg.api_key and self.cfg.api_key in body["model"]:
             raise DecisionError("malformed")
         self._merge_choice_groups(answers, groups)
@@ -1230,12 +1344,16 @@ class DecisionProvider:
             for question in payload["questions"].values():
                 question["instructions"] += DECISION_CATALOG_FORMAT_INSTRUCTIONS
         groups = self._group_choices(payload)
+        payload["questions"]["act"] = self._act_now_question()
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
             raise DecisionValidationError("question_set")
         answers = {question: self._parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
                                           spec["criteria"], question)
-                   for question, spec in payload["questions"].items()}
+                   for question, spec in payload["questions"].items() if question != "act"}
+        answers["act"] = self._parse_act_now(body)
+        if answers["act"]["model"] != answers["route"]["model"]:
+            raise DecisionValidationError("model_identifier")
         if self.cfg.api_key and self.cfg.api_key in body["model"]:
             raise DecisionError("malformed")
         self._merge_choice_groups(answers, groups)

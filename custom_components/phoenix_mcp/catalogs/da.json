@@ -2208,6 +2208,7 @@
     },
     "routing": {
       "accountModel": "Model for {name}",
+      "localAccount": "Lokal",
       "commandHelp": "Home Assistants egne kommandoer kører først, derefter beslutningsudbyderen og så din sædvanlige AI-model.",
       "connectionSettings": "Forbindelsesindstillinger",
       "decisionAccount": "Beslutningskonto",
@@ -2485,6 +2486,7 @@
       "providerOllamaCloud": "Ollama (sky)",
       "providerOllamaLocal": "Ollama (lokal)",
       "providerLocalOpenAI": "OpenAI-kompatibel",
+      "providerLocalSystemOne": "Lokal / System One",
       "providerOpenAI": "OpenAI",
       "providerOpenCodeZen": "OpenCode",
       "providerOpenRouter": "OpenRouter",

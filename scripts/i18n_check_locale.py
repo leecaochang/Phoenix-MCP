@@ -347,6 +347,8 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.shell.agentChat",  # "Agent Chat", a Phoenix product name
     }),
     "fr": frozenset({
+        "panel.routing.localAccount",  # "Local", the same word in this language
+        "panel.settings.providerLocalSystemOne",  # "Local / System One", the same words in this language
         "panel.approvals.previewKindScript",  # "Scripts ({count})", Home Assistant's French term
         "panel.approvals.previewFieldNote",  # "Note", Home Assistant's French term
         "panel.approvals.previewPathSection",  # "section {number}", Home Assistant's French term
@@ -385,6 +387,8 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.expiryMinutes",               # "Minutes"
     }),
     "es": frozenset({
+        "panel.routing.localAccount",  # "Local", the same word in this language
+        "panel.settings.providerLocalSystemOne",  # "Local / System One", the same words in this language
         "panel.approvals.previewKindScript",  # "Scripts ({count})", Home Assistant's Spanish term
         "panel.agentchat.errorLabel",  # "Error", the same word in Spanish
         "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.

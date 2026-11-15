@@ -22,7 +22,7 @@ from .routing_tables import (
     DECISION_EXECUTION_CATEGORIES, DECISION_ENTITY_CATEGORIES, DECISION_PROVIDER_REFUSED_CATEGORIES,
 )
 from .decision_provider import DecisionProvider, _evaluate_guarded, sequential_revision_admitted
-from .decision_types import DecisionError, confident_choice
+from .decision_types import DecisionError, act_now_confirmed, confident_choice
 from .routing_tables import TOOL_ROUTING_SETTINGS, TOOL_ROUTING_REASONS
 from .decision_metrics import DecisionMetrics
 from copy import deepcopy
@@ -241,6 +241,8 @@ class DecisionShadow:
             return result("provider_fallback")
         if not confident_choice(category):
             return result("low_probability")
+        if not act_now_confirmed(category.get("act")):
+            return result("not_immediate")
         if category["choice"] in DECISION_PROVIDER_REFUSED_CATEGORIES:
             return result("operation_unconfirmed")
         access_key = authority.current(hass)

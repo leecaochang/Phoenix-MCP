@@ -14,7 +14,8 @@ def answer(choice, other):
     ('target_low', 'low_probability'), ('value_low', 'low_probability'), ('model', 'model_unverified'),
     ('category', 'category_mismatch'), ('missing', 'category_mismatch'), ('kind', 'numeric_unverified')])
 def test_temporal_admission_boundaries(change, reason):
-    checks = {'route': answer('timer_duration', 'provider'), 'target': answer('t0', 'none'), 'value': answer('value', 'none')}
+    checks = {'route': answer('timer_duration', 'provider'), 'target': answer('t0', 'none'), 'value': answer('value', 'none'),
+              'act': answer('act_now', 'not_now')}
     targets = {'t0': {'entity_id': 'timer.test', 'name': 'Test timer', 'eligible_categories': ['timer_duration']}}
     source = {'kind': 'duration', 'value': '00:05:00'}
     if change and change.endswith('_low'):
@@ -34,7 +35,8 @@ def test_temporal_admission_boundaries(change, reason):
 
 
 def test_temporal_identity_refuses_a_name_nested_in_an_outside_entity():
-    checks = {'route': answer('timer_duration', 'provider'), 'target': answer('t0', 'none'), 'value': answer('value', 'none')}
+    checks = {'route': answer('timer_duration', 'provider'), 'target': answer('t0', 'none'), 'value': answer('value', 'none'),
+              'act': answer('act_now', 'not_now')}
     targets = {'t0': {'entity_id': 'timer.test', 'name': 'Test timer', 'eligible_categories': ['timer_duration']}}
     outside = [('timer.oven_test_timer', ['timer.oven_test_timer', 'Oven Test timer'])]
     outcome, proposal = temporal_proposal(checks, targets, {'kind': 'duration', 'value': '00:05:00'},

@@ -13,6 +13,7 @@
     "groq",
     "infron",
     "kimi",
+    "local_decision",
     "local_openai",
     "meta",
     "mimo",

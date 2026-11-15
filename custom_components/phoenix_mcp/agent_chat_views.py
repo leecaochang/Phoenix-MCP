@@ -410,7 +410,7 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
                 return ProbeConfigError(
                     "Enter the Ollama server URL.", "ollamaUrlRequired",
                 )
-            if kind == "local_openai":
+            if kind in ("local_openai", "local_decision"):
                 return ProbeConfigError("Enter the server URL.", "providerServerUrlRequired")
             return ProbeConfigError(
                 "Enter the provider base URL.", "providerBaseUrlRequired",
@@ -418,8 +418,8 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
         err = await _validate_base_url(base_url, allow_private=kind in AGENT_CHAT_LOCAL_SERVER_KINDS)
         if err:
             return err
-        if kind == "local_openai" and not urlparse(base_url).path:
-            # Every server this kind names serves the OpenAI paths under /v1, so a bare address means it.
+        if kind in ("local_openai", "local_decision") and not urlparse(base_url).path:
+            # Every server these kinds name serves its paths under /v1, so a bare address means it.
             base_url = f"{base_url}/v1"
     else:
         base_url = _default_base_url(kind, endpoint_id)
@@ -470,6 +470,19 @@ async def _checked_decision_models(provider, session, model: object, rid: str) -
         return [], _err("invalid_request", "Choose a model returned by this provider.", 400, rid,
                        key="providerModelNotListed")
     return models, None
+
+
+async def _learn_local_choice_limit(store, instance_id: str, cfg: ProviderConfig, session) -> None:
+    """Record how many choices a local server's newly chosen model accepts; best effort.
+
+    Without it the fallback format applies, which splits large catalogs into groups.
+    """
+    try:
+        provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter)
+        capabilities = await provider.list_model_capabilities(session, [cfg.model])
+    except DecisionError:
+        return
+    await store.set_capabilities(instance_id, capabilities, utcnow().isoformat())
 
 
 class PhoenixAgentCliProvidersView(PhoenixView):
@@ -526,6 +539,12 @@ class PhoenixAgentCliProvidersView(PhoenixView):
             decision_models, error = await _checked_decision_models(provider, session, body.get("model"), rid)
             if error is not None:
                 return error
+            if kind == "local_decision":
+                # A listed model may still not answer decisions; one question proves it does.
+                ok, reason = await provider.validate(session)
+                if not ok:
+                    return _err("invalid_request", f"Connection failed: {reason}", 400, rid,
+                                key=reason.key, params=reason.params or None)
         else:
             ok, reason = await provider.validate(session)
             if not ok:
@@ -638,6 +657,9 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 if not await store.set_model(instance_id, model):
                     return _err("not_found", "Provider account not found.", 404, rid,
                                 key="providerAccountNotFound")
+            if cfg.kind == "local_decision":
+                await _learn_local_choice_limit(store, instance_id, dataclasses.replace(cfg, model=model),
+                                                async_get_clientsession(self.hass))
         elif not await store.set_model(instance_id, model):
             return _err(
                 "not_found", "Provider account not found.", 404, rid,

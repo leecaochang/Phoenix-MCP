@@ -29,7 +29,7 @@ def response(payload, selectors=('light', '', ''), mode='valid'):
     answers = {}
     selected_values = dict(zip(DECISION_SUMMARY_COMPONENTS, selectors, strict=True))
     for question, spec in payload['questions'].items():
-        selected = {'route': 'state_summary', 'target': 'none', 'summary': 'on'}.get(question, 'none')
+        selected = {'act': 'act_now', 'route': 'state_summary', 'target': 'none', 'summary': 'on'}.get(question, 'none')
         if question in mappings:
             selected = next((key for key, value in mappings[question].items()
                              if value == selected_values[question]), 'none')

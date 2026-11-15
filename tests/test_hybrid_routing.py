@@ -58,11 +58,11 @@ async def hybrid_home(hass, access_key_store, immediate_command_observation, mon
 
 
 def wire_answer(payload, category="light_on", target="t0", percent=50, model="test-model"):
-    choices = {"route": category, "target": target, "value": "none", "attribute": "none", "color": "none",
+    choices = {"act": "act_now", "route": category, "target": target, "value": "none", "attribute": "none", "color": "none",
                "percentage": str(percent), "summary": "none", "summary_scope": "none",
                "brightness_tens": str(percent // 10), "brightness_units": str(percent % 10)}
     return {"model": model, "answers": {
-        question: {"type": "choice", "choice": choices[question], "confidence": 0.1,
+        question: {"type": "choice", "choice": choices[question], "confidence": 1 if question == "act" else 0.1,
                    "probabilities": {key: float(key == choices[question]) for key in spec["criteria"]}}
         for question, spec in payload["questions"].items()}}
 
@@ -552,7 +552,7 @@ async def test_qualified_numeric_voice_uses_one_decision_and_shared_execution(ha
     _, domain, _, service, service_field, divisor = spec
     await home[0].store.async_patch_settings(voice_agent_routing_mode='auto')
     async def respond(session, method, path, timeout, payload):
-        assert set(payload['questions']) == {'route', 'target', 'percentage', 'summary', 'summary_scope'}
+        assert set(payload['questions']) == {'act', 'route', 'target', 'percentage', 'summary', 'summary_scope'}
         return numeric_reply(payload, home, spec, percent=percent)
     with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
@@ -653,7 +653,7 @@ async def test_numeric_source_worker_rechecks_before_sharing_request(hass, jev_h
 @pytest.mark.parametrize("category,service", [("light_on", "turn_on"), ("light_off", "turn_off"), ("state_query", None)])
 async def test_jev_joint_routes_one_request_through_existing_executor(hass, jev_hybrid_home, category, service):
     async def respond(session, method, path, timeout, payload):
-        assert set(payload["questions"]) == {"route", "target", "summary", "summary_scope"}
+        assert set(payload["questions"]) == {"act", "route", "target", "summary", "summary_scope"}
         return wire_answer(payload, category, model="jev-1.13.0")
     with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
@@ -707,7 +707,7 @@ async def test_jev_joint_declines_without_sequential_retry(hass, jev_hybrid_home
         hass.states.async_set(entry.entity_id, "off")
         async_expose_entity(hass, "conversation", entry.entity_id, True)
     async def respond(session, method, path, timeout, payload):
-        assert set(payload["questions"]) == {"route", "target", "summary", "summary_scope"}
+        assert set(payload["questions"]) == {"act", "route", "target", "summary", "summary_scope"}
         if case in ("category_scope", "unadvertised_route"):
             assert ("light_on" in payload["questions"]["route"]["criteria"]) == (case == "category_scope")
         if case in ("timeout", "rate_limited"):
@@ -744,7 +744,7 @@ async def test_jev_large_union_keeps_all_candidates_in_one_joint_request(hass, j
     with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, jev_hybrid_home, request=jev_response)
-    assert [set(item.args[4]["questions"]) for item in remote.await_args_list] == [{"route", "target", "summary", "summary_scope"}]
+    assert [set(item.args[4]["questions"]) for item in remote.await_args_list] == [{"act", "route", "target", "summary", "summary_scope"}]
     assert len(remote.await_args.args[4]["state"]["targets"]) == DECISION_MAX_TARGETS + 1
     call.assert_awaited_once()
     provider.assert_not_called()
@@ -851,7 +851,7 @@ async def test_other_models_and_endpoints_keep_sequential_routing(
     with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, hybrid_home, language=language, request=respond)
-    assert [set(item.args[4]['questions']) for item in remote.await_args_list if item.args[1] == 'POST'] == [{'route'}, {'target'}]
+    assert [set(item.args[4]['questions']) for item in remote.await_args_list if item.args[1] == 'POST'] == [{'act', 'route'}, {'target'}]
     protocol = 'systemone'
     assert [item.args[1:3] for item in remote.await_args_list] == [('POST', protocol), ('GET', 'models'), ('POST', protocol)]
     call.assert_awaited_once()
@@ -927,7 +927,7 @@ async def expanded_numeric_home(hass, jev_hybrid_home, request):
 
 def scalar_reply(payload, entity_id, category):
     target = next(key for key, descriptor in payload['state']['targets'].items() if descriptor['entity_id'] == entity_id)
-    choices = {'route': category, 'target': target, 'percentage': 'value', 'value': 'none', 'attribute': 'none', 'color': 'none', 'summary': 'none', 'summary_scope': 'none'}
+    choices = {'act': 'act_now', 'route': category, 'target': target, 'percentage': 'value', 'value': 'none', 'attribute': 'none', 'color': 'none', 'summary': 'none', 'summary_scope': 'none'}
     return {'model': 'jev-1.13.0', 'answers': {
         question: {'type': 'choice', 'choice': choices[question], 'confidence': 1,
                    'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
@@ -1036,7 +1036,7 @@ def temporal_wire(payload, entity_id, category='helper_datetime', value='value')
     if 'target_fields' in state:
         targets = {key: dict(zip(state['target_fields'], row, strict=True)) for key, row in targets.items()}
     target = next(key for key, item in targets.items() if item['entity_id'] == entity_id)
-    choices = {'route': category, 'value': value, 'summary': 'none', 'summary_scope': 'none'}
+    choices = {'act': 'act_now', 'route': category, 'value': value, 'summary': 'none', 'summary_scope': 'none'}
     choices.update({name: target if target in spec['criteria'] else 'none'
                     for name, spec in payload['questions'].items() if name == 'target' or name.startswith('target_')})
     return {'model': 'jev-1.13.0', 'answers': {
@@ -1161,7 +1161,7 @@ async def entity_command_home(hass, jev_hybrid_home, request):
 def entity_command_wire(payload, entity_id, category, value=None):
     target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entity_id)
     selected_value = next((key for key, item in payload['state'].get('values', {}).items() if item == value), 'none')
-    selected = {'route': category, 'target': target, 'value': selected_value, 'percentage': 'none', 'attribute': 'none', 'color': 'none', 'summary': 'none', 'summary_scope': 'none'}
+    selected = {'act': 'act_now', 'route': category, 'target': target, 'value': selected_value, 'percentage': 'none', 'attribute': 'none', 'color': 'none', 'summary': 'none', 'summary_scope': 'none'}
     for question in ('attribute', 'color'):
         selected[question] = next((key for key, item in payload['state'].get(question + '_values', {}).items() if item == value), 'none')
     return {'model': 'jev-1.13.0', 'answers': {question: {
@@ -1239,7 +1239,9 @@ async def test_sequential_target_selection_refuses_a_risky_operation(hass, hybri
     from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority
     data, access_key, store, account, _ = hybrid_home
     provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
-    category = {'choice': 'cover_open', 'probabilities': {'cover_open': 1.0, 'provider': 0.0}}
+    # A real classification carries its act-now answer; this one says act now, so only the risky choice refuses.
+    category = {'choice': 'cover_open', 'probabilities': {'cover_open': 1.0, 'provider': 0.0},
+                'act': {'type': 'choice', 'choice': 'act_now', 'confidence': 1, 'probabilities': {'act_now': 1.0, 'not_now': 0.0}}}
     with patch.object(DecisionProvider, 'select_target', AsyncMock()) as select:
         result = await data.decision_shadow._select_target(
             hass, RoutingAuthority.capture(data, access_key), provider, None, 'Close the desk lamp', category, 1000, prepare=prepare)
@@ -1587,7 +1589,7 @@ async def test_generic_large_catalog_dispatch_and_approval_revalidation(hass, hy
     async def respond(session, method, path, timeout, payload=None):
         if method == 'GET':
             return {'data': [{'id': 'local-model'}]}
-        selected = {'route': 'light_on', 'target': 't0', 'target_2': 'none'}
+        selected = {'act': 'act_now', 'route': 'light_on', 'target': 't0', 'target_2': 'none'}
         return {'model': 'local-model', 'answers': {
             name: {'type': 'choice', 'choice': selected[name], 'confidence': 1.0,
                    'probabilities': {key: float(key == selected[name]) for key in spec['criteria']}}
@@ -1788,3 +1790,24 @@ def test_sequential_admission_rule():
     assert sequential_revision_admitted(custom, "my-build", "my-build")
     assert not sequential_revision_admitted(custom, "my-build", "other-build")
     assert not sequential_revision_admitted(custom, None, None)
+
+
+@pytest.mark.parametrize("act", [("not_now", 0.97), ("act_now", 0.6)])
+async def test_jev_joint_never_acts_without_a_confident_act_now(hass, jev_hybrid_home, act):
+    """A negated command read as a confident route and target still goes to the conversation model."""
+    selected, top = act
+    async def respond(session, method, path, timeout, payload):
+        body = wire_answer(payload, "light_off", model="jev-1.13.0")
+        other = "act_now" if selected == "not_now" else "not_now"
+        body["answers"]["act"] = {"type": "choice", "choice": selected, "confidence": top,
+                                  "probabilities": {selected: top, other: round(1 - top, 6)}}
+        return body
+    with (patch.object(service_tools, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=respond,
+                                                   sentence="Please do not extinguish my desk lamp")
+    remote.assert_awaited_once()
+    call.assert_not_called()
+    provider.assert_called_once()
+    assert answer == "Provider answer"
+    assert jev_hybrid_home[0].decision_shadow.summary()["hybrid"]["reasons"] == {"not_immediate": 1}

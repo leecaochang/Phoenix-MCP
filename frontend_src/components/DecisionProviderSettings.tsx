@@ -8,6 +8,7 @@ import { useClickAway } from "../ui/useClickAway";
 import { ProviderAddForm } from "./ProviderAddForm";
 import type { AgentCliInstance, AgentCliProviderType, GlobalSettings } from "../types";
 import { NumberField } from "../ui/NumberField";
+import { modelLabel } from "../utils";
 
 const THRESHOLD_DEFAULT = 0.9;
 const THRESHOLD_MIN = 0.7;
@@ -188,10 +189,14 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   const askBox = useRef<HTMLSpanElement | null>(null);
   useClickAway(askBox, () => setConfirmRemove(null), confirmRemove !== null && !busy, undefined, "click");
 
+  /** An account's name; a local server's is the word for "local", not a company's name. */
+  const accountName = (account: AgentCliInstance) => account.kind === "local_decision"
+    ? account.name.replace(/^Local(?= \(|$)/, t("routing.localAccount")) : account.name;
+
   /** An account's options, under it: a line for what an action found, then the actions. */
   const accountOptions = (account: AgentCliInstance) => {
     const unavailable = models[account.id]?.length > 0 && !!account.model && !models[account.id].includes(account.model);
-    return <div className="phx-provider-account" aria-label={account.name} role="group">
+    return <div className="phx-provider-account" aria-label={accountName(account)} role="group">
       {/* Hidden while there is nothing to say. */}
       <div className="agentcli-settings-hint phx-provider-info" role="status">
         {unavailable && <p>{t("settings.agentcliModelUnavailable", { model: account.model })}</p>}
@@ -202,13 +207,13 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
         {/* Refresh Models sits beside the model it refreshes. */}
         <div className="agentcli-add-inline">
           <BusySelect className="input input-auto" value={modelDraft} autoFocus
-            aria-label={t("routing.accountModel", { name: account.name })}
+            aria-label={t("routing.accountModel", { name: accountName(account) })}
             busy={saving || busy} disabled={!models[account.id]?.length}
             onChange={event => setModelDraft(event.target.value)}>
             {!models[account.id]?.includes(account.model ?? "") && <option value={account.model ?? ""} disabled>
               {models[account.id]?.length ? t("settings.agentcliModelUnavailable", { model: account.model ?? "" }) : account.model || t("settings.agentcliNotSet")}
             </option>}
-            {models[account.id]?.map(model => <option value={model} key={model}>{model}</option>)}
+            {models[account.id]?.map(model => <option value={model} key={model}>{modelLabel(account.kind, model)}</option>)}
           </BusySelect>
           {/* A decision model has no options to check; what Refresh Models does and does not test reads in Help. */}
           <ActionButton icon="refresh" className="btn btn-outline btn-sm" helpText={t("routing.providerOptions")}
@@ -228,12 +233,12 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
           onClick={() => { setConfirmRemove(null); void editModel(account); }} />
         {/* Remove asks in place, as elsewhere in Phoenix; what it does reads in Help. */}
         {confirmRemove === account.id ? <span className="row-actions" ref={askBox}>
-          <ActionButton icon="delete" label={t("settings.agentcliConfirmRemove", { name: account.name })} className="btn btn-danger btn-sm"
-            helpText={t("routing.removeAccountHelp", { name: account.name })} busy={saving || busy} onClick={() => void remove(account.id)} />
+          <ActionButton icon="delete" label={t("settings.agentcliConfirmRemove", { name: accountName(account) })} className="btn btn-danger btn-sm"
+            helpText={t("routing.removeAccountHelp", { name: accountName(account) })} busy={saving || busy} onClick={() => void remove(account.id)} />
           <ActionButton icon="undo" label={t("settings.cancel")} className="btn btn-outline btn-sm" busy={saving || busy} help="help.cancelAction"
             onClick={() => setConfirmRemove(null)} />
-        </span> : <ActionButton icon="delete" label={t("settings.agentcliRemoveAccount", { name: account.name })} className="btn btn-outline btn-sm phx-action-danger"
-          helpText={t("routing.removeAccountHelp", { name: account.name })} busy={saving || busy}
+        </span> : <ActionButton icon="delete" label={t("settings.agentcliRemoveAccount", { name: accountName(account) })} className="btn btn-outline btn-sm phx-action-danger"
+          helpText={t("routing.removeAccountHelp", { name: accountName(account) })} busy={saving || busy}
           onClick={() => { setConfirmRemove(account.id); setError(""); }} />}
       </div>}
       {/* How sure this account must be before it acts; the default suits every provider tested. */}
@@ -273,7 +278,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
             else { closeOptions(); setOpen(account.id); setThresholdDraft((account.decision_threshold ?? THRESHOLD_DEFAULT).toFixed(2)); }
           }} />
           {/* Accounts at different providers can answer with different models, so each names its own. */}
-          <span>{account.name}{account.model && <>{" "}<span className="routing-account-model">{account.model}</span></>}</span>
+          <span>{accountName(account)}{account.model && <>{" "}<span className="routing-account-model">{modelLabel(account.kind, account.model)}</span></>}</span>
         </label>
         {open === account.id && accountOptions(account)}
       </div>)}

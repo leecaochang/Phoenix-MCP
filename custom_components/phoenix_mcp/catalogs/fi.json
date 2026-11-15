@@ -2208,6 +2208,7 @@
     },
     "routing": {
       "accountModel": "Kohteen {name} malli",
+      "localAccount": "Paikallinen",
       "commandHelp": "Home Assistantin omat komennot suoritetaan ensin, sitten päätöstarjoaja ja sitten tavallinen tekoälymallisi.",
       "connectionSettings": "Yhteysasetukset",
       "decisionAccount": "Päätöstili",
@@ -2485,6 +2486,7 @@
       "providerOllamaCloud": "Ollama (pilvi)",
       "providerOllamaLocal": "Ollama (paikallinen)",
       "providerLocalOpenAI": "OpenAI-yhteensopiva",
+      "providerLocalSystemOne": "Paikallinen / System One",
       "providerOpenAI": "OpenAI",
       "providerOpenCodeZen": "OpenCode",
       "providerOpenRouter": "OpenRouter",

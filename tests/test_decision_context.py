@@ -426,7 +426,7 @@ async def test_preview_of_decision_candidate_reviews_full_history_without_plan(h
         if 'route' not in payload['questions']:
             return wire_answer(answer('provider' if decline else 'compatible'))
         target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entity)
-        selected = {'route': 'light_brightness', 'target': target, 'percentage': '37',
+        selected = {'act': 'act_now', 'route': 'light_brightness', 'target': target, 'percentage': '37',
                     'summary': 'none', 'summary_scope': 'none'}
         return {'model': 'test-model', 'answers': {
             name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
@@ -448,7 +448,7 @@ async def test_explicit_candidate_decline_preserves_fallback_in_context_preview(
     data, access_key, *_ = context_home
     async def response(*args):
         payload = args[4]
-        selected = {'route': 'provider', 'target': 'none'}
+        selected = {'act': 'act_now', 'route': 'provider', 'target': 'none'}
         return {'model': 'jev-1.13.0', 'answers': {
             name: {'type': 'choice', 'choice': selected.get(name, 'none'), 'confidence': 1,
                    'probabilities': {key: float(key == selected.get(name, 'none')) for key in spec['criteria']}}

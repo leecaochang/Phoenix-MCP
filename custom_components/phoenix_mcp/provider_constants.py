@@ -29,7 +29,8 @@ AGENT_CHAT_PROVIDERS = frozenset({
     "local_openai"})
 # Kinds whose models run on a server the operator supplies (often on the home network), so its
 # address may be private and its first reply includes loading the model on the operator's hardware.
-AGENT_CHAT_LOCAL_SERVER_KINDS = frozenset({"ollama", "local_openai"})
+# `local_decision` is a decision account; only the address rules apply to it.
+AGENT_CHAT_LOCAL_SERVER_KINDS = frozenset({"ollama", "local_openai", "local_decision"})
 # Bionic's own model list, beside its OpenAI one: it gives each model's type, and leaves out the voice
 # model its OpenAI list still names. Read from the server root, the address without /v1.
 AGENT_CHAT_LOCAL_NATIVE_MODELS_PATH = "/api/v1/models"

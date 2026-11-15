@@ -56,6 +56,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `gemini_decision`（Google） | 決策 | `api_key`、`model`：`gemini-decision-1` |
 | `cloudflare_decision`（Cloudflare） | 決策 | `account_id`、`api_key`、`model`：`clef-flash`、`clef` |
 | `openai_decision`（OpenAI） | 決策 | `api_key`、`model`：`gpt-6-luna` |
+| `local_decision`（本機） | 決策 | `base_url`、`api_key`（選填）、`model`：伺服器列出的決策模型 |
 
 ### 設定欄位 {#setup-fields}
 
@@ -64,8 +65,8 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | 欄位 | 類型 | 說明 |
 |---|---|---|
 | `kind` | string | 必填。上方的類型之一。 |
-| `api_key` | string | 除 `ollama` 和 `local_openai` 外每種類型都必填。最多 4096 個字元，不能包含控制字元。Phoenix 絕不傳回它。 |
-| `base_url` | string | `ollama`、`local_openai` 和 `qwen` 必填。只有 `ollama` 和 `local_openai` 可以使用私有位址。對於 `local_openai`，位址沒有路徑時 Phoenix 會加上 `/v1`。其他每種類型都使用固定端點，並忽略此欄位。 |
+| `api_key` | string | 除 `ollama`、`local_openai` 和 `local_decision` 外每種類型都必填。最多 4096 個字元，不能包含控制字元。Phoenix 絕不傳回它。 |
+| `base_url` | string | `ollama`、`local_openai`、`local_decision` 和 `qwen` 必填。只有 `ollama`、`local_openai` 和 `local_decision` 可以使用私有位址。對於 `local_openai` 和 `local_decision`，位址沒有路徑時 Phoenix 會加上 `/v1`。其他每種類型都使用固定端點，並忽略此欄位。 |
 | `endpoint_id` | string | 僅用於帶端點的類型。省略它表示預設值。 |
 | `account_id` | string | `cloudflare` 和 `cloudflare_decision` 必填：32 個字元的 Cloudflare 帳戶 ID。Phoenix 用它建構端點。 |
 | `model` | string | 對話類型選填；留空表示自動跟隨提供者。決策類型必填：最多 200 個字元，且必須在提供者目前清單中。 |

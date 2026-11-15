@@ -57,7 +57,7 @@ def wire_targets(payload):
 
 
 def wire_response(payload, category='light_on', target='t0'):
-    choices = [('route', category), ('target', target)]
+    choices = [('route', category), ('target', target)] + ([('act', 'act_now')] if 'act' in payload['questions'] else [])
     choices.extend((key, 'none') for key in ('value', 'attribute', 'color', 'summary', 'summary_scope', 'percentage') if key in payload['questions'])
     choices.extend((key, 'none') for key in payload['questions']
                    if key.startswith(('target_', 'summary_scope_')))
@@ -83,7 +83,7 @@ async def test_one_real_request_with_two_independent_closed_choices(protocol, so
     async with TestServer(app) as server, ClientSession() as session:
         provider = DecisionProvider(llm_accounts.ProviderConfig('typesafe', 'm', str(server.make_url('')).rstrip('/')), protocol)
         result = await provider.route_and_target(session, 'switch it on', {'t0': {'eligible_categories': ['light_on']}}, 1000)
-    assert len(seen) == 1 and set(seen[0]['questions']) == {'route', 'target'}
+    assert len(seen) == 1 and set(seen[0]['questions']) == {'route', 'target', 'act'}
     assert not {'light_brightness', 'media_volume', 'cover_position'} & set(seen[0]['questions']['route']['criteria'])
     assert result['route']['choice'] == 'light_on' and result['target']['choice'] == 't0'
 
@@ -311,7 +311,7 @@ async def test_joint_percentage_preview_uses_one_request_and_never_prepares_exec
     entity_id = entities[category]
     async def response(*args):
         payload = args[4]
-        assert set(payload['questions']) == {'route', 'target', 'percentage', 'summary', 'summary_scope'}
+        assert set(payload['questions']) == {'route', 'target', 'percentage', 'summary', 'summary_scope', 'act'}
         assert len(payload['questions']['percentage']['criteria']) == 102
         assert len(wire_targets(payload)) == 3
         assert 'private-state' not in json.dumps(payload)
@@ -483,7 +483,7 @@ async def test_packing_admits_full_union_previously_over_byte_budget(hass, batch
         payload = args[4]
         assert len(wire_targets(payload)) == DECISION_BATCH_MAX_TARGETS
         assert wire_targets(payload) == targets
-        assert all('target_fields' in question['instructions'] for question in payload['questions'].values())
+        assert all('target_fields' in question['instructions'] for name, question in payload['questions'].items() if name != 'act')
         return percentage_response(payload, 'light_brightness', original, '37')
     with patch.object(DecisionProvider, '_request', side_effect=response) as request:
         result = await percentage_preview(hass, batch_home)
@@ -589,7 +589,7 @@ async def test_categorical_catalog_bounds_follow_qualified_account(hass, batch_h
         expected.add(entry.entity_id)
     async def response(*args):
         payload = args[4]
-        expected_questions = {'route', 'target', 'summary', 'summary_scope'} if qualified else {'route', 'target'}
+        expected_questions = {'route', 'target', 'summary', 'summary_scope', 'act'} if qualified else {'route', 'target', 'act'}
         if count > DECISION_BATCH_MAX_TARGETS:
             expected_questions.add('target_2')
         assert set(payload['questions']) == expected_questions
@@ -803,7 +803,9 @@ async def test_low_confidence_scope_component_cannot_prepare_execution(hass, bat
                              for key in DECISION_SUMMARY_COMPONENTS}}
     with (patch.object(provider, 'route_and_target', AsyncMock(return_value={
               'route': answer('state_summary'), 'target': answer('none'),
-              'summary_scope': scope, 'summary': answer('on')})),
+              'summary_scope': scope, 'summary': answer('on'),
+              'act': {'choice': 'act_now', 'model': 'jev-1.13.0', 'confidence': 1,
+                      'probabilities': {'act_now': 1.0, 'not_now': 0.0}}})),
           patch_readers('custom_components.phoenix_mcp.routing.command_plan._capture_plan') as prepare):
         _, result = await async_prepare_batch(
             hass, RoutingAuthority.capture(data, access_key), provider, None,
@@ -928,7 +930,7 @@ async def test_temporal_catalog_pools_repeated_attributes_without_losing_competi
             for category, metadata in target.get('entity_operations', {}).items():
                 resolved = payload['state']['target_metadata'][metadata['ref']] if set(metadata) == {'ref'} else metadata
                 assert resolved == targets[key]['entity_operations'][category]
-        assert all('lossless storage' in question['instructions'] for question in payload['questions'].values())
+        assert all('lossless storage' in question['instructions'] for name, question in payload['questions'].items() if name != 'act')
         timer_key = next(key for key, target in wire.items() if target['entity_id'] == timer.entity_id)
         body = wire_response(payload, 'timer_duration', timer_key)
         body['answers']['value'].update(choice='value', probabilities={'value': 1.0, 'none': 0.0})
@@ -978,9 +980,27 @@ async def test_temporal_groups_keep_all_candidates_and_require_one_confident_win
             answer = await provider.route_temporal(MagicMock(), 'Start Timer 299 for five minutes', 'en', targets,
                                                   {'kind': 'duration', 'value': '00:05:00'}, 'UTC', 1000)
             assert answer['target']['choice'] == ('t299' if case == 'selected' else 'none')
-            assert set(answer) == {'route', 'target', 'value'}
+            assert set(answer) == {'route', 'target', 'value', 'act'}
         else:
             with pytest.raises(DecisionError):
                 await provider.route_temporal(MagicMock(), 'Start Timer 299 for five minutes', 'en', targets,
                                               {'kind': 'duration', 'value': '00:05:00'}, 'UTC', 1000)
     assert request.await_count == (0 if case in ('unqualified', 'overflow') else 1)
+
+
+@pytest.mark.parametrize('act,reason', [(('not_now', 0.97), 'not_immediate'), (('act_now', 0.6), 'low_probability')])
+async def test_a_joint_preview_without_a_confident_act_now_proposes_nothing(hass, batch_home, act, reason):
+    """A confident route and target do not act when the act-now answer does not confirm a request now.
+
+    An unsure act-now answer is one of the joint answers that must all be confident, so it ends earlier.
+    """
+    selected, top = act
+    async def response(*args):
+        body = wire_response(args[4])
+        other = 'act_now' if selected == 'not_now' else 'not_now'
+        body['answers']['act'] = {'type': 'choice', 'choice': selected, 'confidence': top,
+                                  'probabilities': {selected: top, other: round(1 - top, 6)}}
+        return body
+    with patch.object(DecisionProvider, '_request', side_effect=response):
+        result = await preview(hass, batch_home)
+    assert result['reason'] == reason and 'proposal' not in result

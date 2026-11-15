@@ -20,6 +20,8 @@ const MESA_GATED_LABEL = () => t("common.mesaGatedAction");
  * suffix; requests keep the id.
  */
 export function modelLabel(kind: string | undefined, id: string): string {
+  // Ollama's default tag says nothing a person needs; any other tag, such as a quantization, stays.
+  if (kind === "local_decision") return id.replace(/:latest$/, "") || id;
   // Only a file path: "publisher/model" ids from other servers stay whole, or two publishers' builds would look alike.
   if (kind !== "local_openai" || !/^(?:\/|[A-Za-z]:[\\/])|\.gguf$/i.test(id)) return id;
   const name = id.split(/[/\\]/).pop()?.replace(/\.gguf$/i, "").replace(/-\d{5}-of-\d{5}$/, "");

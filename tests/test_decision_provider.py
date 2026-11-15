@@ -16,7 +16,7 @@ from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.llm import factory as llm_factory
 from custom_components.phoenix_mcp.admin.settings import _validated_settings_patch
 from custom_components.phoenix_mcp.const import DOMAIN
-from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ROUTE_CHOICES
+from custom_components.phoenix_mcp.routing.routing_tables import DECISION_ACT_NOW_CHOICES, DECISION_ROUTE_CHOICES
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.routing.decision_types import DecisionError
 from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider, parse_choice
@@ -47,6 +47,22 @@ def response():
         'confidence':0.8,'probabilities':{k:0.92 if k=='light_on' else 0.02 for k in DECISION_ROUTE_CHOICES}}}}
 
 
+ACT_NOW = {'type':'choice','choice':'act_now','confidence':1,'probabilities':{'act_now':1.0,'not_now':0.0}}
+
+
+def classify_response():
+    """A whole classify body: the route answer plus the act-now answer every classify request asks."""
+    body=response();body['answers']['act']=copy.deepcopy(ACT_NOW)
+    return body
+
+
+def classified():
+    """What classify returns for classify_response()."""
+    return {**parse_choice(response(),DECISION_ROUTE_CHOICES),
+            'act':parse_choice({'model':'jev-1.13.0','answers':{'act':copy.deepcopy(ACT_NOW)}},
+                               DECISION_ACT_NOW_CHOICES,'act')}
+
+
 @pytest.fixture
 async def decision_home(hass, access_key_store):
     access_key, _ = await access_key_store.async_create_access_key('decision_test','test')
@@ -67,7 +83,7 @@ async def test_real_http_contract(protocol, socket_enabled):
     requests=[]
     async def handler(request):
         requests.append((request.path, request.headers.get('Authorization'),await request.json()))
-        return web.json_response(response())
+        return web.json_response(classify_response())
     app=web.Application()
     app.router.add_post('/v1/'+protocol, handler)
     async def models(request):
@@ -85,6 +101,7 @@ async def test_real_http_contract(protocol, socket_enabled):
     payload=requests[0][2]
     assert payload['state']=={'utterance':'Switch the lamp on','language':'en'}
     assert set(payload)=={'model','state','questions'}
+    assert set(payload['questions'])=={'route','act'}
     assert set(payload['questions']['route']['criteria'])==set(DECISION_ROUTE_CHOICES)
 
 
@@ -149,7 +166,7 @@ async def test_decision_accounts_are_secret_free_and_cannot_resolve_for_conversa
     with pytest.raises(ValueError):llm_factory.build_provider(cfg)
     assert 'test-secret' not in json.dumps(store.list_instances())
     assert not any(i['kind']=='typesafe' for i in llm_accounts._provider_catalog())
-    assert {i['kind'] for i in llm_accounts._provider_catalog('decision')}=={'typesafe', 'opencode_decision', 'cloudflare_decision', 'gemini_decision', 'openai_decision'}
+    assert {i['kind'] for i in llm_accounts._provider_catalog('decision')}=={'typesafe', 'opencode_decision', 'cloudflare_decision', 'gemini_decision', 'openai_decision', 'local_decision'}
 
 
 @pytest.mark.parametrize('field',['voice_agent_provider_id','ai_task_provider_id'])
@@ -180,7 +197,7 @@ async def test_decision_budget_is_separate_and_strict(hass,decision_home,budget)
 
 async def test_manual_observation_cannot_execute_or_create_approval(hass,decision_home):
     data,access_key,*_=decision_home
-    with (patch.object(DecisionProvider,'classify',AsyncMock(return_value=parse_choice(response(),DECISION_ROUTE_CHOICES))) as classify,
+    with (patch.object(DecisionProvider,'classify',AsyncMock(return_value=classified())) as classify,
           patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result=await async_preview_decision(hass,data,access_key,'Switch the lamp on','en',{'reason':'no_match','proposal':None})
     assert result['reason']=='observed' and result['executed'] is False
@@ -205,7 +222,7 @@ async def test_changes_during_network_wait_discard_decision(hass,decision_home,c
     data,access_key,store,account=decision_home
     entered=asyncio.Event();release=asyncio.Event()
     async def classify(*args):
-        entered.set();await release.wait();return parse_choice(response(),DECISION_ROUTE_CHOICES)
+        entered.set();await release.wait();return classified()
     with patch.object(DecisionProvider,'classify',classify):
         task=data.decision_shadow.start(hass,data,access_key,'command','en',observe=True)
         await entered.wait()
@@ -253,7 +270,7 @@ async def test_real_http_timeout_is_bounded_and_not_retried(socket_enabled):
     async def handler(request):
         nonlocal calls
         calls+=1;entered.set();await release.wait()
-        return web.json_response(response())
+        return web.json_response(classify_response())
     app=web.Application();app.router.add_post('/systemone',handler)
     loop=asyncio.get_running_loop()
     async with TestServer(app) as server, ClientSession() as session:
@@ -284,7 +301,7 @@ async def test_voice_shadow_never_waits_for_decision_or_replaces_provider(hass,d
         decision_shadow_enabled=True)
     entered=asyncio.Event();release=asyncio.Event()
     async def classify(*args):
-        entered.set();await release.wait();return parse_choice(response(),DECISION_ROUTE_CHOICES)
+        entered.set();await release.wait();return classified()
     local={'reason':local_reason,'proposal':{'intent':'HassTurnOn'} if local_reason=='supported' else None,
            'route':'local_candidate' if local_reason=='supported' else 'provider','elapsed_ms':1,'executed':False}
     ordinary=AsyncMock(return_value='ordinary answer')
@@ -310,7 +327,7 @@ async def test_voice_shadow_never_waits_for_decision_or_replaces_provider(hass,d
 @pytest.mark.parametrize('language,expected', [('zh-Hans', 'zh-CN'), ('es', 'es')])
 async def test_multilingual_decision_preview_sends_language_without_execution(hass, decision_home, language, expected):
     data, access_key, *_ = decision_home
-    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=response())) as request,
+    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=classify_response())) as request,
           patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await async_preview_decision(hass, data, access_key, '打开台灯', language,
                                               {'reason': 'no_match', 'proposal': None}, ingress='preview')
@@ -408,7 +425,7 @@ def test_invalid_probability_values_never_expose_aggregate_diagnostics(bad):
 ])
 async def test_rounding_is_applied_only_to_known_typesafe_endpoint(kind, base_url, protocol, allowed):
     provider = DecisionProvider(llm_accounts.ProviderConfig(kind, 'jev-latest', base_url), protocol)
-    body = response()
+    body = classify_response()
     probabilities = {key: 0.95 if key == 'light_on' else 0.01 for key in DECISION_ROUTE_CHOICES}
     body['answers']['route']['probabilities'] = probabilities
     with patch.object(provider, '_request', AsyncMock(return_value=body)):
@@ -475,6 +492,8 @@ async def test_grouped_choices_require_complete_unambiguous_global_selection(sel
             key = 'none'
             if question == 'route':
                 key = 'light_on' if selection == 'target' else 'state_summary'
+            if question == 'act':
+                key = 'act_now'
             if question == 'summary' and selection == 'summary_scope':
                 key = 'total'
             if question == selection + '_2' and case != 'none':
@@ -537,7 +556,7 @@ async def test_oversized_catalog_kind_selection_keeps_complete_relevant_catalog(
         for question, spec in payload['questions'].items():
             selected = {'catalog': kind, 'route': 'light_on' if kind == 'entity' else 'state_summary',
                         'target': 't1' if kind == 'entity' else 'none',
-                        'summary_scope': 's1', 'summary': 'on'}.get(question, 'none')
+                        'summary_scope': 's1', 'summary': 'on', 'act': 'act_now'}.get(question, 'none')
             if first and failure == 'declined':
                 selected = 'provider'
             answers[question] = {'type': 'choice', 'choice': selected, 'confidence': 1,
@@ -726,7 +745,7 @@ async def test_decision_request_records_identity_and_outcome_without_request_env
     handle = log.begin('agentcli', prompt='Safe visible prompt')
     ctx = history._current.set(handle)
     async def handler(request):
-        return web.json_response(response(), status=status)
+        return web.json_response(classify_response(), status=status)
     app = web.Application()
     app.router.add_post('/systemone', handler)
     try:
