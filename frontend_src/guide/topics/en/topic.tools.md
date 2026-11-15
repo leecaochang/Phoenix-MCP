@@ -255,6 +255,7 @@ Allowed by: [{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#es
 - Integration management adds, enables, disables, reloads and removes integrations, and removes devices.
 - Integration reconfiguration changes an integration's settings. It also adds or changes subentries, such as an AI agent, and fixes repair issues.
 - Subentries and repair fixes always wait for your approval. An agent's settings decide which tools it gets, and a fix runs the integration's own code.
+- Before asking, an agent can look at the first form of a reconfiguration, subentry or fix without your approval. It sees the fields and their labels, not the stored settings, and nothing is submitted.
 - Manage entity registry renames entities and devices and changes entity IDs, areas, floors, labels and categories. `recorder.purge_entities` needs it too, because it deletes history.
 - Radio management changes Zigbee networks. Groups, bindings and device properties also need Physical control. MESA checks changes to a Zigbee device.
 - A Zigbee device with no entities gives MESA nothing to check, so Advisory warns and goes ahead. MESA refuses when it's Enforced, when it failed to start, or when you stored a profile for that device.

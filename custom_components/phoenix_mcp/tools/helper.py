@@ -14,6 +14,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import logging
+from collections.abc import Mapping
 from typing import Any, cast
 
 import voluptuous as vol
@@ -75,6 +76,7 @@ from ..policy_engine import (
 from ..access_key_store import AccessKeyRecord
 from ..authoring_validation import async_template_refusal
 from ..template_scope import HelperScopeError, template_entities, validate_template_selectors
+from .flow_driver import async_flow_strings, fill_placeholders, translated_errors
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -636,21 +638,20 @@ def _invalid_form_errors(err: vol.Invalid) -> dict[str, Any]:
 
 async def _with_field_help(
     hass: HomeAssistant, domain: str, category: str, step_id: Any, schema: Any,
-) -> str | None:
-    """Add HA's own English help to each field and return the step's description.
+    placeholders: Any = None, errors: Any = None,
+) -> tuple[str | None, dict[str, str]]:
+    """Add HA's own English help to each field; return the step's description and error texts.
 
-    A field gets its data_description, else its label; section fields read sections.<name>. Static
+    A field gets its data_description, else its label; section fields read sections.<name>. The
+    step's placeholders are filled in and each form error code gets HA's text for it. Static
     integration strings, so no scope or privacy boundary moves.
     """
-    # Local: not part of the recorded Home Assistant import floor.
-    from homeassistant.helpers.translation import async_get_translations
     if not isinstance(step_id, str):
-        return None
-    try:
-        strings = await async_get_translations(hass, "en", category, [domain])
-    except Exception:  # help text is optional
-        _LOGGER.debug("No %s translations for %s", category, domain, exc_info=True)
-        return None
+        return None, {}
+    strings = await async_flow_strings(hass, domain, category)
+    if not strings:
+        return None, {}
+    filled = placeholders if isinstance(placeholders, Mapping) else {}
     step = f"component.{domain}.{category}.step.{step_id}."
 
     def annotate(fields: list, prefix: str) -> None:
@@ -660,14 +661,19 @@ async def _with_field_help(
             name = field["name"]
             text = strings.get(f"{prefix}data_description.{name}") or strings.get(f"{prefix}data.{name}")
             if isinstance(text, str) and text.strip():
-                field["help"] = text.strip()[:HELPER_FIELD_HELP_MAX]
+                field["help"] = fill_placeholders(text.strip(), filled)[:HELPER_FIELD_HELP_MAX]
             if isinstance(field.get("schema"), list):
                 annotate(field["schema"], f"{step}sections.{name}.")
 
     if isinstance(schema, list):
         annotate(schema, step)
     description = strings.get(f"{step}description")
-    return description.strip()[:HELPER_STEP_HELP_MAX] if isinstance(description, str) and description.strip() else None
+    text = (fill_placeholders(description.strip(), filled)[:HELPER_STEP_HELP_MAX]
+            if isinstance(description, str) and description.strip() else None)
+    if not isinstance(errors, Mapping) or not errors:
+        return text, {}
+    messages = translated_errors(strings, f"component.{domain}.{category}.", errors, filled)
+    return text, {name: message for name, message in messages.items() if message != str(errors.get(name))}
 
 
 def _creation_menu_error(body: dict, supplied: dict) -> str | None:
@@ -705,9 +711,14 @@ async def _prepare_config_flow_helper(
     flow_id = None
 
     async def _described(body: dict[str, Any]) -> dict[str, Any]:
-        if described := await _with_field_help(
-                hass, helper_type, "config", body["step"].get("step_id"), body["step"].get("schema")):
-            body["step"]["help"] = described
+        step = body["step"]
+        described, messages = await _with_field_help(
+            hass, helper_type, "config", step.get("step_id"), step.get("schema"),
+            step.get("description_placeholders"), step.get("errors"))
+        if described:
+            step["help"] = described
+        if messages:
+            step["error_messages"] = messages
         return body
 
     try:
@@ -2770,8 +2781,12 @@ async def _tool_get_helper_settings(
                 "send the whole of settings, since the fields it accepts are unknown here."
             )
             return _helper_settings_result(body, tool)
-        if described := await _with_field_help(
-                hass, entry.domain, "options" if mechanism == _OPTIONS else "config", result.get("step_id"), schema):
+        placeholders = {name: _readable_setting_text(str(value), access_key, hass)
+                        for name, value in (result.get("description_placeholders") or {}).items()}
+        described, _messages = await _with_field_help(
+            hass, entry.domain, "options" if mechanism == _OPTIONS else "config", result.get("step_id"), schema,
+            placeholders)
+        if described:
             body["help"] = described
         body["schema"] = schema
         # THE FIELDS A CALLER ACTUALLY SENDS BACK, taken from the SCHEMA's own

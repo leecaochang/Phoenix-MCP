@@ -5,6 +5,8 @@ needs cap_integration_reconfigure and write scope over every config entry of the
 integration and of the integration it concerns; an issue from an integration with no config
 entry, such as Core's own, is refused. Every fix waits for an administrator whatever the
 capability's mode, and the approval is bound to the issue and each entry's registry context.
+With inspect, the fix flow's first step is shown and the flow closed, under the same checks and
+without an approval.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from ..redaction import redact_structure
 from ..request_authority import _approved_exec_ctx, write_boundary
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _tool_error, _tool_success
 from .discovery import _repair_ref, _safe_repair_text
-from .flow_driver import async_drive_flow
+from .flow_driver import async_drive_flow, async_flow_strings, async_inspect_flow, inspect_mode, stored_strings
 from .integration_reconfigure import MENU_CHOICE_BUDGET, _result_type
 from .integrations import (
     _ConfigEntryActionDecision, _config_entry_action_decision, _config_entry_mesa_error,
@@ -168,7 +170,8 @@ async def _tool_fix_repair(
     """MCP tool: queue a repair issue's own fix flow, with the agent's answers, for approval."""
     if effective_cap(access_key, _CAP) == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", _TOOL
-    if (error := _args_error(args)) is not None:
+    inspect, inspect_error = inspect_mode(args)
+    if (error := inspect_error or _args_error(args)) is not None:
         return _tool_error(error), "invalid_request", _TOOL
     resolved = _resolve(hass, access_key, data, args["repair_ref"], request_id or _TOOL)
     if len(resolved) == 3:
@@ -179,6 +182,8 @@ async def _tool_fix_repair(
             if decision.blocked:
                 fire_mesa_blocked_event(hass, access_key, decision.blocked)
             return _config_entry_mesa_error(entry.entry_id, decision)
+    if inspect:
+        return await _inspect(hass, access_key, args["repair_ref"], issue, entries)
     approval_args = {**args, _BINDING: binding}
     blocked = await _gate(
         _CAP, access_key, hass, data, tool_name=_TOOL, args=approval_args, request_id=request_id,
@@ -188,6 +193,33 @@ async def _tool_fix_repair(
     if blocked is not None:
         return blocked
     return await _execute_fix_repair(approval_args, access_key, hass, data)
+
+
+def _flow_start(manager: Any, issue: ir.IssueEntry) -> Any:
+    # Current releases read the issue from the context; earlier ones from the data.
+    return manager.async_init(issue.domain, context={"issue_id": issue.issue_id}, data={"issue_id": issue.issue_id})
+
+
+async def _inspect(
+    hass: HomeAssistant, access_key: AccessKeyRecord, ref: str, issue: ir.IssueEntry, entries: list[Any],
+) -> tuple[dict, str, str]:
+    """Show the fix flow's first step and close it; nothing is answered or fixed."""
+    manager = repairs_flow_manager(hass)
+    if manager is None:
+        return _tool_error("Home Assistant's Repairs integration is not loaded."), "invalid_request", _TOOL
+    stored = [issue.data or {}] + [value for entry in entries for value in (entry.data, entry.options)]
+    body = await async_inspect_flow(
+        manager, lambda: _flow_start(manager, issue),
+        await async_flow_strings(hass, issue.domain, "issues"),
+        f"component.{issue.domain}.issues.{issue.translation_key}.fix_flow.",
+        stored_strings(stored), lambda text: _safe_repair_text(text, access_key, hass),
+    )
+    body.update({"repair_ref": ref, "domain": issue.domain, "inspect": True,
+                 "note": "Nothing was submitted and the flow is closed. Send config and menu_choices "
+                         "without inspect to fix the issue; it waits for an administrator's approval."})
+    ok = body.get("status") == "inspected"
+    return (_tool_success if ok else _tool_error)(json.dumps(body, default=str)), \
+        "allowed" if ok else "invalid_request", _TOOL
 
 
 @write_boundary
@@ -214,10 +246,7 @@ async def _execute_fix_repair(
     if manager is None:
         return _tool_error("Home Assistant's Repairs integration is not loaded."), "invalid_request", _TOOL
     outcome = await async_drive_flow(
-        manager,
-        # Current releases read the issue from the context; earlier ones from the data.
-        lambda: manager.async_init(issue.domain, context={"issue_id": issue.issue_id},
-                                   data={"issue_id": issue.issue_id}),
+        manager, lambda: _flow_start(manager, issue),
         args.get("config") or {}, list(args.get("menu_choices") or []),
         lambda result: _result_type(result) is FlowResultType.CREATE_ENTRY,
     )

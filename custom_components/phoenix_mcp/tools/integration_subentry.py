@@ -5,7 +5,8 @@ agent and choose which Home Assistant tools it gets (an AI agent's llm_hass_api)
 prompt says, so every write waits for an administrator whatever the capability's mode. The key
 needs cap_integration_reconfigure and write scope over the parent entry, the same as
 reconfigure_integration, and the approval is bound to the entry's identity and, for a
-reconfigure, to the subentry's reviewed settings.
+reconfigure, to the subentry's reviewed settings. With inspect, the flow's first step is shown
+and the flow closed, under the same checks and without an approval.
 """
 
 from __future__ import annotations
@@ -29,7 +30,8 @@ from ..mesa import fire_mesa_blocked_event
 from ..redaction import redact_diagnostics, redact_structure
 from ..request_authority import _approved_exec_ctx, write_boundary
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _record_version, _tool_error, _tool_success
-from .flow_driver import async_drive_flow
+from .discovery import _safe_repair_text
+from .flow_driver import async_drive_flow, async_flow_strings, async_inspect_flow, inspect_mode, stored_strings
 from .integration_reconfigure import MENU_CHOICE_BUDGET, RECONFIGURE_SUCCESS_REASON, _result_type
 from .integrations import (
     _ConfigEntryActionDecision, _config_entry_action_decision, _config_entry_mesa_error,
@@ -153,7 +155,8 @@ async def _tool_set_integration_subentry(
     """MCP tool: queue adding or reconfiguring a config subentry through Core's flow, for approval."""
     if effective_cap(access_key, _CAP) == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", _TOOL
-    if (error := _args_error(args)) is not None:
+    inspect, inspect_error = inspect_mode(args)
+    if (error := inspect_error or _args_error(args)) is not None:
         return _tool_error(error), "invalid_request", _TOOL
     resolved = await _resolve(hass, access_key, data, args, request_id or _TOOL)
     if len(resolved) == 3:
@@ -163,6 +166,8 @@ async def _tool_set_integration_subentry(
         if decision.blocked:
             fire_mesa_blocked_event(hass, access_key, decision.blocked)
         return _config_entry_mesa_error(entry.entry_id, decision)
+    if inspect:
+        return await _inspect(hass, access_key, entry, subentry, kind)
     approval_args = {**args, _BINDING: binding}
     blocked = await _gate(
         _CAP, access_key, hass, data, tool_name=_TOOL, args=approval_args, request_id=request_id,
@@ -171,6 +176,36 @@ async def _tool_set_integration_subentry(
     if blocked is not None:
         return blocked
     return await _execute_set_integration_subentry(approval_args, access_key, hass, data)
+
+
+def _flow_start(manager: Any, entry: Any, subentry: Any, kind: str) -> Any:
+    """Open the add flow, or the reconfigure flow for ``subentry``."""
+    if subentry is None:
+        return manager.async_init((entry.entry_id, kind), context={"source": SOURCE_USER})
+    return manager.async_init(
+        (entry.entry_id, kind), context={"source": SOURCE_RECONFIGURE, "subentry_id": subentry.subentry_id})
+
+
+async def _inspect(
+    hass: HomeAssistant, access_key: AccessKeyRecord, entry: Any, subentry: Any, kind: str,
+) -> tuple[dict, str, str]:
+    """Show the subentry flow's first step and close it; the subentry's settings stay unseen."""
+    manager = hass.config_entries.subentries
+    stored = [entry.data, entry.options] + ([subentry.data] if subentry is not None else [])
+    body = await async_inspect_flow(
+        manager, lambda: _flow_start(manager, entry, subentry, kind),
+        await async_flow_strings(hass, entry.domain, "config_subentries"),
+        f"component.{entry.domain}.config_subentries.{kind}.",
+        stored_strings(stored), lambda text: _safe_repair_text(text, access_key, hass),
+    )
+    body.update({"entry_id": entry.entry_id, "subentry_type": kind, "inspect": True,
+                 "note": "Nothing was submitted and the flow is closed. Send config and menu_choices "
+                         "without inspect to make the change; it waits for an administrator's approval."})
+    if subentry is not None:
+        body["subentry_id"] = subentry.subentry_id
+    ok = body.get("status") == "inspected"
+    return (_tool_success if ok else _tool_error)(json.dumps(body, default=str)), \
+        "allowed" if ok else "invalid_request", entry.entry_id
 
 
 @write_boundary
@@ -196,20 +231,14 @@ async def _execute_set_integration_subentry(
     manager = hass.config_entries.subentries
     before = set(entry.subentries)
     if subentry is None:
-        def start() -> Any:
-            return manager.async_init((entry.entry_id, kind), context={"source": SOURCE_USER})
-
         def success(result: Any) -> bool:
             return _result_type(result) is FlowResultType.CREATE_ENTRY
     else:
-        def start() -> Any:
-            return manager.async_init(
-                (entry.entry_id, kind), context={"source": SOURCE_RECONFIGURE, "subentry_id": subentry.subentry_id})
-
         def success(result: Any) -> bool:
             return _result_type(result) is FlowResultType.ABORT and result.get("reason") == RECONFIGURE_SUCCESS_REASON
     outcome = await async_drive_flow(
-        manager, start, args.get("config") or {}, list(args.get("menu_choices") or []), success)
+        manager, lambda: _flow_start(manager, entry, subentry, kind), args.get("config") or {},
+        list(args.get("menu_choices") or []), success)
     current = hass.config_entries.async_get_entry(entry.entry_id)
     added = sorted(set(current.subentries) - before) if current is not None else []
     body: dict[str, Any] = {

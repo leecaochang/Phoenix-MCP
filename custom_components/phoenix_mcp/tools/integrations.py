@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState, support_entry_unload
+from homeassistant.config_entries import SOURCE_RECONFIGURE, ConfigEntryDisabler, ConfigEntryState, support_entry_unload
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
@@ -42,7 +42,8 @@ from ..tool_common import (
 )
 from ..request_authority import _approved_exec_ctx, write_boundary
 from ..tool_contracts import normalize_tool_args
-from .discovery import _registry_relationships_preview
+from .discovery import _registry_relationships_preview, _safe_repair_text
+from .flow_driver import async_flow_strings, async_inspect_flow, inspect_mode, stored_strings
 from .integration_reconfigure import (
     async_run_reconfigure_flow, MENU_CHOICE_BUDGET,
     STATUS_APPLY_FAILED as RECONFIGURE_APPLY_FAILED,
@@ -732,9 +733,14 @@ async def _tool_reconfigure_integration(
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    """Review agent values, then run only HA's official reconfigure flow."""
+    """Review agent values, then run only HA's official reconfigure flow; or show its first step."""
     if effective_cap(access_key, "cap_integration_reconfigure") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "reconfigure_integration"
+    inspect, inspect_error = inspect_mode(args)
+    if inspect_error is not None:
+        return _tool_error(inspect_error), "invalid_request", "reconfigure_integration"
+    if inspect:
+        return await _inspect_reconfigure_integration(args, access_key, hass, data, request_id)
     value_error = _reconfigure_args_error(args)
     if value_error is not None:
         return _tool_error(value_error), "invalid_request", "reconfigure_integration"
@@ -787,6 +793,59 @@ async def _tool_reconfigure_integration(
     if blocked is not None:
         return blocked
     return await _execute_reconfigure_integration(args, access_key, hass, data)
+
+
+async def _inspect_reconfigure_integration(
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData, request_id: str,
+) -> tuple[dict, str, str]:
+    """Show the reconfigure flow's first step without submitting it; no approval, nothing changes.
+
+    The same capability, complete WRITE coverage, identity and MESA deny checks as a run apply. The
+    form keeps no stored value, and a placeholder carrying the entry's configuration is withheld.
+    """
+    entry_id = args.get("entry_id")
+    if not isinstance(entry_id, str) or not entry_id.strip():
+        return _tool_error("entry_id is required."), "invalid_request", "reconfigure_integration"
+    entry_id = entry_id.strip()
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry is None or entry.domain == DOMAIN:
+        return _tool_error("Integration not found."), "not_found", entry_id
+    if (perm_error := _config_entry_write_error(entry_id, access_key, hass)) is not None:
+        return perm_error
+    identity = _config_entry_private_identity(entry, hass)
+    if identity is None:
+        return _reconfigure_identity_error(entry_id)
+    if identity.same_domain_coowners:
+        return _reconfigure_shared_owner_error(entry_id, identity)
+    _, _, _, supports_reconfigure = await _config_entry_support(entry, hass)
+    if supports_reconfigure is False:
+        return _tool_error(
+            "This integration does not expose Home Assistant's official reconfigure flow."
+        ), "invalid_request", entry_id
+    decision = _config_entry_action_decision(
+        data, access_key, hass, entry, actions=["config_entry.reconfigure"],
+        service_data={"submitted_fields": []}, session_id=request_id or "reconfigure_integration")
+    if isinstance(decision, tuple):
+        return decision
+    if decision.decision == "deny":
+        if decision.blocked:
+            fire_mesa_blocked_event(hass, access_key, decision.blocked)
+        return _config_entry_mesa_error(entry.entry_id, decision)
+    manager = hass.config_entries.flow
+    body = await async_inspect_flow(
+        manager,
+        lambda: manager.async_init(entry.domain, context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id}),
+        await async_flow_strings(hass, entry.domain, "config"),
+        f"component.{entry.domain}.config.",
+        stored_strings([entry.data, entry.options]),
+        lambda text: _safe_repair_text(text, access_key, hass),
+    )
+    body.update({"entry_id": entry_id, "inspect": True,
+                 "note": "Nothing was submitted and the flow is closed. Send config and menu_choices "
+                         "without inspect to make the change, which may wait for an approval."})
+    ok = body.get("status") == "inspected"
+    return (_tool_success if ok else _tool_error)(json.dumps(body, default=str)), \
+        "allowed" if ok else "invalid_request", entry_id
 
 
 @write_boundary

@@ -3407,8 +3407,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Submit agent-provided values to an integration's official Home Assistant reconfigure flow. "
             "Requires complete WRITE coverage and review through the dedicated integration-reconfigure "
-            "capability. Phoenix does not display or emulate Home Assistant's form: values are validated only "
-            "after approval. Supports bounded flat form and ordered menu steps; browser/OAuth and progress steps "
+            "capability. Call with inspect true first to read the flow's first form without approval; values "
+            "are validated only after approval. Supports bounded flat form and ordered menu steps; browser/OAuth and progress steps "
             "must be completed in Home Assistant's frontend. Status is flow_aborted_before_apply, apply_failed, "
             "applied_and_verified, applied_but_unverified, applied_but_incomplete, or "
             "applied_identity_mismatch. Applied results are never safe to retry automatically."
@@ -3422,6 +3422,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "minLength": 1,
                     "description": "The private config entry id returned by list_integrations.",
                 },
+                "inspect": {
+                    "type": "boolean",
+                    "description": "True to see the flow's first step (fields, labels, help or menu) without submitting or approval; send no config.",
+                },
                 "config": {
                     "type": "object",
                     "description": "Flat agent-provided field values for the reconfigure forms. May be empty for confirmation-only flows.",
@@ -3433,7 +3437,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Optional menu step choices, consumed in encounter order.",
                 },
             },
-            "required": ["entry_id", "config"],
+            "required": ["entry_id"],
         },
     },
     {
@@ -3443,7 +3447,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "conversation agent or AI Task entity, or reconfigure one (subentry_id from list_integrations), "
             "through Home Assistant's own subentry flow. Every call waits for an administrator's approval: an "
             "AI agent's settings, such as llm_hass_api and its prompt, decide which tools and instructions it "
-            "gets. Requires complete WRITE coverage of the integration. Values are validated by the "
+            "gets. Requires complete WRITE coverage of the integration. Call with inspect true first to read "
+            "the flow's first form without approval. Values are validated by the "
             "integration only after approval; flat form values and ordered menu choices as for "
             "reconfigure_integration. Applied results are never safe to retry automatically."
         ),
@@ -3454,20 +3459,25 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "entry_id": {"type": "string", "minLength": 1, "description": "The config entry id returned by list_integrations."},
                 "subentry_type": {"type": "string", "minLength": 1, "description": "To add a subentry: its type, such as conversation or ai_task_data."},
                 "subentry_id": {"type": "string", "minLength": 1, "description": "To reconfigure a subentry: its id from list_integrations."},
+                "inspect": {
+                    "type": "boolean",
+                    "description": "True to see the flow's first step (fields, labels, help or menu) without submitting or approval; send no config.",
+                },
                 "config": {"type": "object", "description": "Flat field values for the subentry forms."},
                 "menu_choices": {
                     "type": "array", "maxItems": 10, "items": {"type": "string", "minLength": 1},
                     "description": "Optional menu step choices, consumed in encounter order.",
                 },
             },
-            "required": ["entry_id", "config"],
+            "required": ["entry_id"],
         },
     },
     {
         "name": "fix_repair",
         "description": (
             "Fix a fixable Home Assistant repair issue (is_fixable in get_repairs) through its integration's "
-            "own fix flow, answered with flat config values and ordered menu choices. Every fix waits for an "
+            "own fix flow, answered with flat config values and ordered menu choices. Call with inspect true "
+            "first to read the flow's first form without approval. Every fix waits for an "
             "administrator's approval, since the integration decides what it changes. Requires complete WRITE "
             "coverage of the issue's integration; issues from Home Assistant itself or from integrations "
             "without a config entry are refused. Status is fixed, finished_issue_remains, "
@@ -3478,6 +3488,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "repair_ref": {"type": "string", "minLength": 1, "description": "The repair_ref get_repairs returned."},
+                "inspect": {
+                    "type": "boolean",
+                    "description": "True to see the flow's first step (fields, labels, help or menu) without submitting or approval; send no config.",
+                },
                 "config": {"type": "object", "description": "Flat values for the fix flow's forms; empty for a confirm-only fix."},
                 "menu_choices": {
                     "type": "array", "maxItems": 10, "items": {"type": "string", "minLength": 1},
