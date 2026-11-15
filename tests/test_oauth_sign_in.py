@@ -15,11 +15,13 @@ import itertools
 import json
 import secrets
 from datetime import timedelta
+from http import HTTPStatus
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
@@ -198,6 +200,42 @@ async def test_metadata_describes_phoenix_own_server_over_https_only(oauth):
         assert "registration_endpoint" not in server
     # A request that did not reach Home Assistant through its HTTPS address sees nothing.
     assert (await app.get("/.well-known/oauth-protected-resource/api/phoenix-mcp")).status == 404
+
+
+class _CorePathMetadataView(HomeAssistantView):
+    """Stand-in for Core's per-path RFC 9728 route (core PR #192728).
+
+    Core registers it before any integration and answers 404 for a path whose view does not
+    require Home Assistant authentication, which Phoenix's MCP view does not.
+    """
+
+    url = "/.well-known/oauth-protected-resource/{resource_path:.+}"
+    name = "test:core:oauth-protected-resource:path"
+    requires_auth = False
+
+    async def get(self, request, resource_path: str):
+        return self.json_message("core catch-all", HTTPStatus.NOT_FOUND)
+
+
+async def test_phoenix_metadata_outranks_a_core_catch_all_registered_first(hass, hass_client_no_auth):
+    await _behind_trusted_proxy(hass)
+    await hass.config.async_update(external_url=ORIGIN)
+    data = PhoenixData(store=await AccessKeyStore.async_create(hass), rate_limiter=RateLimiter(), audit=AuditLog())
+    hass.data[DOMAIN] = data
+    hass.http.register_view(_CorePathMetadataView())
+    for view_cls in (*ALL_MCP_VIEWS, *ALL_OAUTH_VIEWS):
+        view = view_cls()
+        view.hass = hass
+        hass.http.register_view(view)
+    app = await hass_client_no_auth()
+    await _key(data)
+    # Phoenix's exact path wins whatever the registration order, so OAuth clients still find it.
+    response = await app.get("/.well-known/oauth-protected-resource/api/phoenix-mcp", headers=HOST)
+    assert response.status == 200
+    assert (await response.json())["resource"] == ORIGIN + "/api/phoenix-mcp"
+    # The catch-all is live for every other path.
+    other = await app.get("/.well-known/oauth-protected-resource/api/other", headers=HOST)
+    assert (other.status, (await other.json())["message"]) == (404, "core catch-all")
     challenge = (await _mcp(app, "phx_" + "0" * 64)).headers["WWW-Authenticate"]
     assert 'resource_metadata="https://phx.example/.well-known/oauth-protected-resource/api/phoenix-mcp"' in challenge
 
