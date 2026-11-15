@@ -106,6 +106,8 @@ On that route the key's rate limit doesn't apply, the audit log shows the calls 
 
 From 2026.10, check that integration's options. A new entry has Expose all AI tools on, which serves every set of tools, Phoenix's included. Turn it off and choose Phoenix MCP (scoped) under AI tools. From 2026.11, the Read-only option leaves an app only the tools marked read-only, but it doesn't replace the key's capabilities.
 
+An app that used Home Assistant's own Home Assistant API finds Phoenix's tool names instead of Home Assistant's. Phoenix has no tools for setting up integrations or reading the full log.
+
 Tools from Home Assistant's other APIs don't pass through Phoenix on that route, so the key, approvals, MESA and the audit log don't cover them. When two APIs offer the same tool name, Home Assistant adds a prefix such as `phoenix-mcp__`.
 
 The Home Assistant set of AI tools, new in 2026.11 for administrators, reaches everything: any entity or action, templates, logs and configuration. To keep an app within Phoenix's checks, choose Phoenix MCP (scoped) alone.

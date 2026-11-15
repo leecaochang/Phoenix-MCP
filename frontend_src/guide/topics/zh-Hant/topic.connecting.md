@@ -106,6 +106,8 @@ Phoenix 沒有自己的遠端服務。家庭網路外的應用程式會像瀏覽
 
 從 2026.10 起，請檢查該整合的選項。新條目預設開啟 Expose all AI tools，會提供每一組工具，包括 Phoenix 的工具。請關閉它，並在 AI tools 下選擇 Phoenix MCP（限定範圍）。從 2026.11 起，Read-only 選項只給應用程式留下標記為唯讀的工具，但它不能取代金鑰的能力設定。
 
+使用過 Home Assistant 內建的 Home Assistant API 的應用程式會看到 Phoenix 的工具名稱，而不是 Home Assistant 的。Phoenix 沒有設定整合或讀取完整日誌的工具。
+
 在這條路徑上，Home Assistant 其他 API 的工具不經過 Phoenix，因此金鑰、核准、MESA 和稽核日誌都不涵蓋它們。當兩個 API 提供同名工具時，Home Assistant 會加上前綴，例如 `phoenix-mcp__`。
 
 「Home Assistant」這組 AI 工具是 2026.11 為管理員新增的，能觸及一切：任何實體或操作、範本、日誌和設定。若要讓應用程式保持在 Phoenix 的檢查之內，只選擇 Phoenix MCP（限定範圍）。
