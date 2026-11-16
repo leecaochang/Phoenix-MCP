@@ -672,6 +672,22 @@ async def test_house_count_uses_scoped_total_without_enumerating_states(hass, co
     assert report['tool_outcomes']==[{'tool':'search_entities','outcome':'allowed'}]
 
 
+async def test_count_without_its_reference_is_answered_by_the_model_not_one_row(hass, companion, monkeypatch):
+    # Seen live: the model counted from the total but left out read_answer, and the
+    # reply named the one lamp the row-limited search returned instead.
+    _, access_key, _, _ = companion
+    access_key.permissions.domains['light'] = PermissionNode('YELLOW')
+    for i in range(12):
+        hass.states.async_set(f'light.count_{i}', 'on', {'friendly_name': f'Lamp {i}'})
+    scripted(monkeypatch, [
+        [('search_entities', {'domain': 'light', 'limit': 1})],
+        json.dumps({'status': 'completed', 'message': 'There are 13 lights.'}),
+    ])
+    report = payload(await rpc(hass, companion, args={'request': 'how many lights in my home?'}))
+    assert report['status'] == 'completed' and report['execution'] == 'not_attempted'
+    assert report['message'] == 'There are 13 lights.' and 'Lamp' not in report['message']
+
+
 @pytest.mark.parametrize('source', [-1, 4, True, '0'])
 async def test_count_source_must_reference_received_evidence(hass, companion, monkeypatch, source):
     scripted(monkeypatch, [

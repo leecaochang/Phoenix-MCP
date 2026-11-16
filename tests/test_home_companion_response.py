@@ -174,6 +174,29 @@ def test_count_detail_describes_scope_instead_of_one_arbitrary_search_row(style)
     assert len(reports[0]['message']) < len(reports[1]['message']) < len(reports[2]['message'])
 
 
+@pytest.mark.parametrize('body', [
+    {'count': 1, 'total': 44, 'truncated': True, 'has_more': True},
+    {'count': 1, 'total': 44},
+    {'count': 1, 'has_more': True},
+])
+def test_a_sample_of_a_larger_search_never_answers_as_its_rows(body):
+    # A count question whose model left out the count reference: one row of 44
+    # lights is not the answer, so the model's reply is.
+    evidence = ResponseEvidence()
+    evidence.observe('search_entities', 'allowed', result({
+        'entities': [{'entity_id': 'light.tall', 'state': 'on', 'friendly_name': 'Tall Lamp'}], **body,
+    }), {'domain': 'light', 'limit': 1})
+    report = build_report('completed', 'You have 44 lights.', evidence, 'en')
+    assert report['message'] == 'You have 44 lights.' and report['execution'] == 'not_attempted'
+
+
+def test_a_complete_search_still_answers_as_its_rows():
+    evidence = ResponseEvidence()
+    search(evidence)
+    assert not evidence.partial_search
+    assert 'Gate: off; Door: on' in build_report('completed', 'x', evidence, 'en')['message']
+
+
 @pytest.mark.parametrize('domain,kind', [('light','light entities'), (['fan'],'fan entities'),
                                        (['light','fan'],'entities'), (None,'entities')])
 def test_count_kind_comes_from_the_selected_admitted_search(domain,kind):

@@ -88,6 +88,9 @@ class ResponseEvidence:
     search_kinds: dict[int, str] = field(default_factory=dict)
     selected_count: int | None = None
     selected_kind: str = "other"
+    # Set when a search returned fewer rows than it matched: its rows are then a
+    # sample, never the answer, whatever their number.
+    partial_search: bool = False
     # A history, statistics or other interpreted read, or a result withheld from
     # the model: the answer is then the model's, not a list of current states.
     model_answer: bool = False
@@ -157,6 +160,9 @@ class ResponseEvidence:
             return
         if name == 'search_entities' and isinstance(body, dict) and isinstance(body.get('entities'), list):
             total = body.get('total')
+            if (body.get('truncated') is True or body.get('has_more') is True
+                    or (type(total) is int and total > len(body['entities']))):
+                self.partial_search = True
             if type(total) is int and total >= 0:
                 self.search_totals[index] = total
                 domain = (arguments or {}).get('domain')
@@ -369,9 +375,10 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
                 parts.append(voice_text(language, _voiced('companion_count_groups', style)))
             if detail == 'detailed':
                 parts.append(voice_text(language, _voiced('companion_count_scope', style)))
-        elif (evidence.chosen or 0 < len(evidence.readings) <= HOME_COMPANION_MAX_REPORT_NAMES) and not evidence.model_answer:
-            # Search rows answer only when every one fits the reply; the first few of a broad
-            # search are an arbitrary subset, so the model, which read them all, answers instead.
+        elif (evidence.chosen or (0 < len(evidence.readings) <= HOME_COMPANION_MAX_REPORT_NAMES
+                                  and not evidence.partial_search)) and not evidence.model_answer:
+            # Search rows answer only when every match fits the reply. The rows of a broad or
+            # row-limited search are an arbitrary subset, so the model, which saw its total, answers.
             parts.append(voice_text(language, _voiced('companion_readings', style), readings='; '.join(
                 list((evidence.chosen or evidence.readings).values())[:HOME_COMPANION_MAX_REPORT_NAMES])))
         else:
