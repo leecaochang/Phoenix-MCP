@@ -395,6 +395,10 @@ AGENT_HEADLESS_LOCAL_CALL_SECONDS = 3600
 # rather than the full silent-stream bound: a provider that has just said it is
 # overloaded and then sends nothing is stuck, not thinking.
 AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS = 60
+# Agent Chat waits out a provider's named rate-limit wait (HTTP 429 with Retry-After) up to this long
+# from the start of the call, even after the turn ran tools: a refused request did no work, and the
+# retry resends the same messages, so no tool runs again. A per-minute token limit needs up to a minute.
+AGENT_CHAT_RATE_LIMIT_WAIT_SECONDS = 60
 # How often Agent Chat's status line reports a model call that has shown nothing yet.
 AGENT_CHAT_STATUS_INTERVAL_SECONDS = 30
 # Interactive inline-approval wait, tied to the live SSE connection (far longer

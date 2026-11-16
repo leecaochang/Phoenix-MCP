@@ -57,7 +57,7 @@ from .provider_constants import (
     AGENT_CHAT_ATTACHMENT_MAX_COUNT, AGENT_CHAT_ATTACHMENT_MAX_EDGE_PX,
     AGENT_CHAT_ATTACHMENT_MAX_TOTAL_BYTES, AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS,
     AGENT_CHAT_MAX_TURN_OUTPUT_BYTES, AGENT_CHAT_PROGRESS_INTERVAL_SECONDS,
-    AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS, AGENT_CHAT_STATUS_INTERVAL_SECONDS,
+    AGENT_CHAT_RATE_LIMIT_WAIT_SECONDS, AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS, AGENT_CHAT_STATUS_INTERVAL_SECONDS,
     AGENT_CHAT_TOOL_RESULT_MAX_CHARS, AGENT_HEADLESS_CALL_SECONDS, AGENT_HEADLESS_LOCAL_CALL_SECONDS,
     AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_PARALLEL_READ_LIMIT,
 )
@@ -1046,6 +1046,13 @@ async def _cancelable_provider_events(
         await events.aclose()
 
 
+# Retry-After is whole seconds, rounded down, so a rate-limit retry waits this much longer to not
+# arrive before the window reopens.
+_RATE_LIMIT_MARGIN_SECONDS = 1.0
+# Calls one rate-limited model call may make while waiting; the doubling gaps reach the bound sooner.
+_RATE_LIMIT_MAX_ATTEMPTS = 8
+
+
 def _after_dispatch_failure(ev: dict, write_started: bool) -> dict:
     """Report a provider failure after a tool dispatch: never retried, uncertain after a write."""
     ev = {**ev, "retryable": False, "dispatch_started": True}
@@ -1063,12 +1070,14 @@ async def _stream_turn_resilient(
     write_started: bool = False,
     first_reply_seconds: float | None = None,
     call_seconds: float | None = None,
+    rate_limit_wait: float | None = None,
 ) -> AsyncIterator[dict]:
     """Wrap provider.stream_turn with a bounded retry for a transient connection failure.
     Retries only before any content, until _CONNECT_RETRY_WINDOW_SECONDS, then surfaces the
-    error; never once an event was seen or a tool dispatched. ``first_reply_seconds`` also
-    bounds the first attempt's first event, and ``call_seconds`` the whole call, retries
-    included; either ends as provider_slow, not retried.
+    error; never once an event was seen or a tool dispatched. ``rate_limit_wait`` also retries
+    an HTTP 429 that names its wait, after a dispatch too, while the wait ends within that many
+    seconds of the start. ``first_reply_seconds`` bounds the first attempt's first event, and
+    ``call_seconds`` the whole call, retries included; either ends as provider_slow, not retried.
     """
     loop_time = asyncio.get_running_loop().time
     started = loop_time()
@@ -1079,6 +1088,7 @@ async def _stream_turn_resilient(
     # the final error keeps: the retry's own failure is often a bare timeout.
     first_detail = ""
     backoff = _CONNECT_RETRY_BACKOFF_SECONDS
+    rate_backoff = 0.0
     while not cancel.is_set():
         attempt += 1
         produced = False
@@ -1107,19 +1117,32 @@ async def _stream_turn_resilient(
                     named = (ev.get("rate_limit") or {}).get("retry_after_seconds") if etype == EV_ERROR else None
                     if isinstance(named, int) and named > wait:
                         wait = float(named)
-                    if (etype == EV_ERROR and not produced and not dispatch_started and ev.get("retryable")
-                            and attempt < _CONNECT_RETRY_MAX_ATTEMPTS and not cancel.is_set()
-                            and loop_time() + wait < deadline):
+                    # The provider refused before doing any work and said when to come back. A token limit
+                    # can name a wait far shorter than the request needs, so the gap doubles, and the last
+                    # one is clipped to end at the bound.
+                    remaining = None if rate_limit_wait is None else started + rate_limit_wait - loop_time()
+                    floor = named + _RATE_LIMIT_MARGIN_SECONDS if isinstance(named, int) and named >= 0 else None
+                    rate_wait = (remaining is not None and floor is not None and etype == EV_ERROR
+                                 and ev.get("status") == 429 and floor <= remaining
+                                 and attempt < _RATE_LIMIT_MAX_ATTEMPTS)
+                    if rate_wait:
+                        assert remaining is not None and floor is not None
+                        wait = min(max(wait, floor, rate_backoff * 2), remaining)
+                    if (etype == EV_ERROR and not produced and ev.get("retryable") and not cancel.is_set()
+                            and (rate_wait or (not dispatch_started and loop_time() + wait < deadline
+                                               and attempt < _CONNECT_RETRY_MAX_ATTEMPTS))):
                         retry = True
                         backoff = wait
+                        rate_backoff = wait if rate_wait else rate_backoff
                         first_detail = first_detail or _failure_detail(ev)
                         yield {"type": EV_RETRYING, "attempt": attempt + 1, "status": ev.get("status"),
                                "detail": _failure_detail(ev), "detail_code": _failure_detail_code(ev)}
                         break
-                    if etype == EV_ERROR and dispatch_started:
-                        ev = _after_dispatch_failure(ev, write_started)
                     if etype == EV_ERROR and attempt > 1:
                         ev = _retry_exhausted(ev, int(loop_time() - started), first_detail)
+                    if etype == EV_ERROR and dispatch_started:
+                        # Last, so a turn that may have written says so whatever the retries were.
+                        ev = _after_dispatch_failure(ev, write_started)
                     if etype in (EV_TEXT, EV_THINKING, EV_TOOL, EV_DONE, EV_INVALID_TOOLS):
                         produced = True
                     yield ev
@@ -1363,7 +1386,7 @@ async def _consume_model_stream(
         async for ev in _stream_turn_resilient(
             provider, session, system_prompt=system, messages=messages,
             tools=tools, options=options, cancel=cancel, dispatch_started=dispatch_started,
-            write_started=write_started,
+            write_started=write_started, rate_limit_wait=AGENT_CHAT_RATE_LIMIT_WAIT_SECONDS,
         ):
             if line is not None:
                 await line.observe(ev)

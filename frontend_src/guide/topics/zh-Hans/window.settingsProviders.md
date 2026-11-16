@@ -85,7 +85,7 @@ Groq、Mistral AI 和 Z.ai 每个请求最多接受 128 个工具。Phoenix 对 
 
 Groq 的免费套餐限制每个模型每分钟接受的 Token 数，而单个 Phoenix 请求就超过了这个上限。Groq 会拒绝该请求，等待也无济于事。请使用 Groq 的付费套餐或其他提供商。
 
-每个 Azure 部署都有自己的每分钟 Token 上限。Phoenix 的请求很大，上限较低的部署可能让对话中途因速率限制错误而停止。请在 Foundry 中提高该部署的上限，或选择余量更大的部署。
+每个 Azure 部署都有自己的每分钟 Token 上限。之前的请求用完上限时，Agent Chat 最多等待一分钟。单个 Phoenix 请求可能超过较低的上限（例如 20,000 个 Token），这时等待也无济于事。请在 Foundry 中提高该部署的上限，或选择余量更大的部署。
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 

@@ -3777,6 +3777,113 @@ async def test_a_retry_keeps_the_shorter_of_the_two_first_reply_bounds():
     assert events[1]["code"] == "provider_retry_exhausted"
 
 
+def _rate_limited(retry_after: int | None = 0, retryable: bool = True) -> dict:
+    """An HTTP 429 the way an adapter reports it, naming its wait when retry_after is given."""
+    ev = {"type": llm_base.EV_ERROR, "status": 429, "code": "rate_limit", "retryable": retryable,
+          "message": "Provider request failed (HTTP 429).", "provider_detail": "Token rate limit exceeded."}
+    return {**ev, "rate_limit": {"retry_after_seconds": retry_after}} if retry_after is not None else ev
+
+
+async def _rate_limit_run(turns, *, rate_limit_wait=60, dispatch_started=True, write_started=False):
+    provider = _ScriptedProvider(turns)
+    with patch("custom_components.phoenix_mcp.agent_turn._CONNECT_RETRY_BACKOFF_SECONDS", 0), \
+            patch("custom_components.phoenix_mcp.agent_turn._RATE_LIMIT_MARGIN_SECONDS", 0):
+        events = await asyncio.wait_for(_collect(agent_turn._stream_turn_resilient(
+            provider, MagicMock(), system_prompt="sys", messages=[], tools=[], options={},
+            cancel=asyncio.Event(), dispatch_started=dispatch_started, write_started=write_started,
+            rate_limit_wait=rate_limit_wait,
+        )), 5)
+    return provider, events
+
+
+@pytest.mark.asyncio
+async def test_a_named_rate_limit_wait_is_retried_after_tools_ran():
+    """A 429 did no work and the retry resends the same messages, so no tool runs again."""
+    provider, events = await _rate_limit_run([[_rate_limited()], [{"type": llm_base.EV_TEXT, "text": "ok"}]])
+    assert provider.i == 2
+    assert events[0]["type"] == llm_base.EV_RETRYING and events[0]["status"] == 429
+    assert events[1:] == [{"type": llm_base.EV_TEXT, "text": "ok"}]
+
+
+@pytest.mark.asyncio
+async def test_a_rate_limit_wait_longer_than_the_retry_window_is_retried_when_it_fits_the_wait():
+    turns = [[_rate_limited()], [{"type": llm_base.EV_TEXT, "text": "ok"}]]
+    with patch("custom_components.phoenix_mcp.agent_turn._CONNECT_RETRY_WINDOW_SECONDS", 0):
+        provider, events = await _rate_limit_run(turns, dispatch_started=False)
+        assert provider.i == 2 and events[-1] == {"type": llm_base.EV_TEXT, "text": "ok"}
+        provider, events = await _rate_limit_run(turns, dispatch_started=False, rate_limit_wait=None)
+        assert provider.i == 1 and events[-1]["type"] == llm_base.EV_ERROR
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("error", "rate_limit_wait"), [
+    # Voice, AI Task and Home Companion keep their own deadlines and never wait.
+    (_rate_limited(), None),
+    # A wait past the bound, a 429 that names no wait, and a refusal the adapter marked final.
+    (_rate_limited(120), 60),
+    (_rate_limited(None), 60),
+    (_rate_limited(0, retryable=False), 60),
+])
+async def test_after_tools_ran_only_a_bounded_named_rate_limit_wait_is_retried(error, rate_limit_wait):
+    provider, events = await _rate_limit_run([[error], [{"type": llm_base.EV_TEXT, "text": "late"}]],
+                                             rate_limit_wait=rate_limit_wait)
+    assert provider.i == 1
+    assert [ev["type"] for ev in events] == [llm_base.EV_ERROR]
+    assert events[0]["retryable"] is False and events[0]["dispatch_started"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_rate_limit_still_refused_after_a_write_reports_an_unknown_outcome():
+    """The retries' own account never hides that an earlier action may have run."""
+    attempts = agent_turn._RATE_LIMIT_MAX_ATTEMPTS
+    provider, events = await _rate_limit_run([[_rate_limited()]] * attempts, write_started=True)
+    assert provider.i == attempts
+    assert [ev["type"] for ev in events] == [llm_base.EV_RETRYING] * (attempts - 1) + [llm_base.EV_ERROR]
+    assert events[-1]["code"] == "provider_after_dispatch" and events[-1]["outcome"] == "outcome_unknown"
+    assert events[-1]["retryable"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_short_named_wait_backs_off_by_doubling_until_the_bound():
+    """A token limit names a wait too short for the request, so each gap doubles, the last ending at the bound."""
+    clock = {"now": 0.0}
+    waits: list[float] = []
+
+    async def _waited(awaitable, timeout):
+        # The wait passes on the fake clock instead of the real one.
+        waits.append(timeout)
+        clock["now"] += timeout
+        awaitable.close()
+        raise asyncio.TimeoutError
+
+    provider = _ScriptedProvider([[_rate_limited(1)]] * agent_turn._RATE_LIMIT_MAX_ATTEMPTS)
+    with patch("custom_components.phoenix_mcp.agent_turn.asyncio.wait_for", _waited), \
+            patch.object(asyncio.get_running_loop(), "time", lambda: clock["now"]):
+        events = await _collect(agent_turn._stream_turn_resilient(
+            provider, MagicMock(), system_prompt="sys", messages=[], tools=[], options={},
+            cancel=asyncio.Event(), dispatch_started=True, rate_limit_wait=60))
+    assert waits == [2.0, 4.0, 8.0, 16.0, 30.0]
+    assert events[-1]["type"] == llm_base.EV_ERROR and provider.i == len(waits) + 1
+
+
+@pytest.mark.asyncio
+async def test_agent_chat_calls_wait_out_a_named_rate_limit():
+    provider = _ScriptedProvider([[_rate_limited()], [{"type": llm_base.EV_TEXT, "text": "ok"}, _done("end_turn")]])
+    frames: list = []
+
+    async def emit(name, payload):
+        frames.append((name, payload))
+
+    with patch("custom_components.phoenix_mcp.agent_turn._CONNECT_RETRY_BACKOFF_SECONDS", 0), \
+            patch("custom_components.phoenix_mcp.agent_turn._RATE_LIMIT_MARGIN_SECONDS", 0):
+        result = await agent_turn._consume_model_stream(
+            provider, MagicMock(), system="sys", messages=[], tools=[], options={}, cancel=asyncio.Event(),
+            emit=emit, usage_done_input=0, usage_done_output=0, context_tokens=0, dispatch_started=True,
+        )
+    assert provider.i == 2 and not result.errored
+    assert "".join(p.get("text", "") for n, p in frames if n == "assistant_delta") == "ok"
+
+
 @pytest.mark.asyncio
 async def test_run_agent_turn_does_not_retry_non_retryable_error(hass):
     provider = _ScriptedProvider([

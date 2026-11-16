@@ -52,6 +52,8 @@ Press Enter to send, or Shift+Enter for a new line. While the agent works, a lin
 
 If the connection drops during a reply, a grey notice tells you. Your message comes back only if nothing had arrived yet, because the agent may already have acted.
 
+If the provider says you're over its rate limit and when to try again, Agent Chat waits and retries for up to a minute. The status line shows it retrying, and **{{label:agentchat.stop}}** still works.
+
 Copy a message with its copy button. The footer shows the tokens used in this conversation, and how much of the model's context the last request took.
 
 ## Pausing to check in {#check-in}

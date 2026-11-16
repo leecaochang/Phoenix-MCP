@@ -83,7 +83,7 @@ Groq, Mistral AI and Z.ai accept at most 128 tools per request. Phoenix applies 
 
 Groq's free tier limits how many tokens each model accepts per minute, and a single Phoenix request is larger than that. Groq refuses it, and waiting doesn't help. Use a paid Groq tier or another provider.
 
-Each Azure deployment has its own limit on tokens per minute. Phoenix requests are large, so a deployment with a low limit can stop a chat partway with a rate limit error. Raise the deployment's limit in Foundry, or choose a deployment with more room.
+Each Azure deployment has its own limit on tokens per minute. Agent Chat waits up to a minute when earlier requests used it up. A single Phoenix request can be larger than a low limit, such as 20,000 tokens, and then waiting doesn't help. Raise the deployment's limit in Foundry, or choose a deployment with more room.
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 
