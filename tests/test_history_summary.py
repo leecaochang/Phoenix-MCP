@@ -1040,6 +1040,37 @@ async def test_select_past_one_result_names_the_rest(recorder_mock, hass: HomeAs
     assert any("summarize not_summarized" in warning for warning in body["warnings"])
 
 
+@pytest.mark.parametrize("tool", ["get_history", "get_statistics"])
+async def test_a_select_is_not_cut_by_the_search_pages_size(recorder_mock, hass: HomeAssistant, tool) -> None:
+    # A search page is bounded to what one stored result holds; the selection reads it whole,
+    # so every match is chosen and the "more than the limit" warning stays for real overflow.
+    from custom_components.phoenix_mcp import tool_common
+    _anchor(hass)
+    ids = [f"sensor.probe_{index:02d}" for index in range(53)]
+    for entity_id in ids:
+        _set(hass, entity_id, "1", -60)
+    await async_wait_recording_done(hass)
+    page_cap = 3000
+    with patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", page_cap):
+        searched = await _call_tool("search_entities", {"query": "probe", "limit": 500}, _search_key(), hass,
+                                    MagicMock(), "r", None)
+    page = json.loads(searched[0]["content"][0]["text"])
+    assert page["has_more"] and page["count"] < 53
+    args = {"select": {"query": "probe"}, "start_time": _at(0).isoformat(), "end_time": _at(400).isoformat(),
+            **({"mode": "summary"} if tool == "get_history" else {})}
+    # The selection's own result is bounded separately; only the search page's bound is small here.
+    with patch.object(tool_common, "TOOL_RESULT_MAX_BYTES", page_cap), \
+            patch.object(history_tools, "longest_fitting", side_effect=lambda build, count: build(count)):
+        content, outcome, _ = await _call_tool(tool, args, _search_key(), hass, MagicMock(), "r", None)
+    assert outcome == "allowed", content
+    body = json.loads(content["content"][0]["text"])
+    assert body["matched"] == 53
+    assert not any("More than" in warning for warning in body["warnings"])
+    named = [row["entity_id"] for row in body["entities"]] + body.get("not_summarized", []) \
+        + body.get("no_statistics", [])
+    assert sorted(named) == ids
+
+
 async def test_an_approximate_name_selects_nothing(recorder_mock, hass: HomeAssistant) -> None:
     # Summarizing a typo-matched entity would answer a question nobody asked.
     _anchor(hass)

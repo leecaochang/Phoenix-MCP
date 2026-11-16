@@ -1528,9 +1528,13 @@ def _search_membership(
 
 
 async def _tool_search_entities(
-    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData, *, fit: bool = True,
 ) -> tuple[dict, str, str]:
-    """MCP tool: filter the access key's accessible entities by name/domain/area/etc."""
+    """MCP tool: filter the access key's accessible entities by name/domain/area/etc.
+
+    fit=False returns the whole page for a caller that reads it rather than returning it, which
+    bounds its own result.
+    """
     if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "search_entities"
 
@@ -1731,7 +1735,7 @@ async def _tool_search_entities(
                 ]
         return page
 
-    body = longest_fitting(build, len(results))
+    body = longest_fitting(build, len(results)) if fit else build(len(results))
     return _tool_success(json.dumps(body, default=str)), "allowed", "search_entities"
 
 

@@ -411,9 +411,10 @@ async def _resolve_select(
                 for state in filter_entities_for_access_key(hass.states.async_all(), access_key, hass)]
     else:
 
+        # Read whole: a page sized for one stored result would cut the selection short.
         found, outcome, _resource = await _tool_search_entities(
             {**filters, "limit": SEARCH_ENTITIES_MAX_LIMIT, "registry_state": "enabled"}, access_key, hass,
-            data if data is not None else hass.data[DOMAIN])
+            data if data is not None else hass.data[DOMAIN], fit=False)
         text = "".join(item.get("text", "") for item in found.get("content", []) if isinstance(item, dict))
         if outcome != "allowed":
             if outcome == "denied":
