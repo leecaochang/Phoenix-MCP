@@ -111,11 +111,27 @@ def _evaluate(payload: dict, permitted: dict, limits: dict) -> dict:
     return {"results": results}
 
 
+def _renders(templates: list[str], permitted: dict) -> dict:
+    """Render each template as the render mode does, with its own output or failure."""
+    # Local: the worker imports Home Assistant only after its limits apply.
+    from custom_components.phoenix_mcp.template_sandbox import render_template_snapshot
+    from custom_components.phoenix_mcp.template_diagnostics import describe_template_failure
+
+    results: list[dict] = []
+    for template in templates:
+        try:
+            results.append({"output": render_template_snapshot(template, permitted)})
+        except Exception as exc:
+            results.append({"failure": describe_template_failure(exc)})
+    return {"results": results}
+
+
 def run_payload(raw: bytes, limits: dict) -> tuple[int, str]:
     """Run one worker request and return (exit code, stdout text).
 
-    ``mode`` is render (the default: one template, rendered text out), evaluate (several
-    renders, JSON out) or check (compile and trial-render, JSON out).
+    ``mode`` is render (the default: one template, rendered text out), renders (several of
+    those, JSON out), evaluate (several renders with variables, JSON out) or check (compile and
+    trial-render, JSON out).
     """
     # Local: the worker imports Home Assistant only after its limits apply.
     from homeassistant.util import dt as dt_util
@@ -143,6 +159,8 @@ def run_payload(raw: bytes, limits: dict) -> tuple[int, str]:
             permitted[state.entity_id] = state
         if mode == "evaluate":
             return 0, json.dumps(_evaluate(payload, permitted, limits), ensure_ascii=False)
+        if mode == "renders":
+            return 0, json.dumps(_renders(payload["templates"], permitted), ensure_ascii=False)
         return 0, render_template_snapshot(payload["template"], permitted)
     except Exception as exc:
         diagnostic = json.dumps(describe_template_failure(exc), ensure_ascii=False)

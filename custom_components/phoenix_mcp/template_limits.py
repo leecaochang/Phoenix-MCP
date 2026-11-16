@@ -15,6 +15,9 @@ TEMPLATE_WORKER_STARTUP_CPU_SECONDS = 8
 TEMPLATE_WORKER_MEMORY_BYTES = 512 * 1024 * 1024
 TEMPLATE_WORKER_INPUT_BYTES = 1_048_576
 TEMPLATE_WORKER_CONCURRENCY = 2
+# How long the renders of one parallel model response wait for each other before going to the
+# worker together; a render refused before reaching it must not hold the others back for longer.
+TEMPLATE_BATCH_GATHER_SECONDS = 0.05
 # How long a check or test waits for a worker slot before answering busy; render_template
 # never waits, so renders cannot hold back writes.
 TEMPLATE_CHECK_SLOT_WAIT_SECONDS = 10

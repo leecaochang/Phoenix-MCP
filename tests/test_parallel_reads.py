@@ -310,27 +310,160 @@ async def test_an_answer_settled_after_authority_is_lost_is_withheld(hass, surfa
         assert run.authority_lost
 
 
-async def test_template_renders_of_one_response_take_worker_slots_as_calls_in_order_would(hass, monkeypatch):
-    """The worker refuses a render when no slot is free, so a batch's renders must not crowd each other out."""
+class _Worker:
+    """The worker's own request code in this process, behind the real slot and batch rules.
+
+    Only the process spawn is replaced; ``fail_batches`` makes a run of several renders fail as a
+    whole, and ``hold`` keeps every run waiting until released.
+    """
+
+    def __init__(self, fail_batches: BaseException | None = None, hold: bool = False) -> None:
+        self.modes: list[tuple[str, int]] = []
+        self.running = self.peak = 0
+        self.fail_batches = fail_batches
+        self.release = asyncio.Event()
+        if not hold:
+            self.release.set()
+        self.cancelled = 0
+
+    async def run(self, payload, data):
+        import json as _json
+        from custom_components.phoenix_mcp import template_limits, template_worker
+
+        mode = payload.get("mode", "render")
+        self.modes.append((mode, len(payload.get("templates", [None]))))
+        self.running += 1
+        self.peak = max(self.peak, self.running)
+        try:
+            await asyncio.sleep(0.01)
+            await self.release.wait()
+        except asyncio.CancelledError:
+            self.cancelled += 1
+            raise
+        finally:
+            self.running -= 1
+        if mode == "renders" and self.fail_batches is not None:
+            raise self.fail_batches
+        limits = {name: value for name, value in vars(template_limits).items() if name.isupper()}
+        code, output = template_worker.run_payload(_json.dumps(payload, default=str).encode(), limits)
+        return code, output.encode()
+
+
+def _render(call_id: str, template: str) -> dict:
+    return {"id": call_id, "name": "render_template", "input": {"template": template}}
+
+
+@pytest.fixture
+def worker(monkeypatch):
+    """The real _run_worker and slot rules, with the spawn replaced by the worker's request code."""
     from custom_components.phoenix_mcp import template_render
 
-    monkeypatch.undo()  # The real slot rules, with only the subprocess faked.
-    running = peak = 0
+    monkeypatch.undo()
 
-    async def worker(payload, data):
-        nonlocal running, peak
-        running += 1
-        peak = max(peak, running)
-        await asyncio.sleep(0.02)
-        running -= 1
-        return 0, b"7"
+    def install(**kwargs) -> _Worker:
+        fake = _Worker(**kwargs)
+        monkeypatch.setattr(template_render, "_run_in_slot", fake.run)
+        return fake
+    return install
 
-    monkeypatch.setattr(template_render, "_run_in_slot", worker)
+
+async def test_the_renders_of_one_response_share_one_worker_run(hass, worker):
+    fake = worker()
     data, access_key = await _environment(hass)
     hass.states.async_set("sensor.one", "1")
-    calls = [{"id": f"t{index}", "name": "render_template", "input": {"template": "{{ states | count }}"}}
-             for index in range(3)] + [_read("r", "sensor.one")]
+    calls = [_render("t0", "{{ 1 + 1 }}"), _render("t1", "{{ 'a' | upper }}"), _read("r", "sensor.one"),
+             _render("t2", "{{ states.sensor | count }}")]
     batch = await _chat_batch(hass, data, access_key, calls)
-    assert [row["tool_use_id"] for row in batch.results] == ["t0", "t1", "t2", "r"]
-    assert [row["is_error"] for row in batch.results] == [False] * 4, batch.results
-    assert peak == 1
+    assert fake.modes == [("renders", 3)]
+    assert [(row["tool_use_id"], row["result_text"], row["is_error"]) for row in batch.results[:2]] == [
+        ("t0", "2", False), ("t1", "A", False)]
+    assert batch.results[3]["result_text"] == "1" and not batch.results[3]["is_error"]
+    assert len(data.audit.query(access_key_id=access_key.id) or []) == 4
+
+
+async def test_a_failing_render_fails_alone_with_the_words_it_gets_on_its_own(hass, worker):
+    from custom_components.phoenix_mcp.template_render import TemplateRenderError, async_render_template_for_access_key
+
+    fake = worker()
+    data, access_key = await _environment(hass)
+    broken = "{{ 1 + }}"
+    with pytest.raises(TemplateRenderError) as alone:
+        await async_render_template_for_access_key(broken, access_key, hass, data)
+    fake.modes.clear()
+    batch = await _chat_batch(hass, data, access_key, [_render("bad", broken), _render("ok", "{{ 2 }}")])
+    assert fake.modes == [("renders", 2)]
+    bad, ok = batch.results
+    assert bad["is_error"] and bad["result_text"] == str(alone.value)
+    assert not ok["is_error"] and ok["result_text"] == "2"
+
+
+@pytest.mark.parametrize("failure", ["limit", "authority"])
+async def test_a_shared_run_that_fails_as_a_whole_renders_each_template_alone(hass, worker, failure):
+    from custom_components.phoenix_mcp.request_authority import AuthorityChangedError
+    from custom_components.phoenix_mcp.template_render import TemplateRenderError
+
+    fake = worker(fail_batches=TemplateRenderError("Template rendering exceeded its CPU budget.")
+                  if failure == "limit" else AuthorityChangedError("Unauthorized."))
+    data, access_key = await _environment(hass)
+    batch = await _chat_batch(hass, data, access_key, [_render("t0", "{{ 1 }}"), _render("t1", "{{ 2 }}"),
+                                                      _render("t2", "{{ 3 }}")])
+    assert fake.modes[0] == ("renders", 3) and fake.modes[1:] == [("render", 1)] * 3
+    assert [(row["result_text"], row["is_error"]) for row in batch.results] == [("1", False), ("2", False), ("3", False)]
+    assert fake.peak == 1
+
+
+async def test_a_render_refused_before_the_worker_does_not_hold_the_others(hass, worker):
+    fake = worker()
+    data, access_key = await _environment(hass)
+    started = asyncio.get_running_loop().time()
+    batch = await _chat_batch(hass, data, access_key, [_render("t0", "{{ 1 }}"), _render("empty", ""),
+                                                      _render("t2", "{{ 3 }}")])
+    assert asyncio.get_running_loop().time() - started < 1
+    assert fake.modes == [("renders", 2)]
+    assert [row["is_error"] for row in batch.results] == [False, True, False]
+
+
+async def test_cancelling_the_turn_cancels_a_shared_render_run(hass, worker):
+    fake = worker(hold=True)
+    data, access_key = await _environment(hass)
+    task = asyncio.ensure_future(_chat_batch(hass, data, access_key, [_render("t0", "{{ 1 }}"), _render("t1", "{{ 2 }}")]))
+    async with asyncio.timeout(2):
+        while not fake.running:
+            await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    async with asyncio.timeout(2):
+        while fake.running:
+            await asyncio.sleep(0)
+    assert fake.cancelled == 1
+
+
+async def test_renders_outside_a_parallel_response_still_run_one_per_worker(hass, worker):
+    fake = worker()
+    data, access_key = await _environment(hass)
+    batch = await _chat_batch(hass, data, access_key, [_render("t0", "{{ 1 }}"), _write("w")])
+    assert fake.modes == [("render", 1)]
+    assert batch.results[0]["result_text"] == "1"
+
+
+async def test_a_caller_that_lost_authority_is_refused_while_its_batch_partner_is_answered(hass, worker):
+    from custom_components.phoenix_mcp import template_render
+    from custom_components.phoenix_mcp.request_authority import AuthorityChangedError, execution_guard
+
+    worker()
+    data, access_key = await _environment(hass)
+    batch = template_render.TemplateBatch(2)
+
+    def lost() -> None:
+        raise AuthorityChangedError("Unauthorized.")
+
+    async def render(template: str, guard=None):
+        template_render.template_batch.set(batch)
+        if guard is not None:
+            execution_guard.set(guard)
+        return await template_render.async_render_template_for_access_key(template, access_key, hass, data)
+
+    kept, refused = await asyncio.gather(render("{{ 1 }}"), render("{{ 2 }}", lost), return_exceptions=True)
+    assert kept == "1"
+    assert isinstance(refused, AuthorityChangedError)

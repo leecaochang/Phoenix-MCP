@@ -469,3 +469,29 @@ async def test_a_snapshot_over_the_input_cap_starts_no_worker(hass):
         with pytest.raises(template_render.TemplateRenderError, match='too large'):
             await template_render.async_render_template_for_access_key('ok', access_key, hass, data)
     spawn.assert_not_called()
+
+
+async def test_renders_gathered_by_a_batch_share_one_real_worker_process(hass):
+    access_key, data = _env()
+    hass.states.async_set("sensor.visible", "42")
+    spawned = []
+    real_spawn = asyncio.create_subprocess_exec
+
+    async def counting(*args, **kwargs):
+        spawned.append(args)
+        return await real_spawn(*args, **kwargs)
+
+    batch = template_render.TemplateBatch(3)
+
+    async def render(template: str):
+        template_render.template_batch.set(batch)
+        try:
+            return await template_render.async_render_template_for_access_key(template, access_key, hass, data)
+        except template_render.TemplateRenderError as exc:
+            return exc
+
+    with patch.object(template_render.asyncio, "create_subprocess_exec", counting):
+        outcomes = await asyncio.gather(render("{{ states('sensor.visible') }}"), render("{{ 1 + }}"), render("{{ 'x' * 3 }}"))
+    assert len(spawned) == 1
+    assert outcomes[0] == "42" and outcomes[2] == "xxx"
+    assert isinstance(outcomes[1], template_render.TemplateRenderError)

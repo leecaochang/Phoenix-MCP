@@ -19,12 +19,12 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from .template_limits import (
-    TEMPLATE_CHECK_COMPILE_SECONDS, TEMPLATE_CHECK_SLOT_WAIT_SECONDS, TEMPLATE_WORKER_DIAGNOSTIC_EXIT,
+    TEMPLATE_BATCH_GATHER_SECONDS, TEMPLATE_CHECK_COMPILE_SECONDS, TEMPLATE_CHECK_SLOT_WAIT_SECONDS, TEMPLATE_WORKER_DIAGNOSTIC_EXIT,
     TEMPLATE_WORKER_INPUT_BYTES, TEMPLATE_WORKER_MAX_TEMPLATES, TEMPLATE_WORKER_TIMEOUT_SECONDS,
 )
 from .template_sandbox import build_permitted_states
 from .template_scope import LONE_SURROGATE_REFUSAL, has_lone_surrogate
-from .request_authority import check_request_authority
+from .request_authority import AuthorityChangedError, check_request_authority
 from .template_diagnostics import format_template_failure
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,10 +68,79 @@ def _note_missing_memory_limit(stderr: bytes) -> None:
 
 # Checks and tests wait for a slot; render_template is refused at once when none is free.
 _WAITING_MODES = frozenset({"check", "evaluate"})
-# Set by a provider loop that runs one response's reads together. Its worker requests then go one
-# at a time, taking slots as the same calls made in order would, so none is refused or kept waiting
-# by its own siblings.
-batch_worker_turn: ContextVar[asyncio.Lock | None] = ContextVar("phoenix_batch_worker_turn", default=None)
+
+
+class TemplateBatch:
+    """The template worker's share of one parallel model response.
+
+    Its worker requests take one turn at a time, as the same calls made in order would, so none
+    is refused or kept waiting by a sibling. Its renders for one key go to the worker together:
+    one process and one snapshot, with a separate answer each. A run that fails as a whole
+    renders each template alone, so a template that exhausts a limit fails only itself.
+    """
+
+    def __init__(self, renders: int = 0) -> None:
+        self.turn = asyncio.Lock()
+        self._remaining = renders
+        self._gathers = renders > 1
+        self._waiting: list[_PendingRender] = []
+        self._timer: asyncio.TimerHandle | None = None
+
+    def gathers(self) -> bool:
+        return self._gathers
+
+    async def render(self, template: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData) -> str:
+        """This call's answer from the batch's next run, checked against the caller's own authority."""
+        loop = asyncio.get_running_loop()
+        pending = _PendingRender(template, access_key, loop.create_future())
+        self._waiting.append(pending)
+        self._remaining -= 1
+        if self._remaining <= 0:
+            self._flush(hass, data)
+        elif self._timer is None:
+            self._timer = loop.call_later(TEMPLATE_BATCH_GATHER_SECONDS, self._flush, hass, data)
+        try:
+            outcome = await pending.future
+        except asyncio.CancelledError:
+            if pending.run is not None and all(other.future.done() for other in pending.group):
+                pending.run.cancel()
+            raise
+        except AuthorityChangedError:
+            # The run checked another caller's authority; this caller answers to its own.
+            check_request_authority()
+            return await _render_alone(template, access_key, hass, data)
+        except Exception:
+            # A lost authority outranks the render's own failure, as it does for a render alone.
+            check_request_authority()
+            raise
+        check_request_authority()
+        return outcome
+
+    def _flush(self, hass: HomeAssistant, data: PhoenixData) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+        group, self._waiting = self._waiting, []
+        if not group:
+            return
+        run = asyncio.ensure_future(_settle_renders(group, hass, data))
+        for pending in group:
+            pending.run, pending.group = run, group
+
+
+class _PendingRender:
+    """One render waiting for its batch's run."""
+
+    def __init__(self, template: str, access_key: AccessKeyRecord, future: asyncio.Future) -> None:
+        self.template = template
+        self.access_key = access_key
+        self.future = future
+        self.run: asyncio.Future | None = None
+        self.group: list[_PendingRender] = []
+
+
+# Set by a provider loop that runs one response's reads together.
+template_batch: ContextVar[TemplateBatch | None] = ContextVar("phoenix_template_batch", default=None)
 
 
 async def _acquire_slot(payload: dict, data: PhoenixData) -> None:
@@ -96,9 +165,9 @@ async def _run_worker(payload: dict, hass: HomeAssistant, data: PhoenixData) -> 
     timeout and the CPU limit raise TemplateRenderError, and a slot still busy after the
     bounded wait TemplateWorkerBusyError; the process is always reaped.
     """
-    turn = batch_worker_turn.get()
-    if turn is not None:
-        async with turn:
+    batch = template_batch.get()
+    if batch is not None:
+        async with batch.turn:
             return await _run_in_free_slot(payload, data)
     return await _run_in_free_slot(payload, data)
 
@@ -178,12 +247,70 @@ async def async_render_template_for_access_key(
     """
     if not isinstance(template, str) or len(template.encode()) > TEMPLATE_WORKER_INPUT_BYTES:
         raise TemplateRenderError("Invalid template size.")
+    batch = template_batch.get()
+    if batch is not None and batch.gathers():
+        return await batch.render(template, access_key, hass, data)
+    return await _render_alone(template, access_key, hass, data)
+
+
+async def _render_alone(template: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData) -> str:
     code, stdout = await _run_worker({"template": template, **_snapshot(access_key, hass)}, hass, data)
     if code == TEMPLATE_WORKER_DIAGNOSTIC_EXIT:
         raise TemplateRenderError(format_template_failure(stdout, template))
     if code != 0:
         raise TemplateRenderError(_WORKER_FAILED)
     return stdout.decode()
+
+
+async def _render_together(group: list[_PendingRender], hass: HomeAssistant, data: PhoenixData) -> list[str | TemplateRenderError]:
+    """Each template's output or failure from one worker run; a failure of the run itself raises."""
+    payload = {"mode": "renders", "templates": [pending.template for pending in group],
+               **_snapshot(group[0].access_key, hass)}
+    code, stdout = await _run_worker(payload, hass, data)
+    try:
+        results = json.loads(stdout)["results"] if code == 0 else None
+    except (ValueError, KeyError, TypeError):
+        results = None
+    if not isinstance(results, list) or len(results) != len(group):
+        raise TemplateRenderError(_WORKER_FAILED)
+    outcomes: list[str | TemplateRenderError] = []
+    for pending, result in zip(group, results, strict=True):
+        if isinstance(result, dict) and isinstance(result.get("output"), str):
+            outcomes.append(result["output"])
+        else:
+            failure = result.get("failure") if isinstance(result, dict) else None
+            outcomes.append(TemplateRenderError(format_template_failure(json.dumps(failure).encode(), pending.template)))
+    return outcomes
+
+
+async def _settle_renders(group: list[_PendingRender], hass: HomeAssistant, data: PhoenixData) -> None:
+    """Answer every waiting render: together per key, alone when the shared run fails as a whole."""
+    keys: dict[tuple, list[_PendingRender]] = {}
+    for pending in group:
+        keys.setdefault((pending.access_key.id, pending.access_key.settings_version), []).append(pending)
+    for same_key in keys.values():
+        live = [pending for pending in same_key if not pending.future.done()]
+        if not live:
+            continue
+        try:
+            outcomes: list[str | BaseException] = list(await _render_together(live, hass, data)) if len(live) > 1 else []
+        except TemplateRenderError:
+            outcomes = []
+        except Exception as exc:
+            outcomes = [exc] * len(live)
+        if not outcomes:
+            for pending in live:
+                try:
+                    outcomes.append(await _render_alone(pending.template, pending.access_key, hass, data))
+                except Exception as exc:
+                    outcomes.append(exc)
+        for pending, outcome in zip(live, outcomes, strict=True):
+            if pending.future.done():
+                continue
+            if isinstance(outcome, BaseException):
+                pending.future.set_exception(outcome)
+            else:
+                pending.future.set_result(outcome)
 
 
 def _bounded_templates(templates: list[str]) -> None:

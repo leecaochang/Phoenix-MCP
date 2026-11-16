@@ -65,7 +65,7 @@ from .request_authority import AuthorityChangedError, household_authority
 from .routing.routing_statistics import provider_events
 from .routing.tool_routing import create_review_state, async_review_tools, ToolReviewState, withheld_results
 from .tool_catalog import build_agent_tool_list
-from .template_render import batch_worker_turn
+from .template_render import TemplateBatch, template_batch
 from .tool_common import (
     _operator_accepted_result, approval_outcome, execution_failure_text, _ProgressBus, _review_outline,
     _progress_ctx,
@@ -566,12 +566,12 @@ def _parallel_reads(tool_calls: list[dict]) -> bool:
         tool_is_read_only(str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]) for tc in tool_calls)
 
 
-@dataclasses.dataclass
 class _ReadBatch:
-    """What the reads of one parallel response share: how many run at once, and one template worker turn."""
+    """What the reads of one parallel response share: how many run at once, and the template worker."""
 
-    gate: asyncio.Semaphore = dataclasses.field(default_factory=lambda: asyncio.Semaphore(AGENT_PARALLEL_READ_LIMIT))
-    worker: asyncio.Lock = dataclasses.field(default_factory=asyncio.Lock)
+    def __init__(self, tool_calls: list[dict]) -> None:
+        self.gate = asyncio.Semaphore(AGENT_PARALLEL_READ_LIMIT)
+        self.worker = TemplateBatch(sum(1 for tc in tool_calls if tc.get("name") == "render_template"))
 
 
 def _start_read(batch: _ReadBatch, run: Callable[[], Awaitable[Any]]) -> asyncio.Task:
@@ -580,7 +580,7 @@ def _start_read(batch: _ReadBatch, run: Callable[[], Awaitable[Any]]) -> asyncio
     The task runs in a copy of the turn's context, so the scopes a call sets stay its own.
     """
     async def bounded() -> Any:
-        batch_worker_turn.set(batch.worker)
+        template_batch.set(batch.worker)
         async with batch.gate:
             return await run()
     return asyncio.ensure_future(bounded())
@@ -1673,7 +1673,7 @@ async def _run_tool_batch(
         if _parallel_reads(tool_calls):
             # Every call reads, so all are checked and started before any is answered; the
             # answers still go back in call order.
-            batch = _ReadBatch()
+            batch = _ReadBatch(tool_calls)
             planned: list[dict | _AdmittedCall] = []
             started: list[asyncio.Task] = []
             try:
@@ -2237,7 +2237,7 @@ async def _dispatch_headless_calls(
             if plan is not None:
                 return plan
         return None
-    batch = _ReadBatch()
+    batch = _ReadBatch(tool_calls)
     # A refusal row stays in its call's place, ahead of the reads after it.
     planned: list[tuple[_AdmittedCall | _HeadlessTurnResult | None, list[dict]]] = []
     started: list[asyncio.Task] = []
