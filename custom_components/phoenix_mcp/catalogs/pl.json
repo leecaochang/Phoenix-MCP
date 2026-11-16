@@ -46,6 +46,7 @@
     "companion_unverified": "Końcowe stany urządzeń nie zostały zweryfikowane. Sprawdź je w Home Assistant; nie wysyłaj poleceń ponownie tylko dlatego, że brakuje potwierdzenia.",
     "companion_refused": "Operacja została odrzucona lub nie można było jej potwierdzić. Sprawdź stan urządzenia i uprawnienia tego asystenta przed podjęciem kolejnej decyzji.",
     "companion_read_failed": "Odczyt nie został ukończony. Nie próbowano wykonać żadnego polecenia dla urządzenia. Wyślij ponownie pełną prośbę.",
+    "companion_rate_limit": "Osiągnięto limit zapytań dostawcy AI, więc odczyt nie został ukończony. Nie próbowano wykonać żadnego polecenia dla urządzenia. Odczekaj minutę, a potem wyślij ponownie pełną prośbę.",
     "companion_limit": "Phoenix osiągnął limit informacji przed ukończeniem. Nie próbowano wykonać polecenia dla urządzenia. Zachowaj ten sam zakres przy kolejnej prośbie; jeśli problem się powtórzy, poproś administratora o sprawdzenie limitów próśb.",
     "companion_steps": "Phoenix osiągnął limit kroków przed ukończeniem. Nie próbowano wykonać polecenia dla urządzenia. Wyślij ponownie tę samą pełną prośbę.",
     "companion_busy": "Inna prośba nadal jest przetwarzana. Ta nie została rozpoczęta; poczekaj na wcześniejszy wynik przed wysłaniem nowej pełnej prośby.",
@@ -81,6 +82,7 @@
     "model_api_unsupported": "Ten model nie został zweryfikowany dla OpenCode Chat Completions. Wybierz obsługiwany model.",
     "provider_unavailable": "Przepraszam, model językowy nie mógł teraz odpowiedzieć.",
     "provider_slow": "Przepraszam, model językowy zbyt długo nie odpowiada. Spróbuj ponownie za chwilę.",
+    "provider_rate_limit": "Przepraszam, osiągnięto limit zapytań dostawcy AI. Odczekaj minutę i spróbuj ponownie.",
     "companion_accepted_explanatory": "Home Assistant przyjął polecenie dla {names}. Jak to zadziałało: Phoenix wykonał akcję Home Assistant na tych urządzeniach.",
     "companion_count_explanatory": "Liczba pasujących {kind} w dozwolonym zakresie: {count}. Jak to zadziałało: Phoenix policzył tylko encje, które ten asystent może widzieć."
   },

@@ -1546,6 +1546,8 @@ HOME_COMPANION_SENSOR_CLASSES = frozenset({
     "temperature", "humidity", "illuminance", "power", "energy", "battery",
 })
 HOME_COMPANION_REPORT_STATUSES = frozenset({"completed", "partial", "clarification_needed", "pending_approval", "refused"})
+# Provider failure codes that mean its rate limit, which Voice and Home Companion name as such.
+PROVIDER_RATE_LIMIT_CODES = frozenset({"rate_limit", "provider_rate_limit_exhausted"})
 HOME_COMPANION_ACCEPTED_TEMPLATES = MappingProxyType({
     style: f"companion_accepted_{style}" for style in CONVERSATION_STYLES
 })

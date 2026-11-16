@@ -3345,6 +3345,7 @@
     "companion_unverified": "Les états finaux des appareils n’ont pas été vérifiés. Vérifiez-les dans Home Assistant ; ne renvoyez pas les commandes uniquement parce que la confirmation manque.",
     "companion_refused": "L’opération a été refusée ou n’a pas pu être confirmée. Vérifiez l’état de l’appareil et les autorisations de cet assistant avant de décider de la suite.",
     "companion_read_failed": "La consultation n’a pas abouti. Aucune commande d’appareil n’a été tentée. Renvoyez la demande complète.",
+    "companion_rate_limit": "La limite de débit du fournisseur d’IA a été atteinte, la consultation n’a donc pas abouti. Aucune commande d’appareil n’a été tentée. Attendez une minute, puis renvoyez la demande complète.",
     "companion_limit": "Phoenix a atteint une limite d’information avant de terminer. Aucune commande n’a été tentée. Conservez le même périmètre lors d’une nouvelle demande ; si cela se reproduit, demandez à l’administrateur de vérifier les limites des demandes.",
     "companion_steps": "Phoenix a atteint sa limite d’étapes avant de terminer. Aucune commande n’a été tentée. Renvoyez la même demande complète.",
     "companion_busy": "Une autre demande est encore en cours. Celle-ci n’a pas démarré ; attendez le résultat précédent avant d’envoyer une nouvelle demande complète.",
@@ -3380,6 +3381,7 @@
     "model_api_unsupported": "Ce modèle n’est pas validé pour OpenCode Chat Completions. Choisissez un modèle pris en charge.",
     "provider_unavailable": "Désolé, le modèle de langage n'a pas pu répondre pour le moment.",
     "provider_slow": "Désolé, le modèle de langage met trop de temps à répondre. Réessayez dans un instant.",
+    "provider_rate_limit": "Désolé, la limite de débit du fournisseur d’IA a été atteinte. Attendez une minute, puis réessayez.",
     "companion_accepted_explanatory": "Home Assistant a accepté la commande pour {names}. Comment ça a fonctionné : Phoenix a exécuté une action Home Assistant sur ces appareils.",
     "companion_count_explanatory": "{kind} correspondantes dans votre périmètre autorisé : {count}. Comment ça a fonctionné : Phoenix n’a compté que les entités que cet assistant peut voir."
   }

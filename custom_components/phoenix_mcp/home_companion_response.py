@@ -275,7 +275,8 @@ def _voiced(key: str, style: str) -> str:
 
 
 def build_report(status: str, model_message: str, evidence: ResponseEvidence, language: object,
-                 *, recovery_required: bool = False, style: str = "direct", detail: str = "balanced") -> dict:
+                 *, recovery_required: bool = False, style: str = "direct", detail: str = "balanced",
+                 rate_limited: bool = False) -> dict:
     """Choose execution claims and required next steps independently of model prose."""
     style = style if style in CONVERSATION_STYLES else 'direct'
     if style in ENGLISH_ONLY_CONVERSATION_STYLES and canonical_language(language) != 'en':
@@ -363,8 +364,9 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
         status, next_step = 'refused', 'check_access'
         parts.append(voice_text(language, 'companion_no_match'))
     elif status != 'completed':
-        next_step = 'full_request'
-        parts.append(voice_text(language, 'companion_read_failed'))
+        # A provider that names its rate limit is waited out, not reworded.
+        next_step = 'wait' if rate_limited else 'full_request'
+        parts.append(voice_text(language, 'companion_rate_limit' if rate_limited else 'companion_read_failed'))
     else:
         # A count answers only a counting question; after a history or other
         # interpreted read the model's answer is the reply, even if it cites a count.

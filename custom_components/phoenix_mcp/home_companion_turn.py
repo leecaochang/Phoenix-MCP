@@ -19,7 +19,8 @@ from .agent_turn import (
 from .audit import generate_request_id
 from .const import (
     HOME_COMPANION_CLIENT_IP, HOME_COMPANION_MAX_CALLS, HOME_COMPANION_MAX_CATALOG_BYTES,
-    HOME_COMPANION_MAX_REQUEST_BYTES, HOME_COMPANION_MAX_ROUNDS, HOME_COMPANION_REPORT_STATUSES,
+    HOME_COMPANION_MAX_REQUEST_BYTES, HOME_COMPANION_MAX_ROUNDS, PROVIDER_RATE_LIMIT_CODES,
+    HOME_COMPANION_REPORT_STATUSES,
     HOME_COMPANION_TIMEOUT_SECONDS, HOME_COMPANION_TOOLS,
 )
 from .helpers import log_internal_failure
@@ -51,13 +52,14 @@ def _refused_and_nothing_else(turn: Any) -> bool:
 
 def _result(status: str, message: str = "", *, outcomes: list[dict] | None = None,
             review_urls: list[str] | None = None, recovery_required: bool = False,
-            language: object = None) -> tuple[dict, str, str]:
+            language: object = None, rate_limited: bool = False) -> tuple[dict, str, str]:
     turn = _turn.get()
     if turn is not None and turn.write_started and not turn.evidence.attempts:
         turn.evidence.attempts = 1
     report = build_report(status, message, turn.evidence if turn else ResponseEvidence(),
                           turn.language if turn else language, recovery_required=recovery_required,
-                          style=turn.style if turn else "direct", detail=turn.detail if turn else "concise")
+                          style=turn.style if turn else "direct", detail=turn.detail if turn else "concise",
+                          rate_limited=rate_limited)
     payload = {**report, "tool_outcomes": outcomes or [], "review_urls": review_urls or []}
     error = report["status"] not in HOME_COMPANION_REPORT_STATUSES
     return ({"content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
@@ -181,7 +183,8 @@ async def run_request(arguments: dict, access_key: Any, hass: HomeAssistant, dat
             if _refused_and_nothing_else(turn) and not result.blocked_by_prior_action:
                 return _result("refused", outcomes=turn.outcomes)
             return _result(result.outcome, outcomes=turn.outcomes,
-                           recovery_required=result.blocked_by_prior_action or data.agent_recovery.blocks(access_key.id))
+                           recovery_required=result.blocked_by_prior_action or data.agent_recovery.blocks(access_key.id),
+                           rate_limited=result.detail_code in PROVIDER_RATE_LIMIT_CODES)
         if result.review_urls or turn.evidence.pending:
             return _result("pending_approval", outcomes=turn.outcomes, review_urls=result.review_urls)
         if turn.evidence.accepted and turn.evidence.targets and turn.calls < HOME_COMPANION_MAX_CALLS:

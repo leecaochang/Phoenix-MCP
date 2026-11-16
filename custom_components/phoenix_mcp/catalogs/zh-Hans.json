@@ -3345,6 +3345,7 @@
     "companion_unverified": "设备最终状态尚未验证。请在 Home Assistant 中检查，不要仅因缺少确认就重新发送指令。",
     "companion_refused": "操作被拒绝或无法确认。请先检查设备状态和此助手的权限，再决定下一步。",
     "companion_read_failed": "查询未完成。未尝试任何设备指令。请重新发送完整请求。",
+    "companion_rate_limit": "已达到 AI 提供商的速率限制，查询未完成。未尝试任何设备指令。请等待一分钟，然后重新发送完整请求。",
     "companion_limit": "Phoenix 在完成前达到信息量限制。未尝试任何设备指令。再次请求时请保留原有范围；如果再次发生，请让管理员检查请求限制。",
     "companion_steps": "Phoenix 在完成前达到步骤上限。未尝试任何设备指令。请重新发送相同的完整请求。",
     "companion_busy": "另一个请求仍在运行。此请求尚未开始，请等待先前结果，再发送新的完整请求。",
@@ -3380,6 +3381,7 @@
     "model_api_unsupported": "此模型尚未通过 OpenCode Chat Completions 兼容性验证。请选择受支持的模型。",
     "provider_unavailable": "抱歉，语言模型现在无法回答。",
     "provider_slow": "抱歉，语言模型响应时间过长。请稍后再试。",
+    "provider_rate_limit": "抱歉，已达到 AI 提供商的速率限制。请等待一分钟后再试。",
     "companion_accepted_explanatory": "Home Assistant 已接受针对 {names} 的命令。工作原理：Phoenix 对这些设备运行了一个 Home Assistant 动作。",
     "companion_count_explanatory": "您权限范围内的匹配{kind}：{count}。工作原理：Phoenix 只统计了此助手可以看到的实体。"
   }

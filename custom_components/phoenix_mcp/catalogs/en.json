@@ -3418,6 +3418,7 @@
     "companion_power_on_sarcastic": "Turned on {names}. Truly, a historic moment.",
     "companion_power_on_shakespearean": "Lo, I have turned on {names}.",
     "companion_power_on_starship_computer": "Acknowledged. {names}: on.",
+    "companion_rate_limit": "The AI provider's rate limit was reached, so the lookup did not finish. No device command was attempted. Wait a minute, then try again with the complete request.",
     "companion_read_failed": "The lookup did not finish. No device command was attempted. Please try again with the complete request.",
     "companion_readings": "Home Assistant reports: {readings}.",
     "companion_readings_butler": "If I may, Home Assistant reports: {readings}.",
@@ -3478,6 +3479,7 @@
     "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again. Open Needs Attention in Phoenix MCP.",
     "output_limit": "Sorry, the model produced too much output, so I stopped.",
     "prior_action_unresolved": "This request was not executed because a previous action needs checking. Open Needs Attention in Phoenix MCP.",
+    "provider_rate_limit": "Sorry, the AI provider's rate limit was reached. Wait a minute, then try again.",
     "provider_slow": "Sorry, the language model is taking too long to answer. Try again in a moment.",
     "provider_unavailable": "Sorry, the language model could not answer right now.",
     "unavailable": "The Phoenix MCP voice agent is currently unavailable."

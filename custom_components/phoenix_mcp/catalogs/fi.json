@@ -3338,6 +3338,7 @@
     "companion_power_off": "{names} sammutettu.",
     "companion_power_on": "{names} kytketty päälle.",
     "companion_read_failed": "Haku ei ehtinyt valmiiksi. Laitteelle ei yritetty lähettää komentoa. Yritä uudelleen täydellisellä pyynnöllä.",
+    "companion_rate_limit": "Tekoälypalvelun käyttörajoitus täyttyi, joten haku ei valmistunut. Laitteelle ei yritetty lähettää komentoa. Odota minuutti ja yritä sitten uudelleen täydellisellä pyynnöllä.",
     "companion_readings": "Home Assistant ilmoittaa: {readings}.",
     "companion_receipt_limit": "Komennon kuittaus vahvistaa vastaanoton; tilantarkistus näyttää, mitä Home Assistant ilmoittaa, ei fyysistä todistetta.",
     "companion_refused": "Pyydetty toiminto torjuttiin tai sitä ei voitu vahvistaa. Tarkista laitteen tila ja tämän avustajan käyttöoikeudet ennen kuin päätät jatkosta.",
@@ -3380,6 +3381,7 @@
     "model_api_unsupported": "Tätä mallia ei ole varmennettu OpenCode Chat Completions -rajapinnalle. Valitse tuettu malli.",
     "provider_unavailable": "Valitettavasti kielimalli ei pystynyt vastaamaan juuri nyt.",
     "provider_slow": "Valitettavasti kielimallin vastaus viipyy liian kauan. Yritä hetken kuluttua uudelleen.",
+    "provider_rate_limit": "Valitettavasti tekoälypalvelun käyttörajoitus on täynnä. Odota minuutti ja yritä sitten uudelleen.",
     "companion_accepted_explanatory": "Home Assistant hyväksyi komennon kohteelle {names}. Näin se toimi: Phoenix suoritti Home Assistant -toiminnon näille laitteille.",
     "companion_count_explanatory": "Sallitussa rajauksessasi on näin monta vastaavaa {kind}: {count}. Näin se toimi: Phoenix laski vain ne entiteetit, jotka tämä avustaja saa nähdä."
   }

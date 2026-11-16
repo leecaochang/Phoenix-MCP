@@ -26,7 +26,7 @@ from .agent_turn import (
 from .approvals import get_approval
 from .const import (
     AI_TASK_CLIENT_IP, CONVERSATION_STYLE_DIRECT, DETAIL_LEVEL_CONCISE,
-    HOME_COMPANION_REPORT_STATUSES, VOICE_AGENT_CLIENT_IP, VOICE_FIRST_REPLY_SECONDS,
+    HOME_COMPANION_REPORT_STATUSES, PROVIDER_RATE_LIMIT_CODES, VOICE_AGENT_CLIENT_IP, VOICE_FIRST_REPLY_SECONDS,
 )
 from .conversation_log import flush_assistant, recorded_chat
 from .data import PhoenixData
@@ -491,6 +491,8 @@ async def async_run_voice_turn(
         # sentence of the conversation's own language instead.
         if turn.detail_code == "provider_slow":
             return voice_text(language, "provider_slow")
+        if turn.detail_code in PROVIDER_RATE_LIMIT_CODES:
+            return voice_text(language, "provider_rate_limit")
         return voice_text(language, "model_api_unsupported" if turn.detail_code == "model_api_unsupported"
                           else "provider_unavailable")
     if turn.outcome == TURN_OUTPUT_LIMIT:

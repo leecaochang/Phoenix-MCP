@@ -52,7 +52,7 @@ Press Enter to send, or Shift+Enter for a new line. While the agent works, a lin
 
 If the connection drops during a reply, a grey notice tells you. Your message comes back only if nothing had arrived yet, because the agent may already have acted.
 
-If the provider says you're over its rate limit and when to try again, Agent Chat waits and retries for up to a minute. The status line shows it retrying, and **{{label:agentchat.stop}}** still works.
+If the provider says you're over its rate limit and when to try again, Agent Chat waits and retries for up to a minute. The status line shows it retrying, and **{{label:agentchat.stop}}** still works. The Home Companion persona and Voice don't wait: they say the provider's rate limit was reached, so you can try again after a minute.
 
 Copy a message with its copy button. The footer shows the tokens used in this conversation, and how much of the model's context the last request took.
 

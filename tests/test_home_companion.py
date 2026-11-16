@@ -5,6 +5,7 @@ from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from custom_components.phoenix_mcp.catalog_text import voice_text
 from homeassistant.core import ServiceCall, ServiceRegistry, callback
 
 from custom_components.phoenix_mcp import agent_chat, home_companion, home_companion_turn, tool_catalog, tool_defs, tool_dispatch
@@ -508,6 +509,23 @@ async def test_final_round_ignoring_no_tools_cannot_act_and_reports_prior_effect
         assert 'step limit' in result['message']
         assert 'same complete request' in result['message']
     assert not companion[0].store.get_pending_approvals()
+
+
+@pytest.mark.parametrize('code', ['rate_limit', 'provider_rate_limit_exhausted'])
+async def test_a_provider_rate_limit_is_named_with_when_to_retry(hass, companion, monkeypatch, code):
+    # Seen live: a 429 after the search read as the generic "did not finish".
+    scripted(monkeypatch, [[('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'compact'}})],
+                           {'type': llm_base.EV_ERROR, 'code': code, 'status': 429, 'retryable': False}])
+    result = payload(await rpc(hass, companion))
+    assert result['status'] == 'provider_error' and result['next_step'] == 'wait'
+    assert result['message'] == voice_text('en', 'companion_rate_limit')
+    assert 'rate limit' in result['message'] and 'No device command was attempted' in result['message']
+
+
+async def test_another_provider_error_keeps_the_general_sentence(hass, companion, monkeypatch):
+    scripted(monkeypatch, [{'type': llm_base.EV_ERROR, 'code': 'server', 'retryable': False}])
+    result = payload(await rpc(hass, companion))
+    assert result['next_step'] == 'full_request' and 'rate limit' not in result['message']
 
 
 @pytest.mark.parametrize('write_first', [False, True])

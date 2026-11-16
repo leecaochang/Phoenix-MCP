@@ -3345,6 +3345,7 @@
     "companion_unverified": "No se verificaron los estados finales. Compruébalos en Home Assistant; no reenvíes comandos solo porque falte la confirmación.",
     "companion_refused": "La operación se rechazó o no pudo confirmarse. Comprueba el estado del dispositivo y los permisos de este asistente antes de decidir el siguiente paso.",
     "companion_read_failed": "La consulta no terminó. No se intentó ningún comando de dispositivo. Vuelve a enviar la solicitud completa.",
+    "companion_rate_limit": "Se alcanzó el límite de solicitudes del proveedor de IA, así que la consulta no terminó. No se intentó ningún comando de dispositivo. Espera un minuto y vuelve a enviar la solicitud completa.",
     "companion_limit": "Phoenix alcanzó un límite de información antes de terminar. No se intentó ningún comando. Mantén el mismo alcance al volver a solicitarlo; si se repite, pide al administrador que revise los límites de las solicitudes.",
     "companion_steps": "Phoenix alcanzó su límite de pasos antes de terminar. No se intentó ningún comando. Vuelve a enviar la misma solicitud completa.",
     "companion_busy": "Otra solicitud sigue en curso. Esta no se inició; espera el resultado anterior antes de enviar una nueva solicitud completa.",
@@ -3380,6 +3381,7 @@
     "model_api_unsupported": "Este modelo no está validado para OpenCode Chat Completions. Elige un modelo compatible.",
     "provider_unavailable": "Lo siento, el modelo de lenguaje no pudo responder en este momento.",
     "provider_slow": "Lo siento, el modelo de lenguaje está tardando demasiado en responder. Inténtalo de nuevo en un momento.",
+    "provider_rate_limit": "Lo siento, se alcanzó el límite de solicitudes del proveedor de IA. Espera un minuto y vuelve a intentarlo.",
     "companion_accepted_explanatory": "Home Assistant aceptó el comando para {names}. Cómo funcionó: Phoenix ejecutó una acción de Home Assistant en esos dispositivos.",
     "companion_count_explanatory": "{kind} coincidentes en tu ámbito permitido: {count}. Cómo funcionó: Phoenix contó solo las entidades que este asistente puede ver."
   }

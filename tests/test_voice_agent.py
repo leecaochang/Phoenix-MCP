@@ -462,6 +462,23 @@ async def test_voice_failure_sentences_follow_the_conversation_language(language
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("language", ["en", "de", "zh-Hans"])
+async def test_voice_turn_rate_limit_says_so_in_the_conversation_language(language):
+    access_key = _make_access_key()
+    data = _make_data()
+    provider = _MockProvider()
+    stream = _staged_stream([{"type": EV_ERROR, "code": "rate_limit", "status": 429,
+                              "provider_detail": "exceeded token rate limit"}])
+    with patch.object(agent_turn, "_stream_turn_resilient", stream), \
+         patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+         patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="SYS"):
+        text = await async_run_voice_turn(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "hi",
+                                          language=language)
+    assert text == voice_text(language, "provider_rate_limit") != voice_text(language, "provider_unavailable")
+    assert "exceeded token rate limit" not in text
+
+
+@pytest.mark.asyncio
 async def test_voice_turn_provider_error_yields_spoken_fallback():
     access_key = _make_access_key()
     data = _make_data()

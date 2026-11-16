@@ -3338,6 +3338,7 @@
     "companion_power_off": "Stängde av {names}.",
     "companion_power_on": "Slog på {names}.",
     "companion_read_failed": "Sökningen slutfördes inte. Inget enhetskommando försöktes. Försök igen med hela begäran.",
+    "companion_rate_limit": "AI-leverantörens hastighetsgräns nåddes, så sökningen slutfördes inte. Inget enhetskommando försöktes. Vänta en minut och försök sedan igen med hela begäran.",
     "companion_readings": "Home Assistant rapporterar: {readings}.",
     "companion_receipt_limit": "Ett kommandokvitto bekräftar att kommandot accepterades; tillståndskontrollen visar vad Home Assistant rapporterar, inte ett fysiskt bevis.",
     "companion_refused": "Den begärda åtgärden avvisades eller kunde inte bekräftas. Kontrollera enhetens tillstånd och den här assistentens behörigheter innan du bestämmer vad du gör härnäst.",
@@ -3380,6 +3381,7 @@
     "model_api_unsupported": "Den här modellen är inte verifierad för OpenCode Chat Completions. Välj en modell som stöds.",
     "provider_unavailable": "Tyvärr kunde språkmodellen inte svara just nu.",
     "provider_slow": "Tyvärr tar språkmodellen för lång tid på sig att svara. Försök igen om en stund.",
+    "provider_rate_limit": "Tyvärr har AI-leverantörens hastighetsgräns nåtts. Vänta en minut och försök sedan igen.",
     "companion_accepted_explanatory": "Home Assistant accepterade kommandot för {names}. Så här fungerade det: Phoenix körde en Home Assistant-åtgärd på de enheterna.",
     "companion_count_explanatory": "Matchande {kind} inom ditt tillåtna omfång: {count}. Så här fungerade det: Phoenix räknade bara de entiteter som den här assistenten får se."
   }

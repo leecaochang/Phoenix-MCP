@@ -3345,6 +3345,7 @@
     "companion_unverified": "Die endgültigen Gerätezustände wurden nicht verifiziert. Prüfen Sie sie in Home Assistant; senden Sie Befehle nicht erneut, nur weil die Bestätigung fehlt.",
     "companion_refused": "Der Vorgang wurde abgelehnt oder konnte nicht bestätigt werden. Prüfen Sie den Gerätezustand und die Berechtigungen dieses Assistenten, bevor Sie weiter vorgehen.",
     "companion_read_failed": "Die Abfrage wurde nicht abgeschlossen. Kein Gerätebefehl wurde versucht. Bitte senden Sie die vollständige Anfrage erneut.",
+    "companion_rate_limit": "Das Ratenlimit des KI-Anbieters wurde erreicht, daher wurde die Abfrage nicht abgeschlossen. Kein Gerätebefehl wurde versucht. Warten Sie eine Minute und senden Sie dann die vollständige Anfrage erneut.",
     "companion_limit": "Phoenix hat vor Abschluss eine Informationsgrenze erreicht. Kein Gerätebefehl wurde versucht. Behalten Sie bei einer neuen Anfrage denselben Umfang bei; tritt dies erneut auf, bitten Sie den Administrator, die Anfragegrenzen zu prüfen.",
     "companion_steps": "Phoenix hat vor Abschluss die Schrittgrenze erreicht. Kein Gerätebefehl wurde versucht. Bitte senden Sie dieselbe vollständige Anfrage erneut.",
     "companion_busy": "Eine andere Anfrage läuft noch. Diese Anfrage wurde nicht gestartet; warten Sie auf das frühere Ergebnis, bevor Sie eine neue vollständige Anfrage senden.",
@@ -3380,6 +3381,7 @@
     "model_api_unsupported": "Dieses Modell ist nicht für OpenCode Chat Completions freigegeben. Wählen Sie ein unterstütztes Modell.",
     "provider_unavailable": "Entschuldigung, das Sprachmodell konnte gerade nicht antworten.",
     "provider_slow": "Entschuldigung, das Sprachmodell braucht zu lange für eine Antwort. Versuchen Sie es gleich noch einmal.",
+    "provider_rate_limit": "Entschuldigung, das Ratenlimit des KI-Anbieters wurde erreicht. Warten Sie eine Minute und versuchen Sie es dann erneut.",
     "companion_accepted_explanatory": "Home Assistant hat den Befehl für {names} angenommen. So hat es funktioniert: Phoenix hat für diese Geräte eine Home Assistant-Aktion ausgeführt.",
     "companion_count_explanatory": "Passende {kind} in Ihrem erlaubten Bereich: {count}. So hat es funktioniert: Phoenix hat nur die Entitäten gezählt, die dieser Assistent sehen darf."
   }

@@ -3345,6 +3345,7 @@
     "companion_unverified": "Gli stati finali non sono stati verificati. Controllali in Home Assistant; non inviare di nuovo i comandi solo perché manca la conferma.",
     "companion_refused": "L’operazione è stata rifiutata o non è stato possibile confermarla. Controlla lo stato del dispositivo e le autorizzazioni di questo assistente prima di decidere come procedere.",
     "companion_read_failed": "La consultazione non è stata completata. Non è stato tentato alcun comando. Invia di nuovo la richiesta completa.",
+    "companion_rate_limit": "È stato raggiunto il limite di frequenza del fornitore di IA, quindi la consultazione non è stata completata. Non è stato tentato alcun comando. Attendi un minuto, poi invia di nuovo la richiesta completa.",
     "companion_limit": "Phoenix ha raggiunto un limite di informazioni prima di terminare. Non è stato tentato alcun comando. Mantieni lo stesso ambito in una nuova richiesta; se il problema si ripete, chiedi all’amministratore di controllare i limiti delle richieste.",
     "companion_steps": "Phoenix ha raggiunto il limite di passaggi prima di terminare. Non è stato tentato alcun comando. Invia di nuovo la stessa richiesta completa.",
     "companion_busy": "Un’altra richiesta è ancora in corso. Questa non è stata avviata; attendi il risultato precedente prima di inviare una nuova richiesta completa.",
@@ -3380,6 +3381,7 @@
     "model_api_unsupported": "Questo modello non è stato verificato per OpenCode Chat Completions. Scegli un modello supportato.",
     "provider_unavailable": "Spiacente, il modello linguistico non è riuscito a rispondere in questo momento.",
     "provider_slow": "Spiacente, il modello linguistico sta impiegando troppo tempo a rispondere. Riprova tra un momento.",
+    "provider_rate_limit": "Spiacente, è stato raggiunto il limite di frequenza del fornitore di IA. Attendi un minuto, poi riprova.",
     "companion_accepted_explanatory": "Home Assistant ha accettato il comando per {names}. Come ha funzionato: Phoenix ha eseguito un'azione di Home Assistant su quei dispositivi.",
     "companion_count_explanatory": "{kind} corrispondenti nel tuo ambito consentito: {count}. Come ha funzionato: Phoenix ha contato solo le entità che questo assistente può vedere."
   }

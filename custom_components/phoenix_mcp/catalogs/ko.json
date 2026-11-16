@@ -3345,6 +3345,7 @@
     "companion_unverified": "기기의 최종 상태는 검증되지 않았습니다. Home Assistant에서 확인하세요. 확인이 없다는 이유만으로 명령을 다시 보내지 마세요.",
     "companion_refused": "작업이 거부되었거나 확인할 수 없었습니다. 다음 작업을 결정하기 전에 기기 상태와 이 어시스턴트의 권한을 확인하세요.",
     "companion_read_failed": "조회가 완료되지 않았습니다. 기기 명령은 시도하지 않았습니다. 전체 요청을 다시 보내 주세요.",
+    "companion_rate_limit": "AI 제공자의 요청 한도에 도달하여 조회가 완료되지 않았습니다. 기기 명령은 시도하지 않았습니다. 일 분 정도 기다린 후 전체 요청을 다시 보내 주세요.",
     "companion_limit": "Phoenix가 완료 전에 정보 한도에 도달했습니다. 기기 명령은 시도하지 않았습니다. 다시 요청할 때 같은 범위를 유지하세요. 반복되면 관리자에게 요청 한도 검토를 부탁하세요.",
     "companion_steps": "Phoenix가 완료 전에 단계 한도에 도달했습니다. 기기 명령은 시도하지 않았습니다. 동일한 전체 요청을 다시 보내 주세요.",
     "companion_busy": "다른 요청이 아직 진행 중입니다. 이 요청은 시작하지 않았습니다. 이전 결과를 기다린 뒤 새로운 전체 요청을 보내 주세요.",
@@ -3380,6 +3381,7 @@
     "model_api_unsupported": "이 모델은 OpenCode Chat Completions에서 검증되지 않았습니다. 지원되는 모델을 선택하세요.",
     "provider_unavailable": "죄송합니다. 지금은 언어 모델이 응답할 수 없습니다.",
     "provider_slow": "죄송합니다. 언어 모델의 응답이 너무 오래 걸립니다. 잠시 후 다시 시도하세요.",
+    "provider_rate_limit": "죄송합니다. AI 제공자의 요청 한도에 도달했습니다. 일 분 정도 기다린 후 다시 시도하세요.",
     "companion_accepted_explanatory": "Home Assistant가 {names}에 대한 명령을 수락했습니다. 작동 방식: Phoenix가 해당 기기에 Home Assistant 액션을 실행했습니다.",
     "companion_count_explanatory": "허용된 범위에서 일치하는 {kind}: {count}개. 작동 방식: Phoenix는 이 어시스턴트가 볼 수 있는 엔티티만 셌습니다."
   }
