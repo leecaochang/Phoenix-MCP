@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 import threading
@@ -563,6 +564,14 @@ def is_sensitive_key(key: Any) -> bool:
     """
     if not isinstance(key, str):
         return False
+    # Only a plain str is cached, so a subclass cannot answer for an equal plain name.
+    return _sensitive_name(key) if type(key) is str else _sensitive_name.__wrapped__(key)
+
+
+# The answer depends only on the name and fixed tables, and a few hundred attribute names
+# recur across every state a search or listing scrubs.
+@functools.lru_cache(maxsize=4096)
+def _sensitive_name(key: str) -> bool:
     if key in SENSITIVE_ATTRIBUTES:
         return True
     lowered = key.lower().replace("-", "_").replace(" ", "_")

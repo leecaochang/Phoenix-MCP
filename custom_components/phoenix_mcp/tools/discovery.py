@@ -1591,17 +1591,20 @@ async def _tool_search_entities(
             continue
         if expose is not None and not expose(eid):
             continue
+        # Filters that need no attributes come before the scrub, which is most of a row's cost.
+        domain = eid.split(".")[0]
+        if f.domains is not None and domain not in f.domains:
+            continue
+        entry = registry.async_get(eid)
+        if f.integrations is not None and (entry is None or entry.platform not in f.integrations):
+            continue
 
         state = hass.states.get(eid)
-        entry = registry.async_get(eid)
         e = scrub_sensitive_attributes(state, access_key, hass) if state is not None else {
             "entity_id": eid,
             "state": None,
             "attributes": {},
         }
-        domain = eid.split(".")[0]
-        if f.domains is not None and domain not in f.domains:
-            continue
         attrs = e.get("attributes", {})
         fname = str_arg(attrs.get("friendly_name")) or (
             str_arg(entry.name or entry.original_name) if entry is not None else ""
@@ -1610,8 +1613,6 @@ async def _tool_search_entities(
             (entry.device_class or entry.original_device_class) if entry is not None else None
         )
         if f.device_classes is not None and device_class not in f.device_classes:
-            continue
-        if f.integrations is not None and (entry is None or entry.platform not in f.integrations):
             continue
         if f.radios is not None and not f.radios & _entity_radio_types(entry, radio_cache, hass):
             continue
