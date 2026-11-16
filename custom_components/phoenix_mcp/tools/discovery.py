@@ -849,11 +849,11 @@ async def _tool_list_areas(
         return _tool_error("Forbidden."), "denied", "list_areas"
 
     registry = er.async_get(hass)
-    dev_reg = dr.async_get(hass)
+    devices = device_registry_snapshot(hass)
     area_reg = ar.async_get(hass)
     counts: dict[str, int] = {}
     for eid in _accessible_entity_ids(access_key, hass):
-        area_id = _resolve_area_id(registry.async_get(eid), dev_reg)
+        area_id = _resolve_area_id(registry.async_get(eid), devices)
         if area_id:
             counts[area_id] = counts.get(area_id, 0) + 1
 
@@ -886,13 +886,13 @@ async def _tool_list_floors(
         return _tool_error("Forbidden."), "denied", "list_floors"
 
     registry = er.async_get(hass)
-    dev_reg = dr.async_get(hass)
+    devices = device_registry_snapshot(hass)
     area_reg = ar.async_get(hass)
     floor_reg = fr.async_get(hass)
     floor_entity_counts: dict[str, int] = {}
     floor_area_ids: dict[str, set[str]] = {}
     for eid in _accessible_entity_ids(access_key, hass):
-        area_id = _resolve_area_id(registry.async_get(eid), dev_reg)
+        area_id = _resolve_area_id(registry.async_get(eid), devices)
         if not area_id:
             continue
         area = area_reg.async_get_area(area_id)
@@ -1152,9 +1152,9 @@ def _search_area_ids(hass: HomeAssistant, wanted: str) -> set[str]:
     return ids
 
 
-def _area_name_for_entity(eid: str, registry: Any, dev_reg: Any, area_reg: Any) -> str | None:
+def _area_name_for_entity(eid: str, registry: Any, devices: DeviceRegistrySnapshot, area_reg: Any) -> str | None:
     """Return the area NAME for an entity, or None if it has no area."""
-    area_id = _resolve_area_id(registry.async_get(eid), dev_reg)
+    area_id = _resolve_area_id(registry.async_get(eid), devices)
     if not area_id:
         return None
     area = area_reg.async_get_area(area_id)
@@ -1569,11 +1569,11 @@ async def _tool_search_entities(
         ), "invalid_request", "search_entities"
 
     registry = er.async_get(hass)
-    dev_reg = dr.async_get(hass)
+    devices = device_registry_snapshot(hass)
     area_reg = ar.async_get(hass)
     now = utcnow()
     # Only a query reads an entity's area, floor, label and device words.
-    context_registries = ((device_registry_snapshot(hass), area_reg, fr.async_get(hass), lr.async_get(hass))
+    context_registries = ((devices, area_reg, fr.async_get(hass), lr.async_get(hass))
                           if f.query else None)
 
     expose = assist_expose_check(access_key, hass)
@@ -1622,10 +1622,10 @@ async def _tool_search_entities(
             continue
         if f.want_unavailable and state_val not in ("unavailable", "unknown"):
             continue
-        area_name = _area_name_for_entity(eid, registry, dev_reg, area_reg)
-        if area_ids is not None and _resolve_area_id(entry, dev_reg) not in area_ids:
+        area_name = _area_name_for_entity(eid, registry, devices, area_reg)
+        if area_ids is not None and _resolve_area_id(entry, devices) not in area_ids:
             continue
-        if f.has_area is not None and (_resolve_area_id(entry, dev_reg) is not None) != f.has_area:
+        if f.has_area is not None and (_resolve_area_id(entry, devices) is not None) != f.has_area:
             continue
         last_changed = None
         if f.stale_threshold is not None:
@@ -1742,7 +1742,7 @@ async def _tool_get_overview(
         return _tool_error("Forbidden."), "denied", "get_overview"
 
     registry = er.async_get(hass)
-    dev_reg = dr.async_get(hass)
+    devices = device_registry_snapshot(hass)
     area_reg = ar.async_get(hass)
     accessible = filter_entities_for_access_key(hass.states.async_all(), access_key, hass)
     by_domain: dict[str, int] = {}
@@ -1757,7 +1757,7 @@ async def _tool_get_overview(
             unavailable += 1
         elif e.get("state") == "unknown":
             unknown += 1
-        area_name = _area_name_for_entity(eid, registry, dev_reg, area_reg) or "(no area)"
+        area_name = _area_name_for_entity(eid, registry, devices, area_reg) or "(no area)"
         by_area[area_name] = by_area.get(area_name, 0) + 1
 
     body = {
@@ -1798,13 +1798,13 @@ async def _tool_describe_area(
     target = _resolve_area(hass, area_query)
 
     registry = er.async_get(hass)
-    dev_reg = dr.async_get(hass)
+    devices = device_registry_snapshot(hass)
     entities_by_domain: dict[str, list[dict]] = {}
     count = 0
     if target is not None:
         for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
             eid = e["entity_id"]
-            if _resolve_area_id(registry.async_get(eid), dev_reg) != target.id:
+            if _resolve_area_id(registry.async_get(eid), devices) != target.id:
                 continue
             entities_by_domain.setdefault(eid.split(".")[0], []).append({
                 "entity_id": eid,
@@ -2651,7 +2651,7 @@ async def _tool_describe_entity(
         "domain": domain,
         "state": scrubbed.get("state"),
         "attributes": scrubbed.get("attributes"),
-        "area": _area_name_for_entity(entity_id, registry, dr.async_get(hass), ar.async_get(hass)),
+        "area": _area_name_for_entity(entity_id, registry, device_registry_snapshot(hass), ar.async_get(hass)),
         "writable": (access_key.pass_through or perm == Permission.WRITE)
         and not unregistered_targets(entity_id, access_key, hass),
         "domain_services": sorted(hass.services.async_services().get(domain, {}).keys()),

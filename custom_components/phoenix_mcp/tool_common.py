@@ -43,7 +43,7 @@ from .config_recovery import ConfigurationRecoveryError
 from .conversation_log import record_event, json_size
 from .mesa_audit import note_mesa_advisory
 from .device_semantics import (
-    device_registry_snapshot_from_registry,
+    DeviceRegistrySnapshot,
     effective_entity_area_id,
 )
 from .mesa import mesa_confirm_preview
@@ -994,11 +994,13 @@ def _mesa_confirm_annotation(
         return None
 
 
-def _resolve_area_id(entry: Any, device_registry: Any) -> str | None:
-    """Return the area_id for an entity registry entry, falling back to the device's area."""
-    return effective_entity_area_id(
-        entry, device_registry_snapshot_from_registry(device_registry)
-    )
+def _resolve_area_id(entry: Any, devices: DeviceRegistrySnapshot) -> str | None:
+    """Return the area_id for an entity registry entry, falling back to the device's area.
+
+    Callers build ``devices`` once per request: a snapshot reads every device, so one per
+    entity made a listing cost entities times devices.
+    """
+    return effective_entity_area_id(entry, devices)
 
 
 async def _create_registry_mesa_approval(

@@ -11,7 +11,7 @@ import time
 from typing import Any, cast, Literal
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
+from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.util import dt as dt_util
 from homeassistant.util.dt import utcnow
 
@@ -24,6 +24,7 @@ from ..const import (
 )
 from ..conversation_log import json_size
 from ..data import PhoenixData
+from ..device_semantics import device_registry_snapshot
 from ..tool_input import str_arg, str_list_arg
 from ..capability import effective_cap
 from ..history_summary import (
@@ -50,6 +51,15 @@ from ..component_guard import require_component
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _row_area_name(entity_id: str, hass: HomeAssistant) -> str | None:
+    """Return one row's area name from the registries as they are now.
+
+    The many-entity loops await a recorder read before each row, so a device snapshot taken
+    before the loop could be stale by the time a later row reads it.
+    """
+    return _area_name_for_entity(entity_id, er.async_get(hass), device_registry_snapshot(hass), ar.async_get(hass))
 
 
 def _readable_state(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[Any, Permission]:
@@ -519,7 +529,6 @@ async def _history_summary_many(
     selected = dict(selection or {})
     # "Which room had no motion" is answered by room, so each row names its entity and area.
 
-    registries = (er.async_get(hass), dr.async_get(hass), ar.async_get(hass))
     scanned = 0
     selection_warnings = list(selected.pop("warnings", []))
     rows: dict[str, Any] = {}
@@ -619,7 +628,7 @@ async def _history_summary_many(
                     ))
                     state = hass.states.get(entity_id)
                     row = {"entity_id": entity_id, "name": state.name if state is not None else None,
-                           "area": _area_name_for_entity(entity_id, *registries),
+                           "area": _row_area_name(entity_id, hass),
                            **{key: value for key, value in row.items() if key != "entity_id"}}
                     size = _stored_bytes(row)
                     if used + size + to_come <= TOOL_RESULT_MAX_BYTES:
@@ -681,7 +690,6 @@ async def _history_rows_many(
             Permission.NOT_FOUND, Permission.NO_ACCESS, Permission.DENY)
 
 
-    registries = (er.async_get(hass), dr.async_get(hass), ar.async_get(hass))
     ids = list(dict.fromkeys(item.strip() for item in raw_ids))
     read_ids = [entity_id for entity_id in ids if readable(entity_id)]
     page_args = {key: value for key, value in args.items() if key != "entity_id"}
@@ -752,7 +760,7 @@ async def _history_rows_many(
                     page_warnings.extend(page.get("warnings") or [])
                     state = hass.states.get(entity_id)
                     row = {"entity_id": entity_id, "name": state.name if state is not None else None,
-                           "area": _area_name_for_entity(entity_id, *registries),
+                           "area": _row_area_name(entity_id, hass),
                            "count": page["count"], "has_more": page["has_more"],
                            **({"next_cursor": page["next_cursor"]} if page["has_more"] else {}),
                            "history_csv": page["history_csv"]}
@@ -912,7 +920,7 @@ async def _statistics_summary_many(
     still = {entity_id for entity_id in scan_ids if readable(entity_id)}
     # A comparison is reported by room and name, so each row carries them.
 
-    registries = (er.async_get(hass), dr.async_get(hass), ar.async_get(hass))
+    registries = (er.async_get(hass), device_registry_snapshot(hass), ar.async_get(hass))
     rows = [{"entity_id": row["entity_id"],
              "name": (state.name if (state := hass.states.get(row["entity_id"])) is not None else None),
              "area": _area_name_for_entity(row["entity_id"], *registries),

@@ -27,6 +27,7 @@ from .const import (
 )
 from .conversation_log import record_event, recorded_exchange
 from .data import PhoenixData
+from .device_semantics import device_registry_snapshot_from_registry
 from .helpers import log_internal_failure, log_request as _log
 from .capability import access_key_has_write_scope, effective_cap, effective_caps
 from .template_sandbox import build_permitted_states as _build_permitted_states
@@ -497,7 +498,7 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
         return {"access_key_name": access_key.name, "persona": access_key.persona, "entities": [],
                 "capability_flags": effective_caps(access_key), "message": "Use home_request for scoped household requests."}
     registry = er.async_get(hass)
-    dev_registry = dr.async_get(hass)
+    devices = device_registry_snapshot_from_registry(dr.async_get(hass))
 
     entities: list[dict] = []
     states = hass.states.async_all()
@@ -522,7 +523,7 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
                 continue
             if _expose_check is not None and not _expose_check(eid):
                 continue
-            area_id = _resolve_area_id(entry, dev_registry)
+            area_id = _resolve_area_id(entry, devices)
             row: dict = {"entity_id": eid, "permission": "READ/WRITE", "area_id": area_id}
             if hint := entity_hint_for_agent(access_key, eid, hass, entity_hints):
                 row["hint"] = hint
@@ -533,7 +534,7 @@ def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dic
             if perm not in (Permission.READ, Permission.WRITE):
                 continue
             entry = registry.async_get(state.entity_id)
-            area_id = _resolve_area_id(entry, dev_registry)
+            area_id = _resolve_area_id(entry, devices)
             perm_str = "READ/WRITE" if perm == Permission.WRITE else "READ"
             e: dict = {"entity_id": state.entity_id, "permission": perm_str, "area_id": area_id}
             hint = entity_hint_for_agent(access_key, state.entity_id, hass, entity_hints)
