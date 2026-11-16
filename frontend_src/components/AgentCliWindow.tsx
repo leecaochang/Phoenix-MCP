@@ -522,6 +522,7 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       return { thinking: thinkOpts(["off", "on"]), style: "boolean", defaultLevel: "on", temperature: true };
     case "openrouter":
     case "infron":
+    case "azure":
     case "nvidia":
     case "opencode":
     case "tencent":

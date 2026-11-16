@@ -1,5 +1,6 @@
 {
   "agentcli_provider_kinds": [
+    "azure",
     "cerebras",
     "chatgpt",
     "claude",

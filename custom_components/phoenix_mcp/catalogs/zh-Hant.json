@@ -235,6 +235,7 @@
       "oauthSaveFailed": "無法移除該登入。請再試一次。",
       "oauthNoHttps": "Home Assistant 沒有 HTTPS 位址，因此應用程式無法登入。請先設定 HTTPS 外部 URL。",
       "providerAccountIdInvalid": "請輸入 32 個字元的帳戶 ID。",
+      "providerAzureEndpointInvalid": "請輸入 Azure 端點：以 .services.ai.azure.com, .openai.azure.com 或 .cognitiveservices.azure.com 結尾的 https 位址。",
       "decisionThresholdInvalid": "請輸入 {min} 到 {max} 之間的閾值，精確到百分位。",
       "decisionThresholdAlone": "請單獨變更閾值。",
       "decisionThresholdConversation": "只有決策帳戶才有閾值。"
@@ -1948,6 +1949,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2150,6 +2152,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions 不再是預設",
       "noneChoice": "無",
       "agentcliAccountId": "帳戶 ID",
+      "agentcliAzureEndpoint": "端點",
       "styleEnglishOnly": "僅限英文",
       "styleExplanatory": "講解",
       "styleExplanatoryHelp": "完成任務後，說明其中的原理，以及您如何自行操作。",

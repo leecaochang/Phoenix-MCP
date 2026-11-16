@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from typing import Any, AsyncIterator, Iterator
 
 from aiohttp import ClientError, ClientSession, SocketTimeoutError
@@ -13,7 +14,7 @@ from ..conversation_log import record_rejected_tool
 from ..catalog_text import LocalizedReason
 from .accounts import PROVIDER_DEFINITIONS, ProviderConfig
 from .base import (
-    _ArgumentText, _bounded_catalog, _CHAT_TIMEOUT, _created_map, _error_body, _FINISH_FAILURES,
+    _ArgumentText, _bounded_catalog, _CHAT_TIMEOUT, _created_map, _epoch, _error_body, _FINISH_FAILURES,
     _gemini_tool_slot, _http_failure, _http_failure_code, _IMAGE_PROBE_TIMEOUT,
     _invalid_tool_calls, _invalid_tools_error, _is_expired, _json_error_hint,
     _MISTRAL_RATE_LIMIT_HEADER_FIELDS, _model_result_text, _norm,
@@ -33,7 +34,7 @@ from ..provider_constants import (
     AGENT_CHAT_REASONING_PROBE_MAX_TOKENS, AGENT_CHAT_CLOUDFLARE_MODELS_QUERY, AGENT_CHAT_LOCAL_NATIVE_MODELS_PATH,
     AGENT_CHAT_LOCAL_NATIVE_SERVER, AGENT_CHAT_LOCAL_REASONING_WIRE, AGENT_CHAT_LOCAL_SERVER_OWNERS,
     AGENT_CHAT_LOCAL_PROPS_PATH, AGENT_CHAT_LOCAL_THINKING_OFF_METHODS,
-    AGENT_CHAT_EFFORT_LEVEL_ORDER,
+    AGENT_CHAT_EFFORT_LEVEL_ORDER, AGENT_CHAT_AZURE_API_PATH, AGENT_CHAT_AZURE_DEPLOYMENTS_PATH,
 )
 
 
@@ -155,6 +156,42 @@ def _filter_together_models(data: list[dict]) -> list[str]:
         if model.get("id") and model.get("type") == "chat"
     )
     return chat or sorted(str(model["id"]) for model in data if model.get("id"))
+
+
+def _azure_deployments(deployments: Any, catalog: Any) -> tuple[list[str], dict[str, float]]:
+    """The chat deployments of an Azure resource, and each one's model release time.
+
+    A deployment is kept once it has succeeded, unless Azure's catalog says its model cannot chat or
+    has passed its retirement date; a model the catalog does not list is judged by its name. A
+    request names the deployment, while the release time is the model's, so the newest model leads.
+    """
+    rows = {row["id"]: row for row in (catalog if isinstance(catalog, list) else [])
+            if isinstance(row, dict) and isinstance(row.get("id"), str)}
+    now = time.time()
+    names: list[str] = []
+    created: dict[str, float] = {}
+    for row in deployments if isinstance(deployments, list) else []:
+        if not isinstance(row, dict) or row.get("status") != "succeeded":
+            continue
+        name, model = row.get("id"), row.get("model")
+        if not isinstance(name, str) or not name or not isinstance(model, str):
+            continue
+        listed = rows.get(model)
+        if listed is None:
+            if _NON_CHAT_MODEL_RE.search(model) or _NON_CHAT_MODEL_RE.search(name):
+                continue
+        else:
+            capabilities = listed.get("capabilities")
+            retired = _epoch((listed.get("deprecation") or {}).get("inference")
+                             if isinstance(listed.get("deprecation"), dict) else None)
+            if (isinstance(capabilities, dict) and capabilities.get("chat_completion") is False) or (
+                    retired is not None and retired <= now):
+                continue
+        names.append(name)
+        stamp = _epoch((listed or {}).get("created_at")) or _epoch(row.get("created_at"))
+        if stamp:
+            created[name] = stamp
+    return sorted(names), created
 
 
 def _filter_cloudflare_models(data: list) -> list[str]:
@@ -402,6 +439,8 @@ class OpenAICompatProvider:
             else f"{self.cfg.base_url}/chat/completions"
 
     def _models_url(self) -> str:
+        if self.definition.models_shape == "azure" and self.cfg.base_url.endswith(AGENT_CHAT_AZURE_API_PATH):
+            return f"{self.cfg.base_url[:-len(AGENT_CHAT_AZURE_API_PATH)]}{AGENT_CHAT_AZURE_DEPLOYMENTS_PATH}"
         if self.definition.models_shape == "cloudflare" and self.cfg.base_url.endswith("/v1"):
             return f"{self.cfg.base_url[:-len('v1')]}{AGENT_CHAT_CLOUDFLARE_MODELS_QUERY}"
         for choice in self.definition.endpoints:
@@ -430,7 +469,10 @@ class OpenAICompatProvider:
         # Every keyed backend uses a Bearer header, including Ollama Cloud; only
         # local Ollama is keyless (no auth header).
         h = {"content-type": "application/json"}
-        if self.cfg.api_key and not self._is_ollama_local:
+        if self.cfg.api_key and self.kind == "azure":
+            # Azure documents its key in this header; a bearer token there means a Microsoft Entra ID token.
+            h["api-key"] = self.cfg.api_key
+        elif self.cfg.api_key and not self._is_ollama_local:
             h["Authorization"] = f"Bearer {self.cfg.api_key}"
         return h
 
@@ -601,6 +643,9 @@ class OpenAICompatProvider:
             )
             if self.definition.models_shape == "cloudflare":
                 return _filter_cloudflare_models(data if isinstance(data, list) else []) or self._model_fallback()
+            if self.definition.models_shape == "azure":
+                models, self.model_created = _azure_deployments(data, await self._azure_catalog(session))
+                return models or self._model_fallback()
             if self.definition.model_filter == "opencode":
                 data = [row for row in (data if isinstance(data, list) else []) if isinstance(row, dict)
                         and isinstance(row.get("id"), str) and row["id"]]
@@ -649,6 +694,19 @@ class OpenAICompatProvider:
             return models or ([self.cfg.model] if self.cfg.model else [])
         except (ClientError, asyncio.TimeoutError, ValueError):
             return self._model_fallback()
+
+    async def _azure_catalog(self, session: ClientSession) -> list | None:
+        """Azure's model catalog rows, which say what each model can do; None when it gives none."""
+        try:
+            async with session.get(f"{self.cfg.base_url}/models", headers=self._headers(),
+                                   timeout=_PROBE_TIMEOUT, allow_redirects=False) as resp:
+                if resp.status != 200:
+                    return None
+                body = await _read_json(resp)
+        except (ClientError, asyncio.TimeoutError, ValueError):
+            return None
+        rows = body.get("data") if isinstance(body, dict) else None
+        return rows if isinstance(rows, list) else None
 
     async def _native_chat_models(self, session: ClientSession) -> set[str] | None:
         """The models a Bionic server types as language models; None when the server has no such list.

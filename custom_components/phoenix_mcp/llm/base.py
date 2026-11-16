@@ -45,9 +45,10 @@ _IMAGE_PROBE_TIMEOUT = ClientTimeout(total=90, connect=5, sock_connect=5)
 
 # Providers that require (or reward) the assistant's reasoning_content being sent
 # back verbatim with its tool calls on the next round. Kimi's thinking models and
-# Qwen's preserve_thinking models take it the same way; others use the field for
-# display only.
-_REPLAY_REASONING_KINDS = frozenset({"deepseek", "zai", "mimo", "tencent", "kimi", "qwen", "fireworks", "opencode", "infron"})
+# Qwen's preserve_thinking models take it the same way, as do those models on Azure;
+# others use the field for display only.
+_REPLAY_REASONING_KINDS = frozenset({"deepseek", "zai", "mimo", "tencent", "kimi", "qwen", "fireworks", "opencode", "infron",
+                                     "azure"})
 # Upper bound on catalogue pages followed, so a misbehaving provider cannot loop forever.
 _MODEL_LIST_MAX_PAGES = 10
 # Stream lines read between turns given to the event loop (see _sse_lines).

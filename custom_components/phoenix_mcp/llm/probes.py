@@ -49,7 +49,7 @@ def _effort_probe_body(kind: str, level: str) -> dict | None:
     if kind in (
         "chatgpt", "grok", "gemini", "kimi", "meta", "mistral",
         "nvidia", "opencode", "tencent", "groq", "together", "cerebras",
-        "fireworks",
+        "fireworks", "azure",
     ):
         return {"reasoning_effort": level}
     return None

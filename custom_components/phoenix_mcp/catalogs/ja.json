@@ -1266,6 +1266,7 @@
       "oauthSaveFailed": "ログインを削除できませんでした。もう一度お試しください。",
       "oauthNoHttps": "Home Assistant に HTTPS アドレスがないため、アプリはログインできません。先に HTTPS の外部 URL を設定してください。",
       "providerAccountIdInvalid": "32 文字のアカウント ID を入力してください。",
+      "providerAzureEndpointInvalid": "Azure のエンドポイントを入力してください。末尾が .services.ai.azure.com, .openai.azure.com、.cognitiveservices.azure.com のいずれかの https アドレスです。",
       "decisionThresholdInvalid": "しきい値は {min}〜{max} の範囲で、百分の一単位で入力してください。",
       "decisionThresholdAlone": "しきい値は単独で変更してください。",
       "decisionThresholdConversation": "しきい値があるのは判断アカウントだけです。"
@@ -1719,6 +1720,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -1921,6 +1923,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions は既定ではなくなりました",
       "noneChoice": "なし",
       "agentcliAccountId": "アカウント ID",
+      "agentcliAzureEndpoint": "エンドポイント",
       "styleEnglishOnly": "英語のみ",
       "styleExplanatory": "説明的",
       "styleExplanatoryHelp": "タスクを完了してから、その仕組みと自分で行う方法を説明します。",

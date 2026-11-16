@@ -314,6 +314,7 @@
       "oauthSaveFailed": "Не удалось удалить вход. Повторите попытку.",
       "oauthNoHttps": "У Home Assistant нет адреса HTTPS, поэтому приложения не могут войти. Сначала задайте внешний URL с HTTPS.",
       "providerAccountIdInvalid": "Введите ваш 32-символьный ID аккаунта.",
+      "providerAzureEndpointInvalid": "Введите конечную точку Azure: адрес https, оканчивающийся на .services.ai.azure.com, .openai.azure.com или .cognitiveservices.azure.com.",
       "decisionThresholdInvalid": "Введите порог от {min} до {max} с точностью до сотых.",
       "decisionThresholdAlone": "Измените порог отдельно.",
       "decisionThresholdConversation": "Порог есть только у учётных записей решений."
@@ -2069,6 +2070,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2273,6 +2275,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions больше не используется по умолчанию",
       "noneChoice": "Нет",
       "agentcliAccountId": "ID аккаунта",
+      "agentcliAzureEndpoint": "Конечная точка",
       "styleEnglishOnly": "Только английский",
       "styleExplanatory": "Объясняющий",
       "styleExplanatoryHelp": "Выполняет задачу, затем объясняет, как это сработало и как сделать это самому.",

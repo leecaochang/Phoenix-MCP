@@ -837,6 +837,7 @@
       "oauthSaveFailed": "无法移除该登录。请重试。",
       "oauthNoHttps": "Home Assistant 没有 HTTPS 地址，因此应用无法登录。请先设置 HTTPS 外部网址。",
       "providerAccountIdInvalid": "请输入 32 个字符的账户 ID。",
+      "providerAzureEndpointInvalid": "请输入 Azure 终结点：以 .services.ai.azure.com, .openai.azure.com 或 .cognitiveservices.azure.com 结尾的 https 地址。",
       "decisionThresholdInvalid": "请输入 {min} 到 {max} 之间的阈值，精确到百分位。",
       "decisionThresholdAlone": "请单独更改阈值。",
       "decisionThresholdConversation": "只有决策账户才有阈值。"
@@ -1746,6 +1747,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -1901,6 +1903,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions 不再是默认",
       "noneChoice": "无",
       "agentcliAccountId": "账户 ID",
+      "agentcliAzureEndpoint": "终结点",
       "styleEnglishOnly": "仅限英语",
       "styleExplanatory": "讲解",
       "styleExplanatoryHelp": "完成任务后，说明其中的原理，以及您如何自己操作。",

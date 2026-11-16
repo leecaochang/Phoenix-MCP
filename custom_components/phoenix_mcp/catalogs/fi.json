@@ -431,6 +431,7 @@
       "oauthSaveFailed": "Kirjautumista ei voitu poistaa. Yritä uudelleen.",
       "oauthNoHttps": "Home Assistantilla ei ole HTTPS-osoitetta, joten sovellukset eivät voi kirjautua. Aseta ensin ulkoinen HTTPS-URL-osoite.",
       "providerAccountIdInvalid": "Anna tilisi 32-merkkinen tunnus.",
+      "providerAzureEndpointInvalid": "Anna Azure-päätepisteesi: https-osoite, jonka loppu on .services.ai.azure.com, .openai.azure.com tai .cognitiveservices.azure.com.",
       "decisionThresholdInvalid": "Anna kynnys väliltä {min} ja {max} sadasosina.",
       "decisionThresholdAlone": "Muuta kynnystä erikseen.",
       "decisionThresholdConversation": "Vain päätöstileillä on kynnys."
@@ -2467,6 +2468,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerChecksHelp": "Tarkista palveluntarjoajilta uudet ja poistuneet mallit säännöllisesti. Oletuksena käytössä.",
       "providerChecksHoursHelp": "Kuinka usein Phoenix tarkistaa kunkin palveluntarjoajan mallimuutokset, {min}-{max} tuntia (oletus {default}).",
       "providerChecksHoursLabel": "Tarkista joka (tuntia)",
@@ -2649,6 +2651,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ei ole enää oletus",
       "noneChoice": "Ei mitään",
       "agentcliAccountId": "Tilin tunnus",
+      "agentcliAzureEndpoint": "Päätepiste",
       "styleEnglishOnly": "Vain englanniksi",
       "styleExplanatory": "Selittävä",
       "styleExplanatoryHelp": "Hoitaa tehtävän ja selittää sitten, miten se toimi ja miten voit tehdä sen itse.",

@@ -1316,6 +1316,7 @@
       "oauthSaveFailed": "De aanmelding kon niet worden verwijderd. Probeer het opnieuw.",
       "oauthNoHttps": "Home Assistant heeft geen HTTPS-adres, dus apps kunnen zich niet aanmelden. Stel eerst een externe HTTPS-URL in.",
       "providerAccountIdInvalid": "Voer je account-ID van 32 tekens in.",
+      "providerAzureEndpointInvalid": "Voer je Azure-eindpunt in: een https-adres dat eindigt op .services.ai.azure.com, .openai.azure.com of .cognitiveservices.azure.com.",
       "decisionThresholdInvalid": "Voer een drempel in van {min} tot {max}, in honderdsten.",
       "decisionThresholdAlone": "Wijzig de drempel afzonderlijk.",
       "decisionThresholdConversation": "Alleen beslissingsaccounts hebben een drempel."
@@ -2129,6 +2130,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2331,6 +2333,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions is niet langer de standaard",
       "noneChoice": "Geen",
       "agentcliAccountId": "Account-ID",
+      "agentcliAzureEndpoint": "Eindpunt",
       "styleEnglishOnly": "Alleen Engels",
       "styleExplanatory": "Verklarend",
       "styleExplanatoryHelp": "Voert de taak uit en legt daarna uit hoe het werkte en hoe je het zelf doet.",

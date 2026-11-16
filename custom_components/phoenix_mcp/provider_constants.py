@@ -26,7 +26,7 @@ AGENT_CHAT_PROVIDERS = frozenset({
     "claude", "deepseek", "chatgpt", "gemini", "grok", "kimi", "meta",
     "minimax", "mistral", "openrouter", "nvidia", "ollama", "ollama_cloud",
     "zai", "groq", "together", "cerebras", "cloudflare", "fireworks", "qwen", "opencode", "mimo", "tencent", "infron",
-    "local_openai"})
+    "local_openai", "azure"})
 # Kinds whose models run on a server the operator supplies (often on the home network), so its
 # address may be private and its first reply includes loading the model on the operator's hardware.
 # `local_decision` is a decision account; only the address rules apply to it.
@@ -123,6 +123,14 @@ AGENT_CHAT_CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
 # account API's model search, one level up; text generation is the only task a chat account uses.
 AGENT_CHAT_CLOUDFLARE_BASE_URL = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
 AGENT_CHAT_CLOUDFLARE_MODELS_QUERY = "models/search?task=Text%20Generation&per_page=100"
+# Microsoft Azure (Foundry) serves each resource at its own host; the operator gives that address, and
+# Phoenix keeps only the host, since the project address Foundry shows does not serve this API. The
+# key is bound to the resource, so it never goes to a host outside these suffixes.
+AGENT_CHAT_AZURE_HOST_SUFFIXES = (".services.ai.azure.com", ".openai.azure.com", ".cognitiveservices.azure.com")
+AGENT_CHAT_AZURE_API_PATH = "/openai/v1"
+# The v1 model list is Azure's whole catalog, not what the resource can run; a request names a deployment.
+# Only this older data-plane version still lists deployments with an API key; newer versions answer 404.
+AGENT_CHAT_AZURE_DEPLOYMENTS_PATH = "/openai/deployments?api-version=2023-03-15-preview"
 AGENT_CHAT_FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1"
 AGENT_CHAT_MIMO_BASE_URL = "https://api.xiaomimimo.com/v1"
 AGENT_CHAT_TENCENT_SINGAPORE_BASE_URL = "https://tokenhub-intl.tencentcloudmaas.com/v1"

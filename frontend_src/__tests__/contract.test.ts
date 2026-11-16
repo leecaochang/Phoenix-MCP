@@ -139,6 +139,7 @@ const PROVIDER_KINDS = {
   mistral: true,
   openrouter: true,
   infron: true,
+  azure: true,
   nvidia: true,
   opencode: true,
   mimo: true,

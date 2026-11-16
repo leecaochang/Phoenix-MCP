@@ -229,6 +229,7 @@
       "oauthSaveFailed": "Impossibile rimuovere l'accesso. Riprova.",
       "oauthNoHttps": "Home Assistant non ha un indirizzo HTTPS, quindi le app non possono accedere. Imposta prima un URL esterno HTTPS.",
       "providerAccountIdInvalid": "Inserisci il tuo ID account di 32 caratteri.",
+      "providerAzureEndpointInvalid": "Inserisci il tuo endpoint Azure: un indirizzo https che termina con .services.ai.azure.com, .openai.azure.com o .cognitiveservices.azure.com.",
       "decisionThresholdInvalid": "Inserisci una soglia da {min} a {max}, in centesimi.",
       "decisionThresholdAlone": "Modifica la soglia da sola.",
       "decisionThresholdConversation": "Solo gli account decisionali hanno una soglia."
@@ -1695,6 +1696,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -1897,6 +1899,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions non è più predefinita",
       "noneChoice": "Nessuno",
       "agentcliAccountId": "ID account",
+      "agentcliAzureEndpoint": "Endpoint",
       "styleEnglishOnly": "Solo inglese",
       "styleExplanatory": "Esplicativo",
       "styleExplanatoryHelp": "Completa l'attività, poi spiega come ha funzionato e come farlo da solo.",

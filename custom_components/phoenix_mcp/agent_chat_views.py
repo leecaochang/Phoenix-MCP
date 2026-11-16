@@ -39,7 +39,7 @@ from .llm.base import AGENT_CHAT_HEARTBEAT_SECONDS, ProbeConfigError
 from .llm.factory import build_provider
 from .llm.probes import _effort_probe_body, async_probe_capabilities, async_probe_vision
 from .provider_constants import (
-    AGENT_CHAT_CLIENT_IP, AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_CHAT_PROBE_SENTINEL, AGENT_CHAT_REQUEST_BODY_BYTES,
+    AGENT_CHAT_AZURE_API_PATH, AGENT_CHAT_AZURE_HOST_SUFFIXES, AGENT_CHAT_CLIENT_IP, AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_CHAT_PROBE_SENTINEL, AGENT_CHAT_REQUEST_BODY_BYTES,
     PROVIDER_API_KEY_MAX_LENGTH,
     AGENT_CHAT_TOOL_LOADING_MODES,
 )
@@ -373,6 +373,27 @@ async def _validate_base_url(
     return None
 
 
+def _azure_api_url(url: str) -> str:
+    """The v1 API address of the Azure resource `url` names, or "" when it names none.
+
+    Any address of the resource is accepted, including the Foundry project address and the v1 API
+    itself; only an HTTPS Azure AI host is, so the key never reaches another host.
+    """
+    try:
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
+    except ValueError:
+        return ""
+    if parsed.scheme != "https" or port not in (None, 443) or parsed.username or parsed.password:
+        return ""
+    suffix = next((suffix for suffix in AGENT_CHAT_AZURE_HOST_SUFFIXES if host.endswith(suffix)), None)
+    resource = host[:-len(suffix)] if suffix else ""
+    if not resource or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?", resource):
+        return ""
+    return f"https://{host}{AGENT_CHAT_AZURE_API_PATH}"
+
+
 async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigError:
     """Build a throwaway config or a localized setup error contract."""
     definition = PROVIDER_DEFINITIONS.get(kind)
@@ -415,6 +436,14 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
             return ProbeConfigError(
                 "Enter the provider base URL.", "providerBaseUrlRequired",
             )
+        if kind == "azure":
+            base_url = _azure_api_url(base_url)
+            if not base_url:
+                return ProbeConfigError(
+                    "Enter your Azure endpoint: an https address ending in .services.ai.azure.com, "
+                    ".openai.azure.com or .cognitiveservices.azure.com.",
+                    "providerAzureEndpointInvalid",
+                )
         err = await _validate_base_url(base_url, allow_private=kind in AGENT_CHAT_LOCAL_SERVER_KINDS)
         if err:
             return err

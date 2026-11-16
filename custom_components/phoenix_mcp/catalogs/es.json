@@ -1268,6 +1268,7 @@
       "oauthSaveFailed": "No se pudo eliminar el inicio de sesión. Inténtelo de nuevo.",
       "oauthNoHttps": "Home Assistant no tiene una dirección HTTPS, así que las aplicaciones no pueden iniciar sesión. Configure primero una URL externa HTTPS.",
       "providerAccountIdInvalid": "Introduzca su ID de cuenta de 32 caracteres.",
+      "providerAzureEndpointInvalid": "Introduzca su punto de conexión de Azure: una dirección https que termine en .services.ai.azure.com, .openai.azure.com o .cognitiveservices.azure.com.",
       "decisionThresholdInvalid": "Introduzca un umbral de {min} a {max}, en centésimas.",
       "decisionThresholdAlone": "Cambie el umbral por separado.",
       "decisionThresholdConversation": "Solo las cuentas de decisión tienen umbral."
@@ -1939,6 +1940,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2141,6 +2143,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions ya no es la predeterminada",
       "noneChoice": "Ninguno",
       "agentcliAccountId": "ID de cuenta",
+      "agentcliAzureEndpoint": "Punto de conexión",
       "styleEnglishOnly": "Solo inglés",
       "styleExplanatory": "Explicativo",
       "styleExplanatoryHelp": "Completa la tarea y luego explica cómo funcionó y cómo hacerlo tú mismo.",

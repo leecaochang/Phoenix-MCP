@@ -1455,6 +1455,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -1657,6 +1658,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions n’est plus l’entité par défaut",
       "noneChoice": "Aucun",
       "agentcliAccountId": "ID de compte",
+      "agentcliAzureEndpoint": "Point de terminaison",
       "styleEnglishOnly": "Anglais uniquement",
       "styleExplanatory": "Explicatif",
       "styleExplanatoryHelp": "Termine la tâche, puis explique comment cela a fonctionné et comment le faire vous-même.",
@@ -2243,6 +2245,7 @@
       "oauthSaveFailed": "La connexion n’a pas pu être supprimée. Réessayez.",
       "oauthNoHttps": "Home Assistant n’a pas d’adresse HTTPS, les applications ne peuvent donc pas se connecter. Définissez d’abord une URL externe HTTPS.",
       "providerAccountIdInvalid": "Saisissez votre ID de compte de 32 caractères.",
+      "providerAzureEndpointInvalid": "Saisissez votre point de terminaison Azure : une adresse https se terminant par .services.ai.azure.com, .openai.azure.com ou .cognitiveservices.azure.com.",
       "decisionThresholdInvalid": "Saisissez un seuil de {min} à {max}, au centième près.",
       "decisionThresholdAlone": "Modifiez le seuil séparément.",
       "decisionThresholdConversation": "Seuls les comptes de décision ont un seuil."

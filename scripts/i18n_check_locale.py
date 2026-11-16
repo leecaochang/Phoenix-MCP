@@ -192,6 +192,7 @@ ALLOW_IDENTICAL = frozenset({
     "panel.settings.providerGroq",
     "panel.settings.providerKimi",
     "panel.settings.providerInfron",
+    "panel.settings.providerAzure",
     "panel.settings.providerMeta",
     "panel.settings.providerMiniMax",
     "panel.settings.providerMistral",
@@ -425,6 +426,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepPersona",
     }),
     "it": frozenset({
+        "panel.settings.agentcliAzureEndpoint",  # Italian uses the English word, as does Azure in Italian.
         "panel.wizard.oauthClaudeCodeTitle",  # "In Claude Code", the same preposition in Italian plus a product name
         "panel.settings.agentcliRegionAu",  # Region name or label spelled the same as English in this language.
         "panel.settings.agentcliRegionCa",  # Region name or label spelled the same as English in this language.

@@ -1833,6 +1833,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2054,7 +2055,8 @@
       "aiDecisionsDefaultReplacedToast": "Phoenix MCP Decisions is now the default, replacing {name}",
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions is no longer the default",
       "noneChoice": "None",
-      "agentcliAccountId": "Account ID"
+      "agentcliAccountId": "Account ID",
+      "agentcliAzureEndpoint": "Endpoint"
     },
     "agentchat": {
       "accessKey": "Access Key",
@@ -2623,6 +2625,7 @@
       "oauthSaveFailed": "The sign-in could not be removed. Try again.",
       "oauthNoHttps": "Home Assistant has no HTTPS address, so apps can't sign in. Set an HTTPS external URL first.",
       "providerAccountIdInvalid": "Enter your 32-character account ID.",
+      "providerAzureEndpointInvalid": "Enter your Azure endpoint: an https address ending in .services.ai.azure.com, .openai.azure.com or .cognitiveservices.azure.com.",
       "decisionThresholdInvalid": "Enter a threshold from {min} to {max}, in hundredths.",
       "decisionThresholdAlone": "Change the threshold on its own.",
       "decisionThresholdConversation": "Only decision accounts have a threshold."

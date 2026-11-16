@@ -1,5 +1,5 @@
 ---
-{ "id": "topic.adminApiChat", "title": "Agent Chat 端点", "parent": "topic.adminApi", "order": 40, "keywords": ["提供商", "AI 提供商", "账户", "模型", "聊天", "智能体轮次", "SSE", "流"], "sectionKeywords": { "providers": ["提供商账户", "实例", "instance_id"], "provider-kinds": ["Anthropic", "OpenAI", "Claude", "ChatGPT", "Gemini", "Ollama", "OpenRouter", "Infron", "Qwen", "TypeSafe", "JEV", "决策提供商", "endpoint_id", "区域"], "setup-fields": ["api_key", "base_url", "endpoint_id", "API 密钥"], "list-providers": ["provider_types", "purpose", "capabilities"], "change-provider": ["自动模型", "auto", "model_mode"], "refresh-models": ["刷新", "能力"], "probe-model": ["探测", "选项", "努力", "视觉"], "check-setup": ["探测", "测试连接"], "chat": ["agentcli/chat", "轮次", "access_key_id"], "chat-options": ["思考", "努力", "温度", "max_tokens", "show_thinking"], "chat-images": ["附件", "图像", "JPEG", "PNG", "GIF", "base64"], "events": ["保活", "text/event-stream", "Server-Sent Events", "ready", "status", "thinking_delta", "assistant_delta", "focus_declined", "tool_call", "tool_progress", "approval_required", "approval_resolved", "tool_image", "tool_result", "usage", "notice", "continue_required", "error", "messages", "done", "事件流", "SSE"] } }
+{ "id": "topic.adminApiChat", "title": "Agent Chat 端点", "parent": "topic.adminApi", "order": 40, "keywords": ["提供商", "AI 提供商", "账户", "模型", "聊天", "智能体轮次", "SSE", "流"], "sectionKeywords": { "providers": ["提供商账户", "实例", "instance_id"], "provider-kinds": ["Anthropic", "OpenAI", "Claude", "ChatGPT", "Gemini", "Ollama", "OpenRouter", "Infron", "Microsoft Azure", "Qwen", "TypeSafe", "JEV", "决策提供商", "endpoint_id", "区域"], "setup-fields": ["api_key", "base_url", "endpoint_id", "API 密钥"], "list-providers": ["provider_types", "purpose", "capabilities"], "change-provider": ["自动模型", "auto", "model_mode"], "refresh-models": ["刷新", "能力"], "probe-model": ["探测", "选项", "努力", "视觉"], "check-setup": ["探测", "测试连接"], "chat": ["agentcli/chat", "轮次", "access_key_id"], "chat-options": ["思考", "努力", "温度", "max_tokens", "show_thinking"], "chat-images": ["附件", "图像", "JPEG", "PNG", "GIF", "base64"], "events": ["保活", "text/event-stream", "Server-Sent Events", "ready", "status", "thinking_delta", "assistant_delta", "focus_declined", "tool_call", "tool_progress", "approval_required", "approval_resolved", "tool_image", "tool_result", "usage", "notice", "continue_required", "error", "messages", "done", "事件流", "SSE"] } }
 ---
 使用这些端点管理 Phoenix 使用的 AI 提供商账户，并从你自己的代码运行 Agent Chat 轮次。每个端点都遵循[管理 API](guide:topic.adminApi)概述中的规则。
 
@@ -48,6 +48,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `together` | 对话 | `api_key` |
 | `cerebras` | 对话 | `api_key` |
 | `cloudflare`（Cloudflare Workers AI） | 对话 | `account_id`、`api_key` |
+| `azure`（Microsoft Azure） | 对话 | `base_url`、`api_key` |
 | `fireworks` | 对话 | `api_key` |
 | `qwen` | 对话 | `api_key`、`base_url` |
 | `zai` | 对话 | `api_key`、`endpoint_id`：`standard`、`coding`、`china` |
@@ -66,7 +67,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 |---|---|---|
 | `kind` | string | 必填。上面的类型之一。 |
 | `api_key` | string | 除 `ollama`、`local_openai` 和 `local_decision` 外每种类型都必填。最多 4096 个字符，不能包含控制字符。Phoenix 绝不返回它。 |
-| `base_url` | string | `ollama`、`local_openai`、`local_decision` 和 `qwen` 必填。只有 `ollama`、`local_openai` 和 `local_decision` 可以使用私有地址。对于 `local_openai` 和 `local_decision`，地址没有路径时 Phoenix 会加上 `/v1`。其他每种类型都使用固定端点，并忽略此字段。 |
+| `base_url` | string | `ollama`、`local_openai`、`local_decision`、`qwen` 和 `azure` 必填。只有 `ollama`、`local_openai` 和 `local_decision` 可以使用私有地址。对于 `local_openai` 和 `local_decision`，地址没有路径时 Phoenix 会加上 `/v1`。对于 `azure`，Phoenix 只保留主机名，它必须是以 `.services.ai.azure.com`、`.openai.azure.com` 或 `.cognitiveservices.azure.com` 结尾的 HTTPS 地址。其他每种类型都使用固定端点，并忽略此字段。 |
 | `endpoint_id` | string | 仅用于带端点的类型。省略它表示默认值。 |
 | `account_id` | string | `cloudflare` 和 `cloudflare_decision` 必填：32 个字符的 Cloudflare 账户 ID。Phoenix 用它构建端点。 |
 | `model` | string | 对话类型可选；留空表示自动跟随提供商。决策类型必填：最多 200 个字符，且必须在提供商当前列表中。 |

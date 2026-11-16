@@ -431,6 +431,7 @@
       "oauthSaveFailed": "Login kunne ikke fjernes. Prøv igen.",
       "oauthNoHttps": "Home Assistant har ingen HTTPS-adresse, så apps kan ikke logge ind. Angiv først en ekstern HTTPS-webadresse.",
       "providerAccountIdInvalid": "Angiv dit konto-id på 32 tegn.",
+      "providerAzureEndpointInvalid": "Angiv dit Azure-slutpunkt: en https-adresse, der slutter på .services.ai.azure.com, .openai.azure.com eller .cognitiveservices.azure.com.",
       "decisionThresholdInvalid": "Angiv en tærskel fra {min} til {max} i hundrededele.",
       "decisionThresholdAlone": "Skift tærsklen for sig selv.",
       "decisionThresholdConversation": "Kun beslutningskonti har en tærskel."
@@ -2467,6 +2468,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerChecksHelp": "Tjek udbydere for nye og udgåede modeller efter en tidsplan. Slået til som standard.",
       "providerChecksHoursHelp": "Hvor ofte Phoenix tjekker hver udbyder for modelændringer, {min} til {max} timer (standard {default}).",
       "providerChecksHoursLabel": "Kontrollér hver (timer)",
@@ -2649,6 +2651,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions er ikke længere standard",
       "noneChoice": "Ingen",
       "agentcliAccountId": "Konto-id",
+      "agentcliAzureEndpoint": "Slutpunkt",
       "styleEnglishOnly": "Kun engelsk",
       "styleExplanatory": "Forklarende",
       "styleExplanatoryHelp": "Løser opgaven og forklarer derefter, hvordan det virkede, og hvordan du selv gør det.",

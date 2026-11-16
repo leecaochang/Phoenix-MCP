@@ -1089,6 +1089,7 @@
       "oauthSaveFailed": "로그인을 제거할 수 없습니다. 다시 시도하세요.",
       "oauthNoHttps": "Home Assistant에 HTTPS 주소가 없어 앱이 로그인할 수 없습니다. 먼저 HTTPS 외부 URL을 설정하세요.",
       "providerAccountIdInvalid": "32자리 계정 ID를 입력하십시오.",
+      "providerAzureEndpointInvalid": "Azure 엔드포인트를 입력하십시오. .services.ai.azure.com, .openai.azure.com 또는 .cognitiveservices.azure.com(으)로 끝나는 https 주소입니다.",
       "decisionThresholdInvalid": "{min}~{max} 범위에서 소수점 둘째 자리까지 임계값을 입력하십시오.",
       "decisionThresholdAlone": "임계값은 단독으로 변경하십시오.",
       "decisionThresholdConversation": "임계값은 결정 계정에만 있습니다."
@@ -1564,6 +1565,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -1766,6 +1768,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions는 더 이상 기본값이 아닙니다",
       "noneChoice": "없음",
       "agentcliAccountId": "계정 ID",
+      "agentcliAzureEndpoint": "엔드포인트",
       "styleEnglishOnly": "영어 전용",
       "styleExplanatory": "설명적",
       "styleExplanatoryHelp": "작업을 마친 뒤 어떻게 작동했는지와 직접 하는 방법을 설명합니다.",

@@ -1336,6 +1336,7 @@
       "oauthSaveFailed": "Nie można usunąć logowania. Spróbuj ponownie.",
       "oauthNoHttps": "Home Assistant nie ma adresu HTTPS, więc aplikacje nie mogą się zalogować. Najpierw ustaw zewnętrzny adres URL HTTPS.",
       "providerAccountIdInvalid": "Wpisz swój 32-znakowy identyfikator konta.",
+      "providerAzureEndpointInvalid": "Wpisz swój punkt końcowy Azure: adres https kończący się na .services.ai.azure.com, .openai.azure.com lub .cognitiveservices.azure.com.",
       "decisionThresholdInvalid": "Wpisz próg od {min} do {max}, z dokładnością do setnych.",
       "decisionThresholdAlone": "Zmień próg osobno.",
       "decisionThresholdConversation": "Tylko konta decyzyjne mają próg."
@@ -2181,6 +2182,7 @@
       "providerAnthropic": "Anthropic",
       "providerCerebras": "Cerebras",
       "providerCloudflare": "Cloudflare Workers AI",
+      "providerAzure": "Microsoft Azure",
       "providerDeepSeek": "DeepSeek",
       "providerFireworks": "Fireworks",
       "providerGemini": "Gemini",
@@ -2385,6 +2387,7 @@
       "aiDecisionsDefaultClearedToast": "Phoenix MCP Decisions nie jest już domyślną encją",
       "noneChoice": "Brak",
       "agentcliAccountId": "Identyfikator konta",
+      "agentcliAzureEndpoint": "Punkt końcowy",
       "styleEnglishOnly": "Tylko angielski",
       "styleExplanatory": "Objaśniający",
       "styleExplanatoryHelp": "Wykonuje zadanie, a potem wyjaśnia, jak to zadziałało i jak zrobić to samodzielnie.",

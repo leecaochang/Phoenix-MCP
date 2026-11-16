@@ -22,7 +22,7 @@ from ..provider_constants import (
     AGENT_CHAT_CEREBRAS_BASE_URL, AGENT_CHAT_CLAUDE_BASE_URL, AGENT_CHAT_CLOUDFLARE_BASE_URL, AGENT_CHAT_DEEPSEEK_BASE_URL,
     AGENT_CHAT_FIREWORKS_BASE_URL, AGENT_CHAT_GEMINI_BASE_URL, AGENT_CHAT_GROK_BASE_URL,
     AGENT_CHAT_GROK_US_BASE_URL, AGENT_CHAT_GROQ_BASE_URL, AGENT_CHAT_INFRON_BALANCE_URL, AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_CHAT_LOCAL_SERVER_NAMES,
-    AGENT_CHAT_INFRON_BASE_URL, AGENT_CHAT_KIMI_BASE_URL,
+    AGENT_CHAT_AZURE_HOST_SUFFIXES, AGENT_CHAT_INFRON_BASE_URL, AGENT_CHAT_KIMI_BASE_URL,
     AGENT_CHAT_KIMI_CHINA_BASE_URL, AGENT_CHAT_LEARNABLE_OPTIONS, AGENT_CHAT_LEARNED_REFUSAL_TTL_DAYS,
     AGENT_CHAT_MAX_CATALOG_MODELS, AGENT_CHAT_MAX_MODEL_ID_LENGTH,
     AGENT_CHAT_MAX_TOOLS_PER_REQUEST, AGENT_CHAT_META_BASE_URL, AGENT_CHAT_MIMO_BASE_URL,
@@ -261,6 +261,11 @@ _OPTIONAL_API_KEY_FIELD = ProviderField(
 _LOCAL_DECISION_URL_FIELD = ProviderField(
     "base_url", "url", "settings.agentcliServerUrl", placeholder="http://host:11434/v1",
 )
+# Any address of the resource will do; Phoenix keeps its host (see AGENT_CHAT_AZURE_HOST_SUFFIXES).
+_AZURE_URL_FIELD = ProviderField(
+    "base_url", "url", "settings.agentcliAzureEndpoint",
+    placeholder="https://{resource}.services.ai.azure.com",
+)
 _QWEN_URL_FIELD = ProviderField(
     "base_url", "url", "settings.agentcliBaseUrl",
     placeholder="https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
@@ -354,6 +359,7 @@ _STORED_DEFAULT_ENDPOINT = {"opencode": "zen"}
 
 _PROVIDER_LABEL_KEYS = {
     "claude": "settings.providerAnthropic",
+    "azure": "settings.providerAzure",
     "deepseek": "settings.providerDeepSeek",
     "chatgpt": "settings.providerOpenAI",
     "gemini": "settings.providerGemini",
@@ -467,6 +473,11 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
             model_filter="together", models_shape="list",
         ),
         _definition("cerebras", "Cerebras", AGENT_CHAT_CEREBRAS_BASE_URL),
+        # Azure serves OpenAI's models too, so the OpenAI tool cap is kept. It checks reasoning_effort
+        # per deployment, refusing a level the model lacks, so the levels are probed.
+        _definition("azure", "Microsoft Azure", "", fields=(_AZURE_URL_FIELD, _API_KEY_FIELD), include_usage=True,
+                    reasoning="probed_effort", model_filter="azure", models_shape="azure",
+                    max_tools=AGENT_CHAT_MAX_TOOLS_PER_REQUEST),
         # Workers AI accepts stream_options and reasoning_effort; it documents no cap on tools,
         # so the OpenAI limit is kept as a precaution.
         _definition("cloudflare", "Cloudflare Workers AI", AGENT_CHAT_CLOUDFLARE_BASE_URL,
@@ -616,7 +627,7 @@ def _instance_name(inst: dict, has_dupes: bool, instance_id: str) -> str:
         # One computer can run several servers, so the port tells them apart.
         host = _host_port_of(inst.get("base_url", ""))
         return f"{label} ({host})" if host else label
-    if kind == "qwen":
+    if kind in ("qwen", "azure"):
         host = _host_of(inst.get("base_url", ""))
         return f"{label} ({host})" if host else label
     definition = PROVIDER_DEFINITIONS.get(kind)
@@ -690,10 +701,15 @@ def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
     """Return the in-memory identity rejecting duplicate accounts; never stored or returned.
 
     The endpoint for a local server, the credential for most kinds, both for Qwen and endpoint-bound
-    keys. OpenCode keeps its credential across Zen and Console.
+    keys, and the resource with the credential for Azure. OpenCode keeps its credential across Zen and Console.
     """
     if kind in AGENT_CHAT_LOCAL_SERVER_KINDS:
         return kind, _normalized_provider_url(cfg.get("base_url"))
+    if kind == "azure":
+        # Every Azure AI host of one resource reaches the same deployments, so the resource name decides.
+        host = _host_of(str(cfg.get("base_url") or "")).lower()
+        resource = next((host[:-len(suffix)] for suffix in AGENT_CHAT_AZURE_HOST_SUFFIXES if host.endswith(suffix)), host)
+        return kind, "\0".join((resource, str(cfg.get("api_key") or "").strip()))
     if kind == "qwen":
         return kind, "\0".join((
             _normalized_provider_url(cfg.get("base_url")),
