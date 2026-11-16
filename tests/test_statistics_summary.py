@@ -8,6 +8,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 import json
 import logging
+import threading
+import time
 import uuid
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
@@ -166,13 +168,106 @@ async def test_an_entity_outside_scope_is_never_read_from_recorder(hass: HomeAss
     from custom_components.phoenix_mcp import recorder_queries
     from custom_components.phoenix_mcp.tools import history as history_tools
 
+    asked: list[set[str]] = []
     read: list[str] = []
-    real = recorder_queries.read_statistic_window
+    real_metadata, real_values = recorder_queries.read_statistic_metadata, recorder_queries.read_statistic_values
 
-    def recording(hass_, start, end, statistic_id, types):
+    def metadata(hass_, statistic_ids):
+        asked.append(set(statistic_ids))
+        return real_metadata(hass_, statistic_ids)
+
+    def values(hass_, start, end, statistic_id, meta, types):
         read.append(statistic_id)
-        return real(hass_, start, end, statistic_id, types)
+        return real_values(hass_, start, end, statistic_id, meta, types)
 
-    with patch.object(history_tools, "read_statistic_window", side_effect=recording):
+    with (patch.object(history_tools, "read_statistic_metadata", side_effect=metadata),
+          patch.object(history_tools, "read_statistic_values", side_effect=values)):
         body = json.loads((await _summary(hass, stats_env, entity_id=["sensor.hidden", "sensor.temp_a"]))[0]["content"][0]["text"])
-    assert read == ["sensor.temp_a"] and body["not_found"] == ["sensor.hidden"]
+    assert asked == [{"sensor.temp_a"}] and read == ["sensor.temp_a"] and body["not_found"] == ["sensor.hidden"]
+
+
+class _SlowReads:
+    """Wraps the window read so it takes a while in its thread, and records how many overlap."""
+
+    def __init__(self, delays: dict[str, float] | None = None) -> None:
+        from custom_components.phoenix_mcp import recorder_queries
+
+        self._real = recorder_queries.read_statistic_values
+        self._delays = delays or {}
+        self._lock = threading.Lock()
+        self.running = 0
+        self.most = 0
+        self.order: list[str] = []
+
+    def __call__(self, hass_, start, end, statistic_id, meta, types):
+        with self._lock:
+            self.running += 1
+            self.most = max(self.most, self.running)
+        try:
+            time.sleep(self._delays.get(statistic_id, 0.05))
+            return self._real(hass_, start, end, statistic_id, meta, types)
+        finally:
+            with self._lock:
+                self.running -= 1
+                self.order.append(statistic_id)
+
+
+async def test_one_metadata_query_serves_every_entity(hass: HomeAssistant, stats_env) -> None:
+    from custom_components.phoenix_mcp import recorder_queries
+    from custom_components.phoenix_mcp.tools import history as history_tools
+
+    ids = ["sensor.temp_a", "sensor.plain", "sensor.temp_b", "sensor.meter"]
+    calls: list[set[str]] = []
+    real = recorder_queries.read_statistic_metadata
+
+    def metadata(hass_, statistic_ids):
+        calls.append(set(statistic_ids))
+        return real(hass_, statistic_ids)
+
+    whole = json.loads((await _summary(hass, stats_env, entity_id=ids))[0]["content"][0]["text"])
+    with patch.object(history_tools, "read_statistic_metadata", side_effect=metadata):
+        body = json.loads((await _summary(hass, stats_env, entity_id=ids))[0]["content"][0]["text"])
+    assert calls == [set(ids)] and body == whole
+    assert [row["entity_id"] for row in body["entities"]] == ["sensor.temp_a", "sensor.temp_b", "sensor.meter"]
+    assert body["no_statistics"] == ["sensor.plain"]
+
+
+async def test_window_reads_overlap_up_to_the_cap_and_rows_keep_request_order(hass: HomeAssistant, stats_env) -> None:
+    from custom_components.phoenix_mcp.tools import history as history_tools
+
+    ids = ["sensor.temp_a", "sensor.temp_b", "sensor.meter"]
+    serial = json.loads((await _summary(hass, stats_env, entity_id=ids))[0]["content"][0]["text"])
+    # The first entity's read finishes last, so rows in finishing order would put it at the end.
+    slow = _SlowReads({"sensor.temp_a": 0.3})
+    with patch.object(history_tools, "read_statistic_values", side_effect=slow):
+        body = json.loads((await _summary(hass, stats_env, entity_id=ids))[0]["content"][0]["text"])
+    assert slow.most == 3 and slow.order[-1] == "sensor.temp_a"
+    assert body == serial
+    capped = _SlowReads()
+    with (patch.object(history_tools, "RECORDER_PARALLEL_READS", 2),
+          patch.object(history_tools, "read_statistic_values", side_effect=capped)):
+        body = json.loads((await _summary(hass, stats_env, entity_id=ids))[0]["content"][0]["text"])
+    assert capped.most == 2 and body == serial
+
+
+async def test_no_window_read_starts_after_the_time_budget(hass: HomeAssistant, stats_env) -> None:
+    from custom_components.phoenix_mcp.tools import history as history_tools
+
+    slow = _SlowReads()
+    with (patch.object(history_tools, "HISTORY_SUMMARY_BATCH_SECONDS", 0),
+          patch.object(history_tools, "read_statistic_values", side_effect=slow)):
+        body = json.loads((await _summary(
+            hass, stats_env, entity_id=["sensor.meter", "sensor.plain", "sensor.temp_a"]))[0]["content"][0]["text"])
+    assert slow.order == [] and body["entities"] == []
+    assert body["unscanned"] == ["sensor.meter", "sensor.temp_a"] and body["no_statistics"] == ["sensor.plain"]
+
+
+async def test_a_failed_window_read_fails_the_call_without_detail(hass: HomeAssistant, stats_env) -> None:
+    from custom_components.phoenix_mcp.tools import history as history_tools
+
+    def broken(hass_, start, end, statistic_id, meta, types):
+        raise RuntimeError("database detail")
+
+    with patch.object(history_tools, "read_statistic_values", side_effect=broken):
+        content, outcome, _ = await _summary(hass, stats_env, entity_id=["sensor.temp_a", "sensor.meter"])
+    assert outcome == "invalid_request" and content["content"][0]["text"] == "Statistics call failed."

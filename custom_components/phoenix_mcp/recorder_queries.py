@@ -417,26 +417,45 @@ def statistic_page(window: RecorderWindow, period: str) -> tuple[datetime, datet
     return page_start, page_end, effective_limit, page_end < requested_end
 
 
-def read_statistic_window(
-    hass: HomeAssistant, start: datetime, end: datetime, statistic_id: str, types: set[Any],
-) -> tuple[dict[str, Any], str | None] | None:
-    """Return mean, min, max and change of a statistic over [start, end). Recorder executor only.
+def read_statistic_metadata(hass: HomeAssistant, statistic_ids: set[str]) -> dict[str, Any]:
+    """Return each statistic's Recorder metadata in one query. Recorder executor only.
 
-    Values are in the display unit, the label; None with no statistics. A type the statistic
-    does not keep is absent and never asked for, as Core's query would fail.
+    A statistic_id without statistics is absent.
     """
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.recorder import statistics as recorder_stats
 
-    metadata = recorder_stats.get_metadata(hass, statistic_ids={statistic_id}).get(statistic_id)
-    if metadata is None:
-        return None
-    meta = metadata[1]
+    return {statistic_id: found[1]
+            for statistic_id, found in recorder_stats.get_metadata(hass, statistic_ids=statistic_ids).items()}
+
+
+def read_statistic_values(
+    hass: HomeAssistant, start: datetime, end: datetime, statistic_id: str, meta: Any, types: set[Any],
+) -> tuple[dict[str, Any], str | None]:
+    """Return mean, min, max and change of a statistic over [start, end) given its metadata. Recorder executor only.
+
+    Values are in the display unit, the label. A type the statistic does not keep is absent and
+    never asked for, as Core's query would fail.
+    """
+    # Local: optional component, imported only when this path runs.
+    from homeassistant.components.recorder import statistics as recorder_stats
+
     kept = {kind for kind in types if (meta.get("has_sum") if kind == "change"
                                        else meta.get("mean_type", meta.get("has_mean")))}
     values = recorder_stats.statistic_during_period(hass, start, end, statistic_id, kept, None) if kept else {}
     unit = recorder_stats.get_display_unit(hass, statistic_id, meta.get("unit_class"), meta.get("unit_of_measurement"))
     return {key: value for key, value in values.items() if value is not None}, unit
+
+
+def read_statistic_window(
+    hass: HomeAssistant, start: datetime, end: datetime, statistic_id: str, types: set[Any],
+) -> tuple[dict[str, Any], str | None] | None:
+    """Return mean, min, max and change of one statistic over [start, end), None with no statistics.
+
+    Recorder executor only.
+    """
+    meta = read_statistic_metadata(hass, {statistic_id}).get(statistic_id)
+    return None if meta is None else read_statistic_values(hass, start, end, statistic_id, meta, types)
 
 
 # The first Core release whose statistics reader leaves last_reset out of the unit conversion.

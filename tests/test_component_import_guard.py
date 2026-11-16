@@ -27,7 +27,8 @@ BOOTSTRAP_ROOTS = ("homeassistant", "persistent_notification", "logger", "networ
 EXECUTOR_ONLY = {
     ("history_summary.py", "read_state_change_page"),
     ("history_summary.py", "read_attribute_changes"),
-    ("recorder_queries.py", "read_statistic_window"),
+    ("recorder_queries.py", "read_statistic_metadata"),
+    ("recorder_queries.py", "read_statistic_values"),
     ("recorder_queries.py", "read_statistics_page"),
     ("tools/blueprint.py", "_validate_blueprint_source"),
     ("tools/blueprint.py", "_canonical_blueprint_source"),
@@ -40,7 +41,7 @@ CONFIRMED_BY_CALLER = {
     ("tools/calendar.py", "_calendar_write_plan"): "after its own _calendar_entity call",
 }
 # Executor-only callers of executor-only functions.
-EXECUTOR_CALLERS = {"_blueprint_restored_text"}
+EXECUTOR_CALLERS = {"_blueprint_restored_text", "read_statistic_window"}
 
 
 def _always_loaded() -> set[str]:
@@ -134,7 +135,7 @@ def test_executor_only_functions_never_run_on_the_event_loop():
 
 
 def test_executor_callers_are_themselves_handed_to_an_executor():
-    """_blueprint_restored_text calls an executor-only function directly, so it must run in one too."""
+    """Each calls an executor-only function directly, so it must run in an executor too."""
     handed = set()
     for _, tree, _ in _sources():
         for call in ast.walk(tree):

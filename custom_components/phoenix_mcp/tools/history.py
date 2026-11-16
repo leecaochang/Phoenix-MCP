@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 import functools
@@ -19,7 +20,7 @@ from ..access_key_store import AccessKeyRecord
 from ..const import (
     CAP_DENY, DOMAIN, GET_STATE_MAX_IDS, HISTORY_SUMMARY_BATCH_SECONDS,
     HISTORY_SUMMARY_MANY_MAX_STATES, HISTORY_SUMMARY_MAX_ROWS, HISTORY_SUMMARY_MAX_SECONDS,
-    HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, SEARCH_ENTITIES_MAX_LIMIT,
+    HISTORY_SUMMARY_MAX_STATES, HISTORY_SUMMARY_PAGE_ROWS, RECORDER_PARALLEL_READS, SEARCH_ENTITIES_MAX_LIMIT,
     TOOL_RESULT_MAX_BYTES,
 )
 from ..conversation_log import json_size
@@ -37,7 +38,7 @@ from ..policy_engine import (
 )
 from ..recorder_queries import (
     backward_page_start, ceil_us, compact_row_page, floor_us, forward_page_end, from_us, iso_utc, local_iso,
-    MAX_SIGNIFICANT_STATES_RANGE, newest_page, parse_recorder_window, read_statistic_window,
+    MAX_SIGNIFICANT_STATES_RANGE, newest_page, parse_recorder_window, read_statistic_metadata, read_statistic_values,
     read_statistics_page, recorder_envelope, RecorderWindow, retention_metadata,
     retention_warnings, row_timestamp, state_timestamp, statistic_page, STATISTIC_PERIOD_LIMITS,
     statistic_timestamp, to_us,
@@ -897,16 +898,32 @@ async def _statistics_summary_many(
 
         instance = get_instance(hass)
         deadline = time.monotonic() + HISTORY_SUMMARY_BATCH_SECONDS
+        # One metadata query answers which entities keep statistics. Core reads each window
+        # separately, so those reads overlap a few at a time, each starting only within the time
+        # budget; rows keep the request order.
+        metadata = (await instance.async_add_executor_job(read_statistic_metadata, hass, set(scan_ids))
+                    if scan_ids else {})
+        found: dict[str, tuple[dict[str, Any], str | None]] = {}
+        slots = asyncio.Semaphore(RECORDER_PARALLEL_READS)
+
+        async def read(entity_id: str) -> None:
+            async with slots:
+                if time.monotonic() < deadline:
+                    found[entity_id] = await instance.async_add_executor_job(
+                        read_statistic_values, hass, window.start, end, entity_id, metadata[entity_id], types)
+
+        # A failed read cancels the rest and fails the call, as the first failure in a loop would.
+        async with asyncio.TaskGroup() as group:
+            for entity_id in scan_ids:
+                if entity_id in metadata:
+                    group.create_task(read(entity_id))
         for entity_id in scan_ids:
-            if time.monotonic() >= deadline:
-                unscanned.append(entity_id)
-                continue
-            found = await instance.async_add_executor_job(
-                read_statistic_window, hass, window.start, end, entity_id, types)
-            if found is None:
+            if entity_id not in metadata:
                 no_statistics.append(entity_id)
+            elif entity_id not in found:
+                unscanned.append(entity_id)
             else:
-                values, unit = found
+                values, unit = found[entity_id]
                 rows.append({"entity_id": entity_id, **{key: round(value, 4) if isinstance(value, float) else value
                                                          for key, value in values.items()}, "unit": unit})
     except Exception:

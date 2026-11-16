@@ -100,6 +100,10 @@ HISTORY_SUMMARY_BATCH_SECONDS = 20.0
 # States listed per entity in that call; the rest are combined, so a numeric
 # sensor's hundreds of distinct values do not crowd out the other entities.
 HISTORY_SUMMARY_MANY_MAX_STATES = 5
+# Statistics window reads one get_statistics call over several entities runs at
+# once: Recorder's database executor has four workers (its pool of five less the
+# recorder thread's), so more would only queue.
+RECORDER_PARALLEL_READS = 4
 # Offset-paged registry and calendar reads.
 DEVICE_LIST_DEFAULT_LIMIT = 100
 DEVICE_LIST_MAX_LIMIT = 500
