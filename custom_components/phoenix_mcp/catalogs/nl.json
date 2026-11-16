@@ -1087,7 +1087,8 @@
       "memoryWarningSome": {
         "one": "Dit bericht is lang, dus het model ziet {count} eerder bericht in deze chat niet.",
         "other": "Dit bericht is lang, dus het model ziet {count} eerdere berichten in deze chat niet."
-      }
+      },
+      "checkingOptions": "Controleren welke opties dit model accepteert..."
     },
     "adminError": {
       "activeAccessKeyRequired": "De gekozen toegangssleutel is ingetrokken of verlopen. Kies een andere toegangssleutel.",

@@ -190,7 +190,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 
 ### 检查模型选项 {#probe-model}
 
-`POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe` 不接受正文。它会询问提供商所选模型接受哪些选项。这会消耗额度。
+`POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe` 会询问提供商某个模型接受哪些选项。这会消耗额度。不带正文时检查账户所选的模型。正文为 `{"model": "..."}` 时改为检查账户模型列表中的另一个模型，账户自己的模型保持不变。
 
 Phoenix 最多发送 10 个非常简短的补全，并在图像支持未知时额外发送一次图像检查。结果会覆盖声明的能力。
 
@@ -200,6 +200,7 @@ Phoenix 最多发送 10 个非常简短的补全，并在图像支持未知时�
 |---|---|---|---|
 | 404 | `not_found` | `adminError.providerNotConfigured`、`adminError.providerAccountNotFound` | 没有账户具有此 ID。 |
 | 400 | `invalid_request` | `adminError.providerChooseModel` | 账户没有选择模型。 |
+| 400 | `invalid_request` | `adminError.providerModelNotListed` | 正文指定的模型不在账户的模型列表中，或包含 `model` 以外的字段。 |
 
 ### 检查设置 {#check-setup}
 

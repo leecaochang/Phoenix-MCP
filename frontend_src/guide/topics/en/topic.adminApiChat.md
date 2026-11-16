@@ -190,7 +190,7 @@ The response has `models`, `capabilities`, `declared` (whether the provider repo
 
 ### Check the model's options {#probe-model}
 
-`POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe` takes no body. It asks the provider which options the selected model accepts. This spends credit.
+`POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe` asks the provider which options a model accepts. This spends credit. With no body it checks the account's selected model. A body of `{"model": "..."}` checks another model from the account's list instead, and leaves the account's model as it is.
 
 Phoenix sends up to 10 very short completions, plus one image check when image support is unknown. The result goes over the declared capabilities.
 
@@ -200,6 +200,7 @@ The response has `model`, `probed`, `calls`, `checked_at`, `effort_checkable`, `
 |---|---|---|---|
 | 404 | `not_found` | `adminError.providerNotConfigured`, `adminError.providerAccountNotFound` | No account has this ID. |
 | 400 | `invalid_request` | `adminError.providerChooseModel` | The account has no model selected. |
+| 400 | `invalid_request` | `adminError.providerModelNotListed` | The body names a model that isn't in the account's list, or has fields other than `model`. |
 
 ### Check a setup {#check-setup}
 

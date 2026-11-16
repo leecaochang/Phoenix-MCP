@@ -1107,7 +1107,8 @@
         "other": "Ta wiadomość jest długa, więc model nie zobaczy {count} wcześniejszych wiadomości w tym czacie.",
         "few": "Ta wiadomość jest długa, więc model nie zobaczy {count} wcześniejszych wiadomości w tym czacie.",
         "many": "Ta wiadomość jest długa, więc model nie zobaczy {count} wcześniejszych wiadomości w tym czacie."
-      }
+      },
+      "checkingOptions": "Sprawdzanie, które opcje akceptuje ten model..."
     },
     "adminError": {
       "activeAccessKeyRequired": "Wybrany klucz dostępu jest unieważniony lub wygasł. Wybierz inny klucz dostępu.",

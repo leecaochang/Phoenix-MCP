@@ -35,6 +35,8 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 
 这会消耗少量额度，因此 Phoenix 会先询问。将指针悬停在按钮上可查看上次运行的时间。
 
+Microsoft Azure、Infron、NVIDIA NIM、OpenCode 和 Tencent Cloud TokenHub 的模型在检测之前不显示思考级别。在 Agent Chat 的下拉菜单中选择这样的模型时，Agent Chat 会直接检测一次，不再询问。
+
 ### 移除账户 {#remove-account}
 
 移除账户会删除其存储的密钥。你需要先就地确认。

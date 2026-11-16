@@ -44,6 +44,8 @@ The line under the title shows the access key, provider and model in use. Select
 - **{{label:agentchat.model}}**: the model to use, from that account's list.
 - **{{label:agentchat.thinking}}** and **{{label:agentchat.temperature}}**: shown only when the model offers them. Thinking starts at the model's own level, and offers Off only where the model can stop thinking. Leave Temperature empty for the provider's default.
 
+For some providers a model's thinking levels are known only after its options are checked, so picking a model that was never checked [checks it](guide:window.settingsProviders#check-options) once.
+
 Changing the access key or provider starts a new conversation. You can't change the key, provider or model while a reply is running.
 
 ## Talking to the agent {#conversation}

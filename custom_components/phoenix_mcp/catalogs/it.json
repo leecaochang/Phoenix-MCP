@@ -416,7 +416,8 @@
       "memoryWarningSome": {
         "one": "Questo messaggio è lungo, quindi il modello non vedrà {count} messaggio precedente in questa chat.",
         "other": "Questo messaggio è lungo, quindi il modello non vedrà {count} messaggi precedenti in questa chat."
-      }
+      },
+      "checkingOptions": "Verifica delle opzioni accettate da questo modello in corso..."
     },
     "audit": {
       "accessPassThrough": "Pass-through",

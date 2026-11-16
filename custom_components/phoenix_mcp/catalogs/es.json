@@ -918,7 +918,8 @@
       "memoryWarningSome": {
         "one": "Este mensaje es largo, así que el modelo no verá {count} mensaje anterior de este chat.",
         "other": "Este mensaje es largo, así que el modelo no verá {count} mensajes anteriores de este chat."
-      }
+      },
+      "checkingOptions": "Comprobando qué opciones acepta este modelo..."
     },
     "diff": {
       "blueprint.create": "Crear plano de {domain} «{rel}»",

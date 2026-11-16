@@ -422,7 +422,8 @@
       "memoryWarningSome": {
         "one": "這則訊息較長，模型將看不到本次聊天中的 {count} 則較早訊息。",
         "other": "這則訊息較長，模型將看不到本次聊天中的 {count} 則較早訊息。"
-      }
+      },
+      "checkingOptions": "正在檢測該模型接受哪些選項…"
     },
     "approvalSummary": {
       "action.optionalReason": "可選原因",
@@ -3345,7 +3346,7 @@
     "companion_unverified": "裝置最終狀態尚未驗證。請在 Home Assistant 中檢查，不要僅因缺少確認就重新傳送指令。",
     "companion_refused": "操作遭拒絕或無法確認。請先檢查裝置狀態和此助理的權限，再決定下一步。",
     "companion_read_failed": "查詢未完成。未嘗試任何裝置指令。請重新傳送完整請求。",
-    "companion_rate_limit": "已達到 AI 供應商的速率限制，查詢未完成。未嘗試任何裝置指令。請等待一分鐘，然後重新傳送完整請求。",
+    "companion_rate_limit": "已達到 AI 提供者的速率限制，查詢未完成。未嘗試任何裝置指令。請等待一分鐘，然後重新傳送完整請求。",
     "companion_limit": "Phoenix 在完成前達到資訊量限制。未嘗試任何裝置指令。再次請求時請保留原有範圍；若再次發生，請讓管理員檢查請求限制。",
     "companion_steps": "Phoenix 在完成前達到步驟上限。未嘗試任何裝置指令。請重新傳送相同的完整請求。",
     "companion_busy": "另一個請求仍在執行。此請求尚未開始，請等待先前結果，再傳送新的完整請求。",
@@ -3381,7 +3382,7 @@
     "model_api_unsupported": "此模型尚未通過 OpenCode Chat Completions 相容性驗證。請選擇受支援的模型。",
     "provider_unavailable": "抱歉，語言模型現在無法回答。",
     "provider_slow": "抱歉，語言模型回應時間過長。請稍後再試。",
-    "provider_rate_limit": "抱歉，已達到 AI 供應商的速率限制。請等待一分鐘後再試。",
+    "provider_rate_limit": "抱歉，已達到 AI 提供者的速率限制。請等待一分鐘後再試。",
     "companion_accepted_explanatory": "Home Assistant 已接受針對 {names} 的命令。運作方式：Phoenix 對這些裝置執行了一個 Home Assistant 動作。",
     "companion_count_explanatory": "您權限範圍內的相符{kind}：{count}。運作方式：Phoenix 只統計了此助理可以看到的實體。"
   }

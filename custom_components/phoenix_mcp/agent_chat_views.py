@@ -32,7 +32,7 @@ from .home_companion import is_companion
 from .net_guard import ip_is_blocked
 from .routing.routing_tables import DECISION_CLOUDFLARE_ACCOUNT_ID, DECISION_THRESHOLD_MAX, DECISION_THRESHOLD_MIN
 from .llm.accounts import (
-    _default_base_url, _default_model, _get_secret_store, _provider_catalog,
+    _catalog_of, _default_base_url, _default_model, _get_secret_store, _provider_catalog,
     DuplicateProviderError, PROVIDER_DEFINITIONS, provider_purpose, ProviderConfig,
 )
 from .llm.base import AGENT_CHAT_HEARTBEAT_SECONDS, ProbeConfigError
@@ -967,7 +967,8 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
 
     Sends very short completions to learn what the selected model accepts. Separate from
     /refresh because this spends the operator's credit, so it has its own consent. Only that
-    model is probed.
+    model is probed: the account's own, or one the body names from the account's listed models,
+    which Agent Chat sends when its dropdown picks a model never checked.
     """
 
     url = "/api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe"
@@ -977,8 +978,21 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
     @require_admin
     async def post(self, request: web.Request, instance_id: str) -> web.Response:
         rid = request.get("phoenix_mcp_rid", "")
+        body = await _read_body(request, rid)
+        if isinstance(body, web.Response):
+            return body
         store = await _get_secret_store(self.hass)
-        cfg = store.resolve(instance_id)
+        stored = store.get(instance_id) or {}
+        named = body.get("model")
+        if named is not None and (
+                not isinstance(named, str) or set(body) - {"model"}
+                or (named != stored.get("model") and named not in (_catalog_of(stored).get("models") or []))):
+            # Only a model the provider listed for this account: the check spends the account's credit.
+            return _err(
+                "invalid_request", "Choose a model returned by this provider.", 400, rid,
+                key="providerModelNotListed",
+            )
+        cfg = store.resolve(instance_id, named or None)
         if cfg is None:
             return _err(
                 "not_found", "Provider account is not configured.", 404, rid,
@@ -990,7 +1004,6 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
                 key="providerChooseModel",
             )
         session = async_get_clientsession(self.hass)
-        stored = store.get(instance_id) or {}
         existing = dict(stored.get("capabilities") or {})
         probed, calls, answered = await async_probe_capabilities(session, cfg, existing.get(cfg.model))
         thinking_checked = cfg.kind == "local_openai" and "thinking" not in (existing.get(cfg.model) or {})

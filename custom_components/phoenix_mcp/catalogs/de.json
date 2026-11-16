@@ -337,7 +337,8 @@
       "memoryWarningSome": {
         "one": "Diese Nachricht ist lang, daher sieht das Modell {count} frühere Nachricht in diesem Chat nicht.",
         "other": "Diese Nachricht ist lang, daher sieht das Modell {count} frühere Nachrichten in diesem Chat nicht."
-      }
+      },
+      "checkingOptions": "Es wird geprüft, welche Optionen dieses Modell akzeptiert..."
     },
     "caps": {
       "cap_config_read": {

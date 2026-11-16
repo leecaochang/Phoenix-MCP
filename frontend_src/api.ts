@@ -481,9 +481,10 @@ export const api = {
   refreshAgentCliProvider: (id: string) =>
     req<{ models: string[]; capabilities: Record<string, DeclaredModelCaps>; declared: boolean; checked_at: string }>(
       "POST", `/agentcli/providers/${encodeURIComponent(id)}/refresh`),
-  probeAgentCliCapabilities: (id: string) =>
+  /** Check what a model accepts: the account's own model, or `model` from its listed models. */
+  probeAgentCliCapabilities: (id: string, model?: string) =>
     req<{ model: string; probed: DeclaredModelCaps & { effort_levels?: string[] }; calls: number; checked_at: string; effort_checkable: boolean; answered: boolean; vision_checked?: boolean; thinking?: "switch" | "always" | "none" | null }>(
-      "POST", `/agentcli/providers/${encodeURIComponent(id)}/probe`),
+      "POST", `/agentcli/providers/${encodeURIComponent(id)}/probe`, model === undefined ? undefined : { model }),
   setAgentCliProviderModel: (id: string, model: string) =>
     req<{ instance: { id: string; model: string } }>(
       "PATCH", `/agentcli/providers/${encodeURIComponent(id)}`, { model }),

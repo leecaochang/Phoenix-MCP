@@ -618,7 +618,8 @@
       "memoryWarningSome": {
         "one": "Meddelandet är långt, så modellen ser inte {count} tidigare meddelande i den här chatten.",
         "other": "Meddelandet är långt, så modellen ser inte {count} tidigare meddelanden i den här chatten."
-      }
+      },
+      "checkingOptions": "Kontrollerar vilka alternativ modellen accepterar..."
     },
     "approvalSummary": {
       "action.optionalReason": "Valfri orsak",

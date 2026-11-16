@@ -618,7 +618,8 @@
       "memoryWarningSome": {
         "one": "Tämä viesti on pitkä, joten malli ei näe {count} aiempaa viestiä tässä keskustelussa.",
         "other": "Tämä viesti on pitkä, joten malli ei näe {count} aiempaa viestiä tässä keskustelussa."
-      }
+      },
+      "checkingOptions": "Tarkistetaan, mitkä valinnat tämä malli hyväksyy..."
     },
     "approvalSummary": {
       "action.optionalReason": "Valinnainen syy",

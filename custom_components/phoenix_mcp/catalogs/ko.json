@@ -739,7 +739,8 @@
       "memoryWarningSome": {
         "one": "이 메시지가 길어서 모델이 이 채팅의 이전 메시지 {count}개를 보지 못합니다.",
         "other": "이 메시지가 길어서 모델이 이 채팅의 이전 메시지 {count}개를 보지 못합니다."
-      }
+      },
+      "checkingOptions": "이 모델이 허용하는 옵션 확인 중..."
     },
     "diff": {
       "blueprint.create": "{domain} 블루프린트 '{rel}' 생성",

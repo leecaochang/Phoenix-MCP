@@ -618,7 +618,8 @@
       "memoryWarningSome": {
         "one": "Meldingen er lang, så modellen ser ikke {count} tidligere melding i denne chatten.",
         "other": "Meldingen er lang, så modellen ser ikke {count} tidligere meldinger i denne chatten."
-      }
+      },
+      "checkingOptions": "Sjekker hvilke alternativer denne modellen godtar..."
     },
     "approvalSummary": {
       "action.optionalReason": "Valgfri begrunnelse",

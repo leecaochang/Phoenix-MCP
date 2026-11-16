@@ -802,6 +802,9 @@ export function clampPosToViewport(
 /** The code of the notice that older messages were left out of what is sent. */
 const MEMORY_TRIMMED = "memory_trimmed";
 
+/** Providers whose thinking levels exist only once a model is checked, and whose check is a few short hosted requests. */
+const CHECK_ON_SELECT_KINDS: ReadonlySet<AgentCliProviderKind> = new Set(["azure", "infron", "nvidia", "opencode", "tencent"]);
+
 /** Statuses a card never asks about again. */
 const TERMINAL_APPROVAL_STATUSES: ReadonlySet<string> = new Set(["approved", "rejected", "cancelled", "expired", "failed", "resolved"]);
 
@@ -818,6 +821,8 @@ export function AgentCliWindow({
   const [accessKeyId, setAccessKeyId] = useState(saved.accessKeyId || initialAccessKeyId || accessKeys[0]?.id || "");
   const [instanceId, setInstanceId] = useState<string>(firstInstance);
   const [models, setModels] = useState<string[]>([]);
+  // The account the model list was loaded for: just after a switch, both still hold the previous account's.
+  const [modelsFor, setModelsFor] = useState("");
   const [model, setModel] = useState<string>(saved.model);
   const restoredApprovals = useRef(new Set<string>());
   // Turns taken from another tab's save: already in storage, so not written back.
@@ -1044,6 +1049,24 @@ export function AgentCliWindow({
   const caps = useMemo(() => modelCaps(kind, model, options.thinking, declaredCaps),
                        [kind, model, options.thinking, declaredCaps]);
 
+  // A model these providers never checked has no thinking list, so picking one checks it, with
+  // the same short requests as Check Options in Settings. Once per model: a check that learns
+  // nothing still records the model as checked, and a failed one is not repeated this session.
+  const [checkingModel, setCheckingModel] = useState("");
+  const checkedModels = useRef(new Set<string>());
+  useEffect(() => {
+    if (!CHECK_ON_SELECT_KINDS.has(kind) || !instanceId || modelsFor !== instanceId || !model
+        || !models.includes(model) || declaredCaps) return;
+    const key = `${instanceId}\0${model}`;
+    if (checkedModels.current.has(key)) return;
+    checkedModels.current.add(key);
+    setCheckingModel(model);
+    api.probeAgentCliCapabilities(instanceId, model)
+      .then(() => window.dispatchEvent(new CustomEvent("phx-agentcli-providers-changed")))
+      .catch(() => undefined)
+      .finally(() => setCheckingModel((m) => (m === model ? "" : m)));
+  }, [kind, instanceId, model, models, modelsFor, declaredCaps]);
+
   // Persist the selections, options, and geometry so they survive reopen/reload.
   useEffect(() => { patchDurable({ accessKeyId }, persistenceOwner); }, [persistenceOwner, accessKeyId]);
   useEffect(() => { patchDurable({ instanceId }, persistenceOwner); }, [instanceId, persistenceOwner]);
@@ -1138,6 +1161,7 @@ export function AgentCliWindow({
       .then((r) => {
         if (cancelled) return;
         setModels(r.models);
+        setModelsFor(instanceId);
         setModel((m) => (r.models.includes(m) ? m : (instanceModel || r.models[0] || "")));
       })
       .catch(() => { if (!cancelled) setModels([]); });
@@ -2391,7 +2415,9 @@ export function AgentCliWindow({
                   </label>
                 )}
               </div>
-              {caps.note && <div className="agentcli-connection-note">{caps.note}</div>}
+              {checkingModel === model && model
+                ? <div className="agentcli-connection-note" role="status">{t("agentchat.checkingOptions")}</div>
+                : caps.note && <div className="agentcli-connection-note">{caps.note}</div>}
             </div>
           </div>
 

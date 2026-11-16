@@ -2240,7 +2240,8 @@
         "other": "This message is long, so the model won't see {count} earlier messages in this chat."
       },
       "sendAnyway": "Send Anyway",
-      "sendInNewChat": "Send in New Chat"
+      "sendInNewChat": "Send in New Chat",
+      "checkingOptions": "Checking which options this model accepts..."
     },
     "diff": {
       "blueprint.create": "Create {domain} blueprint '{rel}'",

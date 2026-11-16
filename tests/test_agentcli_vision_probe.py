@@ -195,18 +195,20 @@ def _request():
     return request
 
 
-async def _probe_endpoint(hass, *, vision, answered=True, found=None):
+async def _probe_endpoint(hass, *, vision, answered=True, found=None, body=None):
     store = MagicMock()
-    store.resolve.return_value = ProviderConfig(kind="deepseek", model="m", base_url="https://x", api_key="k",
-                                                vision=vision)
-    store.get.return_value = {"capabilities": {"m": {"tools": True}}}
+    store.resolve.side_effect = lambda _id, model=None: ProviderConfig(
+        kind="deepseek", model=model or "m", base_url="https://x", api_key="k", vision=vision)
+    store.get.return_value = {"model": "m", "capabilities": {"m": {"tools": True}},
+                              "catalog": {"models": ["m", "listed"]}}
     store.set_capabilities = AsyncMock(return_value=True)
     view = agent_chat_views.PhoenixAgentCliProbeCapsView()
     view.hass = hass
     with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
          patch.object(agent_chat_views, "async_get_clientsession", return_value=MagicMock()), \
          patch("custom_components.phoenix_mcp.agent_chat_views.async_probe_capabilities", AsyncMock(return_value=({}, 3, answered))), \
-         patch("custom_components.phoenix_mcp.agent_chat_views.async_probe_vision", AsyncMock(return_value=found)) as check:
+         patch("custom_components.phoenix_mcp.agent_chat_views.async_probe_vision", AsyncMock(return_value=found)) as check, \
+         patch.object(agent_chat_views, "_read_body", AsyncMock(return_value=body or {})):
         response = await view.post(_request(), instance_id="i1")
     return json.loads(response.text), store, check
 
@@ -237,3 +239,25 @@ async def test_known_support_or_an_unanswering_provider_is_not_checked(hass, vis
 
     check.assert_not_awaited()
     assert body["vision_checked"] is False and body["calls"] == 3
+
+
+@pytest.mark.asyncio
+async def test_a_named_listed_model_is_checked_and_stored_under_its_own_name(hass):
+    # Agent Chat names the model its dropdown picked; the account's own model is untouched.
+    body, store, _check = await _probe_endpoint(hass, vision=True, body={"model": "listed"})
+
+    assert body["model"] == "listed"
+    store.resolve.assert_called_once_with("i1", "listed")
+    stored = store.set_capabilities.call_args.args[1]
+    assert set(stored) == {"m", "listed"} and stored["m"] == {"tools": True}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", [{"model": "unlisted"}, {"model": 3}, {"model": "listed", "extra": 1}])
+async def test_only_a_model_the_account_listed_is_checked(hass, body):
+    # The check spends the account's credit, so a request cannot point it at any model id.
+    response, store, _check = await _probe_endpoint(hass, vision=True, body=body)
+
+    assert response["message_key"] == "adminError.providerModelNotListed"
+    store.resolve.assert_not_called()
+    store.set_capabilities.assert_not_called()

@@ -1861,7 +1861,8 @@
       "memoryWarningSome": {
         "one": "Ce message est long : le modèle ne verra pas {count} message précédent de ce chat.",
         "other": "Ce message est long : le modèle ne verra pas {count} messages précédents de ce chat."
-      }
+      },
+      "checkingOptions": "Vérification des options acceptées par ce modèle..."
     },
     "diff": {
       "blueprint.create": "Créer le blueprint {domain} « {rel} »",

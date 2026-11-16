@@ -44,6 +44,8 @@
 - **{{label:agentchat.model}}**：要使用的模型，来自该账户的列表。
 - **{{label:agentchat.thinking}}** 和 **{{label:agentchat.temperature}}**：仅在模型提供它们时显示。思考从模型自己的默认级别开始，只有模型能停止思考时才提供关闭。温度留空表示使用提供商的默认值。
 
+有些提供商要在检查模型选项后才知道它的思考级别，因此选择从未检查过的模型时，会[检查](guide:window.settingsProviders#check-options)一次。
+
 更改访问密钥或提供商会开始新对话。回复运行期间，你无法更改密钥、提供商或模型。
 
 ## 与智能体交谈 {#conversation}

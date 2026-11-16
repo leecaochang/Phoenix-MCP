@@ -33,6 +33,8 @@ Finds out which effort levels the model supports and whether it can read images,
 
 This uses a little credit, so Phoenix asks first. Hover over the button to see when it last ran.
 
+Microsoft Azure, Infron, NVIDIA NIM, OpenCode and Tencent Cloud TokenHub show no thinking levels for a model until it's checked. When you pick such a model in Agent Chat's dropdown, Agent Chat checks it once without asking.
+
 ### Removing an account {#remove-account}
 
 Removing an account deletes its stored key. You confirm in place first.
