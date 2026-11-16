@@ -337,4 +337,6 @@ Phoenix 每 15 秒傳送一條 `: keepalive` 註解。串流開始後，問題�
 | `messages` | `messages` | 完整更新後的逐字稿。保留它用於下一輪次。 |
 | `done` | `stop_reason` | 一律是最後一個事件。失敗的輪次後，`stop_reason` 為 `error`。 |
 
+當一次模型回應中的所有工具呼叫都只是讀取時，Phoenix 可能會同時執行它們。此時多個 `tool_call` 事件可能先於各自的 `tool_result` 事件到達。請依 `id` 將每個結果與其呼叫對應起來。
+
 相關：[核准與變更端點](guide:topic.adminApiApprovals)、[{{label:agentchat.title}}](guide:window.agentChat#approvals)

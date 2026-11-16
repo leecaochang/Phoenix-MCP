@@ -396,6 +396,10 @@ AGENT_CHAT_APPROVAL_WAIT_SECONDS = 900
 # than the MCP keepalive because this is a local connection with no proxy in
 # the way, and the panel is where a human is actually watching.
 AGENT_CHAT_PROGRESS_INTERVAL_SECONDS = 2.0
+# How many read calls of one model response run at once. A response has no call
+# cap, and each read may hold a template worker or a Recorder query, so a model
+# that sends dozens of reads gets them in waves rather than all together.
+AGENT_PARALLEL_READ_LIMIT = 6
 # Sentinel client_ip so agentCLI-driven tool calls are attributable in the audit
 # log without a core change to _dispatch_mcp.
 AGENT_CHAT_CLIENT_IP = "agentcli"

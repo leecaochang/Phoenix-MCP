@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Collection
+from contextvars import ContextVar
 import json
 import logging
 import os
@@ -67,6 +68,10 @@ def _note_missing_memory_limit(stderr: bytes) -> None:
 
 # Checks and tests wait for a slot; render_template is refused at once when none is free.
 _WAITING_MODES = frozenset({"check", "evaluate"})
+# Set by a provider loop that runs one response's reads together. Its worker requests then go one
+# at a time, taking slots as the same calls made in order would, so none is refused or kept waiting
+# by its own siblings.
+batch_worker_turn: ContextVar[asyncio.Lock | None] = ContextVar("phoenix_batch_worker_turn", default=None)
 
 
 async def _acquire_slot(payload: dict, data: PhoenixData) -> None:
@@ -91,6 +96,14 @@ async def _run_worker(payload: dict, hass: HomeAssistant, data: PhoenixData) -> 
     timeout and the CPU limit raise TemplateRenderError, and a slot still busy after the
     bounded wait TemplateWorkerBusyError; the process is always reaped.
     """
+    turn = batch_worker_turn.get()
+    if turn is not None:
+        async with turn:
+            return await _run_in_free_slot(payload, data)
+    return await _run_in_free_slot(payload, data)
+
+
+async def _run_in_free_slot(payload: dict, data: PhoenixData) -> tuple[int, bytes]:
     await _acquire_slot(payload, data)
     try:
         return await _run_in_slot(payload, data)

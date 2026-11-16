@@ -8,6 +8,7 @@ import binascii
 from contextlib import aclosing
 from contextvars import ContextVar
 import dataclasses
+import functools
 from datetime import datetime, tzinfo
 import json
 import logging
@@ -58,12 +59,13 @@ from .provider_constants import (
     AGENT_CHAT_MAX_TURN_OUTPUT_BYTES, AGENT_CHAT_PROGRESS_INTERVAL_SECONDS,
     AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS, AGENT_CHAT_STATUS_INTERVAL_SECONDS,
     AGENT_CHAT_TOOL_RESULT_MAX_CHARS, AGENT_HEADLESS_CALL_SECONDS, AGENT_HEADLESS_LOCAL_CALL_SECONDS,
-    AGENT_CHAT_LOCAL_SERVER_KINDS,
+    AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_PARALLEL_READ_LIMIT,
 )
 from .request_authority import AuthorityChangedError, household_authority
 from .routing.routing_statistics import provider_events
 from .routing.tool_routing import create_review_state, async_review_tools, ToolReviewState, withheld_results
 from .tool_catalog import build_agent_tool_list
+from .template_render import batch_worker_turn
 from .tool_common import (
     _operator_accepted_result, approval_outcome, execution_failure_text, _ProgressBus, _review_outline,
     _progress_ctx,
@@ -552,6 +554,68 @@ async def _dispatch_with_progress(emit: Any, tool_id: Any, coro: Any) -> Any:
                 await task
             except asyncio.CancelledError:
                 pass
+
+
+def _parallel_reads(tool_calls: list[dict]) -> bool:
+    """Whether one response's calls may run at once: two or more, each read-only by the recovery rule.
+
+    A write, an unknown name or ``home_request`` keeps the whole response in model order, so no
+    write path, dispatch barrier or approval ever runs beside another call.
+    """
+    return len(tool_calls) > 1 and all(
+        tool_is_read_only(str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]) for tc in tool_calls)
+
+
+@dataclasses.dataclass
+class _ReadBatch:
+    """What the reads of one parallel response share: how many run at once, and one template worker turn."""
+
+    gate: asyncio.Semaphore = dataclasses.field(default_factory=lambda: asyncio.Semaphore(AGENT_PARALLEL_READ_LIMIT))
+    worker: asyncio.Lock = dataclasses.field(default_factory=asyncio.Lock)
+
+
+def _start_read(batch: _ReadBatch, run: Callable[[], Awaitable[Any]]) -> asyncio.Task:
+    """Start one read of a parallel response as its own task, at most the batch's count at once.
+
+    The task runs in a copy of the turn's context, so the scopes a call sets stay its own.
+    """
+    async def bounded() -> Any:
+        batch_worker_turn.set(batch.worker)
+        async with batch.gate:
+            return await run()
+    return asyncio.ensure_future(bounded())
+
+
+async def _await_reads(tasks: list[asyncio.Task], cancel: asyncio.Event | None = None) -> None:
+    """Wait for every started read; a set ``cancel`` or a cancelled turn cancels those still running."""
+    waiter = asyncio.ensure_future(cancel.wait()) if cancel is not None else None
+    try:
+        pending = {task for task in tasks if not task.done()}
+        while pending and not (cancel is not None and cancel.is_set()):
+            done, pending = await asyncio.wait(
+                pending | ({waiter} if waiter is not None else set()), return_when=asyncio.FIRST_COMPLETED)
+            if waiter is not None:
+                pending.discard(waiter)
+    finally:
+        if waiter is not None:
+            waiter.cancel()
+        running = [task for task in tasks if not task.done()]
+        for task in running:
+            task.cancel()
+        if running:
+            await asyncio.wait(running)
+
+
+@dataclasses.dataclass
+class _AdmittedCall:
+    """One call that passed its checks before dispatch, and its task when its response runs reads at once."""
+
+    tc: dict
+    name: str
+    args: Any
+    access_key: AccessKeyRecord
+    request_id: str
+    task: asyncio.Task | None = None
 
 
 def _review_stop_error(reason: str, data: PhoenixData) -> dict:
@@ -1448,144 +1512,193 @@ async def _run_tool_batch(
     # The approved executor's own error, when that is what made the outcome unknown.
     unknown_reason: str | None = None
 
-    try:
-        for tc in tool_calls:
-            name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
-            dispatch_access_key = None if (cancel.is_set() or stop_turn) \
-                else _current_dispatch_access_key(data, access_key_id)
-            if dispatch_access_key is None:
-                stop_turn = True
-                if cancel.is_set():
-                    reason: str | None = "Cancelled by the operator; not run."
-                else:
-                    authority_lost = True
-                    reason = ("Phoenix MCP was stopped by its kill switch; not run." if _kill_switch_on(data)
-                              else "This access key is no longer authorized; not run.")
-                results.append({"tool_use_id": tc.get("id"), "tool_name": name,
-                                "result_text": reason, "is_error": True})
-                continue
-            args = tc.get("input") or {}
-            await emit("tool_call", {"id": tc.get("id"), "name": name, "arguments": args})
-            # emit() can set cancel if the client vanished mid-batch; re-check
-            # AFTER the emit and before the side effect closes that gap.
+    async def admit(tc: dict) -> dict | _AdmittedCall:
+        """The call's checks before dispatch: its refusal row, or the call cleared to run."""
+        nonlocal stop_turn, authority_lost
+        name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
+        dispatch_access_key = None if (cancel.is_set() or stop_turn) \
+            else _current_dispatch_access_key(data, access_key_id)
+        if dispatch_access_key is None:
+            stop_turn = True
             if cancel.is_set():
-                stop_turn = True
-                results.append({"tool_use_id": tc.get("id"), "tool_name": name,
-                                "result_text": "Cancelled by the operator; not run.",
-                                "is_error": True})
-                continue
-            # Only arguments the dispatcher would admit are read; it refuses the others itself.
-            time_error = _agentcli_time_arg_error(
-                name, args, dt_util.now().tzinfo or dt_util.UTC,
-            ) if tool_arguments_error(args) is None else None
-            if time_error is not None:
-                await emit("tool_result", {
-                    "id": tc.get("id"), "name": name,
-                    "is_error": True, "summary": time_error,
-                })
-                results.append({
-                    "tool_use_id": tc.get("id"), "tool_name": name,
-                    "result_text": time_error, "is_error": True,
-                })
-                continue
-            dispatch_request_id = generate_request_id()
-            write_started = write_started or not tool_is_read_only(name)
-            try:
-                resp_msg, _m, _r, outcome = await _dispatch_with_progress(
-                    emit, tc.get("id"),
-                    dispatch_agent_tool(
-                        _dispatch_mcp, hass=hass, data=data, access_key=dispatch_access_key,
-                        name=name, arguments=args, tool_id=tc.get("id"),
-                        client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
-                    ),
-                )
-            except BaseException as exc:
-                # Creation may have saved a queue entry before dispatch was interrupted.
-                for saved in data.store.get_pending_approvals():
-                    if saved.get("access_key_id") == access_key_id and saved.get("request_id") == dispatch_request_id:
-                        await _cancel_agent_approval(hass, data, saved["id"])
-                if not isinstance(exc, RecoveryRequired):
-                    raise
-                outcome_unknown = True
-                break
-            result = dispatch_tool_result(resp_msg)
-            if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error", {}).get("code") == -32000:
-                authority_lost = stop_turn = True
-            pending = _parse_pending(
-                result,
-                outcome=outcome,
-                data=data,
-                access_key_id=access_key_id,
-                tool_name=name,
-                request_id=dispatch_request_id,
-            )
-            if pending:
-                record = pending["record"]
-                try:
-                    await emit("approval_required", {
-                        "approval_id": pending["approval_id"],
-                        "tool_name": name,
-                        "review_url": pending.get("review_url"),
-                        "expires_at": pending.get("expires_at"),
-                        "diff": record.diff,
-                    })
-                    result = await _await_agent_approval(
-                        hass, data, pending["approval_id"], cancel, AGENT_CHAT_APPROVAL_WAIT_SECONDS,
-                    )
-                finally:
-                    await _cancel_agent_approval(hass, data, pending["approval_id"])
-                status = _status_of(result)
-                write_ran = write_ran or status != STATUS_REJECTED
-                # The transcript shows WHY, not just the status: the admin's
-                # typed rejection reason, or the executor's error when an
-                # approval executed but failed (status "execution_failed").
-                resolved_record = get_approval(data.store, pending["approval_id"])
-                reason = failure = None
-                if resolved_record is not None:
-                    failure = execution_failure_text(resolved_record)
-                    reason = failure or getattr(resolved_record, "closure_reason", None)
-                await emit("approval_resolved", {
-                    "approval_id": pending["approval_id"],
-                    "status": status,
-                    "reason": _clip_display(reason) if reason else None,
-                    # The executor's own text is English for the agent; the panel
-                    # shows its localized form, as the Approvals window does.
-                    **({"reason_kind": "execution"} if failure else {}),
-                })
-                refused = refused_before_write(resolved_record)
-                if status in (STATUS_FAILED, "execution_failed") and not refused:
-                    # The executor may have applied part of the approved action.
-                    # Do not let the next model round turn its error into a replay.
-                    unknown_reason = execution_failure_text(resolved_record) if resolved_record else None
-                    outcome_unknown = True
-                    break
-                # A refusal before writing reaches the model with the executor's
-                # reason (see _resolved_result), so it can re-read and propose again.
-                if status in (STATUS_APPROVED, STATUS_REJECTED) or refused:
-                    human_resolved = True
+                reason = "Cancelled by the operator; not run."
             else:
-                write_ran = write_ran or not tool_is_read_only(name)
-            is_error = bool(result.get("isError"))
-            content = result.get("content", [])
-            text = _agentcli_add_local_time_fields(
-                name,
-                _flatten_text(content),
-                dt_util.now().tzinfo or dt_util.UTC,
-            )
-            images = _extract_image_blocks(content)
-            for index, image in enumerate(images):
-                await emit("tool_image", {
-                    "id": tc.get("id"),
-                    "name": name,
-                    "index": index,
-                    "mime_type": image["mime_type"],
-                    "data": image["data"],
-                })
-            await emit("tool_result", {"id": tc.get("id"), "name": name,
-                                       "is_error": is_error, "summary": _clip_display(text)})
-            model_text = _agentcli_add_resource_match_guidance(name, args, text)
+                authority_lost = True
+                reason = ("Phoenix MCP was stopped by its kill switch; not run." if _kill_switch_on(data)
+                          else "This access key is no longer authorized; not run.")
+            return {"tool_use_id": tc.get("id"), "tool_name": name, "result_text": reason, "is_error": True}
+        args = tc.get("input") or {}
+        await emit("tool_call", {"id": tc.get("id"), "name": name, "arguments": args})
+        # emit() can set cancel if the client vanished mid-batch; re-check
+        # AFTER the emit and before the side effect closes that gap.
+        if cancel.is_set():
+            stop_turn = True
+            return {"tool_use_id": tc.get("id"), "tool_name": name,
+                    "result_text": "Cancelled by the operator; not run.", "is_error": True}
+        # Only arguments the dispatcher would admit are read; it refuses the others itself.
+        time_error = _agentcli_time_arg_error(
+            name, args, dt_util.now().tzinfo or dt_util.UTC,
+        ) if tool_arguments_error(args) is None else None
+        if time_error is not None:
+            await emit("tool_result", {
+                "id": tc.get("id"), "name": name,
+                "is_error": True, "summary": time_error,
+            })
+            return {"tool_use_id": tc.get("id"), "tool_name": name, "result_text": time_error, "is_error": True}
+        return _AdmittedCall(tc, name, args, dispatch_access_key, generate_request_id())
+
+    def dispatch(call: _AdmittedCall) -> Awaitable[Any]:
+        return _dispatch_with_progress(
+            emit, call.tc.get("id"),
+            dispatch_agent_tool(
+                _dispatch_mcp, hass=hass, data=data, access_key=call.access_key,
+                name=call.name, arguments=call.args, tool_id=call.tc.get("id"),
+                client_ip=client_ip, base_url=base_url, request_id=call.request_id,
+            ),
+        )
+
+    async def settle(call: _AdmittedCall) -> bool:
+        """Dispatch the call, or take its finished read, and answer it; True stops the batch."""
+        nonlocal human_resolved, stop_turn, authority_lost, write_started, write_ran
+        nonlocal outcome_unknown, unknown_reason
+        tc, name, args, dispatch_request_id = call.tc, call.name, call.args, call.request_id
+        write_started = write_started or not tool_is_read_only(name)
+        if call.task is not None and call.task.cancelled():
+            stop_turn = True
             results.append({"tool_use_id": tc.get("id"), "tool_name": name,
-                            "result_text": model_text, "images": images, "is_error": is_error})
+                            "result_text": "Cancelled by the operator; not finished.", "is_error": True})
+            return False
+        if (call.task is not None and call.task.exception() is None
+                and _current_dispatch_access_key(data, access_key_id) is None):
+            # The read started beside others before the key was checked again, so its answer is
+            # withheld as a sequential call would not have run.
+            stop_turn = authority_lost = True
+            withheld = ("Phoenix MCP was stopped by its kill switch; the answer was withheld." if _kill_switch_on(data)
+                        else "This access key is no longer authorized; the answer was withheld.")
+            await emit("tool_result", {"id": tc.get("id"), "name": name, "is_error": True, "summary": withheld})
+            results.append({"tool_use_id": tc.get("id"), "tool_name": name, "result_text": withheld, "is_error": True})
+            return False
+        try:
+            resp_msg, _m, _r, outcome = call.task.result() if call.task is not None else await dispatch(call)
+        except BaseException as exc:
+            # Creation may have saved a queue entry before dispatch was interrupted.
+            for saved in data.store.get_pending_approvals():
+                if saved.get("access_key_id") == access_key_id and saved.get("request_id") == dispatch_request_id:
+                    await _cancel_agent_approval(hass, data, saved["id"])
+            if not isinstance(exc, RecoveryRequired):
+                raise
+            outcome_unknown = True
+            return True
+        result = dispatch_tool_result(resp_msg)
+        if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error", {}).get("code") == -32000:
+            authority_lost = stop_turn = True
+        pending = _parse_pending(
+            result,
+            outcome=outcome,
+            data=data,
+            access_key_id=access_key_id,
+            tool_name=name,
+            request_id=dispatch_request_id,
+        )
+        if pending:
+            record = pending["record"]
+            try:
+                await emit("approval_required", {
+                    "approval_id": pending["approval_id"],
+                    "tool_name": name,
+                    "review_url": pending.get("review_url"),
+                    "expires_at": pending.get("expires_at"),
+                    "diff": record.diff,
+                })
+                result = await _await_agent_approval(
+                    hass, data, pending["approval_id"], cancel, AGENT_CHAT_APPROVAL_WAIT_SECONDS,
+                )
+            finally:
+                await _cancel_agent_approval(hass, data, pending["approval_id"])
+            status = _status_of(result)
+            write_ran = write_ran or status != STATUS_REJECTED
+            # The transcript shows WHY, not just the status: the admin's
+            # typed rejection reason, or the executor's error when an
+            # approval executed but failed (status "execution_failed").
+            resolved_record = get_approval(data.store, pending["approval_id"])
+            reason = failure = None
+            if resolved_record is not None:
+                failure = execution_failure_text(resolved_record)
+                reason = failure or getattr(resolved_record, "closure_reason", None)
+            await emit("approval_resolved", {
+                "approval_id": pending["approval_id"],
+                "status": status,
+                "reason": _clip_display(reason) if reason else None,
+                # The executor's own text is English for the agent; the panel
+                # shows its localized form, as the Approvals window does.
+                **({"reason_kind": "execution"} if failure else {}),
+            })
+            refused = refused_before_write(resolved_record)
+            if status in (STATUS_FAILED, "execution_failed") and not refused:
+                # The executor may have applied part of the approved action.
+                # Do not let the next model round turn its error into a replay.
+                unknown_reason = execution_failure_text(resolved_record) if resolved_record else None
+                outcome_unknown = True
+                return True
+            # A refusal before writing reaches the model with the executor's
+            # reason (see _resolved_result), so it can re-read and propose again.
+            if status in (STATUS_APPROVED, STATUS_REJECTED) or refused:
+                human_resolved = True
+        else:
+            write_ran = write_ran or not tool_is_read_only(name)
+        is_error = bool(result.get("isError"))
+        content = result.get("content", [])
+        text = _agentcli_add_local_time_fields(
+            name,
+            _flatten_text(content),
+            dt_util.now().tzinfo or dt_util.UTC,
+        )
+        images = _extract_image_blocks(content)
+        for index, image in enumerate(images):
+            await emit("tool_image", {
+                "id": tc.get("id"),
+                "name": name,
+                "index": index,
+                "mime_type": image["mime_type"],
+                "data": image["data"],
+            })
+        await emit("tool_result", {"id": tc.get("id"), "name": name,
+                                   "is_error": is_error, "summary": _clip_display(text)})
+        model_text = _agentcli_add_resource_match_guidance(name, args, text)
+        results.append({"tool_use_id": tc.get("id"), "tool_name": name,
+                        "result_text": model_text, "images": images, "is_error": is_error})
+        return False
+
+    try:
+        if _parallel_reads(tool_calls):
+            # Every call reads, so all are checked and started before any is answered; the
+            # answers still go back in call order.
+            batch = _ReadBatch()
+            planned: list[dict | _AdmittedCall] = []
+            started: list[asyncio.Task] = []
+            try:
+                for tc in tool_calls:
+                    plan = await admit(tc)
+                    if isinstance(plan, _AdmittedCall):
+                        plan.task = _start_read(batch, functools.partial(dispatch, plan))
+                        started.append(plan.task)
+                    planned.append(plan)
+                await _await_reads(started, cancel)
+            finally:
+                for task in started:
+                    task.cancel()
+            for plan in planned:
+                if isinstance(plan, dict):
+                    results.append(plan)
+                elif await settle(plan):
+                    break
+        else:
+            for tc in tool_calls:
+                plan = await admit(tc)
+                if isinstance(plan, dict):
+                    results.append(plan)
+                elif await settle(plan):
+                    break
     except Exception as exc:
         # Repeating a write that ran is the risk: its receipts stay as the barrier and the
         # results so far go back with the turn.
@@ -2004,37 +2117,70 @@ def _with_read_answer(result_text: str, reference: dict) -> str:
     return result_text + '\nread_answer: ' + json.dumps(reference)
 
 
-async def _dispatch_headless_call(run: _HeadlessRun, tc: dict, results: list[dict]) -> _HeadlessTurnResult | None:
-    """Dispatch one call under a freshly resolved key, adding its row to ``results``.
+def _headless_dispatch_key(
+    run: _HeadlessRun, tc: dict, name: str, results: list[dict], *, ran: bool,
+) -> AccessKeyRecord | None:
+    """The key a call may act or answer under, or None once its refusal row is in ``results``.
 
-    Returns the result that ends the turn, or None to go on to the next call.
+    ``ran`` marks a read that already ran beside others: its answer is withheld instead.
     """
-    name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
     dispatch_access_key = _current_dispatch_access_key(run.data, run.access_key_id)
     # Like Assist, the surface binding is the grant: an unbound or disabled surface stops its key.
-    if dispatch_access_key is None or (run.still_bound is not None and not run.still_bound()):
-        record_rejected_tool(tc.get("id"), name, tc.get("input"),
-                             reason="This access key is no longer authorized; the tool was not run.", stage="authority_guard")
-        run.authority_lost = True
-        results.append({
-            "tool_use_id": tc.get("id"), "tool_name": name,
-            "result_text": "This access key is no longer authorized; not run.",
-            "is_error": True,
-        })
+    if dispatch_access_key is not None and (run.still_bound is None or run.still_bound()):
+        return dispatch_access_key
+    outcome = "the answer was withheld" if ran else "the tool was not run"
+    record_rejected_tool(tc.get("id"), name, tc.get("input"),
+                         reason=f"This access key is no longer authorized; {outcome}.", stage="authority_guard")
+    run.authority_lost = True
+    results.append({
+        "tool_use_id": tc.get("id"), "tool_name": name,
+        "result_text": ("This access key is no longer authorized; the answer was withheld." if ran
+                        else "This access key is no longer authorized; not run."),
+        "is_error": True,
+    })
+    return None
+
+
+def _admit_headless_call(
+    run: _HeadlessRun, tc: dict, results: list[dict],
+) -> _AdmittedCall | _HeadlessTurnResult | None:
+    """The call's checks before dispatch under a freshly resolved key.
+
+    Returns the call cleared to run, the result that ends the turn, or None once its refusal row
+    is in ``results``.
+    """
+    name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
+    dispatch_access_key = _headless_dispatch_key(run, tc, name, results, ran=False)
+    if dispatch_access_key is None:
         return None
     dispatch_request_id = generate_request_id()
     if ambiguous_control(dispatch_access_key, run.hass, name, tc.get("input")):
         record_rejected_tool(tc.get("id"), name, tc.get("input"),
                              reason="The target is ambiguous; no action was executed.", stage="target_guard")
         return _HeadlessTurnResult(json.dumps({'status': 'clarification_needed', 'message': 'Ambiguous target.'}), run.review_urls)
+    return _AdmittedCall(tc, name, tc.get("input") or {}, dispatch_access_key, dispatch_request_id)
+
+
+def _dispatch_headless(run: _HeadlessRun, call: _AdmittedCall) -> Awaitable[Any]:
+    return dispatch_agent_tool(
+        _dispatch_mcp, hass=run.hass, data=run.data, access_key=call.access_key,
+        name=call.name, arguments=call.args, tool_id=call.tc.get("id"),
+        client_ip=run.client_ip, base_url=run.base_url, request_id=call.request_id,
+    )
+
+
+async def _settle_headless_call(
+    run: _HeadlessRun, call: _AdmittedCall, results: list[dict],
+) -> _HeadlessTurnResult | None:
+    """Dispatch the call, or take its finished read, adding its row to ``results``.
+
+    Returns the result that ends the turn, or None to go on to the next call.
+    """
+    tc, name, dispatch_access_key, dispatch_request_id = call.tc, call.name, call.access_key, call.request_id
     run.dispatch_started = True
     run.write_started = run.write_started or not tool_is_read_only(name)
     try:
-        resp_msg, _m, _r, outcome = await dispatch_agent_tool(
-            _dispatch_mcp, hass=run.hass, data=run.data, access_key=dispatch_access_key,
-            name=name, arguments=tc.get("input") or {}, tool_id=tc.get("id"),
-            client_ip=run.client_ip, base_url=run.base_url, request_id=dispatch_request_id,
-        )
+        resp_msg, _m, _r, outcome = call.task.result() if call.task is not None else await _dispatch_headless(run, call)
     except RecoveryRequired:
         return _HeadlessTurnResult("", run.review_urls, outcome=TURN_OUTCOME_UNKNOWN)
     result = dispatch_tool_result(resp_msg)
@@ -2076,6 +2222,53 @@ async def _dispatch_headless_call(run: _HeadlessRun, tc: dict, results: list[dic
     return None
 
 
+async def _dispatch_headless_calls(
+    run: _HeadlessRun, tool_calls: list[dict], results: list[dict],
+) -> _HeadlessTurnResult | None:
+    """Dispatch a round's calls in model order, or start them together when every one reads.
+
+    Rows go into ``results`` in call order either way; a result ends the turn at that call.
+    """
+    if not _parallel_reads(tool_calls):
+        for tc in tool_calls:
+            plan = _admit_headless_call(run, tc, results)
+            if isinstance(plan, _AdmittedCall):
+                plan = await _settle_headless_call(run, plan, results)
+            if plan is not None:
+                return plan
+        return None
+    batch = _ReadBatch()
+    # A refusal row stays in its call's place, ahead of the reads after it.
+    planned: list[tuple[_AdmittedCall | _HeadlessTurnResult | None, list[dict]]] = []
+    started: list[asyncio.Task] = []
+    try:
+        for tc in tool_calls:
+            rows: list[dict] = []
+            plan = _admit_headless_call(run, tc, rows)
+            if isinstance(plan, _AdmittedCall):
+                run.dispatch_started = True
+                plan.task = _start_read(batch, functools.partial(_dispatch_headless, run, plan))
+                started.append(plan.task)
+            planned.append((plan, rows))
+            if isinstance(plan, _HeadlessTurnResult):
+                break
+        await _await_reads(started)
+    finally:
+        for task in started:
+            task.cancel()
+    for plan, rows in planned:
+        results.extend(rows)
+        if isinstance(plan, _AdmittedCall):
+            # Checked again before the answer is used, as a sequential call is checked before it runs.
+            if (plan.task is not None and plan.task.exception() is None
+                    and _headless_dispatch_key(run, plan.tc, plan.name, results, ran=True) is None):
+                continue
+            plan = await _settle_headless_call(run, plan, results)
+        if plan is not None:
+            return plan
+    return None
+
+
 async def _run_headless_tools(
     run: _HeadlessRun, tool_calls: list[dict], iteration: int,
 ) -> _HeadlessTurnResult | None:
@@ -2094,9 +2287,8 @@ async def _run_headless_tools(
                 return _HeadlessTurnResult("", run.review_urls, outcome=TURN_AUTHORITY_LOST)
             return None
     results: list[dict] = []
-    for tc in tool_calls:
-        if (ending := await _dispatch_headless_call(run, tc, results)) is not None:
-            return ending
+    if (ending := await _dispatch_headless_calls(run, tool_calls, results)) is not None:
+        return ending
     # Measured against the longer final-round prompt, which the next round may use.
     append_fitting_results(run.access_key, run.system + _FINAL_ROUND_SYSTEM, run.messages,
                            _merged_results(slots, results), run.provider.append_tool_results)

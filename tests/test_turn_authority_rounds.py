@@ -112,7 +112,39 @@ async def test_a_voice_turn_stops_using_a_key_unbound_mid_turn(hass: HomeAssista
 
 
 async def test_an_unbound_key_is_refused_at_dispatch_even_inside_a_round(hass: HomeAssistant):
-    """Two calls in one round: the binding changes after the first, so the second never runs."""
+    """A read then a write in one round: the binding changes after the read, so the write never runs."""
+    data, key, other = await _environment(hass)
+    real = tool_dispatch._dispatch_mcp
+    turned_on = AsyncMock()
+    hass.services.async_register("light", "turn_on", turned_on)
+
+    async def dispatch_then_unbind(*args, **kwargs):
+        result = await real(*args, **kwargs)
+        await data.store.async_patch_settings(ai_task_access_key_id=other.id)
+        return result
+
+    write = {"type": llm_base.EV_TOOL, "id": "c2", "name": "call_service", "input": {
+        "service": {"domain": "light", "name": "turn_on"}, "targets": [{"kind": "entity", "ids": ["light.lamp"]}]}}
+    provider = _Provider([*_read("c1")[:1], write, *_read("c2")[1:]], _answer("unused"))
+
+    def still_bound() -> bool:
+        current = data.store.get_settings()
+        return bool(current.ai_task_enabled and current.ai_task_access_key_id == key.id)
+
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list",
+                       return_value=[tool_dispatch._TOOL_DEFS_BY_NAME["get_state"],
+                                     tool_dispatch._TOOL_DEFS_BY_NAME["call_service"]]), \
+            patch.object(agent_turn, "_dispatch_mcp", dispatch_then_unbind):
+        with pytest.raises(agent_chat.AiTaskError):
+            await agent_chat.async_run_ai_task(hass, data, agent_turn._zero_inline_wait(key), provider, None,
+                                               "http://h", "task", max_iterations=4, still_bound=still_bound)
+    assert _allowed_reads(data) == 1
+    turned_on.assert_not_awaited()
+    assert provider.requests == 1
+
+
+async def test_reads_that_ran_together_withhold_an_answer_once_the_binding_is_gone(hass: HomeAssistant):
+    """Two reads in one round start together; the binding changes during them, so no answer after it is used."""
     data, key, other = await _environment(hass)
     real = tool_dispatch._dispatch_mcp
 
@@ -134,7 +166,8 @@ async def test_an_unbound_key_is_refused_at_dispatch_even_inside_a_round(hass: H
         with pytest.raises(agent_chat.AiTaskError):
             await agent_chat.async_run_ai_task(hass, data, agent_turn._zero_inline_wait(key), provider, None,
                                                "http://h", "task", max_iterations=4, still_bound=still_bound)
-    assert _allowed_reads(data) == 1
+    # Both reads ran before the binding changed and keep their audit rows; neither answer reached a model.
+    assert _allowed_reads(data) == 2
     assert provider.requests == 1
 
 

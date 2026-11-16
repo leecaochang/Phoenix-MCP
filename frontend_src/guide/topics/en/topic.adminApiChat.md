@@ -337,4 +337,6 @@ Phoenix sends a `: keepalive` comment every 15 seconds. Once the stream starts, 
 | `messages` | `messages` | The full updated transcript. Keep it for the next turn. |
 | `done` | `stop_reason` | Always the last event. `stop_reason` is `error` after a failed turn. |
 
+When every tool call in one model response only reads, Phoenix may run them at the same time. Several `tool_call` events can then arrive before their `tool_result` events. Match each result to its call by `id`.
+
 Related: [Approval and Change Endpoints](guide:topic.adminApiApprovals), [{{label:agentchat.title}}](guide:window.agentChat#approvals)
