@@ -9,7 +9,7 @@ from typing import Any
 
 import attr
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
@@ -238,6 +238,37 @@ def device_registry_snapshot_from_registry(registry: Any) -> DeviceRegistrySnaps
 def device_registry_snapshot(hass: HomeAssistant) -> DeviceRegistrySnapshot:
     """Build the current compatibility-aware device snapshot."""
     return device_registry_snapshot_from_registry(dr.async_get(hass))
+
+
+class LiveDeviceSnapshot:
+    """A device snapshot that stays current across awaits, rebuilt only after a registry change.
+
+    Home Assistant fires its device registry event synchronously on every create, update and
+    removal, so current() equals a fresh snapshot while building one only when something changed.
+    Event loop only; close() when done.
+    """
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self._hass = hass
+        self._snapshot: DeviceRegistrySnapshot | None = None
+        self._unsubscribe: Callable[[], None] | None = hass.bus.async_listen(
+            dr.EVENT_DEVICE_REGISTRY_UPDATED, self._changed)
+
+    @callback
+    def _changed(self, _event: Event[Any]) -> None:
+        self._snapshot = None
+
+    def current(self) -> DeviceRegistrySnapshot:
+        """Return the snapshot, rebuilding it when the registry changed since the last read."""
+        if self._snapshot is None:
+            self._snapshot = device_registry_snapshot(self._hass)
+        return self._snapshot
+
+    def close(self) -> None:
+        """Stop listening; safe to call twice."""
+        if self._unsubscribe is not None:
+            self._unsubscribe()
+            self._unsubscribe = None
 
 
 def update_device_registry_entry(

@@ -1,10 +1,11 @@
-"""Area-resolving reads build one device snapshot per call and keep their results.
+"""Registry-wide reads build their device snapshot once per call and keep their results.
 
 list_areas, list_floors, describe_area, search_entities, get_overview and the JSON context
 resolve every listed entity's area. Each used to rebuild a snapshot of the whole device
-registry for every entity, so a large home stalled the event loop for seconds. These tests
-pin the snapshot count independent of the entity count, and the results for a scoped and a
-pass-through key across direct, device-inherited, overridden and missing areas.
+registry for every entity, and per-device access checks scanned every entity, so a large home
+stalled the event loop for seconds. These tests pin the snapshot count independent of the
+home's size, the index lookups against the scans they replace, the live snapshot that loops
+with awaits use, and the results for a scoped and a pass-through key.
 """
 
 from __future__ import annotations
@@ -26,6 +27,10 @@ from pytest_homeassistant.common import MockConfigEntry
 from custom_components.phoenix_mcp import device_semantics
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionNode, PermissionTree
 from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.device_semantics import LiveDeviceSnapshot, device_registry_snapshot
+from custom_components.phoenix_mcp.policy_engine import (
+    config_entry_registry_context, device_cascade_entity_ids, device_registry_entity_ids,
+)
 from custom_components.phoenix_mcp.tool_dispatch import _build_context_json, _call_tool
 
 
@@ -175,3 +180,109 @@ async def test_one_device_snapshot_per_call_whatever_the_entity_count(hass: Home
     large = await snapshots()
     assert small >= 1
     assert large == small, f"{tool} built {small} snapshots for 5 lights and {large} for 45"
+
+
+def _snapshot_facts(snapshot) -> tuple:
+    return (sorted(snapshot.by_id), snapshot.effective_area_by_id, snapshot.parent_by_id)
+
+
+async def test_live_snapshot_matches_a_fresh_one_after_every_change(hass: HomeAssistant) -> None:
+    """current() rebuilds only after a registry change, and then equals a fresh snapshot."""
+    _home(hass, extra_lights=0)
+    devices, areas = dr.async_get(hass), ar.async_get(hass)
+    attic = next(area for area in areas.areas.values() if area.name == "Attic")
+    hub = next(device for device in device_registry_snapshot(hass).entries if device.area_id is not None)
+    live = LiveDeviceSnapshot(hass)
+    try:
+        first = live.current()
+        assert live.current() is first
+        devices.async_update_device(hub.id, area_id=attic.id)
+        assert live.current() is not first
+        assert _snapshot_facts(live.current()) == _snapshot_facts(device_registry_snapshot(hass))
+        added = devices.async_get_or_create(config_entry_id="area_cost", identifiers={("test_integration", "new")})
+        assert added.id in live.current().by_id
+        devices.async_remove_device(added.id)
+        assert added.id not in live.current().by_id
+        assert _snapshot_facts(live.current()) == _snapshot_facts(device_registry_snapshot(hass))
+    finally:
+        live.close()
+    live.close()
+    devices.async_update_device(hub.id, area_id=None)
+    assert live.current().effective_area_id(hub.id) == attic.id, "a closed snapshot no longer follows"
+
+
+@pytest.mark.usefixtures("requires_child_devices")
+async def test_live_snapshot_follows_child_device_changes(hass: HomeAssistant) -> None:
+    _home(hass, extra_lights=0)
+    devices, areas = dr.async_get(hass), ar.async_get(hass)
+    hub = next(device for device in device_registry_snapshot(hass).entries if device.area_id is not None)
+    child = devices.async_get_or_create_child(config_entry_id="area_cost", identifiers={("test_integration", "child")},
+                                              name="Child", parent_device_id=hub.id)
+    live = LiveDeviceSnapshot(hass)
+    try:
+        assert live.current().effective_area_id(child.id) == hub.area_id
+        attic = next(area for area in areas.areas.values() if area.name == "Attic")
+        devices.async_update_child_device(child.id, area_id=attic.id)
+        assert live.current().effective_area_id(child.id) == attic.id
+    finally:
+        live.close()
+
+
+async def test_device_entity_lookups_match_a_full_scan(hass: HomeAssistant) -> None:
+    """The per-device and per-entry indexes return what scanning every entity returned."""
+    _home(hass, extra_lights=2)
+    entities = er.async_get(hass)
+    hub = next(device for device in device_registry_snapshot(hass).entries if device.area_id is not None)
+    disabled = entities.async_get_or_create("light", "test_integration", "off_light", device_id=hub.id,
+                                            disabled_by=er.RegistryEntryDisabler.USER)
+    every = list(entities.entities.values())
+    for device in device_registry_snapshot(hass).entries:
+        assert device_registry_entity_ids(hass, device.id) == sorted(
+            entry.entity_id for entry in every if entry.device_id == device.id)
+        assert device_cascade_entity_ids(hass, device.id) == sorted(
+            entry.entity_id for entry in every if entry.device_id == device.id)
+    assert disabled.entity_id in device_registry_entity_ids(hass, hub.id)
+    assert device_registry_entity_ids(hass, "no-such-device") == []
+    context = config_entry_registry_context("area_cost", hass)
+    assert context is not None
+    assert list(context.entity_ids) == sorted(
+        entry.entity_id for entry in every if entry.config_entry_id == "area_cost")
+
+
+@pytest.mark.parametrize("pass_through", [False, True])
+async def test_list_integrations_builds_snapshots_by_entry_not_by_device(hass: HomeAssistant, pass_through: bool) -> None:
+    """Snapshots per call stay level as devices grow; one per device grows with them."""
+    built = 0
+    real = device_semantics.DeviceRegistrySnapshot
+
+    def counted(*args, **kwargs):
+        nonlocal built
+        built += 1
+        return real(*args, **kwargs)
+
+    key = _key(pass_through=pass_through)
+    key.cap_integration_write = "confirm"
+
+    async def snapshots() -> tuple[int, list]:
+        nonlocal built
+        built = 0
+        with patch.object(device_semantics, "DeviceRegistrySnapshot", counted):
+            body = await _tool(hass, "list_integrations", {}, key)
+        return built, [(row["entry_id"], row["accessible_entity_count"], row["accessible_device_count"])
+                       for row in body["integrations"]]
+
+    hub_id = _home(hass, extra_lights=0)
+    small, small_rows = await snapshots()
+    for index in range(40):
+        device = dr.async_get(hass).async_get_or_create(
+            config_entry_id="area_cost", identifiers={("test_integration", f"grown{index}")})
+        entity = er.async_get(hass).async_get_or_create(
+            "light", "test_integration", f"grown_{index}", suggested_object_id=f"grown_{index}", device_id=device.id,
+            config_entry=hass.config_entries.async_get_entry("area_cost"))
+        hass.states.async_set(entity.entity_id, "on", {})
+    large, large_rows = await snapshots()
+    assert hub_id
+    assert small >= 1
+    assert large == small, f"built {small} snapshots for 3 devices and {large} for 43"
+    assert small_rows == [("area_cost", 5 + (1 if pass_through else 0), 2 + (1 if pass_through else 0))]
+    assert large_rows == [("area_cost", 45 + (1 if pass_through else 0), 42 + (1 if pass_through else 0))]

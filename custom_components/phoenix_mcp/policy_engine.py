@@ -7,7 +7,7 @@ import re
 import threading
 from datetime import datetime, timedelta
 from enum import Enum
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from typing import Any, NamedTuple
 
 from homeassistant.const import STATE_UNAVAILABLE
@@ -260,13 +260,24 @@ def device_config_entry_ids(device: Any) -> list[str]:
     return sorted(entry_id for entry_id in config_entries if isinstance(entry_id, str))
 
 
-def device_registry_entity_ids(hass: HomeAssistant, device_id: str) -> list[str]:
-    """Return every registry entity currently attached to a device."""
+def _entity_ids_on_devices(hass: HomeAssistant, device_ids: Collection[str]) -> list[str]:
+    """Return every registry entity attached to one of these devices, disabled ones included.
+
+    Reads HA's per-device index instead of every entity. The device_id check drops what the
+    lookup adds for a pre-migration composite id, so only entities on these very devices count.
+    """
+    registry = er.async_get(hass)
     return sorted(
         entry.entity_id
-        for entry in er.async_get(hass).entities.values()
+        for device_id in device_ids
+        for entry in er.async_entries_for_device(registry, device_id, include_disabled_entities=True)
         if entry.device_id == device_id
     )
+
+
+def device_registry_entity_ids(hass: HomeAssistant, device_id: str) -> list[str]:
+    """Return every registry entity currently attached to a device."""
+    return _entity_ids_on_devices(hass, (device_id,))
 
 
 def device_cascade_entity_ids(
@@ -280,12 +291,7 @@ def device_cascade_entity_ids(
     Core cascades deletion, disabling and area from a main device to its children.
     """
     snapshot = snapshot or device_registry_snapshot(hass)
-    device_ids = {device_id, *snapshot.part_ids(device_id)}
-    return sorted(
-        entry.entity_id
-        for entry in er.async_get(hass).entities.values()
-        if entry.device_id in device_ids
-    )
+    return _entity_ids_on_devices(hass, {device_id, *snapshot.part_ids(device_id)})
 
 
 def _phoenix_owned_device(device: Any, hass: HomeAssistant) -> bool:
@@ -432,7 +438,7 @@ def _device_chain_permission(
 
 
 def config_entry_registry_context(
-    entry_id: str, hass: HomeAssistant
+    entry_id: str, hass: HomeAssistant, *, snapshot: DeviceRegistrySnapshot | None = None,
 ) -> ConfigEntryRegistryContext | None:
     """Collect exact entity and device membership for a config entry.
 
@@ -446,12 +452,12 @@ def config_entry_registry_context(
         return None
     entity_ids = tuple(sorted(
         item.entity_id
-        for item in er.async_get(hass).entities.values()
+        for item in er.async_entries_for_config_entry(er.async_get(hass), entry_id)
         if item.config_entry_id == entry_id
     ))
     device_ids = tuple(sorted(
         device.id
-        for device in device_registry_snapshot(hass).entries
+        for device in (snapshot or device_registry_snapshot(hass)).entries
         if entry_id in device_config_entry_ids(device)
         and not _phoenix_owned_device(device, hass)
     ))
@@ -459,10 +465,12 @@ def config_entry_registry_context(
 
 
 def resolve_config_entry_registry_access(
-    entry_id: str, access_key: AccessKeyRecord, hass: HomeAssistant
+    entry_id: str, access_key: AccessKeyRecord, hass: HomeAssistant,
+    *, snapshot: DeviceRegistrySnapshot | None = None,
 ) -> Permission:
     """Resolve read visibility inherited from an entry's owned resources."""
-    context = config_entry_registry_context(entry_id, hass)
+    snapshot = snapshot or device_registry_snapshot(hass)
+    context = config_entry_registry_context(entry_id, hass, snapshot=snapshot)
     if context is None:
         return Permission.NOT_FOUND
     if access_key.pass_through:
@@ -475,7 +483,7 @@ def resolve_config_entry_registry_access(
             in (Permission.READ, Permission.WRITE)
             for entity_id in context.entity_ids
         ) or any(
-            resolve_device_registry_access(device_id, access_key, hass)
+            resolve_device_registry_access(device_id, access_key, hass, snapshot=snapshot)
             in (Permission.READ, Permission.WRITE)
             for device_id in context.device_ids
         ):
@@ -488,7 +496,6 @@ def resolve_config_entry_registry_access(
         for entity_id in context.entity_ids
         if expose is None or expose(entity_id)
     ]
-    snapshot = device_registry_snapshot(hass)
     device_results = [
         resolve_device_registry_access(device_id, access_key, hass, snapshot=snapshot)
         for device_id in context.device_ids

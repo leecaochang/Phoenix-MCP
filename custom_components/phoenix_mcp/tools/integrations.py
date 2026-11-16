@@ -20,7 +20,7 @@ from ..const import (
     CAP_DENY, DOMAIN, INTEGRATION_LIST_DEFAULT_LIMIT, INTEGRATION_LIST_MAX_LIMIT, MESA_MODE_OFF,
 )
 from ..data import PhoenixData
-from ..device_semantics import device_entry_value, device_registry_snapshot
+from ..device_semantics import LiveDeviceSnapshot, device_entry_value, device_registry_snapshot
 from ..catalog_text import (
     diff_summary_fields as _summary, version_summary_fields as _version_summary,
 )
@@ -518,67 +518,73 @@ async def _tool_list_integrations(
     query = (query or "").strip().lower()
     integrations: list[dict[str, Any]] = []
     serial_usage = await integration_serial_ports(hass)
-    for entry in hass.config_entries.async_entries():
-        if domain_filter and entry.domain != domain_filter:
-            continue
-        access = resolve_config_entry_registry_access(entry.entry_id, access_key, hass)
-        if access not in (Permission.READ, Permission.WRITE):
-            continue
-        context = config_entry_registry_context(entry.entry_id, hass)
-        if context is None:
-            continue
-        expose = assist_expose_check(access_key, hass)
-        accessible_entities = sum(
-            (expose is None or expose(entity_id)) and
-            resolve_registry_access(entity_id, access_key, hass)
-            in (Permission.READ, Permission.WRITE)
-            for entity_id in context.entity_ids
-        )
-        accessible_devices = sum(
-            resolve_device_registry_access(device_id, access_key, hass)
-            in (Permission.READ, Permission.WRITE)
-            for device_id in context.device_ids
-        )
-        (
-            supports_reload,
-            supports_unload,
-            supports_options,
-            supports_reconfigure,
-        ) = await _config_entry_support(entry, hass)
-        reason = getattr(entry, "reason", None)
-        row = {
-            "entry_id": entry.entry_id,
-            "domain": entry.domain,
-            # Titles are user/integration supplied and commonly contain an IP,
-            # hostname URL, or both.  Keep the public title field useful while
-            # applying the same network-topology scrub as setup diagnostics.
-            "title": redact_diagnostics(entry.title),
-            "source": _config_entry_value(entry.source),
-            "state": _config_entry_value(entry.state),
-            "enabled": entry.disabled_by is None,
-            "disabled_by": _config_entry_value(entry.disabled_by),
-            "setup_failure_reason": (
-                redact_diagnostics(str(reason)) if reason else None
-            ),
-            "supports_reload": supports_reload,
-            "supports_unload": supports_unload,
-            "supports_options": supports_options,
-            "supports_reconfigure": supports_reconfigure,
-            "pref_disable_new_entities": bool(entry.pref_disable_new_entities),
-            "pref_disable_polling": bool(entry.pref_disable_polling),
-            "accessible_entity_count": accessible_entities,
-            "accessible_device_count": accessible_devices,
-        }
-        if serial_usage and entry.entry_id in serial_usage:
-            row["serial_ports"] = serial_usage[entry.entry_id]
-        if subentries := getattr(entry, "subentries", None):
-            # set_integration_subentry reconfigures one by its ID; titles get the title scrub.
-            row["subentries"] = [
-                {"subentry_id": sub.subentry_id, "subentry_type": sub.subentry_type,
-                 "title": redact_diagnostics(sub.title)}
-                for sub in subentries.values()
-            ]
-        integrations.append(row)
+    # The loop awaits each entry's support check, so the snapshot follows registry changes.
+    devices = LiveDeviceSnapshot(hass)
+    try:
+        for entry in hass.config_entries.async_entries():
+            if domain_filter and entry.domain != domain_filter:
+                continue
+            snapshot = devices.current()
+            access = resolve_config_entry_registry_access(entry.entry_id, access_key, hass, snapshot=snapshot)
+            if access not in (Permission.READ, Permission.WRITE):
+                continue
+            context = config_entry_registry_context(entry.entry_id, hass, snapshot=snapshot)
+            if context is None:
+                continue
+            expose = assist_expose_check(access_key, hass)
+            accessible_entities = sum(
+                (expose is None or expose(entity_id)) and
+                resolve_registry_access(entity_id, access_key, hass)
+                in (Permission.READ, Permission.WRITE)
+                for entity_id in context.entity_ids
+            )
+            accessible_devices = sum(
+                resolve_device_registry_access(device_id, access_key, hass, snapshot=snapshot)
+                in (Permission.READ, Permission.WRITE)
+                for device_id in context.device_ids
+            )
+            (
+                supports_reload,
+                supports_unload,
+                supports_options,
+                supports_reconfigure,
+            ) = await _config_entry_support(entry, hass)
+            reason = getattr(entry, "reason", None)
+            row = {
+                "entry_id": entry.entry_id,
+                "domain": entry.domain,
+                # Titles are user/integration supplied and commonly contain an IP,
+                # hostname URL, or both.  Keep the public title field useful while
+                # applying the same network-topology scrub as setup diagnostics.
+                "title": redact_diagnostics(entry.title),
+                "source": _config_entry_value(entry.source),
+                "state": _config_entry_value(entry.state),
+                "enabled": entry.disabled_by is None,
+                "disabled_by": _config_entry_value(entry.disabled_by),
+                "setup_failure_reason": (
+                    redact_diagnostics(str(reason)) if reason else None
+                ),
+                "supports_reload": supports_reload,
+                "supports_unload": supports_unload,
+                "supports_options": supports_options,
+                "supports_reconfigure": supports_reconfigure,
+                "pref_disable_new_entities": bool(entry.pref_disable_new_entities),
+                "pref_disable_polling": bool(entry.pref_disable_polling),
+                "accessible_entity_count": accessible_entities,
+                "accessible_device_count": accessible_devices,
+            }
+            if serial_usage and entry.entry_id in serial_usage:
+                row["serial_ports"] = serial_usage[entry.entry_id]
+            if subentries := getattr(entry, "subentries", None):
+                # set_integration_subentry reconfigures one by its ID; titles get the title scrub.
+                row["subentries"] = [
+                    {"subentry_id": sub.subentry_id, "subentry_type": sub.subentry_type,
+                     "title": redact_diagnostics(sub.title)}
+                    for sub in subentries.values()
+                ]
+            integrations.append(row)
+    finally:
+        devices.close()
     if query:
         integrations = [row for row in integrations
                         if query in f"{row['domain']} {row['title'] or ''}".lower()]

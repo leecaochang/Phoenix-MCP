@@ -24,7 +24,7 @@ from ..const import (
 )
 from ..conversation_log import json_size
 from ..data import PhoenixData
-from ..device_semantics import device_registry_snapshot
+from ..device_semantics import LiveDeviceSnapshot, device_registry_snapshot
 from ..tool_input import str_arg, str_list_arg
 from ..capability import effective_cap
 from ..history_summary import (
@@ -51,15 +51,6 @@ from ..component_guard import require_component
 
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _row_area_name(entity_id: str, hass: HomeAssistant) -> str | None:
-    """Return one row's area name from the registries as they are now.
-
-    The many-entity loops await a recorder read before each row, so a device snapshot taken
-    before the loop could be stale by the time a later row reads it.
-    """
-    return _area_name_for_entity(entity_id, er.async_get(hass), device_registry_snapshot(hass), ar.async_get(hass))
 
 
 def _readable_state(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[Any, Permission]:
@@ -582,6 +573,8 @@ async def _history_summary_many(
         body["warnings"] = warnings
         return body
 
+    # Each row follows a recorder await, so the snapshot follows registry changes.
+    devices = LiveDeviceSnapshot(hass)
     try:
         require_component(hass, "recorder")
         # Local: optional component, imported only when this path runs.
@@ -628,7 +621,7 @@ async def _history_summary_many(
                     ))
                     state = hass.states.get(entity_id)
                     row = {"entity_id": entity_id, "name": state.name if state is not None else None,
-                           "area": _row_area_name(entity_id, hass),
+                           "area": _area_name_for_entity(entity_id, er.async_get(hass), devices.current(), ar.async_get(hass)),
                            **{key: value for key, value in row.items() if key != "entity_id"}}
                     size = _stored_bytes(row)
                     if used + size + to_come <= TOOL_RESULT_MAX_BYTES:
@@ -640,6 +633,8 @@ async def _history_summary_many(
     except Exception:
         _LOGGER.warning("MCP history summary of several entities failed", exc_info=True)
         return _tool_error("History call failed."), "invalid_request", tool
+    finally:
+        devices.close()
     check_request_authority()
     authority = request_authority.get()
     if authority is not None:
@@ -732,6 +727,8 @@ async def _history_rows_many(
         body["warnings"] = warnings
         return body
 
+    # Each row follows a recorder await, so the snapshot follows registry changes.
+    devices = LiveDeviceSnapshot(hass)
     try:
         require_component(hass, "recorder")
         # Local: optional component, imported only when this path runs.
@@ -760,7 +757,7 @@ async def _history_rows_many(
                     page_warnings.extend(page.get("warnings") or [])
                     state = hass.states.get(entity_id)
                     row = {"entity_id": entity_id, "name": state.name if state is not None else None,
-                           "area": _row_area_name(entity_id, hass),
+                           "area": _area_name_for_entity(entity_id, er.async_get(hass), devices.current(), ar.async_get(hass)),
                            "count": page["count"], "has_more": page["has_more"],
                            **({"next_cursor": page["next_cursor"]} if page["has_more"] else {}),
                            "history_csv": page["history_csv"]}
@@ -774,6 +771,8 @@ async def _history_rows_many(
     except Exception:
         _LOGGER.warning("MCP history rows of several entities failed", exc_info=True)
         return _tool_error("History call failed."), "invalid_request", tool
+    finally:
+        devices.close()
     check_request_authority()
     authority = request_authority.get()
     if authority is not None:
