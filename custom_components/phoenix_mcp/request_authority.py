@@ -146,6 +146,31 @@ household_authority: ContextVar[HouseholdAuthority | None] = ContextVar(
 )
 
 
+# The provider kind and model of the Phoenix AI turn making requests, for its audit rows.
+acting_model: ContextVar[tuple[str, str] | None] = ContextVar("phoenix_acting_model", default=None)
+
+_Turn = TypeVar("_Turn", bound=Callable[..., Awaitable[Any]])
+
+
+def note_acting_model(config: Any) -> None:
+    """Name the provider account's kind and model as the acting model, or none when either is missing."""
+    kind, model = getattr(config, "kind", None), getattr(config, "model", None)
+    acting_model.set((kind, model) if isinstance(kind, str) and kind and isinstance(model, str) and model else None)
+
+
+def acting_model_scope(run: _Turn) -> _Turn:
+    """Restore the caller's acting model when this turn ends, so a model never outlives its turn."""
+    @functools.wraps(run)
+    async def scoped(*args: Any, **kwargs: Any) -> Any:
+        token = acting_model.set(acting_model.get())
+        try:
+            return await run(*args, **kwargs)
+        finally:
+            acting_model.reset(token)
+
+    return scoped  # type: ignore[return-value]
+
+
 # Set while async_execute_approved_tool runs an admin-approved action, so the MESA
 # gate treats that approval as the human confirmation it asks for (confirm-approved
 # semantics: confirm-mode entities proceed, prohibited/read_only entities are

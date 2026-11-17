@@ -6,6 +6,7 @@ Phoenix keeps two logs. The audit log is a short record of every action and its 
 ## What makes an audit entry {#audit-entries}
 
 - **Agent actions**: each tool call from an MCP client, Agent Chat, the voice agent, Assist, AI Task or Home Companion. The entry holds the tool's name and arguments, never its result.
+- **Phoenix's AI models**: an action from Agent Chat, Voice, AI Task, Home Companion or the decision provider also names the provider and model that asked, in [{{label:workspace.logDetails}}](guide:window.logDetails#audit-entry).
 - **Other MCP requests**: listing tools, starting and ending a session, and requests a key wasn't allowed to make. If an app disconnects during a change, an entry named `request/cancelled` records it.
 - **Evaluate actions**: each `ai_task/evaluate` call and refusal, under the Decisions access key. The entry holds a refusal's reason, never the questions or data.
 - **MESA blocks**: an extra entry for each entity MESA refused. These need the mesa_core.audit logger at its default level, INFO; raising it in Home Assistant's logger settings hides them, though the blocks still happen.

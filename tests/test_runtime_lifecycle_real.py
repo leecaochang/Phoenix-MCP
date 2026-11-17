@@ -404,19 +404,22 @@ async def test_removal_records_each_cancelled_approval_in_the_audit_log(hass, en
 
 
 async def test_sweep_records_an_expired_approval_in_the_audit_log(hass, enable_custom_integrations):
-    """Expiry found by the sweep is audited like expiry found at approve time."""
+    """Expiry found by the sweep is audited like expiry found at approve time, naming the model that asked."""
     from pytest_homeassistant.common import async_fire_time_changed
     from custom_components.phoenix_mcp.approvals import async_create_pending_approval
     from custom_components.phoenix_mcp.const import APPROVAL_SWEEP_INTERVAL
+    from custom_components.phoenix_mcp.request_authority import acting_model
 
     entry, data = await _setup_runtime(hass)
     try:
         access_key, _ = await data.store.async_create_access_key("sweeper", "admin")
+        token = acting_model.set(("claude", "claude-sonnet-5-5"))
         async with data.store.async_lock:
             approval = await async_create_pending_approval(
                 data.store, access_key_id=access_key.id, access_key_name=access_key.name,
                 tool_name="restart_ha", cap_name="cap_restart", args={}, diff={}, request_id="rid-sweep",
             )
+            acting_model.reset(token)
             rows = data.store.get_pending_approvals()
             for row in rows:
                 if row["id"] == approval.id:
@@ -428,6 +431,7 @@ async def test_sweep_records_an_expired_approval_in_the_audit_log(hass, enable_c
         audited = [e for e in data.audit.query(limit=50) if e.method == "approval/expired"]
         assert [e.resource for e in audited] == [f"approval:restart_ha:{approval.id}"]
         assert audited[0].request_id == "rid-sweep" and audited[0].outcome == "denied"
+        assert (audited[0].provider, audited[0].model) == ("claude", "claude-sonnet-5-5")
     finally:
         assert await hass.config_entries.async_unload(entry.entry_id)
 

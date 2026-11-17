@@ -303,3 +303,21 @@ async def test_the_wrappers_bind_the_turn_to_their_surface(hass: HomeAssistant):
     assert seen["voice"]() and seen["ai_task"]()
     await data.store.async_patch_settings(voice_agent_access_key_id=other.id, ai_task_enabled=False)
     assert not seen["voice"]() and not seen["ai_task"]()
+
+
+async def test_an_agent_chat_turn_names_its_provider_and_model_on_its_audit_rows(hass: HomeAssistant):
+    from types import SimpleNamespace
+    from custom_components.phoenix_mcp.request_authority import acting_model
+
+    data, key, _ = await _environment(hass)
+    provider = _Provider(_read("c1"), _answer("The lamp is on."))
+    provider.cfg = SimpleNamespace(kind="claude", model="claude-sonnet-5-5")
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list",
+                       return_value=[tool_dispatch._TOOL_DEFS_BY_NAME["get_state"]]):
+        await agent_chat.async_run_agent_turn(
+            hass=hass, data=data, access_key=key, provider=provider, session=None,
+            messages=[{"role": "user", "content": "hi"}], options={}, client_ip="agentcli",
+            base_url="http://h", emit=AsyncMock(), cancel=asyncio.Event(), max_iterations=4)
+    reads = [row for row in data.audit.query() if row.method == "get_state"]
+    assert reads and all((row.provider, row.model) == ("claude", "claude-sonnet-5-5") for row in reads)
+    assert acting_model.get() is None

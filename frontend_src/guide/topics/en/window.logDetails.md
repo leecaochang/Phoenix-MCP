@@ -15,6 +15,8 @@ If the access key was renamed since, its name then shows in brackets after the c
 
 A request an app made through OAuth sign-in shows **{{label:audit.rowOAuthApp}}**: the name the app gave itself, then the address it signed in through. Only the address is checked, so trust that part.
 
+A request one of Phoenix's AI models made shows its **{{label:conversations.providerLabel}}** and **{{label:conversations.modelLabel}}**. These requests come from Agent Chat, Voice, AI Task, Home Companion and the decision provider. If the request waited for approval, the entries about how that ended name the same model.
+
 ## A conversation {#conversation}
 
 The heading sums up the conversation: where it came from, when, and how many turns, tool calls and changes it holds. Its turns follow, oldest first, 25 at a time.

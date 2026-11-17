@@ -32,6 +32,7 @@ Use these to review, approve, reject or cancel the actions agents are waiting on
 | `result` | The tool's result after an approve. |
 | `request_id`, `client_ip` | The agent request that asked. |
 | `oauth_app` | `name` and `host` of the app whose OAuth sign-in asked, or `null` for a request sent with the key itself. |
+| `provider`, `model` | The provider type and model of the Phoenix AI model that asked, or `null` for any other request. |
 | `household_request`, `ha_user_id` | The household request flag, and the Home Assistant user behind the request. |
 | `execution_started_at` | When an approve started running the action. |
 

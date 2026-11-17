@@ -30,7 +30,9 @@ from .redaction import access_key_notes_block
 from .home_companion_response import build_report, ResponseEvidence
 from .llm.accounts import _get_secret_store
 from .llm.factory import build_provider
-from .request_authority import AuthorityChangedError, check_request_authority, execution_guard
+from .request_authority import (
+    AuthorityChangedError, acting_model_scope, check_request_authority, execution_guard, note_acting_model,
+)
 from .routing.command_display import async_state_translations
 
 from .home_companion import (
@@ -66,6 +68,7 @@ def _result(status: str, message: str = "", *, outcomes: list[dict] | None = Non
              "isError": error}, "invalid_request" if error else "allowed", "home_request")
 
 
+@acting_model_scope
 async def run_request(arguments: dict, access_key: Any, hass: HomeAssistant, data: Any) -> tuple:
     """Use the shared headless engine and existing write-recovery/approval path."""
 
@@ -94,6 +97,7 @@ async def run_request(arguments: dict, access_key: Any, hass: HomeAssistant, dat
         cfg = store.resolve(account, model) if account else None
         if cfg is None or not cfg.model:
             return _result("not_configured", "", language=turn.language)
+        note_acting_model(cfg)
         account_snapshot = deepcopy(store.get(account))
         outer_guard = execution_guard.get()
 

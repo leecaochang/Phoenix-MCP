@@ -491,6 +491,9 @@ export interface AuditEntry {
   stale_tools_advisory?: boolean;
   /** The OAuth sign-in's app when one made the request: its claimed name and checked host. */
   oauth_app?: { name: string; host: string } | null;
+  /** The provider kind and model of the Phoenix AI turn that made the request; both or neither. */
+  provider?: string;
+  model?: string;
 }
 
 export interface EntityInfo {

@@ -32,6 +32,7 @@ POST   /api/phoenix-mcp/admin/approvals/{approval_id}/reject
 | `result` | 批准后工具的结果。 |
 | `request_id`、`client_ip` | 发起请求的智能体请求。 |
 | `oauth_app` | 通过 OAuth 登录发出请求的应用的 `name` 和 `host`；直接用密钥发出的请求为 `null`。 |
+| `provider`, `model` | 发出请求的 Phoenix AI 模型的提供商类型和模型；其他请求为 `null`。 |
 | `household_request`、`ha_user_id` | 家庭请求标志，以及请求背后的 Home Assistant 用户。 |
 | `execution_started_at` | 批准开始运行操作的时间。 |
 

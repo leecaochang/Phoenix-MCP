@@ -343,3 +343,21 @@ async def test_an_approved_clear_that_leaves_items_closes_as_interrupted(sweep):
     assert status == 200 and isinstance(calls[0][0], UncertainOutcome)
     stored = next(row for row in sweep.data.store.get_pending_approvals() if row["id"] == record.id)
     assert (stored["status"], stored["closure_reason"]) == ("failed", "execution_interrupted")
+
+
+async def test_the_executed_row_names_the_model_that_queued_the_request(sweep):
+    from custom_components.phoenix_mcp.request_authority import acting_model
+
+    token = acting_model.set(("claude", "claude-sonnet-5-5"))
+    try:
+        async with sweep.data.store.async_lock:
+            record = await async_create_pending_approval(
+                sweep.data.store, access_key_id=sweep.access_key.id, access_key_name=sweep.access_key.name,
+                tool_name="restart_ha", cap_name="cap_restart", args={},
+                diff={"kind": "system_action", "summary": "restart"}, request_id="r-model",
+            )
+    finally:
+        acting_model.reset(token)
+    await _reaches_executor(sweep, "restart_ha", record.id)
+    rows = {row.method: row for row in sweep.data.audit.query(request_id="r-model")}
+    assert (rows["approval/executed"].provider, rows["approval/executed"].model) == ("claude", "claude-sonnet-5-5")

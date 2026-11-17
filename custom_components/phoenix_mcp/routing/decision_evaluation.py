@@ -30,7 +30,7 @@ from ..helpers import log_request
 from ..household_authority import household_scope
 from ..llm.accounts import _get_secret_store, PROVIDER_DEFINITIONS
 from ..redaction import redact_secrets_in_text
-from ..request_authority import AuthorityChangedError, check_request_authority
+from ..request_authority import AuthorityChangedError, acting_model_scope, check_request_authority, note_acting_model
 from .routing_statistics import evaluation_result, tracked_turn
 from .decision_history import ContextTooDeepError, history_texts, SensitiveContextKeyError
 from .decision_provider import (
@@ -231,6 +231,7 @@ async def _evaluate_within_deadline(hass: HomeAssistant, data: Any, questions: d
     if cfg is None or not cfg.model:
         raise DecisionError("not_configured")
     record_identity(access_key=access_key, config=cfg)
+    note_acting_model(cfg)
 
     def guard() -> None:
         current = _current_key(data)
@@ -252,6 +253,7 @@ async def _evaluate_within_deadline(hass: HomeAssistant, data: Any, questions: d
     return answers
 
 
+@acting_model_scope
 @tracked_turn("ai_task")
 @recorded_turn("ai_task", "task_name")
 async def async_evaluate(hass: HomeAssistant, data: Any, task_name: str, questions: dict[str, Any], state: Any,

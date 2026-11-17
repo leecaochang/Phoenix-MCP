@@ -323,6 +323,8 @@ POST   /api/phoenix-mcp/admin/oauth/requests/{request_id}/deny
 
 由 OAuth 登录发出的请求所写入的条目还有 `oauth_app`，包含该登录的 `name` 和 `host`。
 
+由 Phoenix 的 AI 模型发出的请求所写入的条目还有 `provider` 和 `model`：提供商类型和所用的模型。
+
 | 状态 | `error` | `message_key` | 条件 |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.badPagination` | `limit` 或 `offset` 不是整数。 |

@@ -323,6 +323,8 @@ Each row has `request_id`, `timestamp`, `access_key_id`, `access_key_name`, `met
 
 A row written for a request an OAuth sign-in made also has `oauth_app`, with that sign-in's `name` and `host`.
 
+A row written for a request one of Phoenix's AI models made also has `provider` and `model`: the provider type and the model it used.
+
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.badPagination` | `limit` or `offset` isn't a whole number. |

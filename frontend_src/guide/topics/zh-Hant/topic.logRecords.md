@@ -6,6 +6,7 @@ Phoenix 保留兩種日誌。稽核日誌是每個操作及其結果的簡短記
 ## 什麼構成稽核條目 {#audit-entries}
 
 - **智慧體操作**：來自 MCP 用戶端、Agent Chat、語音智慧體、Assist、AI 任務或 Home Companion 的每次工具呼叫。條目包含工具名稱和參數，絕不包含其結果。
+- **Phoenix 的 AI 模型**：來自 Agent Chat、Voice、AI Task、Home Companion 或決策提供者的操作還會在 [{{label:workspace.logDetails}}](guide:window.logDetails#audit-entry) 中寫明發出請求的提供者和模型。
 - **其他 MCP 請求**：列出工具、開始和結束工作階段，以及金鑰無權發出的請求。如果應用程式在變更期間中斷連線，名為 `request/cancelled` 的條目會記錄這一情況。
 - **評估動作**：每次 `ai_task/evaluate` 呼叫和拒絕，記在 Decisions 存取金鑰名下。條目包含拒絕原因，絕不包含問題或資料。
 - **MESA 阻止**：MESA 每拒絕一個實體就增加一筆條目。這些條目需要 mesa_core.audit 記錄器處於預設層級 INFO；在 Home Assistant 的記錄器設定中提高層級會隱藏它們，但阻止仍會發生。

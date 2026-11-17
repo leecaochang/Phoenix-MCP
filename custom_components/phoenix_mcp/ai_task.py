@@ -34,7 +34,7 @@ from .helpers import instance_base_url as _base_url
 from .household_authority import household_scope
 from .llm.accounts import _get_secret_store, loaded_decision_account
 from .llm.factory import build_provider
-from .request_authority import AuthorityChangedError
+from .request_authority import AuthorityChangedError, acting_model_scope, note_acting_model
 from .routing.decision_evaluation import async_evaluate, decisions_configured
 from .schema_compat import schema_engine
 
@@ -428,6 +428,7 @@ def _task_user_id() -> str | None:
     return user_id if isinstance(user_id, str) else None
 
 
+@acting_model_scope
 @recorded_turn("ai_task", "instructions")
 async def async_generate_ai_task_data(
     hass: HomeAssistant, data: Any, instructions: str, structure: Any,
@@ -472,6 +473,7 @@ async def _async_generate_ai_task_data(
         raise HomeAssistantError("The Phoenix MCP AI Task entity is not fully configured.")
 
     record_identity(access_key=access_key, config=cfg)
+    note_acting_model(cfg)
 
     structure_json = _structure_to_json(structure)
     provider = build_provider(cfg)

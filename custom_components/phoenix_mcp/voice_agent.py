@@ -29,7 +29,7 @@ from .home_companion import is_companion
 from .household_authority import household_scope
 from .llm.accounts import _get_secret_store
 from .llm.factory import build_provider
-from .request_authority import AuthorityChangedError, household_authority
+from .request_authority import AuthorityChangedError, acting_model_scope, household_authority, note_acting_model
 from .routing.command_clarification import (
     async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel,
 )
@@ -113,6 +113,7 @@ from .component_guard import require_component
 
 
 # The log keeps what the speaker heard, in the conversation's language.
+@acting_model_scope
 @recorded_turn("voice", "user_text", transform=lambda text, call: _speakable(text, call.get("language")))
 async def async_voice_answer(
     hass: HomeAssistant, data: Any, user_text: str, *,
@@ -181,6 +182,7 @@ async def _async_voice_answer(
         return voice_text(language, "not_configured")
 
     record_identity(access_key=access_key, config=cfg)
+    note_acting_model(cfg)
 
     if authority is not None and not is_companion(access_key):
         if authority.current(hass) is None:

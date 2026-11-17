@@ -21,7 +21,7 @@ from .const import (
     MAX_PENDING_APPROVALS_PER_ACCESS_KEY, APPROVAL_HISTORY_LIMIT, APPROVAL_HISTORY_DAYS,
     APPROVAL_PAYLOAD_RETENTION_SECONDS, CAP_ALLOW, CAP_CONFIRM, CAP_DENY,
 )
-from .request_authority import household_authority, check_request_authority, request_authority
+from .request_authority import acting_model, household_authority, check_request_authority, request_authority
 from .time_text import parse_datetime
 from collections.abc import Awaitable, Callable
 
@@ -127,6 +127,8 @@ class PendingApproval:
     # None for a raw key, a household surface, or a record saved before these existed.
     sign_in_id: str | None = None
     oauth_app: dict[str, str] | None = None
+    # The provider kind and model of the Phoenix AI turn that queued it, for the rows that close it.
+    provider_model: tuple[str, str] | None = None
     # credential_generation() of the key when queued; None matches any generation.
     credential_generation: str | None = None
 
@@ -143,6 +145,8 @@ class PendingApproval:
         return {
             **stored,
             "oauth_app": dict(self.oauth_app) if self.oauth_app else None,
+            "provider": self.provider_model[0] if self.provider_model else None,
+            "model": self.provider_model[1] if self.provider_model else None,
             "id": self.id,
             "access_key_id": self.access_key_id,
             "access_key_name": self.access_key_name,
@@ -213,6 +217,7 @@ class PendingApproval:
             ),
             sign_in_id=data.get("sign_in_id") if isinstance(data.get("sign_in_id"), str) else None,
             oauth_app=_stored_oauth_app(data.get("oauth_app")),
+            provider_model=_stored_provider_model(data.get("provider"), data.get("model")),
             credential_generation=(
                 data.get("credential_generation")
                 if isinstance(data.get("credential_generation"), str) else None
@@ -231,6 +236,13 @@ def _stored_oauth_app(value: Any) -> dict[str, str] | None:
     if not isinstance(name, str) or not isinstance(host, str) or not host:
         return None
     return {"name": name, "host": host}
+
+
+def _stored_provider_model(provider: Any, model: Any) -> tuple[str, str] | None:
+    """A stored provider kind and model as a pair of nonempty strings, else None."""
+    if not isinstance(provider, str) or not provider or not isinstance(model, str) or not model:
+        return None
+    return provider, model
 
 
 def credential_generation(access_key: AccessKeyRecord) -> str:
@@ -303,6 +315,7 @@ async def async_create_pending_approval(
         ha_user_id=household.user_id if household else None,
         sign_in_id=sign_in_id,
         oauth_app=oauth_app,
+        provider_model=acting_model.get(),
         # A household request was made by a Home Assistant user, not with the key's secret.
         credential_generation=None if access_key is None or household is not None else credential_generation(access_key),
     )
@@ -655,7 +668,7 @@ def audit_closed_approvals(
 ) -> None:
     """Write the approval/<status> row of each request closed without an administrator's decision.
 
-    Each row carries the queuing request's ID, key, household user and app label, with the
+    Each row carries the queuing request's ID, key, household user, app label and model, with the
     approval ID and reason in the payload, so it links to the request with entity names off.
     """
     if audit is None:
@@ -673,6 +686,7 @@ def audit_closed_approvals(
             payload={"approval_id": approval.id, "reason": approval.closure_reason},
             ha_user_id=approval.ha_user_id,
             oauth_app=approval.oauth_app,
+            provider_model=approval.provider_model,
         )
 
 

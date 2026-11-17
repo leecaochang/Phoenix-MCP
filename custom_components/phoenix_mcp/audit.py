@@ -23,7 +23,7 @@ from .const import (
 )
 from .conversation_log import sanitized
 from .helpers import log_internal_failure
-from .request_authority import household_authority, request_authority
+from .request_authority import acting_model, household_authority, request_authority
 from .provider_constants import AGENT_CHAT_CLIENT_IP
 from .access_key_store import GlobalSettings
 from .time_text import parse_datetime
@@ -103,6 +103,13 @@ def _oauth_app_field(value: Any) -> dict[str, str] | None:
     if not isinstance(name, str) or not isinstance(host, str) or not host:
         return None
     return {"name": _bounded_field(name), "host": _bounded_field(host)}
+
+
+def _model_fields(provider: Any, model: Any) -> tuple[str, str] | tuple[None, None]:
+    """A saved row's provider and model as bounded text, or neither unless both are text."""
+    if not isinstance(provider, str) or not provider or not isinstance(model, str) or not model:
+        return None, None
+    return _bounded_field(provider), _bounded_field(model)
 
 
 def _request_oauth_app(access_key_id: str) -> dict[str, str] | None:
@@ -199,6 +206,9 @@ class AuditEntry:
     originating_access_key_id: str | None = None
     # The OAuth sign-in's app, {"name", "host"}, copied when the row was written.
     oauth_app: dict[str, str] | None = None
+    # The provider kind and model of the Phoenix AI turn that made the request.
+    provider: str | None = None
+    model: str | None = None
     # Insertion order across the log's two rings; never saved.
     seq: int = field(default=0, repr=False, compare=False)
 
@@ -228,6 +238,9 @@ class AuditEntry:
             d["originating_access_key_id"] = self.originating_access_key_id
         if self.oauth_app is not None:
             d["oauth_app"] = dict(self.oauth_app)
+        if self.provider is not None and self.model is not None:
+            d["provider"] = self.provider
+            d["model"] = self.model
         return d
 
 
@@ -286,6 +299,7 @@ class AuditLog:
         ha_user_id: str | None = None,
         originating_access_key_id: str | None = None,
         oauth_app: dict[str, str] | None = None,
+        provider_model: tuple[str, str] | None = None,
         uncertain: bool = False,
     ) -> None:
         """Append an audit entry, subject to the current logging settings.
@@ -293,7 +307,8 @@ class AuditLog:
         approval/* rows. A key's cheap refusals past AUDIT_REFUSAL_ROWS_PER_WINDOW in one window
         are counted on one row; ``uncertain`` marks a write that may have run, never folded.
         log_entity_names and log_client_ip redact names and IPs, keeping Phoenix's own surfaces
-        named. ``oauth_app`` defaults to the request's own OAuth sign-in.
+        named. ``oauth_app`` defaults to the request's own OAuth sign-in, ``provider_model``
+        (provider kind, model) to the acting model, if any.
         """
         if settings.disable_all_logging:
             return
@@ -342,6 +357,7 @@ class AuditLog:
 
 
         household = household_authority.get()
+        model = provider_model if provider_model is not None else acting_model.get()
         if ha_user_id is None and access_key_id == "admin" and access_key_name.startswith("admin:"):
             ha_user_id = access_key_name.removeprefix("admin:")
         entry = AuditEntry(
@@ -361,6 +377,8 @@ class AuditLog:
             ha_user_id=_storable_text(ha_user_id if ha_user_id is not None else household.user_id if household else None),
             originating_access_key_id=_storable_text(originating_access_key_id),
             oauth_app=_oauth_app_field(oauth_app if oauth_app is not None else _request_oauth_app(access_key_id)),
+            provider=None if model is None else _bounded_field(model[0]),
+            model=None if model is None else _bounded_field(model[1]),
         )
         if window is not None:
             # The first refusal past the window's allowance becomes the row that counts the rest.
@@ -540,6 +558,7 @@ class AuditLog:
                 outcome = r["outcome"]
                 if outcome not in self._VALID_OUTCOMES:
                     raise ValueError(f"unrecognised outcome: {outcome!r}")
+                provider, model = _model_fields(r.get("provider"), r.get("model"))
                 payload = r.get("payload")
                 if payload is not None:
                     clean = _logged_payload(payload)
@@ -562,6 +581,8 @@ class AuditLog:
                     ha_user_id=r.get("ha_user_id"),
                     originating_access_key_id=r.get("originating_access_key_id"),
                     oauth_app=_oauth_app_field(r.get("oauth_app")),
+                    provider=provider,
+                    model=model,
                 ))
             except (KeyError, TypeError, ValueError) as exc:
                 _LOGGER.warning("Skipping corrupt audit entry: %s", exc)

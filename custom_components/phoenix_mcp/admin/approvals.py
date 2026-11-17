@@ -602,6 +602,7 @@ async def _finalize_execution(attempt: _ApprovalAttempt, tool_result: dict, outc
             payload={"approval_id": approval_id, "admin_request_id": rid, **(payload or {})},
             ha_user_id=record.ha_user_id,
             oauth_app=record.oauth_app,
+            provider_model=record.provider_model,
         )
 
     try:

@@ -97,6 +97,15 @@ describe("Audit Log updates", () => {
     expect(field?.querySelector("dd")?.textContent).toBe("Pass-Through");
   });
 
+  it("shows the provider and model in Log Details after the access key, only for a row a model's turn made", () => {
+    const fields = (e: AuditEntry) => [...render(<AuditEntryDetail entry={e} accessKeyName="key" />).container
+      .querySelectorAll(".phx-log-field")].map((f) => [f.querySelector("dt")?.textContent, f.querySelector("dd")?.textContent]);
+    const shown = fields({ ...entry(1), provider: "claude", model: "claude-sonnet-5-5" });
+    const at = shown.findIndex(([label]) => label === "Access key");
+    expect(shown.slice(at + 1, at + 3)).toEqual([["Provider", "claude"], ["Model", "claude-sonnet-5-5"]]);
+    expect(fields(entry(2)).some(([label]) => label === "Provider" || label === "Model")).toBe(false);
+  });
+
   it("names the OAuth app in Log Details only for a row a sign-in made", () => {
     const field = (e: AuditEntry) => [...render(<AuditEntryDetail entry={e} accessKeyName="key" />).container
       .querySelectorAll(".phx-log-field")].find((f) => f.querySelector("dt")?.textContent === "OAuth app");

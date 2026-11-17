@@ -106,6 +106,10 @@ export function AuditEntryDetail({ entry, accessKeyName }: { entry: AuditEntry; 
             ? `${formatAccessKeyName(accessKeyName)} (${formatAccessKeyName(entry.access_key_name)})`
             : formatAccessKeyName(accessKeyName)}
         />
+        {entry.provider && entry.model && <>
+          <Field label={t("conversations.providerLabel")} value={entry.provider} />
+          <Field label={t("conversations.modelLabel")} value={entry.model} />
+        </>}
         <Field label={t("audit.rowAccess")} value={accessLabel(entry)} />
         {entry.oauth_app && (
           <Field

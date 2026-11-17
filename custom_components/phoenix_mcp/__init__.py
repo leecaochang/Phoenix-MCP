@@ -827,6 +827,9 @@ async def _async_recover_approvals(
                 outcome="denied",
                 client_ip="",
                 settings=store.get_settings(),
+                ha_user_id=approval.ha_user_id,
+                oauth_app=approval.oauth_app,
+                provider_model=approval.provider_model,
             )
 
     async def _reconcile_interrupted_approvals(
@@ -898,6 +901,9 @@ async def _async_recover_approvals(
                 client_ip="",
                 settings=store.get_settings(),
                 payload={"reason": approval.closure_reason, "cancelled_at_startup": True},
+                ha_user_id=approval.ha_user_id,
+                oauth_app=approval.oauth_app,
+                provider_model=approval.provider_model,
             )
         if cancelled:
             _LOGGER.info(

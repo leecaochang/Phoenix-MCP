@@ -255,6 +255,8 @@ The response has `entries` and `total`. Each entry has `request_id`, `timestamp`
 
 A row written for a request an OAuth sign-in made also has `oauth_app`, with that sign-in's `name` and `host`.
 
+A row written for a request one of Phoenix's AI models made also has `provider` and `model`: the provider type and the model it used.
+
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.badPagination`, `adminError.paginationNonNegative` | `limit` or `offset` isn't a whole number of 0 or more. |

@@ -39,6 +39,7 @@ from .llm.base import (
 )
 from .llm.provider_claude import ClaudeProvider
 from .llm.provider_openai import OpenAICompatProvider
+from .request_authority import acting_model_scope, note_acting_model
 from .provider_constants import (
     AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_CHAT_MAX_ITERATIONS, AGENT_CHAT_MAX_TOOL_CALL_CORRECTIONS,
     AGENT_CHAT_MAX_TURN_OUTPUT_BYTES,
@@ -61,6 +62,7 @@ def _authority_stop(data: PhoenixData) -> dict:
     return {"code": "unauthorized", "message": "This access key is no longer authorized."}
 
 
+@acting_model_scope
 @recorded_chat
 @tracked_turn("chat")
 @recovery_turn
@@ -85,6 +87,7 @@ async def async_run_agent_turn(
     live in _consume_model_stream and _run_tool_batch; the iteration cap, output budget and
     turn ending stay here.
     """
+    note_acting_model(getattr(provider, "cfg", None))
     await data.agent_recovery.reconcile(data.store, access_key.id)
     if data.agent_recovery.needs_attention(access_key.id):
         await emit("error", {"code": "outcome_unknown", "retryable": False,

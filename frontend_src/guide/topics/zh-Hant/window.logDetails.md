@@ -15,6 +15,8 @@
 
 應用程式透過 OAuth 登入發出的請求會顯示 **{{label:audit.rowOAuthApp}}**：先是應用程式自稱的名稱，然後是它登入時使用的位址。只有位址經過核實，請以位址為準。
 
+由 Phoenix 的 AI 模型發出的請求會顯示其 **{{label:conversations.providerLabel}}** 和 **{{label:conversations.modelLabel}}**。這類請求來自 Agent Chat、Voice、AI Task、Home Companion 和決策提供者。如果請求曾等待核准，記錄核准結果的條目也會顯示同一個模型。
+
 ## 對話 {#conversation}
 
 標題會概括對話：來自哪裡、何時，以及包含多少輪次、工具呼叫和變更。其後是各個輪次，最早的在前，每次 25 個。
