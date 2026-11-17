@@ -598,17 +598,18 @@ def _host_port_of(url: str) -> str:
     return f"{host}:{port}" if host and port else host
 
 
-def _decision_account_name(inst: dict, instance_id: str, has_dupes: bool) -> str:
+def _decision_account_name(inst: dict, instance_id: str, has_dupes: bool, shared_host: bool = False) -> str:
     """A decision account's name: its company alone, since the model shows beside it.
 
-    The id tells two accounts apart; for local servers the address does.
+    The id tells two accounts apart; for local servers the address does, unless another
+    account of the kind is on the same server.
     """
     kind = inst.get("kind", "")
     company = PROVIDER_DEFINITIONS[kind].label.split(" / ")[0]
     if not has_dupes:
         return company
     host = _host_port_of(inst.get("base_url", "")) if kind in AGENT_CHAT_LOCAL_SERVER_KINDS else ""
-    return f"{company} ({host or instance_id[:8]})"
+    return f"{company} ({instance_id[:8] if shared_host or not host else host})"
 
 
 def _instance_name(inst: dict, has_dupes: bool, instance_id: str) -> str:
@@ -700,9 +701,13 @@ def _normalized_provider_url(value: object) -> str:
 def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
     """Return the in-memory identity rejecting duplicate accounts; never stored or returned.
 
-    The endpoint for a local server, the credential for most kinds, both for Qwen and endpoint-bound
+    The endpoint for a local server (with the model for a local decision server), the credential for most kinds, both for Qwen and endpoint-bound
     keys, and the resource with the credential for Azure. OpenCode keeps its credential across Zen and Console.
     """
+    if kind == "local_decision":
+        # One server holds several decision models, and each account is one of them.
+        model = str(cfg.get("model") or "").strip().removesuffix(":latest")
+        return kind, "\0".join((_normalized_provider_url(cfg.get("base_url")), model))
     if kind in AGENT_CHAT_LOCAL_SERVER_KINDS:
         return kind, _normalized_provider_url(cfg.get("base_url"))
     if kind == "azure":
@@ -756,13 +761,13 @@ class AgentCliStore:
         cfg = self._data.get(instance_id)
         return dict(cfg) if isinstance(cfg, dict) else None
 
-    def has_duplicate(self, kind: str, cfg: dict) -> bool:
-        """Whether the same provider endpoint or credential is already stored."""
+    def has_duplicate(self, kind: str, cfg: dict, *, exclude: str | None = None) -> bool:
+        """Whether another stored account has the same provider endpoint or credential."""
         identity = _provider_identity(kind, cfg)
         return bool(identity[1]) and any(
             _provider_identity(inst.get("kind", ""), inst) == identity
-            for inst in self._data.values()
-            if isinstance(inst, dict)
+            for iid, inst in self._data.items()
+            if isinstance(inst, dict) and iid != exclude
         )
 
     async def add(self, kind: str, cfg: dict) -> str:
@@ -918,6 +923,8 @@ class AgentCliStore:
     def list_instances(self) -> list[dict]:
         """Configured accounts for the panel; never includes a key."""
         counts = Counter(inst.get("kind") for inst in self._data.values() if isinstance(inst, dict))
+        hosts = Counter((inst.get("kind"), _host_port_of(inst.get("base_url", "")))
+                        for inst in self._data.values() if isinstance(inst, dict))
         out = []
         for iid, inst in self._data.items():
             if not isinstance(inst, dict) or inst.get("kind") not in PROVIDER_DEFINITIONS:
@@ -929,7 +936,8 @@ class AgentCliStore:
             out.append({
                 "id": iid,
                 "kind": kind,
-                "name": _decision_account_name(inst, iid, counts[kind] > 1) if decision
+                "name": _decision_account_name(inst, iid, counts[kind] > 1,
+                                               hosts[(kind, _host_port_of(inst.get("base_url", "")))] > 1) if decision
                         else _instance_name(inst, counts[kind] > 1, iid),
                 # The model a request would use now. `model_mode` says whether the
                 # operator chose it ("fixed") or the account follows the provider's

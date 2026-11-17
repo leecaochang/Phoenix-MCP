@@ -683,6 +683,9 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 if store.get(instance_id) != record:
                     return _err("conflict", "Provider account changed. Reload and try again.", 409, rid,
                                 key="providerAccountChanged")
+                if store.has_duplicate(record["kind"], {**record, "model": model}, exclude=instance_id):
+                    return _err("already_exists", str(DuplicateProviderError()), 409, rid,
+                                key="providerAlreadyConfigured")
                 if not await store.set_model(instance_id, model):
                     return _err("not_found", "Provider account not found.", 404, rid,
                                 key="providerAccountNotFound")

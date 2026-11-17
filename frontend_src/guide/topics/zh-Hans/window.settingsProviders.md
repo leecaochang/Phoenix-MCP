@@ -118,7 +118,7 @@ Phoenix 会按计划重新检查提供商的模型列表：6 到 720 小时（�
 - OpenCode / System One：JEV、Gemini Decision 或 GPT Luna Decision，使用 OpenCode Console API 密钥。
 - TypeSafe / JEV：TypeSafe 的 JEV 模型，使用 TypeSafe API 密钥。其 jev-preview 模型只观察，从不执行命令。
 
-添加一个账户并选择其模型。同一时间只能使用一个决策提供商。每个账户的名称旁会显示其模型。
+添加一个账户并选择其模型。同一时间只能使用一个决策提供商。每个账户的名称旁会显示其模型。一台本地服务器可以有多个账户，每个模型一个。
 
 决策账户与同一家公司的任何 AI 提供商账户相互独立。如果你已经在 AI 提供商中使用该密钥，也必须在此再次添加。
 
@@ -129,6 +129,10 @@ Phoenix 会按计划重新检查提供商的模型列表：6 到 720 小时（�
 它还可以为自动化和脚本回答 Home Assistant 的“评估”操作，请参阅[决策](guide:window.settingsHome#ai-decisions)。
 
 Ollama 会在模型空闲 5 分钟后将其卸载。重新加载可能超过[决策超时](#decision-timeout)，因此停顿后的第一条命令会交给你的 AI 模型。要让模型保持加载，请在 Ollama 服务器上设置 `OLLAMA_KEEP_ALIVE`。
+
+选择设备时，会把你的设备列表发送给模型。如果模型运行时的上下文太小，Ollama 会拒绝这个列表，命令会交给你的 AI 模型。大约 100 盏灯时，4,096 个 token 就太小了。
+
+请在模型 Modelfile 的副本中调高 `num_ctx`，例如调到 16384。一次读取整个提示的模型（例如 d3）还需要把 `num_batch` 调到相同的值。
 
 相关：[命令如何路由](guide:topic.commandRouting)
 

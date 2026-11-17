@@ -154,6 +154,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | 400 | `invalid_request` | `adminError.decisionModelRequired` | `auto: true` 傳給了決策帳戶，而決策帳戶需要具體模型。 |
 | 400 | `invalid_request` | `adminError.providerModelNotListed` 以及[新增帳戶](guide:#add-provider)下的決策提供者錯誤 | 決策帳戶的模型既未列出，也不是 `jev-1.13.0` 這樣已審核的固定版本，或檢查失敗。 |
 | 409 | `conflict` | `adminError.providerAccountChanged` | 決策帳戶在檢查期間發生了變化。請重新讀取並重試。 |
+| 409 | `already_exists` | `adminError.providerAlreadyConfigured` | 同一伺服器上的另一個本機 / System One 帳戶已在使用此模型。 |
 | 404 | `not_found` | `adminError.providerAccountNotFound` | 沒有帳戶具有此 ID。 |
 
 ### 移除帳戶 {#remove-provider}

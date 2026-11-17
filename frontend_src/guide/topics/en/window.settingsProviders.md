@@ -116,7 +116,7 @@ Choose from these decision providers:
 - OpenCode / System One: JEV, Gemini Decision or GPT Luna Decision, with an OpenCode Console API key.
 - TypeSafe / JEV: TypeSafe's JEV model, with a TypeSafe API key. Its jev-preview model only observes and never carries out commands.
 
-Add an account and select its model. Only one decision provider can be in use at a time. Each account shows its model beside its name.
+Add an account and select its model. Only one decision provider can be in use at a time. Each account shows its model beside its name. A local server can hold several accounts, one for each of its models.
 
 A decision account is separate from any AI provider account from the same company. You must add its key here again if you already use that key for AI Provider.
 
@@ -127,6 +127,10 @@ To use it, choose its account. Choose **{{label:routing.noProvider}}** to stop u
 It can also answer Home Assistant's Evaluate action for automations and scripts: see [Decisions](guide:window.settingsHome#ai-decisions).
 
 Ollama unloads a model after 5 idle minutes. Loading it again can take longer than the [decision timeout](#decision-timeout), so the first command after a pause goes to your AI model. To keep the model loaded, set `OLLAMA_KEEP_ALIVE` on the Ollama server.
+
+Choosing a device sends the model the list of your devices. If the model runs with a small context, Ollama refuses that list and the command goes to your AI model. With about 100 lights, 4,096 tokens is too small.
+
+In a copy of its Modelfile, raise `num_ctx`, for example to 16384. A model that reads the whole prompt at once, such as d3, also needs `num_batch` raised to the same value.
 
 Related: [How a command is routed](guide:topic.commandRouting)
 

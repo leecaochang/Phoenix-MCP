@@ -534,9 +534,10 @@ class DecisionProvider:
             # TypeSafe's 529 is "temporarily overloaded"; a 5xx is a server failure, neither a refusal.
             return "unavailable"
         # OpenCode serves JEV and relays TypeSafe's error body; OpenAI uses its usual error object;
-        # Google answers an invalid or unusable key with 400 rather than 401.
+        # Google answers an invalid or unusable key with 400 rather than 401; a local server names
+        # a prompt longer than the context it runs the model with.
         if response.status != 400 or self.cfg.kind not in (
-                "typesafe", "opencode_decision", "openai_decision", "gemini_decision"):
+                "typesafe", "opencode_decision", "openai_decision", "gemini_decision", "local_decision"):
             return "http_error"
         try:
             raw = bytearray()
@@ -550,6 +551,12 @@ class DecisionProvider:
                 details = error.get("details") if isinstance(error, dict) else None
                 reasons = {item.get("reason") for item in details if isinstance(item, dict)} if isinstance(details, list) else set()
                 return "authentication" if "API_KEY_INVALID" in reasons else "http_error"
+            if self.cfg.kind == "local_decision":
+                error = body.get("error") if isinstance(body, dict) else None
+                # Ollama answers with a sentence, llama.cpp's server with a typed object.
+                too_long = (isinstance(error, str) and "context length" in error.lower()) or (
+                    isinstance(error, dict) and error.get("type") == "exceed_context_size_error")
+                return "provider_context_limit" if too_long else "http_error"
             if self.cfg.kind == "openai_decision":
                 error = body.get("error") if isinstance(body, dict) else None
                 code = error.get("code") if isinstance(error, dict) else None

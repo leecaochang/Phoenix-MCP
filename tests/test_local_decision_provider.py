@@ -259,11 +259,51 @@ async def test_two_local_accounts_are_told_apart_by_address():
         "Local (192.168.1.103:11434)", "Local (192.168.1.104:8080)"]
 
 
-async def test_one_address_is_one_account():
+async def test_one_server_holds_one_account_per_model():
     store = llm_accounts.AgentCliStore(AsyncMock())
     await store.add("local_decision", {"base_url": "http://192.168.1.103:11434/v1", "model": "clef"})
-    assert store.has_duplicate("local_decision", {"base_url": "http://192.168.1.103:11434/v1/", "model": "laya"})
+    # Another model on the same server is another account; the same model again is not.
+    assert not store.has_duplicate("local_decision", {"base_url": "http://192.168.1.103:11434/v1/", "model": "d3:9b"})
+    assert store.has_duplicate("local_decision", {"base_url": "http://192.168.1.103:11434/v1/", "model": "clef"})
+    assert store.has_duplicate("local_decision", {"base_url": "http://192.168.1.103:11434/v1", "model": "clef:latest"})
     assert not store.has_duplicate("local_decision", {"base_url": "http://192.168.1.104:11434/v1", "model": "clef"})
+
+
+async def test_two_accounts_on_one_server_are_told_apart_by_id():
+    store = llm_accounts.AgentCliStore(AsyncMock())
+    first = await store.add("local_decision", {"base_url": "http://192.168.1.103:11434/v1", "model": "clef"})
+    second = await store.add("local_decision", {"base_url": "http://192.168.1.103:11434/v1", "model": "d3:9b"})
+    other = await store.add("local_decision", {"base_url": "http://192.168.1.104:8080/v1", "model": "clef"})
+    names = {item["id"]: item["name"] for item in store.list_instances()}
+    assert names == {first: f"Local ({first[:8]})", second: f"Local ({second[:8]})", other: "Local (192.168.1.104:8080)"}
+
+
+async def test_adding_a_second_model_on_one_server_succeeds_and_the_same_model_is_refused(hass):
+    stub = _Server(models=["clef-flash:latest", "clef:latest"],
+                   show={"clef-flash:latest": ["decision"], "clef:latest": ["decision"]})
+    store = llm_accounts.AgentCliStore(AsyncMock())
+    async with TestServer(stub.app()) as server, ClientSession() as session:
+        assert (await _create(hass, server, session, store)).status == 201
+        assert (await _create(hass, server, session, store, {"model": "clef:latest"})).status == 201
+        again = await _create(hass, server, session, store, {"model": "clef:latest"})
+    assert again.status == 409 and json.loads(again.body)["message_key"] == "adminError.providerAlreadyConfigured"
+    assert len(store.list_instances()) == 2
+
+
+async def test_a_model_change_never_makes_two_accounts_of_one_model(hass):
+    stub = _Server(models=["clef-flash:latest", "clef:latest"],
+                   show={"clef-flash:latest": ["decision"], "clef:latest": ["decision"]})
+    store = llm_accounts.AgentCliStore(AsyncMock())
+    async with TestServer(stub.app()) as server, ClientSession() as session:
+        first = json.loads((await _create(hass, server, session, store)).body)["instance"]["id"]
+        await _create(hass, server, session, store, {"model": "clef:latest"})
+        hass.data[DOMAIN] = MagicMock(settings_update_lock=asyncio.Lock())
+        view = agent_chat_views.PhoenixAgentCliProviderView()
+        view.hass = hass
+        with patch_readers(_SECRET_STORE, AsyncMock(return_value=store)), patch(_SESSION, return_value=session):
+            response = await view.patch(_admin_request({"model": "clef:latest"}), instance_id=first)
+    assert response.status == 409 and json.loads(response.body)["error"] == "already_exists"
+    assert store.resolve(first, purpose="decision").model == "clef-flash:latest"
 
 
 # --------------------------------------------------------------------------- #
@@ -365,3 +405,25 @@ def test_a_local_server_gets_no_exact_percentages_or_rounding():
         llm_accounts.ProviderConfig("local_decision", "clef", "http://192.168.1.103:11434/v1"), "systemone")
     assert not provider.supports_exact_percentages()
     assert provider.rounding_error == 0
+
+
+@pytest.mark.parametrize("body,expected", [
+    # Ollama, when the prompt outgrows the context the model runs with (num_ctx).
+    ({"error": "the prompt is longer than the context length currently available to the model; shorten the "
+               "prompt, adjust the context length in settings, or use a model with a longer context length"},
+     "provider_context_limit"),
+    # llama.cpp's server.
+    ({"error": {"code": 400, "message": "the request exceeds the available context size", "type": "exceed_context_size_error"}},
+     "provider_context_limit"),
+    ({"error": "model \'d3:9b\' not found"}, "http_error"),
+    ({"detail": {"error_type": "max_tokens_exceeded"}}, "http_error"),
+])
+async def test_a_local_context_refusal_is_named_as_one(body, expected):
+    async def handler(request):
+        return web.json_response(body, status=400)
+    app = web.Application()
+    app.router.add_post("/v1/systemone", handler)
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = llm_accounts.ProviderConfig("local_decision", "d3:9b", str(server.make_url("/v1")))
+        with pytest.raises(DecisionError, match="^" + expected + "$"):
+            await DecisionProvider(cfg, "systemone").classify(session, "command", 1000)
