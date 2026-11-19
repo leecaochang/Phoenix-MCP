@@ -3,7 +3,7 @@
 ---
 Logs shows what agents did through Phoenix and what they said.
 
-- **{{label:shell.tabAudit}}** lists each action, who made it and its outcome.
+- **{{label:shell.tabAudit}}** lists each action, who made it, and its outcome.
 - **{{label:conversations.title}}** keeps agent conversations in full, once you turn recording on.
 - Select a record in either log to read it in **{{label:workspace.logDetails}}**.
 

@@ -1,7 +1,7 @@
 ---
 { "id": "window.settingsHome", "title": "{{label:workspace.homeAssistant}}", "parent": "workspace.settings", "order": 3, "keywords": ["voice", "Assist", "assistant"], "sectionKeywords": { "ai-decisions": ["evaluate", "ai_task.evaluate"], "voice-agent": ["conversation agent", "pipeline"], "voice-assistant": ["pipeline"], "ai-task": ["generate data"], "assist-tool-provider": ["LLM API", "AI tools", "Control Home Assistant"] }, "covers": ["frontend_src/components/VoiceAgentSettings.tsx", "frontend_src/components/AiTaskSettings.tsx", "frontend_src/utils/access_key_list.ts", "frontend_src/components/AiTaskDecisionsSection.tsx", "custom_components/phoenix_mcp/routing/decision_evaluation.py", "frontend_src/components/AssistBridgeSettings.tsx"] }
 ---
-Connect Phoenix to Home Assistant's own AI features. Each tab sets up one feature, and in each one an access key decides what Phoenix may do.
+Connect Phoenix to Home Assistant's own AI features. Each tab sets up one feature. In each one, an access key decides what Phoenix can do.
 
 - {{label:settings.voiceCard}}: Phoenix answers Home Assistant's voice and Assist conversations, using your account and model.
 - {{label:settings.aiTaskCard}}: Phoenix runs Home Assistant's AI Task actions, using your account and model.
@@ -11,11 +11,11 @@ Related: [Which one to use](guide:topic.homeAssistantFeatures)
 
 ## {{label:settings.voiceCard}} {#voice-agent}
 
-Makes Phoenix a Home Assistant conversation agent named Phoenix MCP. Set the access key, account and model first: the agent appears only once all three are set.
+Makes Phoenix a Home Assistant conversation agent named Phoenix MCP. Set the access key, account, and model first: the agent appears only once all three are set.
 
 ### {{label:settings.voiceEnableLabel}} {#voice-enable}
 
-Turns the agent on. Off by default. Turning it off also removes the Assist assistant Phoenix created.
+Turns the agent on. Off by default. Turning it off also removes the Assist assistant Phoenix created. To keep the agent and remove only the assistant, turn off **{{label:settings.voiceAssistSetup}}** instead.
 
 While the **{{label:settings.killSwitchCard}}** is on, the agent stays, but only replies that it's unavailable.
 
@@ -23,19 +23,19 @@ While the **{{label:settings.killSwitchCard}}** is on, the agent stays, but only
 
 Creates a Home Assistant assistant named Phoenix MCP that uses this agent, with Home Assistant's default speech-to-text and text-to-speech. Available once the agent is fully set up.
 
-Turning it off deletes the assistant. Home Assistant always keeps at least one assistant, so if it's the only one, it stays, but Phoenix stops managing it.
+Turning it off removes the assistant. Home Assistant always keeps at least one assistant. If Phoenix's assistant is the only one, it stays, but Phoenix stops managing it.
 
-Phoenix also removes its assistant if you clear the access key, account or model, or revoke the key. Home Assistant keeps it while it is its only assistant, and Phoenix tells you so. Remove it in Home Assistant after adding another.
+Phoenix also removes its assistant if you clear the access key, account, or model, or revoke the key. Home Assistant keeps it while it is its only assistant, and Phoenix tells you so. After you add another assistant, remove this one in Home Assistant.
 
 ### {{label:settings.voicePreferredLabel}} {#voice-preferred}
 
-Makes Phoenix's assistant the one Home Assistant uses by default. Turning it off hands that role to the first assistant in Home Assistant's list, which may not be the one you used before.
+Makes Phoenix's assistant the one Home Assistant uses by default. Turning it off hands that role to the first assistant in Home Assistant's list, which might not be the one you used before.
 
 ### {{label:settings.accessKey}} {#voice-access-key}
 
-The access key that decides what the agent may do. You can only choose an active key. The list updates when you create or revoke a key. If the key is revoked or expires, it's cleared here.
+The access key that decides what the agent can do. The list shows only active keys. The list updates when you create or revoke a key. If the key is revoked or expires, it's cleared here.
 
-Choosing another key, or turning the agent off, also stops a conversation still running with the old key.
+Selecting another key, or turning the agent off, also stops a conversation still running with the old key.
 
 A Home Companion key hands conversations to the companion, and hides **{{label:routing.enableVoice}}**.
 
@@ -45,9 +45,9 @@ The account whose model answers. Decision provider accounts aren't listed. Add a
 
 ### {{label:settings.model}} {#voice-model}
 
-The model that answers. Choose the account first. If the provider retires the model, Phoenix switches to its [successor](guide:window.settingsProviders#change-model).
+The model that answers. Select the account first. If the provider retires the model, Phoenix switches to its [successor](guide:window.settingsProviders#change-model).
 
-The agent waits up to 30 seconds for the model to start answering, except on a local Ollama or OpenAI-compatible server. After that, it waits up to 3 minutes for anything new, and up to 10 minutes for each reply.
+The agent waits up to 30 seconds for the model to start answering, except on a local Ollama or OpenAI-compatible server. After that, it waits up to 3 minutes for anything new. Each reply can take up to 10 minutes, or up to an hour on a local server.
 
 ### {{label:routing.enableVoice}} {#voice-commands}
 
@@ -67,7 +67,7 @@ How much replies say. Default: {{label:settings.detailConcise}}.
 
 ### {{label:settings.homeFocused}} {#voice-home-focused}
 
-Asks the model to stick to your home. This is a preference, not a security control.
+Asks the model to stick to your home. Off by default. It's a preference, not a security control.
 
 ### {{label:routingStats.title}} {#voice-statistics}
 
@@ -81,7 +81,7 @@ Gives Home Assistant an AI Task entity named Phoenix MCP AI Task, which automati
 
 ### {{label:settings.aiTaskEnableLabel}} {#ai-task-enable}
 
-Turns the entity on. Off by default. The entity exists only while the access key, account and model are all set.
+Turns the entity on. Off by default. The entity exists only while the access key, account, and model are all set.
 
 If you clear any of them, Phoenix removes the entity, and any changes you made to it in Home Assistant are lost.
 
@@ -93,7 +93,7 @@ Turning it off leaves Home Assistant with no default. The previous default isn't
 
 ### {{label:settings.accessKey}} {#ai-task-access-key}
 
-The access key that decides what AI Task may do. It works the same as the [Voice Agent's](guide:#voice-access-key).
+The access key that decides what AI Task can do. It works the same as the [Voice Agent's](guide:#voice-access-key).
 
 ### {{label:settings.providerAccount}} {#ai-task-provider}
 
@@ -101,7 +101,7 @@ The account whose model runs the tasks.
 
 ### {{label:settings.model}} {#ai-task-model}
 
-The model that runs the tasks. A task fails if one reply from the model takes over 10 minutes, or sends nothing new for 3 minutes.
+The model that runs the tasks. A task fails if one reply from the model takes over 10 minutes, or over an hour on a local Ollama or OpenAI-compatible server. It also fails if the model sends nothing new for 3 minutes.
 
 ### {{label:settings.conversationStyle}} {#ai-task-style}
 
@@ -115,9 +115,9 @@ How much text results say. Default: {{label:settings.detailBalanced}}. Tasks tha
 
 ## {{label:settings.aiDecisionsHeading}} {#ai-decisions}
 
-Gives Home Assistant a second entity, Phoenix MCP Decisions, for the Evaluate action. Automations and scripts use it to ask yes-or-no, choice and rating questions about text or data they pass in. Your decision provider answers, and each answer comes with probabilities.
+Gives Home Assistant a second entity, Phoenix MCP Decisions, for the Evaluate action. Automations and scripts use it to ask yes-or-no, choice, and rating questions about text or data they pass in. Your decision provider answers, and each answer comes with probabilities.
 
-After each answer, the entity's answering_model attribute names the model that gave it, such as jev-1.14.0. An automation that compares probabilities with a threshold can check it, since jev-latest moves to each new JEV release.
+After each answer, the entity's `answering_model` attribute names the model that gave it, such as `jev-1.13.0`. An automation that compares probabilities with a threshold can check it, since `jev-latest` moves to each new JEV release.
 
 This section shows only on Home Assistant 2026.11 or later, while a decision provider is in use. To add or choose one, go to [{{label:workspace.aiProviders}}](guide:window.settingsProviders#decision-provider).
 
@@ -129,7 +129,7 @@ A person who starts an Evaluate action needs control of the Decisions entity, ev
 
 Turns the entity on. Off by default. The entity exists only while this is on and an access key is chosen.
 
-Revoking the access key or removing the decision provider turns this off and removes the entity, along with any changes you made to it in Home Assistant.
+Revoking the access key or removing the decision provider turns this off and removes the entity. Any changes you made to it in Home Assistant are lost.
 
 ### {{label:settings.aiDecisionsDefaultLabel}} {#ai-decisions-default}
 
@@ -143,11 +143,11 @@ Entity permissions and MESA don't apply here: the action has no target entity an
 
 ### {{label:routingStats.aiTaskTitle}} {#ai-decisions-statistics}
 
-**{{label:routingStats.aiTaskShow}}** opens a window that counts the Evaluate actions the entity answered, refused or failed, and the decision tokens they used. See [Evaluate](guide:topic.routingStatistics#evaluate).
+**{{label:routingStats.aiTaskShow}}** opens a window that counts the Evaluate actions the entity answered, refused, or failed, and the decision tokens they used. See [Evaluate](guide:topic.routingStatistics#evaluate).
 
 ## {{label:settings.assistCard}} {#assist-tool-provider}
 
-Lends Phoenix's tools to a model that runs elsewhere, such as a conversation agent whose AI tools setting is Phoenix MCP (scoped). Choose no other API there, or the model gets tools outside Phoenix's checks. Phoenix runs no model of its own here.
+Lends Phoenix's tools to a model that runs elsewhere, such as a conversation agent whose AI tools setting is Phoenix MCP (scoped). Don't select any other API there. Otherwise, the model gets tools outside Phoenix's checks. Phoenix runs no model of its own here.
 
 ### {{label:settings.assistBoundAccessKey}} {#assist-access-key}
 

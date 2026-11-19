@@ -14,17 +14,18 @@ GET    /api/phoenix-mcp/context
 GET    /api/phoenix-mcp/skill
 ```
 
-Agents send MCP requests to the first route, read their key's context from the second, and fetch the skill guide from the last. Apps that sign in with OAuth also use [the sign-in routes](guide:#oauth).
+Agents send MCP requests to `POST /api/phoenix-mcp`, close legacy sessions with `DELETE`, read their key's context from `/context`, and fetch the skill guide from `/skill`. Apps that sign in with OAuth also use [the sign-in routes](guide:#oauth).
 
 - POST and DELETE also work with a trailing slash, `/api/phoenix-mcp/`.
-- `GET /api/phoenix-mcp` answers `405`, since the endpoint has no GET handler.
+- `GET /api/phoenix-mcp` answers `405`.
 - While the kill switch is on, these routes don't serve agents.
+- If Home Assistant started with the kill switch on, these routes and [the sign-in routes](guide:#oauth) answer `404` until you turn it off.
 
 ## Sending the key {#bearer}
 
 Send the key in the `Authorization` header as `Bearer phx_...`. The key is `phx_` followed by 64 characters. Never put it in the URL: a `token` or `access_token` query parameter is refused even when the header is right.
 
-An app that signed in with OAuth sends its access token the same way, as `Bearer phxo_...`. It stands for the key the sign-in was approved for, and every check below applies to that key.
+An app that signed in with OAuth sends its access token the same way, as `Bearer phxo_...`. The token stands for the key that the sign-in was approved for. Every key check in this section applies to that key.
 
 Every route but the skill checks the key, in this order:
 
@@ -39,11 +40,13 @@ Every route but the skill checks the key, in this order:
 | 401 | `unauthorized` | The key is revoked or has expired. An expired key moves to the archive. |
 | 429 | `rate_limited` | The key is over its rate limit. See [Rate limits](guide:#rate-limit). |
 
-Every `401` carries `WWW-Authenticate: Bearer realm="Phoenix MCP"`. While a key allows OAuth sign-in and the request came over HTTPS, it also names `resource_metadata`, and adds `error="invalid_token"` for an ended OAuth token. A key that passes gets its `last_used_at` updated before the rate limit check.
+Every `401` carries `WWW-Authenticate: Bearer realm="Phoenix MCP"`. While a key allows OAuth sign-in and the request came over HTTPS, the header also names `resource_metadata`. In that case, it also adds `error="invalid_token"` for an ended OAuth token.
 
-When a `phx_` key is unknown, revoked or expired, Home Assistant's log gets a warning with the client's address, never the key. After the first one, each address gets at most one warning every 10 minutes, with a count of the refusals since.
+Phoenix updates the `last_used_at` of a key that passes these checks, even when the rate limit then refuses the request.
 
-A missing or malformed key isn't logged, because apps send one on purpose to find the sign-in page.
+When a `phx_` key is unknown, revoked, or expired, Home Assistant's log gets a warning with the client's address, never the key. After the first one, each address gets at most one warning every 10 minutes, with a count of the refusals since.
+
+Phoenix doesn't log a missing or malformed key. Apps send requests without a key on purpose to find the sign-in page.
 
 Errors on these routes have a simpler body than the admin API's: `error` and `message`, sometimes with a `suggestions` array. They carry `X-Phoenix-Request-ID` but no `message_key` and no `Cache-Control`.
 
@@ -55,7 +58,7 @@ Related: [Errors](guide:topic.adminApi#errors)
 
 ## OAuth sign-in {#oauth}
 
-Phoenix runs its own OAuth 2.1 server for apps that can't send a key. Home Assistant's own sign-in is never used, and its tokens are refused.
+Phoenix runs its own OAuth 2.1 server for apps that can't send a key. Phoenix never uses Home Assistant's own sign-in and refuses its tokens.
 
 ```
 GET    /.well-known/oauth-protected-resource/api/phoenix-mcp
@@ -68,14 +71,16 @@ POST   /api/phoenix-mcp/oauth/revoke
 - The issuer is your HTTPS address followed by `/api/phoenix-mcp/oauth`. Its document is also served at both OpenID discovery paths.
 - Apps name themselves with a Client ID Metadata Document: `client_id` is an https address. There's no dynamic registration.
 - Only S256 PKCE is accepted. `resource`, when sent, must be your address followed by `/api/phoenix-mcp`.
-- Authorize sends the browser to the Phoenix panel, where an administrator approves the sign-in for one key. It answers the same way whether or not a sign-in window is open. Authorization responses carry `iss`.
-- A code works once, within 60 seconds. A wrong client, redirect, resource or PKCE verifier uses it up. Using a code again ends the sign-in it produced.
+- Authorize sends the browser to the Phoenix panel, where an administrator approves the sign-in for one key. It answers the same way whether or not a sign-in period is open. Authorization responses carry `iss`.
+- A code works once, within 60 seconds. A wrong client, redirect, resource, or PKCE verifier uses it up. Using a code again ends the sign-in it produced.
 - Access tokens (`phxo_`) last one hour. A tool call already running when the hour ends still finishes and answers. Each refresh replaces the refresh token (`phxr_`).
-- Within 60 seconds, an app may use a replaced refresh token twice more, in case an answer got lost or it refreshed several times at once.
+- Within 60 seconds, an app can use a replaced refresh token twice more, in case an answer got lost or it refreshed several times at once.
 - A fourth use, any later use, or reuse of an older refresh token ends the sign-in.
 - Revoke takes either token and ends the whole sign-in.
 
-The routes answer `404` until a key allows OAuth sign-in, and to any request that didn't arrive over HTTPS, even while the kill switch is on. Otherwise, while the kill switch is on they answer `503`. Each address may make 30 requests a minute to them, and IPv6 addresses count by their /64 block.
+Until a key allows OAuth sign-in, the routes answer `404`. They also answer `404` to any request that didn't arrive over HTTPS. Both apply even while the kill switch is on. Otherwise, while the kill switch is on they answer `503`.
+
+Each address can make 30 requests a minute to them. IPv6 addresses count by their /64 block.
 
 Related: [Apps that sign in with OAuth](guide:topic.connecting#oauth), [OAuth sign-in endpoints](guide:topic.adminApiKeys#oauth)
 
@@ -87,7 +92,7 @@ Desktop and command-line apps send no `Origin`, so this doesn't affect them. The
 
 ## The MCP endpoint {#mcp}
 
-`POST /api/phoenix-mcp` takes one JSON-RPC message, or a batch, of up to 1 MiB. Phoenix supports protocol revisions `2026-07-28` and `2025-03-26`. Revision `2025-03-26` is called legacy below.
+`POST /api/phoenix-mcp` takes one JSON-RPC message, or a batch, of up to 1 MiB. Phoenix supports protocol revisions `2026-07-28` and `2025-03-26`. The rest of this page calls revision `2025-03-26` legacy.
 
 | Status | Body | When |
 |---|---|---|
@@ -109,7 +114,7 @@ To get the response as a stream, send `Accept: text/event-stream`. Phoenix sends
 
 ### Batches {#batches}
 
-Only legacy requests may be batches. Phoenix refuses a batch with `400` and `-32600` when it has more than 50 items, more than the key's burst, or more than its per-minute limit.
+Only legacy requests can be batches. When a batch has more than 50 items, more than the key's burst, or more than its per-minute limit, Phoenix refuses it with `400` and `-32600`.
 
 Phoenix charges the whole batch against the rate limit before running it. When too little of the limit is left, the batch answers `429` with `rate_limited` and `Retry-After`, and nothing in it runs.
 
@@ -127,16 +132,16 @@ When the key's own sessions are all busy, `Retry-After` is 5 seconds. Otherwise 
 
 ### Ending a session {#end-session}
 
-`DELETE /api/phoenix-mcp` closes a legacy session. It runs the same readiness, origin and key checks as POST, including the rate limit. The response is `204` with no body.
+`DELETE /api/phoenix-mcp` closes a legacy session. It runs the same readiness, origin, and key checks as POST, including the rate limit. The response is `204` with no body.
 
 | Status | `error` | When |
 |---|---|---|
 | 400 | `invalid_request` | The `Mcp-Session-Id` header is missing. |
-| 404 | `not_found` | The session doesn't exist, has expired or belongs to another key. |
+| 404 | `not_found` | The session doesn't exist, has expired, or belongs to another key. |
 
 ## Context {#context}
 
-`GET /api/phoenix-mcp/context` describes what the key can reach. It answers in plain text by default; add `?format=json` for JSON. It runs the key check and the rate limit, and every call goes in the audit log.
+`GET /api/phoenix-mcp/context` describes what the key can reach. It answers in plain text by default. Add `?format=json` for JSON. It runs the key check and the rate limit. Phoenix logs each allowed call in the audit log like any other request.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -148,11 +153,11 @@ When the key's own sessions are all busy, `Retry-After` is 5 seconds. Otherwise 
 | `capability_flags` | object | The capability values that apply to the agent. |
 | `rate_limit` | object | `requests_per_minute` and `burst_per_second`. |
 
-A Home Companion key gets only `access_key_name`, `persona`, an empty `entities`, `capability_flags` and `message`.
+A Home Companion key gets only `access_key_name`, `persona`, an empty `entities`, `capability_flags`, and `message`.
 
 ## Skill {#skill}
 
-`GET /api/phoenix-mcp/skill` answers with the Phoenix MCP skill guide as Markdown (`text/markdown`). It needs no key, isn't rate limited and holds nothing about your home. It's the same for everyone.
+`GET /api/phoenix-mcp/skill` answers with the Phoenix MCP skill guide as Markdown (`text/markdown`). It needs no key, isn't rate limited, and holds nothing about your home. It's the same for everyone.
 
 While Phoenix is starting or shutting down, or the kill switch is on, it answers `503` with the plain text "Service unavailable." Its responses carry no `X-Phoenix-Request-ID`.
 
@@ -160,9 +165,9 @@ Related: [What the agent is told](guide:topic.connecting#primer)
 
 ## Rate limits {#rate-limit}
 
-Each key has two limits. `rate_limit_requests` counts requests over a sliding 60 seconds. `rate_limit_burst` counts requests in any one second; 0 turns the burst limit off. A `rate_limit_requests` of 0 turns both off.
+Each key has two limits. `rate_limit_requests` counts requests over a sliding 60 seconds. `rate_limit_burst` counts requests in any one second. Set it to 0 to turn off the burst limit. A `rate_limit_requests` of 0 turns both off.
 
-A lone `notifications/initialized` and a session `DELETE` count toward the minute but never the burst. A client that opens several sessions at once sends many of them together.
+A lone `notifications/initialized` and a session `DELETE` count toward the minute but never the burst.
 
 Related: [{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)
 
@@ -182,7 +187,7 @@ X-RateLimit-Reset: 1793612345
 | `X-RateLimit-Remaining` | Requests left in the current 60 seconds, after this one. A batch counts every item. |
 | `X-RateLimit-Reset` | Unix time, in whole seconds, when the oldest request in the window drops out of it. |
 
-These headers appear only on `200` JSON and SSE responses from `POST /api/phoenix-mcp`, batches included. Notifications, protocol errors, other errors, DELETE, context and skill don't get them. A key with rate limiting off gets none.
+These headers appear only on `200` JSON and SSE responses from `POST /api/phoenix-mcp`, and on its batch responses. Notifications, protocol errors, other errors, DELETE, context, and skill don't get them. A key with rate limiting off gets none.
 
 ### When the limit is hit {#limit-hit}
 

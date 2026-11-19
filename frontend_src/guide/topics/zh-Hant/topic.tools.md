@@ -1,13 +1,13 @@
 ---
 {"id": "topic.tools", "title": "智慧體可以做什麼", "parent": "topic.about", "order": 30, "keywords": ["工具", "工具清單", "MCP 工具", "智慧體可以做什麼", "tools/list"], "sectionKeywords": {"rules": ["拒絕存取", "隱藏工具", "宣告全部工具", "結果大小"], "reading": ["get_state", "get_history", "get_statistics", "get_camera_image", "get_calendar_events", "get_todo_items", "GetLiveContext", "GetDateTime", "歷史", "統計", "攝影機"], "controlling": ["HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed", "HassClimateSetTemperature", "HassSetPosition", "HassStopMoving", "HassMediaPause", "HassMediaSearchAndPlay", "HassSetVolume", "HassVacuumStart", "HassCancelAllTimers", "HassBroadcast", "原生工具", "門鎖", "捲簾", "HassMediaNext", "HassMediaPrevious", "HassMediaUnpause", "HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassSetVolumeRelative", "HassVacuumCleanArea", "HassVacuumReturnToBase"], "actions": ["call_service", "dry_run_service", "服務", "操作", "重新載入", "重新啟動", "回應資料", "附件", "media-source"], "lists": ["set_todo_item", "create_calendar_event", "update_calendar_event", "delete_calendar_event", "get_calendar_write", "待辦", "行事曆"], "waiting": ["watch_entity", "等待狀態"], "testing": ["test_trigger", "test_condition", "測試自動化", "觸發條件", "條件"], "home-companion": ["home_request", "家庭請求"], "automations": ["list_automations", "get_automation", "create_automation", "edit_automation", "delete_automation", "list_scripts", "get_script", "create_script", "edit_script", "delete_script", "create_blueprint", "edit_blueprint", "delete_blueprint", "藍圖", "間接控制", "套件", "packages"], "scenes": ["list_scenes", "get_scene", "create_scene", "edit_scene", "delete_scene"], "helpers": ["list_helpers", "create_helper", "edit_helper", "delete_helper", "get_helper_settings", "set_helper_settings", "input_boolean", "計數器", "計時器", "區域", "模板輔助項目"], "dashboards": ["list_dashboards", "create_dashboard", "edit_dashboard", "delete_dashboard", "get_dashboard_config", "set_dashboard_config", "卡片", "儀表板"], "restore": ["還原", "回執", "回滾"], "mesa": ["MESA 策略", "租約"], "configuration": ["設定", "模板", "日誌", "能源"], "diagnostics": ["搜尋", "登錄檔", "追蹤", "診斷"], "files": ["檔案", "YAML", "www", "themes"], "esphome": ["ESPHome", "韌體"], "system": ["整合", "登錄檔", "無線電", "備份", "重新啟動", "通知", "fix_repair", "set_integration_subentry", "子項目", "修復"], "introspection": ["自己的請求", "稽核條目"], "household": ["語音", "Assist", "AI 任務", "非管理員"]}}
 ---
-智慧體透過工具工作。本頁依群組說明它們：智慧體可以用它們做什麼、哪些能力允許它們，以及值得了解的限制。[工具參考](guide:topic.toolReference)列出每個工具的參數和呼叫範例。
+智慧體透過工具工作。[工具參考](guide:topic.toolReference)列出每個工具的參數和呼叫範例。
 
 兩個設定決定每個操作。[{{label:accessKeys.cardCapabilities}}](guide:window.capabilities)決定智慧體可以做哪類事情。[{{label:accessKeys.permissionsTree}}](guide:window.permissions)決定它可以對哪些實體做。
 
 ## 能力如何生效 {#rules}
 
-- 能力為拒絕存取的工具不會提供給智慧體，對它的呼叫會在執行前被拒絕。
+- 如果工具的能力為 {{label:caps.modeDeny}}，Phoenix 不會把它提供給智慧體。Phoenix 會在執行前拒絕對它的呼叫。
 - **{{label:accessKeys.announceAllLabel}}** 仍會列出所有工具，用於疑難排解。智慧體仍然無法使用隱藏的工具。
 - 確認會暫緩變更以等待你的核准。使用同一能力的讀取會直接執行。
 - 列出許多實體的結果會在約 64 KB 時停止。
@@ -24,7 +24,7 @@
 
 - 歷史和統計每頁最多 1000 列。狀態變化和統計以一張精簡的表格交給智慧體，使用你家的時區，時間精確到秒，統計值至少保留四位有效數字。
 - 一次行事曆讀取最多涵蓋 31 天和 500 個事件。
-- 攝影機影像每邊最多 2048 像素。
+- 智慧體可以要求每邊最多 2048 像素的攝影機影像。未指定尺寸時，它會取得攝影機本身的尺寸。Phoenix 會拒絕超過 4 MiB 的影像。
 - 屬性值摘要最多涵蓋 7 天。
 
 允許它的能力：[{{label:caps.cap_camera_read.label}}](guide:window.capabilities#camera-read)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)
@@ -43,7 +43,7 @@
 
 開啟 `broadcast` 的 Z-Wave 多點傳送會被拒絕，因為它會到達網路中的每個裝置。
 
-透過 Assist 衛星裝置廣播訊息或在其上發起對話需要廣播。MESA 會在能力和權限樹之後最後檢查每個命令。
+透過 Assist 衛星裝置廣播訊息或在其上發起對話需要廣播。MESA 也會檢查每個命令。
 
 允許它的能力：[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)、[{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
 
@@ -58,7 +58,7 @@
 - 重新啟動或停止 Home Assistant 需要重新啟動能力。安裝更新也需要它，並且一律需要您核准。
 - 重新載入自動化、腳本、場景、輔助項目或核心設定需要 YAML 設定。
 - 操作傳回的資料需要服務回應資料。沒有它，大多數操作仍會執行，但不傳回資料。只傳回資料的操作（例如 `weather.get_forecasts`）會被拒絕。
-- 傳送訊息的通知操作需要通知能力。整合自帶的、透過通知實體傳送訊息的操作也需要。手機以外的舊版通知服務一律需要您核准。
+- 傳送訊息的通知操作需要通知能力。整合自帶的、透過通知實體傳送訊息的操作也需要。手機以外的舊版通知操作一律需要您核准。
 - 公告播放需要廣播能力：`assist_satellite.announce`、`start_conversation`、`ask_question`、`music_assistant.play_announcement`、帶 `announce` 的 `media_player.play_media` 和 `tts.speak`。
 - `tts.speak` 還需要對其指定的每個喇叭有 W。一般播放只需要 W。
 - 操作資料中以 `media-source://camera/<entity_id>` 或 `media-source://image/<entity_id>` 指定的攝影機或影像，需要 {{label:caps.cap_camera_read.label}} 和對它的 R，與取得靜態影像相同。
@@ -102,7 +102,7 @@
 
 ## 等待變更 {#waiting}
 
-智慧體最多可以等待 30 秒，讓實體發生變化或達到某個狀態，以確認操作生效。等待結束時，權限樹和權限會再次檢查。
+智慧體最多可以等待 30 秒，讓實體發生變化或達到某個狀態，以確認操作生效。等待結束時，Phoenix 會再次檢查金鑰是否仍然有效，以及能否讀取該實體。
 
 允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
 
@@ -116,11 +116,11 @@
 
 條件中的範本與模板渲染在同一個個別受限程序中執行，作用於金鑰可讀取狀態的副本。範本必須直接指定實體，例如 `states('sensor.x')`。
 
-觸發條件中的範本需要 {{label:caps.cap_automation_write.label}} 設為允許，因為測試期間 Home Assistant 會自己在每次變化時執行它們，不經審核。它們會先在那個個別程序中試執行。否則，請把範本當作條件來測試。
+觸發條件中的範本需要 {{label:caps.cap_automation_write.label}} 設為 {{label:caps.modeAllow}}，因為測試期間 Home Assistant 會自己在每次變化時執行它們，不經審核。Phoenix 會先在那個個別程序中試執行它們。如果該能力不是 {{label:caps.modeAllow}}，請把範本當作條件來測試。
 
 事件、MQTT、Webhook 和對話觸發條件會被拒絕，因為任何金鑰的範圍都無法限制它們涉及的內容。
 
-允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；範本觸發條件還需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) 設為允許
+允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；範本觸發條件還需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) 設為 {{label:caps.modeAllow}}
 
 本群組每個工具及其參數：[工具參考](guide:topic.tools-testing)
 
@@ -226,7 +226,7 @@
 
 - 讀取設定涵蓋 Home Assistant 的基本設定、能源設定、太陽能預測和藍圖。
 - 管理能源儀表板會變更能源設定的一部分。它不能為某一類型新增第二個來源，也會拒絕變更已有多個來源的類型。
-- 模板渲染會在個別受限程序中渲染模板。它作用於金鑰可讀取狀態的副本，最長 10 秒，包括啟動該程序的時間。
+- 模板渲染會在個別受限程序中渲染模板。它作用於金鑰可讀取狀態的副本，最長 10 秒。
 - 讀取系統日誌涵蓋警告和錯誤、日誌簿和通知。故障日誌和擷取的偵錯記錄還需要診斷。
 - 整合日誌級別會變更整合的日誌量，例如開啟偵錯日誌。變更可以在 5 到 120 分鐘後結束、持續到下次重新啟動，或一直保留到清除。
 
@@ -275,7 +275,7 @@ YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔�
 
 智慧體可以讀取和搜尋 ESPHome 裝置設定，密碼、金鑰、所有請求標頭的值、網址中的憑證以及提到它們的註解都會被遮蔽。
 
-使用 ESPHome Device Builder 附加元件時，它們還可以校驗、編譯、讀取裝置日誌、分析記憶體並檢查連線。沒有該附加元件時，只能讀取和搜尋。
+使用 ESPHome Device Builder 應用程式時，它們還可以校驗、編譯、讀取裝置日誌、分析記憶體並檢查連線。沒有該應用程式時，只能讀取和搜尋。
 
 secrets.yaml 中的值無論出現在哪裡都會被遮蔽，即使在網址或註解中。金鑰無法讀取的實體 ID 顯示為 `<redacted-entity>`，在檔案中以及 Device Builder 的輸出和日誌中都是如此。任何智慧體都不能讀取或安裝名稱含 secret 的檔案。
 
@@ -295,7 +295,7 @@ Phoenix 無法確定所屬裝置的檔案（例如共用套件或已刪除的檔
 
 - 整合管理會新增、啟用、停用、重新載入和移除整合，並移除裝置。
 - 重新設定整合會變更整合的設定，也會新增或變更子項目（例如 AI 代理）並執行修復項的修復。
-- 子項目和修復始終等待你的核准。代理的設定決定它獲得哪些工具，而修復執行的是整合自身的程式碼。
+- 子項目和修復始終等待你的核准。AI 代理子項目的設定決定它獲得哪些工具。修復執行的是整合自身的程式碼。
 - 在提出請求之前，代理可以檢視重新設定、子項目或修復的第一個表單，無需你的核准。它能看到欄位及其標籤，但看不到已儲存的設定，也不會提交任何內容。
 - 管理實體登錄檔會重新命名實體和裝置，並變更實體 ID、分區、樓層、分類和類別。`recorder.purge_entities` 也需要它，因為該操作會刪除歷史記錄。
 - 無線電裝置管理會變更 Zigbee 網路。群組、綁定和裝置屬性還需要物理控制。MESA 會檢查對 Zigbee 裝置的變更。
@@ -320,6 +320,6 @@ Phoenix 無法確定所屬裝置的檔案（例如共用套件或已刪除的檔
 
 家庭中的任何人都可以對 Assist 或語音智慧體說話。對於不是 Home Assistant 管理員的人，金鑰最多保留五項能力。它們是搜尋與發現、讀取登錄檔、物理控制、廣播和服務回應資料。其餘都算作拒絕存取。
 
-核准和稽核工具也會被隱藏，Home Assistant 僅限管理員的操作會被拒絕。Home Assistant 無法辨識的說話者也會被同樣對待。AI 任務始終如此執行。
+核准和稽核工具也會被隱藏，Home Assistant 僅限管理員的操作會被拒絕。Home Assistant 無法辨識的說話者也會被同樣對待。AI 任務也以同樣方式執行，除非 Home Assistant 指明發起任務的人是管理員。
 
 相關：[語音智慧體、AI 任務或 Assist 工具提供者](guide:topic.homeAssistantFeatures)、[Assist 和語音智慧體](guide:topic.permissionResolution#household)

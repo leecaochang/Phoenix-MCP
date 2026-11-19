@@ -7,4 +7,4 @@
 
 ## {{label:accessKeys.deletePermanently}} {#delete-permanently}
 
-从此列表中移除密钥。选择它，然后选择 **{{label:accessKeys.confirmDelete}}**。点击其他任意位置可取消。
+从此列表中移除密钥。在密钥所在行选择 **{{label:accessKeys.deletePermanently}}**，然后选择 **{{label:accessKeys.confirmDelete}}**。点击其他任意位置可取消。

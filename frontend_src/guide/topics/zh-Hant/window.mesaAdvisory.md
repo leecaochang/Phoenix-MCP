@@ -19,8 +19,8 @@ MESA 在檢查你的策略和自動化時注意到的事情。視窗僅在有事
 
 ## {{label:mesa.dismiss}} {#dismiss}
 
-在此瀏覽器中隱藏一組發現。當新發現加入該組時，它會再次出現。在 MESA 操作選單中選擇 **{{label:mesa.restoreNotices}}** 可再次看到已忽略的發現。
+在此瀏覽器中隱藏一組發現。當新發現加入該組時，它會再次出現。在 **{{label:mesa.menu}}** 選單中選擇 **{{label:mesa.restoreNotices}}** 可再次看到已忽略的發現。
 
 ## 發現何時更新 {#refresh}
 
-MESA 會在 Home Assistant 啟動、自動化重新載入，以及你在此儲存、刪除或匯入策略時再次檢查，因此已修復的發現會消失。**{{label:mesa.rescan}}** 會立即再次檢查。
+MESA 會在 Home Assistant 啟動、自動化重新載入，以及你在 Phoenix 中儲存、刪除或匯入策略時再次檢查，因此已修復的發現會消失。**{{label:mesa.rescan}}** 會立即再次檢查。

@@ -39,16 +39,18 @@ Phoenix 在写入任何内容之前检查每个值。第一个问题会拒绝整
 - 开启 `access_key_presets_enabled` 会给每个密钥一个“默认”预设。
 - 开启 `kill_switch` 会丢弃开放中的 OAuth 登录时段和等待批准的登录。已批准的登录会保留并暂停。
 - 关闭 `kill_switch` 会重新打开智能体路由。
-- Phoenix 会立即应用 `mesa_mode`，并更新语音智能体、AI 任务和 Assist 工具提供商。
+- Phoenix 会立即应用 `mesa_mode`。
+- 更改 `kill_switch` 会更新语音智能体、AI 任务和 Assist 工具提供商。
+- 更改 `voice_agent_` 或 `ai_task_` 设置会更新该功能。更改 `decision_provider_id` 还会更新 AI 任务。
 - `mesa_inject_enabled` 和 `agentcli_global` 会在页面下次完整加载时生效。
 
-审计日志会记录更改，包含已更改设置的名称，而不是其值。响应与读取相同。当语音智能体不再完全设置好，但 Home Assistant 保留 Phoenix 的助手作为其唯一助手时，它会添加 `voice_agent_pipeline_kept: true`。
+审计日志会记录更改，包含已更改设置的名称，而不是其值。响应与读取相同。如果语音智能体不再完全设置好，但 Home Assistant 保留了 Phoenix 的助手，响应会添加 `voice_agent_pipeline_kept: true`。它是唯一助手或删除失败时，Home Assistant 会保留它。
 
 | 状态 | `error` | `message_key` | 条件 |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.unknownFields` | 某个字段不可写，例如 `voice_agent_pipeline_id`。`message_params` 包含 `fields`。 |
 | 400 | `invalid_request` | `adminError.booleanRequired` | 某个布尔设置收到了其他类型。`message_params` 包含 `field`。 |
-| 400 | `invalid_request` | `adminError.valueAllowed` | 某个选择设置收到了其他值：`mesa_mode`、某种风格、某个详细级别、某种路由模式或某个审计菜单。`message_params` 包含 `field` 和 `values`。 |
+| 400 | `invalid_request` | `adminError.valueAllowed` | 某个选择设置收到了其他值：`mesa_mode`、某种风格、某个详细级别、某种路由模式、`audit_flush_interval` 或 `audit_log_maxlen`。`message_params` 包含 `field` 和 `values`。 |
 | 400 | `invalid_request` | `adminError.integerRequired` | 某个整数设置收到了其他类型。`message_params` 包含 `field`。 |
 | 400 | `invalid_request` | `adminError.routingLanguagesInvalid` | `command_routing_languages` 指定了不是已安装 Assist 语言的语言。 |
 | 400 | `invalid_request` | `adminError.conversationLimitInvalid` | 对话日志限制、`command_routing_timeout_ms`、`decision_timeout_ms` 或 `decision_request_budget` 超出范围。`message_params` 包含 `field`、`min` 和 `max`。 |
@@ -135,7 +137,7 @@ Phoenix 在写入任何内容之前检查每个值。第一个问题会拒绝整
 三种工具审核模式要求决策提供商在模型提议的每次工具调用运行前检查它。它们是 `agentcli_tool_routing_mode`、`voice_agent_tool_routing_mode` 和 `ai_task_tool_routing_mode`。
 
 - `observe` 和 `advise` 需要决策账户。
-- `advise` 还需要合格语言。`tool_routing_qualified_languages` 列出它们；为空时，Phoenix 会以 `adminError.toolRoutingUnqualified` 拒绝 `advise`。
+- `advise` 还需要合格语言。`tool_routing_qualified_languages` 列出它们。为空时，Phoenix 会以 `adminError.toolRoutingUnqualified` 拒绝 `advise`。
 - Home Companion 密钥跳过工具审核。
 
 相关：[命令如何路由](guide:topic.commandRouting)
@@ -193,7 +195,7 @@ DELETE /api/phoenix-mcp/admin/wipe
 
 ### 确认字段 {#confirmations}
 
-只有三个路由在正文中要求确认。设置 PATCH 不要求任何确认。
+本页有三个路由在正文中要求确认。设置 PATCH 不要求任何确认。
 
 | 路由 | 正文 |
 |---|---|
@@ -261,7 +263,7 @@ GET    /api/phoenix-mcp/admin/audit
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.badPagination`、`adminError.paginationNonNegative` | `limit` 或 `offset` 不是大于等于 0 的整数。 |
 | 400 | `invalid_request` | `adminError.sinceTimestampInvalid` | `since` 不是有效时间。 |
-| 400 | `invalid_request` | `adminError.outcomeFilterUnknown` | `outcome` 不是上面的值之一，或为空。`message_params` 包含 `value`。 |
+| 400 | `invalid_request` | `adminError.outcomeFilterUnknown` | `outcome` 不是字段表中的 `outcome` 值之一，或为空。`message_params` 包含 `value`。 |
 
 相关：[{{label:shell.tabAudit}}](guide:window.auditLog)、[日志记录](guide:topic.logRecords)
 
@@ -354,7 +356,7 @@ DELETE /api/phoenix-mcp/admin/voice_agent/pipeline/preferred
 
 ### 移除助手 {#remove-pipeline}
 
-`DELETE /api/phoenix-mcp/admin/voice_agent/pipeline` 会在需要时把首选权移到另一个助手，然后删除 Phoenix 的助手。响应为 `{"ok": true, "kept": false}`。
+`DELETE /api/phoenix-mcp/admin/voice_agent/pipeline` 会在需要时把首选权移到另一个助手，然后删除 Phoenix 的助手。响应包含 `ok: true` 和 `kept`。
 
 当 Home Assistant 仍保留该助手时，`kept` 为 `true`，因为它已经是唯一助手，或删除失败。
 
@@ -382,7 +384,7 @@ DELETE /api/phoenix-mcp/admin/ai_task/evaluate_preferred
 
 读取和设置 Home Assistant 的默认数据生成实体。`POST` 让 Phoenix 的 AI 任务实体成为默认，替换其他任何实体。`DELETE` 仅在默认实体是 Phoenix 的时候清除它。
 
-三者都返回相同字段：
+`preferred` 路由返回以下字段：
 
 | 字段 | 说明 |
 |---|---|
@@ -392,12 +394,15 @@ DELETE /api/phoenix-mcp/admin/ai_task/evaluate_preferred
 | `gen_data_name` | 当前默认实体的名称。 |
 | `is_preferred` | Phoenix 的实体是否为默认。 |
 
+`evaluate_preferred` 路由对 Home Assistant 的默认 Decisions 实体执行相同操作。它们返回 `entity_id`、`evaluate_entity_id`、`evaluate_name` 和 `is_preferred`。
+
 | 状态 | `error` | `message_key` | 条件 |
 |---|---|---|---|
 | 404 | `not_found` | `adminError.setupMissing` | Phoenix 尚未设置。 |
-| 400 | `invalid_request` | `adminError.aiTaskNotConfigured` | 仅限 `POST`。Phoenix 的 AI 任务尚未完全设置并开启。 |
+| 400 | `invalid_request` | `adminError.aiTaskNotConfigured` | 仅限对 `preferred` 的 `POST`。Phoenix 的 AI 任务尚未完全设置并开启。 |
+| 400 | `invalid_request` | `adminError.aiDecisionsNotConfigured` | 仅限对 `evaluate_preferred` 的 `POST`。Phoenix 的 Decisions 实体尚未用访问密钥开启。 |
 | 400 | `invalid_request` | `adminError.aiTaskPreferencesUnavailable` | 仅限 `POST`。Home Assistant 没有保存默认值的位置。 |
-| 400 | `invalid_request` | `adminError.aiTaskPreferredFailed` | 仅限 `POST`。保存默认值失败。 |
+| 400 | `invalid_request` | `adminError.aiTaskPreferredFailed` | 仅限对 `preferred` 的 `POST`。保存默认值失败。 |
 
 相关：[Home Assistant 设置](guide:window.settingsHome#ai-task-default)
 
@@ -416,7 +421,7 @@ DELETE /api/phoenix-mcp/admin/command-routing/statistics
 
 ### 实时计数器 {#routing-counters}
 
-`GET /api/phoenix-mcp/admin/command-routing/preview` 返回保存在内存中的计数器。Phoenix 重启时它们从零开始。
+`GET /api/phoenix-mcp/admin/command-routing/preview` 返回实时计数器。Phoenix 重启时它们从零开始。
 
 | 字段 | 说明 |
 |---|---|
@@ -440,7 +445,7 @@ DELETE /api/phoenix-mcp/admin/command-routing/statistics
 | `messages` | list | 更早的轮次，用于历史审核。需要 `decision`，且不能有 `targets`。 |
 | `references` | boolean | 需要 `messages`。 |
 
-不允许其他字段。任何需要 `decision` 的选项都会联系决策账户，并计入 `decision_request_budget`。
+不允许其他字段。任何需要 `decision` 的选项都会向决策提供商发送请求。该请求计入 `decision_request_budget`。
 
 响应包含 `route`（`local_candidate` 或 `provider`）、`reason`、`proposal`、`executed: false`、`elapsed_ms`、`voice_observations` 和 `decision_observations`。根据选项，它还可能包含 `decision_shadow`、`batch_review` 或 `context_review`。
 
@@ -456,9 +461,11 @@ DELETE /api/phoenix-mcp/admin/command-routing/statistics
 `GET /api/phoenix-mcp/admin/command-routing/statistics` 返回已保存的总量，跨重启保留。响应包含 `voice`、`chat` 和 `ai_task`（“评估”操作），各含：
 
 - `since`
-- `outcomes`：`local`、`decision`、`provider`、`pending`、`failed`、`cancelled` 和 `refused`；`ai_task` 用 `decision` 表示回答，用 `refused` 表示拒绝
+- `outcomes`：`local`、`decision`、`provider`、`pending`、`failed`、`cancelled` 和 `refused`
 - `provider_turns`
 - `decision_usage` 和 `provider_usage`，各含 `requests`、`reports`、`input_tokens` 和 `output_tokens`
+
+对于 `ai_task`，`decision` 表示回答，`refused` 表示拒绝。
 
 ### 重置统计 {#reset-statistics}
 

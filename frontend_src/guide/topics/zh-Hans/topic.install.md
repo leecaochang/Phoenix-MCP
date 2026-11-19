@@ -39,6 +39,6 @@ Home Assistant 2026.7.0 或更高版本。Phoenix 不需要安装其他东西：
 
 删除集成会吊销所有访问密钥、取消等待审批的请求，并清除所有 AI 提供商账户及其 API 密钥。它还会解除 Phoenix 与 Assist、语音智能体、AI 任务和决策提供商的关联。智能体限时调高的日志级别会立即恢复。
 
-其他所有内容都保留在 Home Assistant 的存储中。包括紧急停止开关和 MESA 模式等设置，以及审计日志、对话日志、MESA 策略、变更历史和安全副本。如果你再次添加 Phoenix，它会读取这些内容，已吊销的密钥会列在已归档的访问密钥中。
+其他所有内容都保留在 Home Assistant 的存储中。包括紧急停止开关和 MESA 模式等设置，以及审计日志、对话日志、MESA 策略、变更历史和安全副本。如果你再次添加 Phoenix，它会读取这些内容。已吊销的密钥会出现在{{label:accessKeys.archivedTitle}}中。
 
-要同时移除 Phoenix 的数据，请在删除集成前使用[{{label:settings.wipeTitle}}](guide:window.settingsSafety#wipe-core)中的 **{{label:settings.wipeCoreLabel}}**。[有少量内容会保留](guide:topic.security#removing)，包括安全副本。
+要同时移除 Phoenix 的数据，请在删除集成前使用[{{label:settings.dataCard}}](guide:window.settingsSafety#wipe-core)中的 **{{label:settings.wipeCoreLabel}}**。[有少量内容会保留](guide:topic.security#removing)，包括安全副本。

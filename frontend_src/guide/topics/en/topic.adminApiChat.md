@@ -18,11 +18,11 @@ POST   /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/probe
 POST   /api/phoenix-mcp/admin/agentcli/probe
 ```
 
-Add, check and remove the accounts Phoenix uses to reach AI providers. Conversation accounts serve Agent Chat, the Voice Agent and AI Task. Decision accounts serve the decision provider.
+Add, check, and remove the accounts Phoenix uses to reach AI providers. Conversation accounts serve Agent Chat, the Voice Agent, and AI Task. Decision accounts serve the decision provider.
 
 ### Provider kinds {#provider-kinds}
 
-Every account has a `kind`. Kinds with endpoints take an `endpoint_id`; the first value listed is the default.
+Every account has a `kind`. Kinds with endpoints take an `endpoint_id`. The first value listed is the default.
 
 | Kind | Purpose | Setup fields |
 |---|---|---|
@@ -39,7 +39,7 @@ Every account has a `kind`. Kinds with endpoints take an `endpoint_id`; the firs
 | `nvidia` | conversation | `api_key` |
 | `mimo` (Xiaomi MiMo) | conversation | `api_key`, `endpoint_id`: `payg`, `token_plan`, `token_plan_sgp`, `token_plan_ams` |
 | `tencent` (Tencent Cloud TokenHub) | conversation | `api_key`, `endpoint_id`: `singapore`, `guangzhou`, `silicon_valley` |
-| `opencode` | conversation | `api_key`, `endpoint_id`: `zen`, `console` |
+| `opencode` | conversation | `api_key`, `endpoint_id`: `console`, `zen` |
 | `ollama_cloud` | conversation | `api_key` |
 | `ollama` (local) | conversation | `base_url` |
 | `local_openai` (local OpenAI-compatible server) | conversation | `base_url`, optional `api_key` |
@@ -66,12 +66,12 @@ Adding an account and checking a setup take the same body.
 
 | Field | Type | Notes |
 |---|---|---|
-| `kind` | string | Required. One of the kinds above. |
-| `api_key` | string | Required for every kind except `ollama`, `local_openai` and `local_decision`. At most 4096 characters, with no control characters. Phoenix never returns it. |
-| `base_url` | string | Required for `ollama`, `local_openai`, `local_decision`, `qwen`, `azure` and `azure_decision`. Only `ollama`, `local_openai` and `local_decision` may use a private address. For `local_openai` and `local_decision`, Phoenix adds `/v1` to an address without a path. For `azure` and `azure_decision`, Phoenix keeps only the host, which must be an HTTPS address ending in `.services.ai.azure.com`, `.openai.azure.com` or `.cognitiveservices.azure.com`. Every other kind uses a fixed endpoint and ignores this field. |
+| `kind` | string | Required. One of the kinds in [Provider kinds](guide:#provider-kinds). |
+| `api_key` | string | Required for every kind except `ollama`, `local_openai`, and `local_decision`. At most 4,096 characters, with no control characters. Phoenix never returns it. |
+| `base_url` | string | Required for `ollama`, `local_openai`, `local_decision`, `qwen`, `azure`, and `azure_decision`. Only `ollama`, `local_openai`, and `local_decision` can use a private address. For `local_openai` and `local_decision`, Phoenix adds `/v1` to an address without a path. For `azure` and `azure_decision`, Phoenix keeps only the host, which must be an HTTPS address ending in `.services.ai.azure.com`, `.openai.azure.com`, or `.cognitiveservices.azure.com`. Every other kind uses a fixed endpoint and ignores this field. |
 | `endpoint_id` | string | Only for kinds with endpoints. Leave it out for the default. |
 | `account_id` | string | Required for `cloudflare` and `cloudflare_decision`: the 32-character Cloudflare account ID. Phoenix builds the endpoint from it. |
-| `model` | string | Optional for conversation kinds; leave it empty to follow the provider automatically. Required for decision kinds: at most 200 characters, and in the provider's current list. |
+| `model` | string | Optional for conversation kinds. Leave it empty to follow the provider automatically. Required for decision kinds: at most 200 characters, and in the provider's current list. |
 
 ### List accounts {#list-providers}
 
@@ -83,7 +83,7 @@ Adding an account and checking a setup take the same body.
 
 The response has `instances`, the accounts, and `provider_types`, the setup forms. Both are sorted by label.
 
-Each entry in `provider_types` has `kind`, `label`, `label_key` and `fields`. Each field has `id`, `type` (`secret`, `url`, `text` or `choice`), `label_key` and `required`. It may also have `placeholder` and `choices`, each choice with `value`, `label` and `label_key`.
+Each entry in `provider_types` has `kind`, `label`, `label_key`, and `fields`. Each field has `id`, `type` (`secret`, `url`, `text`, or `choice`), `label_key`, and `required`. It might also have `placeholder` and `choices`, each choice with `value`, `label`, and `label_key`.
 
 Each account in `instances` has these fields. The API key is never among them.
 
@@ -98,7 +98,8 @@ Each account in `instances` has these fields. The API key is never among them.
 | `models_checked_at` | When Phoenix last read the model list. |
 | `base_url` | As set up. |
 | `endpoint_id` | As set up. |
-| `tool_loading` | `auto` (default), `always` or `never`. |
+| `tool_loading` | `auto` (default), `always`, or `never`. |
+| `decision_threshold` | Decision accounts only. How sure an answer must be before the account acts. |
 | `capabilities` | Per model: what the provider declares, what a probe found, and options the provider refused in the last 30 days. |
 | `capabilities_checked_at` | When Phoenix last checked capabilities. |
 
@@ -110,7 +111,7 @@ For a conversation kind, Phoenix runs the provider's credential check. For a dec
 
 If that passes, Phoenix stores the account and tries to read its model list and declared capabilities.
 
-The response is `201` with `{"instance": {...}}`, holding the account fields above.
+The response is `201` with `{"instance": {...}}`, holding the account fields listed under [List accounts](guide:#list-providers).
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -119,7 +120,7 @@ The response is `201` with `{"instance": {...}}`, holding the account fields abo
 | 400 | `invalid_request` | `adminError.providerEndpointInvalid` | `endpoint_id` isn't one of the kind's values. |
 | 400 | `invalid_request` | `adminError.providerAccountIdInvalid` | `account_id` isn't 32 hexadecimal characters. |
 | 400 | `invalid_request` | `adminError.ollamaUrlRequired`, `adminError.providerServerUrlRequired`, `adminError.providerBaseUrlRequired` | A required `base_url` is missing. |
-| 400 | `invalid_request` | `adminError.providerUrlInvalid`, `adminError.providerUrlScheme`, `adminError.providerRemoteUrlScheme`, `adminError.providerUrlHostRequired`, `adminError.providerUrlCredentialsForbidden`, `adminError.providerUrlFragmentForbidden`, `adminError.providerUrlAddressForbidden`, `adminError.providerUrlResolutionForbidden`, `adminError.providerRemoteUrlAddressForbidden`, `adminError.providerRemoteUrlResolutionForbidden`, `adminError.providerRemoteUrlResolutionFailed` | `base_url` isn't an acceptable URL. |
+| 400 | `invalid_request` | `adminError.providerUrlInvalid`, `adminError.providerUrlScheme`, `adminError.providerRemoteUrlScheme`, `adminError.providerUrlHostRequired`, `adminError.providerUrlCredentialsForbidden`, `adminError.providerUrlFragmentForbidden`, `adminError.providerUrlAddressForbidden`, `adminError.providerUrlResolutionForbidden`, `adminError.providerRemoteUrlAddressForbidden`, `adminError.providerRemoteUrlResolutionForbidden`, `adminError.providerRemoteUrlResolutionFailed`, `adminError.providerAzureEndpointInvalid` | `base_url` isn't an acceptable URL. |
 | 400 | `invalid_request` | `adminError.providerConnectionFailed`, or a key for the provider's own failure | The credential check failed. `adminError.providerConnectionFailed` comes with a `detail`. |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | A decision kind has no `model`. |
 | 400 | `invalid_request` | `adminError.providerModelNotListed` | The model isn't in the provider's list. |
@@ -134,7 +135,7 @@ The response is `201` with `{"instance": {...}}`, holding the account fields abo
 |---|---|---|
 | `model` | string | The model to use. Conversation accounts accept any model ID. Decision accounts need one the provider lists now. |
 | `auto` | boolean | `true` follows the provider's model automatically. Decision accounts refuse it. |
-| `tool_loading` | string | `auto`, `always` or `never`: how the account's turns get the access key's tools. Decision accounts refuse it. |
+| `tool_loading` | string | `auto`, `always`, or `never`: how the account's turns get the access key's tools. Decision accounts refuse it. |
 | `decision_threshold` | number | Decision accounts only: how sure an answer must be before the account acts, from 0.70 to 1.00 in hundredths. Send it alone. |
 
 Send `model` or `auto: true`, not both. `tool_loading` can come alone or with either. With `auto: true`, Phoenix reads the model list straight away, so the response shows the model it picked.
@@ -143,8 +144,8 @@ The response is `200` with only `{"instance": {"id": ..., "model": ..., "model_m
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
-| 400 | `invalid_request` | `adminError.unknownFields` | The body has fields other than `model`, `auto` and `tool_loading`. |
-| 400 | `invalid_request` | `adminError.toolLoadingInvalid` | `tool_loading` isn't `auto`, `always` or `never`. |
+| 400 | `invalid_request` | `adminError.unknownFields` | The body has fields other than `model`, `auto`, `tool_loading`, and `decision_threshold`. |
+| 400 | `invalid_request` | `adminError.toolLoadingInvalid` | `tool_loading` isn't `auto`, `always`, or `never`. |
 | 400 | `invalid_request` | `adminError.toolLoadingDecision` | `tool_loading` went to a decision account, which uses no tools. |
 | 400 | `invalid_request` | `adminError.decisionThresholdInvalid` | `decision_threshold` isn't a number from 0.70 to 1.00 in hundredths. |
 | 400 | `invalid_request` | `adminError.decisionThresholdAlone` | `decision_threshold` came with other fields. |
@@ -153,7 +154,7 @@ The response is `200` with only `{"instance": {"id": ..., "model": ..., "model_m
 | 400 | `invalid_request` | `adminError.providerModelOrAuto` | Both `model` and `auto: true` were sent. |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | Neither was sent. |
 | 400 | `invalid_request` | `adminError.decisionModelRequired` | `auto: true` went to a decision account, which needs a specific model. |
-| 400 | `invalid_request` | `adminError.providerModelNotListed` and the decision provider errors under [Add an account](guide:#add-provider) | A decision account's model isn't listed or a reviewed fixed version such as `jev-1.13.0`, or the check failed. |
+| 400 | `invalid_request` | `adminError.providerModelNotListed` and the decision provider errors under [Add an account](guide:#add-provider) | A decision account's model isn't listed and isn't a reviewed fixed version such as `jev-1.13.0`, or the decision provider check failed. |
 | 409 | `conflict` | `adminError.providerAccountChanged` | The decision account changed during the check. Read it again and retry. |
 | 409 | `already_exists` | `adminError.providerAlreadyConfigured` | Another Local / System One account on the same server already uses this model. |
 | 404 | `not_found` | `adminError.providerAccountNotFound` | No account has this ID. |
@@ -162,9 +163,9 @@ The response is `200` with only `{"instance": {"id": ..., "model": ..., "model_m
 
 `DELETE /api/phoenix-mcp/admin/agentcli/providers/{instance_id}` takes no body. It removes the account and clears every setting that points at it:
 
-- The Voice Agent's provider and model.
-- AI Task's provider and model, with its entity and the Phoenix Assist pipeline.
-- For the decision account in use: `decision_provider_id`, `decision_shadow_enabled`, all three tool review modes, and any `hybrid` routing mode, which turns `off`.
+- The Voice Agent's provider and model, with the Phoenix Assist pipeline
+- AI Task's provider and model, with its entity
+- For the active decision account: `decision_provider_id`, `decision_shadow_enabled`, `ai_task_decisions_enabled`, the three tool review modes, and `hybrid` routing (set to `off`)
 
 If you remove the default decision account, another decision account becomes the default. The response is `200` with `{"deleted": "<instance_id>"}`, even for an ID that doesn't exist.
 
@@ -183,7 +184,7 @@ Related: [Settings and System Endpoints](guide:topic.adminApiSettings#settings)
 
 `POST /api/phoenix-mcp/admin/agentcli/providers/{instance_id}/refresh` takes no body. It rereads the model list and the declared capabilities, and stores them. Effort levels and temperature limits found by an options check stay stored unless the provider now declares them. It sends no completion requests, so it costs no tokens. For `ollama`, it sends one request per model.
 
-The response has `models`, `capabilities`, `declared` (whether the provider reports capabilities at all) and `checked_at`.
+The response has `models`, `capabilities`, `declared` (whether the provider reports capabilities at all), and `checked_at`.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -196,7 +197,7 @@ The response has `models`, `capabilities`, `declared` (whether the provider repo
 
 Phoenix sends up to 10 very short completions, plus one image check when image support is unknown. The result goes over the declared capabilities.
 
-The response has `model`, `probed`, `calls`, `checked_at`, `effort_checkable`, `answered`, `vision_checked` and `thinking`. `answered` is `false` when the provider declined every question. `thinking` is `switch`, `always` or `none` when a `local_openai` model's thinking was checked, and `null` otherwise.
+The response has `model`, `probed`, `calls`, `checked_at`, `effort_checkable`, `answered`, `vision_checked`, and `thinking`. `answered` is `false` when the provider declined every question. `thinking` is `switch`, `always`, or `none` when a `local_openai` model's thinking was checked, and `null` otherwise.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -214,7 +215,7 @@ A setup or connection failure still answers `200`, with the failure in the body:
 { "ok": false, "error": "English description.", "message_key": "adminError.providerConnectionFailed", "message_params": {}, "models": [] }
 ```
 
-On success the body is `{"ok": true, "models": [...]}`. A failure carries `message_passthrough: true` instead of `message_key` when the text came from the provider. `message_params` appears only when the message has values.
+On success the body is `{"ok": true, "models": [...]}`. When the text came from the provider, a failure carries `message_passthrough: true` instead of `message_key`. `message_params` appears only when the message has values.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -227,7 +228,7 @@ On success the body is `{"ok": true, "models": [...]}`. A failure carries `messa
 POST   /api/phoenix-mcp/agentcli/chat
 ```
 
-Runs one Agent Chat turn and streams it back as Server-Sent Events. Note the path: it sits outside `/admin`, but still needs an administrator.
+Runs one Agent Chat turn and streams it back as Server-Sent Events. The path sits outside `/admin`, but still needs an administrator.
 
 The route follows the kill switch. While the kill switch is on, it answers `503`. If the kill switch was on when Phoenix started, Home Assistant answers `404` until you turn the kill switch off.
 
@@ -253,14 +254,14 @@ Related: [Kill switch](guide:topic.killSwitch)
 | `model` | string | Optional. Overrides the account's model for this turn. |
 | `user` | string | The new message. Required unless you send `attachments` or `continue: true`. |
 | `attachments` | list | Images for this message. See [Images](guide:#chat-images). |
-| `messages` | list | The earlier turns. Phoenix doesn't keep the transcript: store the list from the `messages` event and send it back with the next turn. Each provider stores tool calls in its own format, so start with an empty list when you change `instance_id`, as Agent Chat does. |
+| `messages` | list | The earlier turns. Phoenix doesn't keep the transcript: store the list from the `messages` event and send it back with the next turn. Each provider stores tool calls in its own format. When you change `instance_id`, start with an empty list, as Agent Chat does. |
 | `options` | object | Model options. See [Options](guide:#chat-options). |
 | `continue` | boolean | `true` resumes a turn paused at the round limit, without adding a message. |
 | `turn_started_at` | string | With `continue: true`, the `turn_started_at` from `continue_required`, so the model sees the same date and time as before the pause. Ignored if it isn't a past ISO 8601 time with a time zone. |
 | `language` | string | The language for command routing. The panel always sends it. |
 | `log_conversation_id` | string | Groups turns into one thread in the Conversation Log. |
 
-The round limit is the `agentcli_max_iterations` setting. Reply style, detail level and Home-focused mode come from the Agent Chat settings when the request starts.
+The round limit is the `agentcli_max_iterations` setting. Reply style, detail level, and Home-focused mode come from the Agent Chat settings when the request starts.
 
 Related: [Agent Chat settings](guide:window.settingsChat), [How a command is routed](guide:topic.commandRouting)
 
@@ -270,18 +271,18 @@ Phoenix uses each option only where the provider supports it.
 
 | Field | Type | Notes |
 |---|---|---|
-| `thinking` | boolean | Turns the model's reasoning on. Default `true`. For Claude, `false` sends the off setting the model declares, with `effort` at most `high`. |
-| `effort` | string | `low`, `medium`, `high`, `xhigh` or `max`. Default `high`. For Claude, an empty string sends none. |
+| `thinking` | boolean | Turns the model's reasoning on. Default `true` for Claude and MiniMax. Other kinds use the provider's own default. For Claude, `false` sends the off setting the model declares, with `effort` at most `high`. |
+| `effort` | string | `low`, `medium`, `high`, `xhigh`, or `max`. Default `high` for Claude. Other kinds use the provider's own default. For Claude, an empty string sends none. |
 | `show_thinking` | boolean | Whether to show the model's reasoning. |
 | `temperature` | number | The provider's sampling temperature. |
-| `max_tokens` | integer | The most tokens the model may write. Default 32000. |
+| `max_tokens` | integer | The most tokens the model can write. Claude and MiniMax only. Default 32,000. |
 
 ### Images {#chat-images}
 
 Each attachment is `{"mime_type": "image/jpeg", "data": "<base64>"}`.
 
-- Send at most 4 images, each JPEG, PNG or GIF.
-- Each image is at most 2 MiB decoded and 8000 pixels on a side, and all of them together at most 4 MiB.
+- Send at most 4 images, each JPEG, PNG, or GIF.
+- Each image is at most 2 MiB decoded and 8,000 pixels on a side, and all of them together at most 4 MiB.
 - The image's own header must match its `mime_type`.
 - Images inside `messages` share the same 4 MiB budget. Going over it answers `413`.
 
@@ -289,7 +290,7 @@ This route accepts a body of up to 6,706,518 bytes. Everything except the images
 
 ### Errors before the stream {#chat-errors}
 
-Phoenix checks the body size, setup, kill switch, access key, account, model, images and message, in that order. The first failure answers with an HTTP status. The [body errors](guide:topic.adminApi#bodies) apply too.
+Phoenix answers the first check that fails with an HTTP status. The [body errors](guide:topic.adminApi#bodies) apply too.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -324,7 +325,7 @@ Phoenix sends a `: keepalive` comment every 15 seconds. Once the stream starts, 
 | Event | Data fields | Notes |
 |---|---|---|
 | `ready` | `provider` (the kind), `model`, `access_key_id` | Always the first event. |
-| `status` | `provider` (the label), `step`, `tools`, `phase`, `seconds`; during a retry also `attempt`, `detail`, `detail_code` | `phase` is `waiting`, `thinking` or `retrying`. Sent when a model call starts, on each change, and every 30 seconds while nothing else has arrived. |
+| `status` | `provider` (the label), `step`, `tools`, `phase`, `seconds`; during a retry also `attempt`, `detail`, `detail_code` | `phase` is `waiting`, `thinking`, or `retrying`. Sent when a model call starts, on each change, and every 30 seconds while nothing else has arrived. |
 | `thinking_delta` | `text` | Reasoning text, only when the provider streams it. |
 | `assistant_delta` | `text` | Reply text. |
 | `focus_declined` | none | The model declined a request outside the home in Home-focused mode. Phoenix removes the model's marker from the reply. |
@@ -335,12 +336,12 @@ Phoenix sends a `: keepalive` comment every 15 seconds. Once the stream starts, 
 | `tool_image` | `id`, `name`, `index`, `mime_type`, `data` | A base64 image from a tool result. |
 | `tool_result` | `id`, `name`, `is_error`, `summary` | `summary` is shortened for display. |
 | `usage` | `input_tokens`, `output_tokens`, `context_tokens`, `cache_read_tokens`, `cache_write_tokens` | The provider's totals for the turn so far, only when it reports usage. |
-| `notice` | `code`, `message` | `code` is `bad_tool_call_retry`, `max_tokens_stop` or `empty_turn`. |
+| `notice` | `code`, `message` | `code` is `bad_tool_call_retry`, `max_tokens_stop`, or `empty_turn`. |
 | `continue_required` | `iterations`, `turn_started_at` | The turn paused at the round limit. Send the next request with `continue: true` and this `turn_started_at`. |
-| `error` | `code`, `message`; optional `retryable`, `outcome`, `diagnostic`, `message_params`, `provider_detail`, `provider_code`, `rate_limit`, `refused` | `code` includes `cancelled`, `internal`, `kill_switch`, `unauthorized`, `review_changed`, `outcome_unknown`, `output_limit`, `invalid_request` and the provider's own codes. |
+| `error` | `code`, `message`; optional `retryable`, `outcome`, `diagnostic`, `message_params`, `provider_detail`, `provider_code`, `rate_limit`, `refused` | `code` includes `cancelled`, `internal`, `kill_switch`, `unauthorized`, `review_changed`, `outcome_unknown`, `output_limit`, `invalid_request`, and the provider's own codes. |
 | `messages` | `messages` | The full updated transcript. Keep it for the next turn. |
-| `done` | `stop_reason` | Always the last event. `stop_reason` is `error` after a failed turn. |
+| `done` | `stop_reason` | The last event, unless the turn ends with an `internal` error. `stop_reason` is `error` after a failed turn. |
 
-When every tool call in one model response only reads, Phoenix may run them at the same time. Several `tool_call` events can then arrive before their `tool_result` events. Match each result to its call by `id`.
+When every tool call in one model response only reads, Phoenix might run them at the same time. Several `tool_call` events can then arrive before their `tool_result` events. Match each result to its call by `id`.
 
 Related: [Approval and Change Endpoints](guide:topic.adminApiApprovals), [{{label:agentchat.title}}](guide:window.agentChat#approvals)

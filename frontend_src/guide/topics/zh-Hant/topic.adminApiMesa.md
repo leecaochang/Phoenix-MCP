@@ -16,7 +16,7 @@
 
 每次變更都會新增一筆包含請求路徑的稽核日誌條目。匯出也會新增一筆，儘管它不變更任何內容。
 
-MESA 租約沒有管理端點。Phoenix 把它們儲存在記憶體中，智慧體用自己的工具請求和釋放它們。
+MESA 租約沒有管理端點。智慧體用自己的工具請求和釋放它們。
 
 這些端點按你寫下的原樣回傳策略文字。智慧體自己的 MESA 工具會把其金鑰無法讀取的實體顯示為 `<redacted-entity>`。
 
@@ -139,7 +139,7 @@ DELETE /api/phoenix-mcp/admin/mesa/domains/{domain}
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
-| 400 | `invalid_request` | 上表中該鍵的錯誤 | 鍵格式錯誤。僅限儲存。 |
+| 400 | `invalid_request` | [其他層級的策略](guide:#scope-profiles)中該鍵的錯誤 | 鍵格式錯誤。僅限儲存。 |
 | 412 | `precondition_failed` | `adminError.mesaProfileExists` | 你傳送了 `If-None-Match: *`，但策略已存在。 |
 | 400 | `invalid_request` | 無，`message_passthrough` | MESA 拒絕了文件。訊息來自 MESA 本身。 |
 
@@ -163,7 +163,7 @@ PUT    /api/phoenix-mcp/admin/mesa/defaults
 
 ### 讀取預設設定 {#read-defaults}
 
-MESA 自己的格式會再次包裝設定，因此回應會巢狀兩次 `deployment_defaults`。未儲存預設設定時，外層為 `null`：
+回應會巢狀兩次 `deployment_defaults`。未儲存預設設定時，外層為 `null`：
 
 ```json
 {
@@ -201,7 +201,7 @@ GET    /api/phoenix-mcp/admin/mesa/issues
 POST   /api/phoenix-mcp/admin/mesa/orphans/clear
 ```
 
-用於讀取 MESA 知道的標籤、尋找與自動化不一致的策略，以及清理已移除項目留下的策略。
+用於讀取 MESA 的標籤、尋找與自動化不一致的策略，以及清理孤立策略。
 
 ### 詞彙表 {#vocabulary}
 
@@ -221,7 +221,7 @@ POST   /api/phoenix-mcp/admin/mesa/orphans/clear
 
 ### 清除孤立項 {#clear-orphans}
 
-刪除每個孤立的實體、裝置、分區和整合策略。不傳送本文。Phoenix 會先對照 Home Assistant 檢查孤立項，然後準確刪除那些策略。
+刪除每個孤立的實體、裝置、分區和整合策略。不傳送本文。Phoenix 會先對照 Home Assistant 檢查孤立項，只刪除仍然孤立的策略。
 
 回應為 `{ deleted: { entities, devices, areas, integrations }, count }`。
 

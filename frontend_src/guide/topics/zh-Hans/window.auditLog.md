@@ -20,7 +20,7 @@
 
 ## {{label:logs.filters}} {#filters}
 
-按 **{{label:audit.rowOutcome}}**、**{{label:audit.colAccessKey}}** 和时间，以及 **{{label:audit.rowMethod}}**、**{{label:audit.rowResource}}** 和 **{{label:audit.rowIp}}** 中的文本缩小列表范围。**{{label:audit.rowRequestId}}** 可查找一个确切的请求，例如来自对话日志的请求。像过去 5 分钟这样的时间窗口会随日志更新而移动。
+按 **{{label:audit.rowOutcome}}**、**{{label:audit.colAccessKey}}** 和时间，以及 **{{label:audit.rowMethod}}**、**{{label:audit.rowResource}}** 和 **{{label:audit.rowIp}}** 中的文本缩小列表范围。**{{label:audit.rowRequestId}}** 可查找一个确切的请求，例如来自{{label:conversations.title}}的请求。像过去 5 分钟这样的时间窗口会随日志更新而移动。
 
 隐藏筛选会停止应用它们，直到你再次显示。两个日志都打开时，一个 **{{label:logs.filters}}** 按钮会显示两者的筛选条件。
 
@@ -28,6 +28,6 @@
 
 窗口显示且未折叠时，新条目每 5 秒出现一次。**{{label:logs.pauseUpdates}}** 会在你阅读时让列表保持不动。暂停期间，**{{label:common.refresh}}** 会加载一次最新条目。
 
-## 来自需要关注 {#attention}
+## 来自{{label:attention.title}} {#attention}
 
-需要关注窗口中的 **{{label:attention.showInAudit}}** 会打开此日志，并筛选到那一个请求。
+{{label:attention.title}}中的 **{{label:attention.showInAudit}}** 会打开此日志，并筛选到那一个请求。

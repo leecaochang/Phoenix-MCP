@@ -16,9 +16,9 @@
 
 使用鍵盤時，每一列的四個按鈕只占一個 Tab 位置。用方向鍵在 N、R、W 和 D 之間移動，然後按 Enter 或空格設定目前所在的按鈕。僅移動不會變更任何內容。
 
-每個名稱後的文字會顯示結果：讀寫、唯讀、拒絕存取、無存取權限或未找到。
+每個名稱後的文字會顯示結果：{{label:perms.stateWrite}}、{{label:perms.stateRead}}、{{label:perms.stateDeny}}、{{label:perms.stateNoAccess}}或{{label:perms.stateNotFound}}。
 
-無論你如何設定，{{label:personas.home_companion.label}} 金鑰都只能存取家用裝置。其他類型的裝置顯示無存取權限；感測器、天氣、行事曆和太陽即使設為 W 也顯示唯讀。參見[{{label:personas.home_companion.label}}](guide:window.persona#home-companion)。
+無論你如何設定，{{label:personas.home_companion.label}} 金鑰都只能存取家用裝置。其他類型的裝置顯示{{label:perms.stateNoAccess}}；感測器、天氣、行事曆和太陽即使設為 W 也顯示{{label:perms.stateRead}}。參見[{{label:personas.home_companion.label}}](guide:window.persona#home-companion)。
 
 相關：[權限如何判定](guide:topic.permissionResolution)
 
@@ -26,7 +26,7 @@
 
 域位於頂端，其裝置和實體在下方。沒有裝置的實體會歸在 **{{label:perms.deviceless}}** 下，由部件組成的裝置會將它們巢狀顯示在下面。
 
-對域或裝置的授權也會涵蓋之後新增給它的實體；**{{label:perms.dynamicBadge}}** 徽章表示這一點。「!」標記的是 W 會延伸得比看起來更遠的域，例如 homeassistant、backup、automation、script 和 scene。
+對域或裝置的授權也會涵蓋之後新增給它的實體。{{label:perms.dynamicBadge}}徽章標記這類授權。「!」標記的是 W 會延伸得比看起來更遠的域，例如 homeassistant、backup、automation、script 和 scene。
 
 標記為「{{label:perms.missingBadge}}」的列，是對不在 Home Assistant 已啟用實體清單中的實體的授權。末尾的「{{label:perms.unmatchedDevicesTitle}}」列出對已不存在裝置的授權；把它們設為 N 即可移除。
 
@@ -38,13 +38,13 @@
 
 ## {{label:selectBy.menu}} {#select-by}
 
-把權限樹縮小到一個分區、分類或整合。它只改變你看到的內容；絕不會授予任何權限。選擇重設可再次顯示所有內容。
+把權限樹縮小到一個分區、分類或整合。它只改變你看到的內容；絕不會授予任何權限。選擇 **{{label:selectBy.reset}}** 可再次顯示所有內容。
 
 ## 實體提示 {#hints}
 
 提示會告訴智慧體某個實體的情況，例如它是哪盞燈。**{{label:perms.addHint}}** 會出現在設為 R、W 或 D 的實體上。
 
-選擇提示是僅用於此金鑰還是用於所有金鑰，輸入最多 200 個字元，然後選擇儲存。儲存空文字會移除提示。金鑰自己的提示優先於適用於所有金鑰的提示。
+選擇提示是僅用於此金鑰還是用於所有金鑰，輸入最多 200 個字元，然後選擇 **{{label:common.save}}**。儲存空文字會移除提示。金鑰自己的提示優先於適用於所有金鑰的提示。
 
 提示只是建議，絕不授予存取權限。智慧體及其模型提供者會收到它們，因此絕不要在提示中填寫機密。把實體設回 N 會刪除此金鑰自己的提示。
 

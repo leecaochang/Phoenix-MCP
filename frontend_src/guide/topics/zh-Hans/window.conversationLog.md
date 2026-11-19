@@ -7,7 +7,7 @@
 
 ## 开启记录 {#recording}
 
-在你于[{{label:workspace.logsNotifications}}](guide:window.settingsLogs#conversation-log)中开启 **{{label:conversations.enable}}** 之前，日志是空的。选择工具栏上的 **{{label:logs.logSettings}}** 可在此打开它。记录默认关闭。
+在你于[{{label:workspace.logsNotifications}}](guide:window.settingsLogs#conversation-log)中开启 **{{label:conversations.enable}}** 之前，日志是空的。选择工具栏上的 **{{label:logs.logSettings}}** 可在日志上方打开该窗口。记录默认关闭。
 
 ## 列表 {#list}
 

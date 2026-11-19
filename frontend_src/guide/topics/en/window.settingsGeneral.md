@@ -11,11 +11,11 @@ This choice applies to this browser only, and changes the panel and Agent Chat s
 
 ## {{label:settings.themeLabel}} {#theme}
 
-{{label:settings.themeLight}}, {{label:settings.themeAuto}} (default) or {{label:settings.themeDark}}. {{label:settings.themeAuto}} follows Home Assistant's dark mode. This choice applies to this browser only.
+{{label:settings.themeLight}}, {{label:settings.themeAuto}} (default), or {{label:settings.themeDark}}. {{label:settings.themeAuto}} follows Home Assistant's dark mode. This choice applies to this browser only.
 
 ## {{label:settings.colorThemeLabel}} {#color-theme}
 
-Changes the colors of the whole panel, the Guide and Agent Chat. Each color theme has a light and a dark version, and {{label:settings.themeLabel}} picks which one you see. This choice applies to this browser only, and changes everything straight away.
+Changes the colors of the whole panel, the Guide, and Agent Chat. Each color theme has a light and a dark version, and {{label:settings.themeLabel}} picks which one you see. This choice applies to this browser only, and changes everything straight away.
 
 - **{{label:settings.colorTheme.aubergine}}**: a deep plum toolbar band with plum buttons, like a popular team chat app.
 - **{{label:settings.colorTheme.autumn}}**: a rust-brown toolbar band over warm paper, with tan window title bars and burnt-orange buttons.
@@ -23,23 +23,23 @@ Changes the colors of the whole panel, the Guide and Agent Chat. Each color them
 - **{{label:settings.colorTheme.mist}}**: soft blue throughout, with blue buttons and selection.
 - **{{label:settings.colorTheme.office}}**: a blue toolbar band and white windows, like a desktop office suite.
 - **{{label:settings.colorTheme.spartan}}** (default): black and white, with color only where it means something.
-- **{{label:settings.colorTheme.wayfinding}}**: like {{label:settings.colorTheme.spartan}}, but each workspace has its own color on its toolbar button, on its tools and on the icons in its windows.
+- **{{label:settings.colorTheme.wayfinding}}**: like {{label:settings.colorTheme.spartan}}, but each workspace has its own color on its toolbar button, on its tools, and on the icons in its windows.
 
 Status colors keep their meaning in every theme: green for allowed, red for denied, amber for waiting on you. In {{label:settings.colorTheme.mist}} and {{label:settings.colorTheme.office}}, Read access shows in violet, because blue is already their button color.
 
-Every theme except {{label:settings.colorTheme.spartan}} also colors three personas: {{label:personas.home_companion.label}} gold, {{label:personas.new_user.label}} green and {{label:personas.custom.label}} blue.
+Every theme except {{label:settings.colorTheme.spartan}} also colors three personas: {{label:personas.home_companion.label}} gold, {{label:personas.new_user.label}} green, and {{label:personas.custom.label}} blue.
 
 ## {{label:settings.presetsLabel}} {#presets}
 
 A preset saves an access key's whole setup, so you can switch the key between setups. Turning presets on gives every key a starting preset, and shows the **{{label:accessKeys.cardPresets}}** window in Access Keys. Off by default.
 
-Each key can hold up to 8 presets. Turning presets off hides them, but doesn't delete them.
+Each key can hold up to eight presets. Turning presets off hides them, but doesn't delete them.
 
 Related: [Access Keys](guide:workspace.accessKeys)
 
 ## {{label:settings.injectLabel}} {#inject}
 
-Adds MESA profile buttons to Home Assistant's own pages: the entity, automation, script, scene, helper and people lists, and the device, area and integration pages. Only administrators see them. Off by default.
+Adds MESA profile buttons to Home Assistant's own pages: the entity, automation, script, scene, helper, and people lists, and the device, area, and integration pages. Only administrators see them. Off by default.
 
 A change takes effect the next time the page fully loads. If the buttons fail on a page, they turn off until the page reloads, but the setting stays on.
 

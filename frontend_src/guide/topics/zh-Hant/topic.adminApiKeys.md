@@ -30,7 +30,7 @@ DELETE /api/phoenix-mcp/admin/access-keys/archived/{id}
 
 使用它們建立、變更、輪換和撤銷金鑰，以及讀取其使用情況。`{id}` 是存取金鑰的 ID。
 
-每個指定金鑰的端點在金鑰不存在時傳回 `404`：
+如果沒有有效金鑰使用該 ID，指定金鑰的端點會傳回此錯誤，除非其自己的表另有說明：
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
@@ -246,10 +246,10 @@ PATCH 拒絕不在此表中的任何欄位，且 `expires_at` 根本無法變更
 | `persona` | string | 金鑰的角色。 |
 | `count` | integer | 提供的工具數量。 |
 | `catalog_bytes` | integer | 工具定義作為精簡 JSON 的大小。 |
-| `loads_in_parts` | boolean | Agent Chat 在{{label:settings.toolLoadingLabel}}為{{label:settings.toolLoadingAuto}}時是否分批載入此目錄。 |
-| `tools` | array | 每個工具一個物件：`name`、`read_only`（工具是否只讀取）和 `group`（Agent Chat 分批載入時載入它的分組，始終宣告的工具為 `null`）。 |
+| `loads_in_parts` | boolean | {{label:agentchat.title}} 在{{label:settings.toolLoadingLabel}}為{{label:settings.toolLoadingAuto}}時是否分批載入此目錄。 |
+| `tools` | array | 每個工具一個物件：`name`、`read_only`（工具是否只讀取）和 `group`（{{label:agentchat.title}} 分批載入時載入它的分組，始終宣告的工具為 `null`）。 |
 
-| 狀態 | `error` | `key` | 何時 |
+| 狀態 | `error` | `message_key` | 何時 |
 |---|---|---|---|
 | 404 | `not_found` | `adminError.accessKeyNotFound` | 沒有使用此 ID 的有效金鑰。 |
 
@@ -372,7 +372,7 @@ POST   /api/phoenix-mcp/admin/access-keys/{id}/presets/{pid}/apply
 
 | 欄位 | 類型 | 說明 |
 |---|---|---|
-| `name` | string | 必填。上方的預設名稱規則。 |
+| `name` | string | 必填。遵循[預設](guide:#presets)中的預設名稱規則。 |
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
@@ -470,7 +470,7 @@ POST   /api/phoenix-mcp/admin/access-keys/{id}/permissions/bulk-select
 | 400 | `invalid_request` | `adminError.nodeIdInvalidChars` | 某個節點 ID 包含被拒絕的字元。 |
 | 400 | `invalid_request` | `adminError.badDomain` | 某個域 ID 不是有效域。 |
 | 400 | `invalid_request` | `adminError.badEntityId` | 某個實體 ID 不是有效實體 ID。 |
-| 400 | `invalid_request` | `adminError.permissionStateInvalidDomain`、`adminError.permissionStateInvalidDevice` 或 `adminError.permissionStateInvalidEntity` | 節點的 `state` 不是四種之一。鍵名指明節點類型；`message_params` 給出 `state`、`node` 和 `states`。 |
+| 400 | `invalid_request` | `adminError.permissionStateInvalidDomain`、`adminError.permissionStateInvalidDevice` 或 `adminError.permissionStateInvalidEntity` | 節點的 `state` 不是四種之一。`message_key` 指明節點類型；`message_params` 給出 `state`、`node` 和 `states`。 |
 | 400 | `invalid_request` | `adminError.permissionHintString` | 節點的 `hint` 不是字串或 `null`。 |
 | 400 | `invalid_request` | `adminError.permissionHintTooLong` | 節點的 `hint` 超過 `max` 個字元。 |
 | 400 | `invalid_request` | `adminError.permissionTreeInvalid` | 權限樹無法按傳送內容儲存。 |
@@ -598,7 +598,7 @@ GET    /api/phoenix-mcp/admin/access-keys/{id}/resolve/{entity_id}
 GET    /api/phoenix-mcp/admin/access-keys/{id}/scope
 ```
 
-這些端點顯示權限編輯器所看到的你的家，以及一個金鑰實際可以存取什麼。
+這些端點顯示{{label:accessKeys.permissionsTree}}所看到的你的家，以及一個金鑰可以存取什麼。
 
 ### 實體樹 {#entity-tree}
 

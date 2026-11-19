@@ -3,7 +3,7 @@
 ---
 Add the AI accounts Phoenix uses. Each account needs an API key or, for a local model, a server address.
 
-Agent Chat, the Voice Agent and AI Task each use one of these accounts, with a model you choose. They send the conversation and tool results to that provider.
+Agent Chat, the Voice Agent, and AI Task each use one of these accounts, with a model you choose. They send the conversation and tool results to that provider.
 
 Related: [What leaves your home](guide:topic.security#leaves-home)
 
@@ -15,11 +15,13 @@ If something is wrong with an account, such as a model the provider no longer of
 
 ### {{label:settings.accountChangeModel}} {#change-model}
 
-Choose from the models the provider offers. Models that can't use tools are greyed out, because Phoenix needs tools to act.
+Select one of the models the provider offers. Models that can't use tools are greyed out, because Phoenix needs tools to act.
 
-**{{label:settings.agentcliModelAuto}}** uses a current model suited to agent work, skipping previews and models announced for retirement. If you pick a model yourself, Phoenix keeps it until the provider retires it. After that, Phoenix uses the successor the provider names, or else the newest model of the same family, or else of the same tier, such as another Haiku model.
+**{{label:settings.agentcliModelAuto}}** uses a current model suited to agent work. It skips previews and models announced for retirement. If you pick a model yourself, Phoenix keeps it until the provider retires it.
 
-If there's none, Phoenix keeps the retired model and shows a warning, so choose another. A model whose name ends in `:free` switches only to another free model. On a local Ollama server, Phoenix switches only within the family, and **{{label:settings.agentcliModelAuto}}** never chooses a cloud model.
+After that, Phoenix switches to the successor the provider names. Without one, it uses the newest model of the same family, or else of the same tier, such as another Haiku model.
+
+If there's none, Phoenix keeps the retired model and shows a warning. Select another model. A model whose name ends in `:free` switches only to another free model. On a local Ollama server, Phoenix switches only within the family. **{{label:settings.agentcliModelAuto}}** never chooses a cloud model there.
 
 When **{{label:settings.agentcliVerifyOptions}}** is on, saving also checks which options the model supports. This uses a little API credit.
 
@@ -29,23 +31,23 @@ Reloads the provider's list of models. This uses no tokens. On a local Ollama se
 
 ### {{label:settings.accountCheckOptions}} {#check-options}
 
-Finds out which effort levels the model supports and whether it can read images, by sending it a few very short requests.
+Finds out which thinking levels the model supports and whether it can read images, by sending it a few very short requests.
 
 This uses a little credit, so Phoenix asks first. Hover over the button to see when it last ran.
 
-Microsoft Azure, Infron, NVIDIA NIM, OpenCode and Tencent Cloud TokenHub show no thinking levels for a model until it's checked. When you pick such a model in Agent Chat's dropdown, Agent Chat checks it once without asking.
+Microsoft Azure, Infron, NVIDIA NIM, OpenCode, and Tencent Cloud TokenHub show no thinking levels for a model until it's checked. When you select such a model in Agent Chat's dropdown, Agent Chat checks it once without asking.
 
 ### Removing an account {#remove-account}
 
-Removing an account deletes its stored key. You confirm in place first.
+Removing an account deletes its stored key. Confirm in place first.
 
-If the Voice Agent or AI Task used the account, they lose it, and Phoenix removes the Assist assistant and AI Task entity it created for them.
+If the Voice Agent or AI Task used the account, they lose it. Phoenix also removes the Assist assistant and AI Task entity it created for them.
 
 Related: [Voice Agent](guide:window.settingsHome#voice-agent), [AI Task](guide:window.settingsHome#ai-task)
 
 ### {{label:settings.toolLoadingLabel}} {#tool-loading}
 
-Decides how Agent Chat, the Voice Agent and AI Task give this account's model the access key's tools.
+Decides how Agent Chat, the Voice Agent, and AI Task give this account's model the access key's tools.
 
 **{{label:settings.toolLoadingAuto}}** (default) sends a small set of everyday tools and lists the rest by group. The model loads more when a request needs them. Phoenix does this when the access key has a large set of tools, about 75 or more. With fewer, it sends them all.
 
@@ -53,14 +55,14 @@ Loading in parts sends far fewer tokens with each request, with the same results
 
 **{{label:settings.toolLoadingAlways}}** loads in parts whatever the size. **{{label:settings.toolLoadingNever}}** always sends every tool, except to providers that accept only 128 tools.
 
-Tool loading never gives the model more access, Phoenix checks every call as usual. Home Companion keys are not affected by the **{{label:settings.toolLoadingLabel}}** setting.
+Loading tools in parts never gives the model more access. Phoenix checks every call as usual. The {{label:settings.toolLoadingLabel}} setting doesn't affect Home Companion keys.
 
 ## Adding an account {#provider-add}
 
 1. Select **{{label:settings.addAccount}}** on the toolbar to show the providers.
-2. Pick a provider and fill in its fields. Select **{{label:settings.showSecret}}** to check the API key you pasted.
+2. Select a provider and fill in its fields. Select **{{label:settings.showSecret}}** to check the API key you pasted.
 3. Select **{{label:settings.agentcliValidate}}**. This checks the details with the provider, but saves nothing yet.
-4. Choose a model, or keep **{{label:settings.agentcliModelAuto}}**, then select **{{label:settings.agentcliDone}}**.
+4. Select a model, or keep **{{label:settings.agentcliModelAuto}}**. Then select **{{label:settings.agentcliDone}}**.
 
 If you change a field after validating, validate again. Phoenix checks the details once more before it saves the account.
 
@@ -68,62 +70,64 @@ If you change a field after validating, validate again. Phoenix checks the detai
 
 Most providers need only an API key. Some also need to know where your account is:
 
-- OpenAI, Grok, Kimi, Mistral AI and MiniMax: the region your key was issued for.
+- OpenAI, Grok, Kimi, Mistral AI, and MiniMax: the region your key was issued for.
 - Xiaomi MiMo: pay as you go, or your Token Plan region.
 - Tencent Cloud TokenHub: the site that issued your key. A key works only on that site.
 - OpenCode: the Zen or Console route. You can add a key on one route only.
-- Z.ai: Standard API, Coding Plan or China. You can save the same key once for each plan.
+- Z.ai: Standard API, Coding Plan, or China. You can save the same key once for each plan.
 - Qwen: your workspace's base URL, a public HTTPS address, as well as the API key.
 - Cloudflare Workers AI: your Cloudflare account ID and an API token with Workers AI permissions. Phoenix lists only models marked for tool use. The free plan has a small daily allowance, and some models need Workers Paid.
 - Microsoft Azure: your resource's endpoint and one of its keys. The project endpoint from Foundry works too. Deploy a model in Foundry first: Phoenix lists your chat model deployments by their names.
-- Ollama (local): your Ollama server's address. Home Assistant connects to it, so use an address the Home Assistant host can reach. Plain `http://` traffic isn't encrypted; see [What leaves your home](guide:topic.security#leaves-home).
-- {{label:settings.providerLocalOpenAI}}: the address of your llama.cpp, vLLM, Bionic or LocalAI server, such as `http://host:8080/v1`. Phoenix adds `/v1` to an address without a path. Add an API key only if your server needs one.
+- Ollama (local): your Ollama server's address. Home Assistant connects to it, so use an address the Home Assistant host can reach. Plain `http://` traffic isn't encrypted. See [What leaves your home](guide:topic.security#leaves-home).
+- {{label:settings.providerLocalOpenAI}}: the address of your llama.cpp, vLLM, Bionic, or LocalAI server, such as `http://host:8080/v1`. Phoenix adds `/v1` to an address without a path. Add an API key only if your server needs one.
 
-Some plans are for coding tools only: Z.ai's Coding Plan, Xiaomi MiMo's Token Plan, and Alibaba Cloud's Coding Plan and Token Plan. Their terms forbid use from an app such as Home Assistant, and the provider may throttle or block the key. Phoenix warns when you choose one. For Voice, AI Task and Agent Chat, use the provider's pay-as-you-go API.
+Some plans are for coding tools only: Z.ai's Coding Plan, Xiaomi MiMo's Token Plan, and Alibaba Cloud's Coding Plan and Token Plan. Their terms forbid use from an app such as Home Assistant. The provider might throttle or block the key.
 
-Groq, Mistral AI and Z.ai accept at most 128 tools per request. Phoenix applies the same limit to Gemini, Kimi, OpenRouter, Infron, Cloudflare Workers AI, Microsoft Azure and a local OpenAI-compatible server. When the access key has more, Phoenix always loads tools in parts for them, whatever the [Tool loading](guide:#tool-loading) setting.
+Phoenix warns when you choose one of these plans. For the Voice Agent, AI Task, and Agent Chat, use the provider's pay-as-you-go API.
 
-Groq's free tier limits how many tokens each model accepts per minute, and a single Phoenix request is larger than that. Groq refuses it, and waiting doesn't help. Use a paid Groq tier or another provider.
+Groq, Mistral AI, and Z.ai accept at most 128 tools per request. Phoenix applies the same limit to Gemini, Kimi, OpenRouter, Infron, Cloudflare Workers AI, Microsoft Azure, and a local OpenAI-compatible server. When the access key has more, Phoenix always loads tools in parts for them, whatever the [{{label:settings.toolLoadingLabel}}](guide:#tool-loading) setting.
 
-Each Azure deployment has its own limit on tokens per minute. Agent Chat waits up to a minute when earlier requests used it up. A single Phoenix request can be larger than a low limit, such as 20,000 tokens, and then waiting doesn't help. Raise the deployment's limit in Foundry, or choose a deployment with more room.
+Groq's free tier limits how many tokens each model accepts per minute. A single Phoenix request is larger than that limit. Groq refuses it, and waiting doesn't help. Use a paid Groq tier or another provider.
+
+Each Azure deployment has its own limit on tokens per minute. When earlier requests used up that limit, Agent Chat waits up to a minute. A single Phoenix request can be larger than a low limit, such as 20,000 tokens. Waiting doesn't help then. Raise the deployment's limit in Foundry, or choose a deployment with more room.
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 
-Phoenix rereads each account's model list from time to time. This keeps the lists up to date, so **{{label:settings.agentcliModelAuto}}** can move to a newer model.
+Phoenix rereads each account's model list on a schedule. This keeps the lists up to date, so **{{label:settings.agentcliModelAuto}}** can move to a newer model.
 
 ### {{label:settings.providerChecksLabel}} {#provider-checks}
 
-Once an hour, Phoenix rereads any model list older than the period below. This uses no tokens. On by default.
+Once an hour, Phoenix rereads any model list older than the period set in **{{label:settings.providerChecksHoursLabel}}**. This uses no tokens. On by default.
 
-When it's off, Phoenix still reads a list when it needs one: for a new account, when a provider reports a missing model, and when you switch to **{{label:settings.agentcliModelAuto}}**.
+When it's off, Phoenix still reads a list for a new account, when a provider reports a missing model, and when you switch to **{{label:settings.agentcliModelAuto}}**.
 
 ### {{label:settings.providerChecksHoursLabel}} {#provider-checks-hours}
 
-Phoenix will re-check the provider's model list on a schedule: 6 to 720 hours (default 24).
+How often Phoenix rereads each model list: 6 to 720 hours (default 24).
 
 ## {{label:routing.providerSection}} {#decision-provider}
 
 A decision provider is a small, fast model that carries out simple commands, so your main AI model doesn't have to. It saves the cost and the wait of a full model turn.
 
-It works with **{{label:routing.enableChat}}** and **{{label:routing.enableVoice}}**. Phoenix tries Home Assistant's own sentence matching first, and the decision provider handles the commands sentence matching misses.
+It works with **{{label:routing.enableChat}}** and **{{label:routing.enableVoice}}**. Phoenix tries Home Assistant's own sentence matching first. The decision provider handles the commands that sentence matching misses.
 
 Choose from these decision providers:
 
 - Cloudflare / Clef: Clef or Clef Flash on Workers AI, with your Cloudflare account ID and an API token.
 - Google / Gemini Decision: Google's Gemini Decision model, with a Gemini API key.
-- Local / System One: a decision model on your own server, such as Ollama or llama.cpp. For Ollama, set `OLLAMA_KEEP_ALIVE` to keep it loaded, and raise `num_ctx` (plus `num_batch` for d3) to 16384.
+- Local / System One: a decision model on your own server, such as Ollama or llama.cpp. For Ollama, set `OLLAMA_KEEP_ALIVE` to keep the model loaded. Raise `num_ctx` to `16384`, and `num_batch` too for d3.
 - Microsoft / Decision: Microsoft-Decision-1 in Azure AI Foundry, with your resource's endpoint and key.
 - OpenAI / Decisions: OpenAI's gpt-6-luna decision model, with an OpenAI API key.
-- OpenCode / System One: JEV, Gemini Decision or GPT Luna Decision, with an OpenCode Console API key.
+- OpenCode / System One: JEV, Gemini Decision, or GPT Luna Decision, with an OpenCode Console API key.
 - TypeSafe / JEV: TypeSafe's JEV model, with a TypeSafe API key. Its jev-preview model only observes and never carries out commands.
 
 Add an account and select its model. Only one decision provider can be in use at a time. Each account shows its model beside its name. A local server can hold several accounts, one for each of its models.
 
-A decision account is separate from any AI provider account from the same company. You must add its key here again if you already use that key for AI Provider.
+A decision account is separate from any AI provider account from the same company. If you already use that key for an AI provider account, add it here again.
 
 Every decision provider except Microsoft / Decision also handles follow-up messages that depend on the conversation. With Local / System One, only the clef model does. See [Follow-up messages](guide:topic.commandRouting#follow-ups). Local / System One and Microsoft / Decision also send commands with a number, such as a brightness, to your AI model.
 
-To use it, choose its account. Choose **{{label:routing.noProvider}}** to stop using it; commands then rely on sentence matching alone.
+To use it, select its account. Select **{{label:routing.noProvider}}** to stop using it. Commands then rely on sentence matching alone.
 
 It can also answer Home Assistant's Evaluate action for automations and scripts: see [Decisions](guide:window.settingsHome#ai-decisions).
 
@@ -133,9 +137,9 @@ Related: [How a command is routed](guide:topic.commandRouting)
 
 How sure a decision account must be before it carries out a command, from 0.70 to 1.00 (default 0.90). Select the account to show it. Each account keeps its own.
 
-A lower threshold lets the decision provider handle more commands itself, and routes fewer commands to your AI provider. This can potentially let more mistakes through, as each model differs.
+A lower threshold lets the decision provider handle more commands itself, and routes fewer commands to your AI provider. It might also let more mistakes through, depending on the model.
 
-Follow-ups are first checked against the conversation: whether the message is a real request, whether an earlier instruction rules it out, and what "it" refers to. That check always needs at least 0.90, whatever the threshold, because a lower threshold let commands through that the conversation had ruled out.
+The decision provider first checks a follow-up against the conversation. It checks whether the message is a real request, whether an earlier instruction rules it out, and what "it" refers to. That check always needs at least 0.90, whatever the threshold.
 
 The threshold still applies when the provider chooses the device and action.
 

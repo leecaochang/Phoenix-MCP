@@ -156,7 +156,10 @@ def test_documented_mesa_baseline_and_default_match_runtime() -> None:
     assert all(mode == "confirm" for domain, mode in DOMAIN_SAFETY_BASELINE.items()
                if domain not in ("light", "lock", "alarm_control_panel"))
     rules = _page("topic.mesaRules")
-    assert "lights are Autonomous, locks and alarm panels are Prohibited, and everything else is Confirm" in rules
+    assert (
+        "lights are {{label:mesa.modeAutonomous}}, locks and alarm panels are {{label:mesa.modeProhibited}}, "
+        "and everything else is {{label:mesa.modeConfirm}}"
+    ) in rules
     assert "**{{label:settings.mesaModeAdvisory}}** (default)" in rules
 
 

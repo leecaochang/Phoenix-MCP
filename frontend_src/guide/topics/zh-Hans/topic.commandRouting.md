@@ -17,9 +17,9 @@
 
 ## 何时适用 {#when}
 
-你可以分别为 [Agent Chat](guide:window.settingsChat#chat-commands) 和[语音智能体](guide:window.settingsHome#voice-commands)开启命令处理。
+分别为 [Agent Chat](guide:window.settingsChat#chat-commands) 和 [{{label:settings.voiceCard}}](guide:window.settingsHome#voice-commands) 开启命令处理。
 
-它只适用于纯文本消息。Home Companion 密钥的消息始终直接交给 Home Companion。
+它只适用于纯文本消息。{{label:personas.home_companion.label}} 密钥的消息始终直接交给它处理。
 
 ## 后续消息 {#follow-ups}
 
@@ -40,7 +40,7 @@
 
 ## 限制 {#limits}
 
-决策提供商对每个请求有时间限制，并可设置每小时限制。达到任一限制时，命令会交给你的 AI 模型，确保不会无人应答。
+决策提供商对每个请求有时间限制，并可设置每小时限制。达到任一限制时，命令会交给你的 AI 模型。
 
 相关：[连接设置](guide:window.settingsProviders#decision-connection)
 

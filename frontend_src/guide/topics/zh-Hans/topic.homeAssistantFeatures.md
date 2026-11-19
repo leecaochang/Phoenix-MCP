@@ -25,10 +25,10 @@ Phoenix 使用你的账户和模型，为自动化和脚本运行 Home Assistant
 
 如果你已有喜欢的对话智能体，并希望它通过 Phoenix 的控制访问你的家，请使用它。
 
-在该智能体的 AI 工具设置（2026.11 之前叫“控制 Home Assistant”）中，只选择 Phoenix MCP（限定范围），不要选其他。
+在该智能体的 **AI 工具**设置（2026.11 之前叫**控制 Home Assistant**）中，只选择 **Phoenix MCP (scoped)**，不要选其他。
 
-Home Assistant 自带的“设备控制”和“Home Assistant”API 不经过 Phoenix。与 Phoenix 一起选择时，模型会得到不受密钥、审批、MESA 和审计日志约束的工具。“Home Assistant”API 能触及的最多：所有实体和操作、模板、日志和配置。
+Home Assistant 自带的**设备控制**和 **Home Assistant** 选项不经过 Phoenix。如果同时选择它们，模型会得到绕过密钥、审批、MESA 和审计日志的工具。**Home Assistant** 选项能触及的最多：所有实体和操作、模板、日志和配置。
 
-从 Home Assistant 2026.11 起，一次对话会保留开始时的工具。修改后的备注和权限会随下一次工具调用送达模型，已失去的工具会被立即拒绝。新增的工具需要开始新的对话。
+从 Home Assistant 2026.11 起，一次对话会保留开始时的工具。对密钥指引或权限的修改会随下一次工具调用送达模型。如果模型调用已失去的工具，Phoenix 会立即拒绝。新增的工具需要开始新的对话。
 
 相关：[{{label:workspace.homeAssistant}}](guide:window.settingsHome)

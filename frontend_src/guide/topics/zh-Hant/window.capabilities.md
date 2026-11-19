@@ -1,19 +1,19 @@
 ---
 { "id": "window.capabilities", "title": "{{label:accessKeys.cardCapabilities}}", "parent": "workspace.accessKeys", "order": 3, "keywords": ["工具", "權限", "核准", "拒絕存取", "允許", "確認"], "sectionKeywords": { "modes": ["核准", "佇列"], "physical-control": ["門鎖", "警報", "捲簾", "閥門", "車庫門"], "restart": ["重新啟動"], "backup": ["快照"], "camera-read": ["影像", "快照"], "filesystem": ["www", "themes", "檔案"], "lovelace-write": ["Lovelace", "儀表板"], "dashboard-resources": ["自訂卡片", "JavaScript"], "yaml-edit": ["configuration.yaml", "重新載入"], "esphome-flash": ["韌體", "OTA"], "registry-write": ["重新命名實體", "實體 ID"], "radio-write": ["Zigbee", "ZHA"], "log-control": ["偵錯日誌"] } }
 ---
-能力決定金鑰可以使用哪些工具。每項能力可設為拒絕存取、允許或確認，新金鑰的每項能力都從拒絕存取開始。
+能力決定金鑰可以使用哪些工具。每項能力可設為{{label:caps.modeDeny}}、{{label:caps.modeAllow}}或{{label:caps.modeConfirm}}。新金鑰的每項能力都從{{label:caps.modeDeny}}開始。
 
-能力和[{{label:accessKeys.permissionsTree}}](guide:window.permissions)共同作用。能力決定智慧體可以做哪類事情；權限樹決定它可以對哪些裝置和實體做。
+能力決定智慧體可以做哪類事情。[{{label:accessKeys.permissionsTree}}](guide:window.permissions)決定它可以對哪些裝置和實體做。
 
 ## 拒絕存取、允許和確認 {#modes}
 
-- **{{label:caps.modeDeny}}**：智慧體不能使用這些工具。它們不會提供給智慧體。
+- **{{label:caps.modeDeny}}**：智慧體不能使用這些工具。它們不會提供給智慧體，除非開啟了{{label:accessKeys.announceAllLabel}}。
 - **{{label:caps.modeAllow}}**：智慧體可以自由使用它們。
 - **{{label:caps.modeConfirm}}**：變更會在[核准](guide:workspace.approvals)中等待你決定。使用同一能力的讀取會直接執行。
 
-讀取和日常操作只能設為拒絕存取或允許；它們的確認按鈕會顯示為灰色。
+{{label:caps.tierRead}}和{{label:caps.tierEveryday}}只能設為{{label:caps.modeDeny}}或{{label:caps.modeAllow}}。它們的 **{{label:caps.modeConfirm}}** 按鈕會顯示為灰色。
 
-變更會立即生效。放寬能力會讓智慧體繼續。收緊能力會拒絕智慧體已在進行的請求。你核准請求時，Phoenix 會再次檢查能力，如果現在為拒絕存取，請求會失敗。
+變更會立即生效。放寬能力會讓智慧體繼續。收緊能力會拒絕智慧體已在進行的請求。你核准請求時，Phoenix 會再次檢查能力。如果現在為{{label:caps.modeDeny}}，請求會失敗。
 
 相關：[同步等待核准](guide:window.keySettings#inline-wait)、[直通模式會開放什麼](guide:topic.passThrough)
 
@@ -77,7 +77,7 @@
 
 ### {{label:caps.cap_broadcast.label}} {#broadcast}
 
-透過 Assist 衛星裝置廣播訊息、在其上發起對話，並在喇叭上播放公告和語音文字，這需要在喇叭的 W 之外另行授予。一般播放只需要 W。直通模式允許它。
+透過 Assist 衛星裝置廣播訊息、在其上發起對話，並在喇叭上播放公告和語音文字。金鑰還需要對喇叭有 W。一般播放只需要 W。直通模式允許它。
 
 {{tools:cap_broadcast}}
 
@@ -99,7 +99,7 @@
 
 ### {{label:caps.cap_automation_write.label}} {#automation-write}
 
-讀取、建立、編輯和刪除自動化。新增執行程式碼或觸及主機的呼叫時，一律需要您核准，即使設為「允許」也一樣。重新啟動、更新、範本化的動作名稱和藍圖也是如此。
+讀取、建立、編輯和刪除自動化。新增執行程式碼或觸及主機的呼叫時，一律需要您核准，即使設為{{label:caps.modeAllow}}也一樣。重新啟動、更新、範本化的動作名稱和藍圖也是如此。
 
 {{tools:cap_automation_write}}
 
@@ -111,13 +111,13 @@
 
 ### {{label:caps.cap_blueprint_write.label}} {#blueprint-write}
 
-建立、編輯和刪除藍圖。寫入藍圖還需要符合的自動化或腳本能力：任一為拒絕存取都會拒絕它，任一為確認都會暫緩它以等待核准。自動化的核准規則同樣適用於此。
+建立、編輯和刪除藍圖。寫入藍圖還需要符合的自動化或腳本能力：任一為{{label:caps.modeDeny}}，Phoenix 就會拒絕它。任一為{{label:caps.modeConfirm}}，寫入就會等待你的核准。自動化的核准規則同樣適用於此。
 
 {{tools:cap_blueprint_write}}
 
 ### {{label:caps.cap_scene_write.label}} {#scene-write}
 
-讀取、建立、編輯和刪除場景。
+讀取、建立、編輯和刪除場景。金鑰需要對場景中的每個實體有 W。
 
 {{tools:cap_scene_write}}
 
@@ -139,7 +139,7 @@
 
 控制門鎖、警報控制面板、捲簾和閥門，無論透過它們自身的操作，還是其他會作用到它們的操作。`zwave_js.set_value` 這類原始裝置命令始終需要它，裝置上有這些實體時，其 ESPHome 操作也需要。
 
-智慧體還需要在{{label:accessKeys.permissionsTree}}中對它們有 W。原始命令或 ESPHome 操作需要對其裝置能操作的一切擁有 W，包括按鈕。變更 Zigbee 裝置的無線電工具也需要它。
+智慧體還需要在{{label:accessKeys.permissionsTree}}中對它們有 W。原始命令或 ESPHome 操作需要對其裝置能操作的一切擁有 W，包括按鈕。變更 Zigbee 裝置的無線電工具也需要{{label:caps.cap_physical_control.label}}。
 
 建立或編輯包含這些實體的場景也需要此能力。
 
@@ -147,13 +147,13 @@
 
 ### {{label:caps.cap_notify.label}} {#notify}
 
-透過自己的工具、通知操作或其他透過通知實體傳送訊息的操作傳送通知。手機以外的舊版通知服務一律需要您核准，即使設為「允許」也一樣。
+透過自己的工具、通知操作或其他透過通知實體傳送訊息的操作傳送通知。手機以外的舊版通知操作一律需要您核准，即使設為{{label:caps.modeAllow}}也一樣。
 
 {{tools:cap_notify}}
 
 ### {{label:caps.cap_restart.label}} {#restart}
 
-重新啟動或停止 Home Assistant 並安裝更新。每次更新都需要您核准，即使設為「允許」也一樣。ESPHome 韌體使用它自己的能力。
+重新啟動或停止 Home Assistant 並安裝更新。每次更新都需要您核准，即使設為{{label:caps.modeAllow}}也一樣。ESPHome 韌體使用它自己的能力。
 
 {{tools:cap_restart}}
 
@@ -171,7 +171,7 @@
 
 ### {{label:caps.cap_integration_reconfigure.label}} {#integration-reconfigure}
 
-重新設定整合，新增或變更其子項目（例如 AI 代理），並修復其修復項。子項目和修復始終需要你的核准，即使設為允許也是如此。
+重新設定整合，新增或變更其子項目（例如 AI 代理），並修復其修復項。子項目和修復始終需要你的核准，即使設為{{label:caps.modeAllow}}也是如此。
 
 {{tools:cap_integration_reconfigure}}
 
@@ -179,11 +179,11 @@
 
 讀取和變更儀表板。沒有它，智慧體也無法讀取儀表板。
 
-卡片會以開啟儀表板的人的權限執行。因此，新增範本、新增或變更任何自訂卡片，或新增來自其他網站的圖片或連結的變更，即使設為允許也會等待你的核准。智慧體還原先前的佈局並帶回此類卡片時也是如此。
+卡片會以開啟儀表板的人的權限執行。因此，新增範本、新增或變更任何自訂卡片，或新增來自其他網站的圖片或連結的變更，即使設為{{label:caps.modeAllow}}也會等待你的核准。智慧體還原先前的佈局並帶回此類卡片時也是如此。
 
 儀表板上已有且未變更的自訂卡片不算在內。不含以上內容的內建卡片遵循你設定的模式。
 
-儀表板變更中的範本會先在個別程序中試執行，範本在那裡失敗的變更會被拒絕。
+Phoenix 會先試執行儀表板變更中的新範本。如果某個範本當機、耗時過長或超出限制，Phoenix 會拒絕該變更。
 
 {{tools:cap_lovelace_write}}
 
@@ -207,7 +207,7 @@
 
 ### {{label:caps.cap_esphome_flash.label}} {#esphome-flash}
 
-透過 ESPHome Device Builder 在 ESPHome 裝置上安裝韌體。它還需要 {{label:caps.cap_esphome_yaml.label}}。只有 ESPHome 裝置角色允許它，並且需要你的核准。ESPHome 裝置上的 `update.install` 也需要此能力。
+透過 ESPHome Device Builder 在 ESPHome 裝置上安裝韌體。它還需要 {{label:caps.cap_esphome_yaml.label}}。只有{{label:personas.esphome.label}}角色允許它，並且需要你的核准。ESPHome 裝置上的 `update.install` 也需要此能力。
 
 {{tools:cap_esphome_flash}}
 
@@ -227,7 +227,7 @@
 
 ### {{label:caps.cap_dashboard_resources.label}} {#dashboard-resources}
 
-新增和變更儀表板資源，即自訂卡片載入的 JavaScript 檔案。每次變更都需要您核准，因此沒有「允許」選項。檔案必須來自 `/local/` 或 `/hacsfiles/`，Phoenix MCP 只變更它自己新增的資源。
+新增和變更儀表板資源，即自訂卡片載入的 JavaScript 檔案。每次變更都需要您核准，因此沒有{{label:caps.modeAllow}}選項。檔案必須來自 `/local/` 或 `/hacsfiles/`。Phoenix 只變更它自己新增的資源。
 
 每個開啟儀表板的瀏覽器都會以該使用者的 Home Assistant 存取權限執行這些檔案。管理員的瀏覽器開啟 Phoenix MCP 面板時也會執行它們，以讀取它們新增的自訂卡片。
 
@@ -235,7 +235,7 @@
 
 ## 不需要能力的工具 {#no-capability}
 
-這些工具不需要自己的能力。[{{label:accessKeys.permissionsTree}}](guide:window.permissions)決定它們能觸及哪些實體。會做出變更的工具，只有在權限樹給金鑰某處「寫入」權限時才會提供。
+[{{label:accessKeys.permissionsTree}}](guide:window.permissions)決定它們能觸及哪些實體。會做出變更的工具，只有在權限樹給金鑰某處「寫入」權限時才會提供。
 
 有些呼叫仍需要一項能力，例如鎖門需要{{label:caps.cap_physical_control.label}}。
 

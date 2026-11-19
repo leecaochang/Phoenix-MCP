@@ -7,9 +7,9 @@
 
 每一列顯示金鑰的名稱、模式和狀態，以及建立、最後變更、過期和最後使用的時間。已撤銷和已過期的金鑰會移到[{{label:accessKeys.archivedTitle}}](guide:window.archivedAccessKeys)。
 
-在清單上方的篩選框中輸入，可依名稱或狀態尋找金鑰。你可以排序、移動、調整大小和隱藏欄；佈局會儲存在此瀏覽器中。
+在清單上方的篩選框中輸入，可依名稱或狀態尋找金鑰。你可以排序、移動、調整大小和隱藏欄。Phoenix 會把佈局隨工作區排列一起儲存，歸屬於你的 Home Assistant 使用者。
 
-模式欄會顯示限定範圍，略過權限樹的金鑰則顯示 {{label:accessKeys.passThrough}}。
+{{label:accessKeys.colMode}} 欄會顯示 {{label:accessKeys.scoped}}，略過權限樹的金鑰則顯示 {{label:accessKeys.passThrough}}。
 
 相關：[直通模式會開放什麼](guide:topic.passThrough)
 
@@ -23,23 +23,23 @@
 
 ### {{label:accessKeys.expiryLabel}} {#key-expiry}
 
-永不過期（預設），或若干分鐘、小時、天或週。金鑰過期時，Phoenix 會將它歸檔。金鑰建立後無法變更有效期。
+{{label:accessKeys.expiryNone}}（預設），或若干分鐘、小時、天或週。金鑰過期時，Phoenix 會將它歸檔。金鑰建立後無法變更有效期。
 
 ### 速率限制 {#key-rate-limits}
 
-**{{label:accessKeys.rateRequestsShort}}**（預設 60）和 **{{label:accessKeys.rateBurstShort}}**（預設 10）。設為 0 表示不限制。兩者之後都可以變更。
+限制外部應用程式使用此金鑰傳送請求的速度。Agent Chat、語音智慧體、Assist 和 AI 任務不受限制。**{{label:accessKeys.rateRequestsShort}}**（預設 60）和 **{{label:accessKeys.rateBurstShort}}**（預設 10）。設為 0 表示不限制。兩者之後都可以變更。
 
-相關：[速率限制](guide:window.keySettings#rate-limiting)
+相關：[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)
 
 ### {{label:accessKeys.passThroughMode}} {#key-pass-through}
 
-讓金鑰略過權限樹，從而可以存取所有實體。預設為關閉。建立前請開啟確認。
+讓金鑰略過權限樹，從而可以存取所有實體。只對你完全信任的智慧體使用。預設為關閉。建立前請開啟確認。
 
 相關：[直通模式會開放什麼](guide:topic.passThrough)
 
 ### {{label:oauth.switchLabel}} {#key-oauth}
 
-讓只接受伺服器位址的應用程式（例如 ChatGPT 或 Claude）登入以使用此金鑰。預設為關閉。你也可以稍後在[金鑰設定](guide:window.keySettings#oauth-sign-in)中開啟它。
+為無法傳送存取金鑰的應用程式（例如 ChatGPT 或 Claude）開啟它。該應用程式改為登入，並使用此金鑰。預設為關閉。如需稍後開啟，請使用[{{label:workspace.keySettings}}](guide:window.keySettings#oauth-sign-in)。
 
 ### 建立金鑰之後 {#key-created}
 
@@ -53,7 +53,7 @@ Phoenix 會詢問你將如何使用新金鑰：
 
 ## {{label:workspace.keyActions}} {#key-actions}
 
-工具列上的 **{{label:workspace.keyActions}}** 會作用於所選金鑰。除重新命名外，每個操作都會在清單上方要求你確認。
+工具列上的 **{{label:workspace.keyActions}}** 會作用於所選金鑰。除 {{label:workspace.rename}} 外，每個操作都會在清單上方要求你確認。
 
 ### {{label:workspace.rename}} {#rename}
 
@@ -73,7 +73,7 @@ Phoenix 會詢問你將如何使用新金鑰：
 
 ### {{label:accessKeys.revoke}} {#revoke}
 
-永久結束金鑰。它的請求會被拒絕，等待中的核准會被取消。Phoenix 還會將它從語音智慧體、AI 任務和 Assist 工具提供者中移除，並移到 {{label:accessKeys.archivedTitle}}。此操作無法復原。
+永久結束金鑰。Phoenix 會拒絕它的請求，並取消它等待中的核准。Phoenix 還會將它從語音智慧體、AI 任務和 Assist 工具提供者中移除，並移到 {{label:accessKeys.archivedTitle}}。此操作無法復原。適用於你不再需要的金鑰。如果金鑰外洩，請改為輪換它。
 
 ## 重新連線智慧體 {#reconnect}
 

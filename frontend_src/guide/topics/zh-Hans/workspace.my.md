@@ -23,10 +23,10 @@
 
 开启后，拖动窗口下方的边框可把它调高。
 
-## Agent Chat {#chat}
+## {{label:agentchat.title}} {#chat}
 
-在 Agent Chat 自己的菜单中选择 **{{label:workspace.addToMy}}**，即可将它停靠在这里。显示其他工作区时，Chat 会浮在其上；回到这里时它再次停靠。如果期间你关闭了它，它会保持关闭；它窗口中的 **{{label:shell.agentChat}}** 可将其打开。**{{label:agentchat.floatChat}}** 会取消停靠，在这里关闭则会关闭 Chat。
+要将 {{label:agentchat.title}} 停靠在这里，请在它自己的菜单中选择 **{{label:workspace.addToMy}}**。显示其他工作区时，{{label:agentchat.title}} 会浮在其上。回到这里时它会再次停靠。如果期间你关闭了它，它会保持关闭。要打开它，请在这里它的空窗口中选择 **{{label:shell.agentChat}}**。**{{label:agentchat.floatChat}}** 会取消停靠。在这里关闭它会关闭 {{label:agentchat.title}}。
 
 ## 在手机上 {#phones}
 
-在窗口菜单中选择 **{{label:workspace.addToMy}}** 将其添加到这里，在这里关闭即可移除。手机上不能添加 Agent Chat。手机保留自己的“我的工作区”，与电脑上的相互独立。
+在窗口菜单中选择 **{{label:workspace.addToMy}}** 将其添加到这里，在这里关闭即可移除。手机上不能添加 {{label:agentchat.title}}。手机保留自己的“我的工作区”，与电脑上的相互独立。

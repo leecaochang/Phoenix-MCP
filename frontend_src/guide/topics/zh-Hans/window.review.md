@@ -1,7 +1,7 @@
 ---
 { "id": "window.review", "title": "{{label:workspace.review}}", "parent": "workspace.approvals", "order": 2, "keywords": ["差异", "比较", "决定"], "sectionKeywords": { "reject": ["原因", "拒绝请求"], "change": ["更改前", "更改后", "预览", "代码编辑器", "并排", "使用方", "关联", "删除"] } }
 ---
-准确显示所选请求会更改什么，并让你做出决定。已决定的请求会保留在这里，并显示其结果。
+准确显示所选请求会更改什么，并让你做出决定。已决定的请求会保留在{{label:workspace.review}}中，并显示其结果。
 
 ## 剩余时间 {#context}
 
@@ -19,7 +19,7 @@
 
 拒绝请求。**{{label:approvals.reject}}** 会打开一个用于填写可选原因的框，智能体会收到该原因，以便调整下一次提议。按 Enter 或选择 **{{label:approvals.confirmReject}}** 拒绝，或选择 **{{label:approvals.cancelReject}}** 退出。
 
-你输入的原因也会同步到 Agent Chat 的拒绝按钮。
+你输入的原因也会同步到 Agent Chat 的 {{label:agentchat.reject}} 按钮。
 
 ## 更改 {#change}
 
@@ -31,7 +31,7 @@
 - 删除、重命名、辅助元素、集成等系统操作：请求为何需要批准、将发生什么、谁在使用它、哪些 Phoenix 设置提及它。展开底部的 **{{label:approvals.previewAllDetails}}** 查看全部。
 - 删除待办事项：每个事项及其状态，并提示删除后无法恢复。
 
-仪表盘更改中的模板已先在单独的进程中试运行，模板在那里失败的更改不会送到你这里。预览从不运行模板：含模板的卡片会以文本显示。
+Phoenix 会先试运行仪表盘更改中的所有新模板。如果某个模板崩溃、运行太久或超出限制，该更改就不会送到你这里。预览从不运行模板：含模板的卡片会以文本显示。
 
 其他视图选择会保存在此浏览器中，变更也会使用它们。
 

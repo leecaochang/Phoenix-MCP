@@ -1,30 +1,30 @@
 ---
 {"id": "topic.tools", "title": "What Agents Can Do", "parent": "topic.about", "order": 30, "keywords": ["tools", "tool list", "MCP tools", "what can an agent do", "tools/list"], "sectionKeywords": {"rules": ["deny", "hidden tool", "announce all tools", "result size"], "reading": ["get_state", "get_history", "get_statistics", "get_camera_image", "get_calendar_events", "get_todo_items", "GetLiveContext", "GetDateTime", "history", "statistics", "camera"], "controlling": ["HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed", "HassClimateSetTemperature", "HassSetPosition", "HassStopMoving", "HassMediaPause", "HassMediaSearchAndPlay", "HassSetVolume", "HassVacuumStart", "HassCancelAllTimers", "HassBroadcast", "native tools", "lock", "cover", "HassMediaNext", "HassMediaPrevious", "HassMediaUnpause", "HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassSetVolumeRelative", "HassVacuumCleanArea", "HassVacuumReturnToBase"], "actions": ["call_service", "dry_run_service", "service", "action", "reload", "restart", "response data", "attachments", "media-source"], "lists": ["set_todo_item", "create_calendar_event", "update_calendar_event", "delete_calendar_event", "get_calendar_write", "to-do", "calendar"], "waiting": ["watch_entity", "wait for state"], "testing": ["test_trigger", "test_condition", "test automation", "trigger", "condition"], "home-companion": ["home_request", "household request"], "automations": ["list_automations", "get_automation", "create_automation", "edit_automation", "delete_automation", "list_scripts", "get_script", "create_script", "edit_script", "delete_script", "create_blueprint", "edit_blueprint", "delete_blueprint", "blueprint", "indirect control", "package", "packages"], "scenes": ["list_scenes", "get_scene", "create_scene", "edit_scene", "delete_scene"], "helpers": ["list_helpers", "create_helper", "edit_helper", "delete_helper", "get_helper_settings", "set_helper_settings", "input_boolean", "counter", "timer", "zone", "Template helper"], "dashboards": ["list_dashboards", "create_dashboard", "edit_dashboard", "delete_dashboard", "get_dashboard_config", "set_dashboard_config", "add_dashboard_card", "edit_dashboard_card", "delete_dashboard_card", "patch_dashboard", "list_dashboard_cards", "list_dashboard_resources", "set_dashboard_resource", "Lovelace", "custom cards"], "restore": ["restore_configuration", "undo", "roll back"], "mesa": ["mesa_query_profiles", "mesa_get_profile", "mesa_explain_profile", "mesa_get_caller_context", "mesa_request_lease", "mesa_release_lease", "lease"], "configuration": ["get_config", "get_energy_config", "get_solar_forecast", "edit_energy_config", "list_blueprints", "get_blueprint", "render_template", "get_logs", "get_log_detail", "get_logbook", "get_notifications", "list_integration_log_levels", "set_integration_log_level", "template", "logbook", "debug logging"], "diagnostics": ["search_entities", "get_overview", "describe_area", "describe_entity", "find_available_actions", "get_relationships", "whatif", "compare_states", "compare_entities", "recent_activity", "recognize_intent", "list_areas", "list_floors", "list_zones", "list_devices", "get_device", "list_labels", "get_automation_traces", "check_ha_config", "validate_automation_or_script", "get_system_health", "get_repairs", "get_radio_network", "get_esphome_overview", "get_phoenix_diagnostics", "traces"], "files": ["list_files", "read_file", "get_yaml_config", "www", "themes", "custom_templates", "secrets.yaml"], "esphome": ["get_esphome_yaml", "search_esphome_yaml", "validate_esphome_yaml", "compile_esphome_firmware", "install_esphome_firmware", "get_esphome_device_logs", "analyze_esphome_memory", "Device Builder", "firmware", "list_esphome_devices", "get_esphome_board", "get_esphome_component", "get_esphome_automations", "get_esphome_history", "check_esphome_connectivity", "clean_esphome_build", "decode_esphome_backtrace", "list_esphome_jobs", "get_esphome_job", "wait_for_esphome_job", "cancel_esphome_job"], "system": ["list_integrations", "set_integration", "set_integration_enabled", "reload_integration", "remove_integration", "reconfigure_integration", "remove_device", "set_entity", "delete_entity", "set_device", "set_area_or_floor", "set_label_or_category", "list_backups", "create_backup", "restart_ha", "send_notification", "Zigbee", "ZHA", "backup", "rename", "get_radio_device", "scan_zigbee_topology", "permit_zigbee_join", "reconfigure_zigbee_device", "remove_zigbee_device", "configure_zigbee_reporting", "set_zigbee_device_options", "set_zigbee_device_property", "set_zigbee_binding", "get_zigbee_groups", "create_zigbee_group", "set_zigbee_group_members", "remove_zigbee_group", "fix_repair", "set_integration_subentry", "subentry", "repair fix"], "introspection": ["get_approval_status", "wait_for_approval", "get_capability_summary", "get_audit_summary"], "household": ["family member", "non-admin", "voice", "Assist", "AI Task", "household"]}, "covers": ["custom_components/phoenix_mcp/tool_defs.py", "custom_components/phoenix_mcp/tool_catalog.py", "custom_components/phoenix_mcp/tool_dispatch.py", "custom_components/phoenix_mcp/tool_registration.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/log_read.py", "custom_components/phoenix_mcp/template_sandbox.py", "custom_components/phoenix_mcp/home_companion.py", "custom_components/phoenix_mcp/home_companion_turn.py", "custom_components/phoenix_mcp/household_authority.py", "custom_components/phoenix_mcp/tools/", "custom_components/phoenix_mcp/mesa_tools.py", "custom_components/phoenix_mcp/authoring_validation.py", "custom_components/phoenix_mcp/card_catalog.py", "custom_components/phoenix_mcp/esphome_builder.py", "custom_components/phoenix_mcp/esphome_yaml.py", "custom_components/phoenix_mcp/history_summary.py", "custom_components/phoenix_mcp/proxy_diagnostics.py", "custom_components/phoenix_mcp/radio.py", "custom_components/phoenix_mcp/recorder_queries.py", "custom_components/phoenix_mcp/service_targets.py", "custom_components/phoenix_mcp/system_log_payload.py", "custom_components/phoenix_mcp/template_diagnostics.py", "custom_components/phoenix_mcp/template_render.py", "custom_components/phoenix_mcp/template_scope.py", "custom_components/phoenix_mcp/template_worker.py", "custom_components/phoenix_mcp/tool_contracts.py", "custom_components/phoenix_mcp/routing/tool_routing.py", "custom_components/phoenix_mcp/yaml_includes.py", "custom_components/phoenix_mcp/logger_control.py", "custom_components/phoenix_mcp/home_companion_response.py", "custom_components/phoenix_mcp/debug_capture.py", "custom_components/phoenix_mcp/fault_log.py", "frontend_src/utils/card_harvest.ts", "frontend_src/utils/dashboard_page.ts", "custom_components/phoenix_mcp/esphome_constants.py", "custom_components/phoenix_mcp/template_limits.py", "custom_components/phoenix_mcp/tool_reference_data.py", "frontend_src/guide/reference.ts", "frontend_src/guide/tool_reference.json"]}
 ---
-An agent works through tools. This page explains them by group: what they let an agent do, which capabilities allow them, and the limits worth knowing. The [Tool Reference](guide:topic.toolReference) lists every tool with its parameters and an example call.
+An agent works through tools. The [Tool Reference](guide:topic.toolReference) lists every tool with its parameters and an example call.
 
-Two settings decide every action. [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities) decide what kind of thing an agent may do. The [{{label:accessKeys.permissionsTree}}](guide:window.permissions) decides which entities it may do it to.
+Two settings decide every action. [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities) decide what kind of thing an agent can do. The [{{label:accessKeys.permissionsTree}}](guide:window.permissions) decides which entities it can do it to.
 
 ## How capabilities apply {#rules}
 
-- A tool whose capability is Deny isn't offered to the agent, and a call to it is refused before it runs.
+- If a tool's capability is {{label:caps.modeDeny}}, Phoenix doesn't offer it to the agent. Phoenix refuses a call to it before it runs.
 - **{{label:accessKeys.announceAllLabel}}** lists every tool anyway, for troubleshooting. The agent still can't use the hidden ones.
 - Confirm holds a change for your approval. Reads that use the same capability run straight away.
 - A result that lists many entities stops at about 64 KB.
 
 Pass-through allows most read capabilities without setting them. Every capability that changes something keeps its own setting.
 
-Related: [Deny, Allow and Confirm](guide:window.capabilities#modes), [What pass-through opens](guide:topic.passThrough)
+Related: [Deny, Allow, and Confirm](guide:window.capabilities#modes), [What pass-through opens](guide:topic.passThrough)
 
 ## Reading the home {#reading}
 
-Agents read current states, history, statistics, calendars, to-do lists and a summary of the whole home. They see only the entities the tree lets them read. Sensitive attributes are always removed.
+Agents read current states, history, statistics, calendars, to-do lists, and a summary of the whole home. They see only the entities the tree lets them read. Sensitive attributes are always removed.
 
-Most reads need no capability; the tree alone decides. Camera stills need one, and so does picking history or statistics entities with a search filter.
+Most reads need no capability. The tree alone decides. Camera stills need one, and so does picking history or statistics entities with a search filter.
 
-- History and statistics come in pages of up to 1000 rows. State changes and statistics reach agents as a compact table in your home's time zone, with times to the second and statistics rounded to at least four significant digits.
+- History and statistics come in pages of up to 1,000 rows. Agents get state changes and statistics as a compact table in your home's time zone. Times are to the second, and statistics keep at least four significant digits.
 - A calendar read covers up to 31 days and 500 events.
-- Camera images are at most 2048 pixels on a side.
+- An agent can ask for a camera image up to 2048 pixels on a side. Without a size, it gets the camera's own size. Phoenix refuses images over 4 MiB.
 - A summary of an attribute's values covers at most 7 days.
 
 Allowed by: [{{label:caps.cap_camera_read.label}}](guide:window.capabilities#camera-read), [{{label:caps.cap_search.label}}](guide:window.capabilities#search)
@@ -33,13 +33,13 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## Controlling devices {#controlling}
 
-Agents turn things on and off, set lights, fans, climate, covers and volume, control media and vacuums, and cancel timers. These are the same commands Home Assistant's own assistant uses. Every target needs Write in the tree.
+Agents turn things on and off, set lights, fans, climate, covers, and volume, control media and vacuums, and cancel timers. These are the same commands Home Assistant's own assistant uses. Every target needs Write in the tree.
 
-Locks, alarms, covers and valves also need Physical control. So does any other action that reaches one, such as an integration's own unlock action, and a raw device command such as `zwave_js.set_value`, whichever entity it names. On Confirm, a command that includes one waits for your approval. On Deny, the agent can't control them.
+Locks, alarms, covers, and valves also need Physical control. So does any other action that reaches one, such as an integration's own unlock action. A raw device command such as `zwave_js.set_value` needs it too, whichever entity it names. On Confirm, a command that includes one waits for your approval. On Deny, the agent can't control them.
 
-A raw Z-Wave or ISY command works on the whole device. The agent needs Write on everything the device can operate, such as its locks, lights and switches, and MESA checks every entity of the device. A Z-Wave multicast with `broadcast` on is refused, because it reaches every device on the network.
+A raw Z-Wave or ISY command works on the whole device. The agent needs Write on everything the device can operate, such as its locks, lights, and switches. MESA checks every entity of the device. A Z-Wave multicast with `broadcast` on is refused, because it reaches every device on the network.
 
-Announcing a message through Assist satellites, or starting a conversation on one, needs Broadcast. MESA checks every command last, after the capability and the tree.
+Announcing a message through Assist satellites, or starting a conversation on one, needs Broadcast. MESA also checks every command.
 
 Allowed by: [{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control), [{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
 
@@ -49,35 +49,35 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## Running any action {#actions}
 
-Agents can also run Home Assistant actions on targets they can write, and preview the result first. The target must be one the action works on, so `light.turn_on` on a switch is refused. `homeassistant.turn_on`, `turn_off`, `toggle` and `update_entity` work on anything. A few actions need more:
+Agents can also run Home Assistant actions on targets they can write, and preview the result first. The target must be one the action works on, so `light.turn_on` on a switch is refused. `homeassistant.turn_on`, `turn_off`, `toggle`, and `update_entity` work on anything. A few actions need more:
 
 - Restarting or stopping Home Assistant needs Restart. So does installing an update, which always needs your approval.
-- Reloading automations, scripts, scenes, helpers or the core configuration needs YAML configuration.
+- Reloading automations, scripts, scenes, helpers, or the core configuration needs YAML configuration.
 - An action's returned data needs Service response data. Without it, most actions still run but return no data. Actions that only return data, such as `weather.get_forecasts`, are refused.
-- Notify actions, which send messages, need Notifications. So does an integration's own action that sends through a notify entity. A legacy notify service other than a phone's always needs your approval.
+- Notify actions, which send messages, need Notifications. So does an integration's own action that sends through a notify entity. A legacy notify action other than a phone's always needs your approval.
 - Announcements need Broadcast: `assist_satellite.announce`, `start_conversation` and `ask_question`, `music_assistant.play_announcement`, `media_player.play_media` with `announce`, and `tts.speak`. `tts.speak` also needs Write on every speaker it names. Ordinary playback needs only Write.
 - A camera or image named in an action's data as `media-source://camera/<entity_id>` or `media-source://image/<entity_id>` needs {{label:caps.cap_camera_read.label}} and Read on it, as with any still.
-- A Nest, UniFi Protect, Reolink, motionEye or Netatmo recording named as a `media-source://` ID needs {{label:caps.cap_camera_read.label}} and Read on every camera of that integration. One hidden camera blocks them all.
-- Google Photos, Immich, iCloud, Synology Photos, System Bridge, Xbox, uploaded images and any media source not listed here, such as Frigate's, need {{label:caps.cap_camera_read.label}}, even with pass-through. It covers every item, so grant it only where you'd share them all.
-- A key's own AI Task images, local media, radio, spoken text, Jellyfin and DLNA servers need nothing extra.
+- A Nest, UniFi Protect, Reolink, motionEye, or Netatmo recording named as a `media-source://` ID needs {{label:caps.cap_camera_read.label}} and Read on every camera of that integration. One hidden camera blocks them all.
+- Google Photos, Immich, iCloud, Synology Photos, System Bridge, Xbox, and uploaded images need {{label:caps.cap_camera_read.label}}, even with pass-through. So does any media source this list doesn't name, such as Frigate's. Grant it only where you'd share every item.
+- A key's own AI Task images, local media, radio, spoken text, and Jellyfin and DLNA servers need nothing extra.
 - AI Task attachments must be cameras, images, or a picture the same key made with `ai_task.generate_image` since the last restart.
-- ESPHome device actions need Write on everything the device can operate, such as its switches, buttons and locks. They must pass MESA on every entity of the device. MESA doesn't check reloads or restarts.
-- `homeassistant.turn_on`, `turn_off` and `toggle` take no data when a target is a script. Use `script.turn_on` to pass its inputs.
+- ESPHome device actions need Write on everything the device can operate, such as its switches, buttons, and locks. They must pass MESA on every entity of the device. MESA doesn't check reloads or restarts.
+- `homeassistant.turn_on`, `turn_off`, and `toggle` take no data when a target is a script. Use `script.turn_on` to pass its inputs.
 - Searching or listing the Music Assistant library needs Service response data and Read on a Music Assistant entity, such as a speaker. Nothing plays, so MESA doesn't check these either.
 - `update.install` must pass MESA on every entity of the device. On an ESPHome device it also needs ESPHome firmware flashing.
 - An entity named in a script's or automation's inputs needs the same access as a target, and MESA checks it. If one falls short, nothing runs.
 - Any input shaped like an entity ID or a 32-character registry ID counts as naming an entity.
-- An input that selects a device, area, floor or label is refused, and so is `all` unless the script declares that input as plain data. Name each entity instead.
+- An input that selects a device, area, floor, or label is refused, and so is `all` unless the script declares that input as plain data. Name each entity instead.
 
 An entity with no unique ID, such as a YAML light or an automation without an `id`, can't be a target. Home Assistant keeps no registry entry for it, so Phoenix refuses the action for every key and tells the agent why.
 
 An action that needs several capabilities follows the strictest. Deny refuses it, and Confirm holds it for your approval.
 
-An action that doesn't declare a target, such as `shell_command`, `rest_command` or `python_script`, is refused for every key, pass-through included. That holds whatever target the agent names, even an entity of the action's own domain. Other actions without a target are refused too.
+An action that doesn't declare a target, such as `shell_command`, `rest_command`, or `python_script`, is refused for every key, pass-through included. That holds whatever target the agent names, even an entity of the action's own domain. Other actions without a target are refused too.
 
 A custom action declares a target when Home Assistant runs it on its entities, or when its registered schema names `entity_id`.
 
-Calendar changes, `homeassistant.reload_config_entry` and `todo.remove_completed_items` are refused as well, because they have their own tools. An action still running after 30 seconds is reported as possibly incomplete. If Home Assistant says an action failed, the agent gets the reason and is told to check the result before trying again.
+Calendar changes, `homeassistant.reload_config_entry`, and `todo.remove_completed_items` are refused as well, because they have their own tools. If an action is still running after 30 seconds, Phoenix reports it as possibly incomplete. If Home Assistant says an action failed, the agent gets the reason and is told to check the result before trying again.
 
 Allowed by: [{{label:caps.cap_restart.label}}](guide:window.capabilities#restart), [{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit), [{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response), [{{label:caps.cap_notify.label}}](guide:window.capabilities#notify), [{{label:caps.cap_search.label}}](guide:window.capabilities#search) for previews
 
@@ -85,11 +85,11 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## Lists and calendars {#lists}
 
-Agents add, change and remove to-do items and clear completed ones, which needs only Write on the list. Removing an item is permanent: Phoenix keeps no copy, so you [can't restore it](guide:topic.configurationHistory#not-recorded). The result names what went. Item text that still holds a `<redacted>` mark from a read is refused.
+Agents add, change, and remove to-do items and clear completed ones, which needs only Write on the list. Removing an item is permanent: Phoenix keeps no copy, so you [can't restore it](guide:topic.configurationHistory#not-recorded). The result names what went. Item text that still holds a `<redacted>` mark from a read is refused.
 
 If you approve a removal requested through Phoenix's to-do tool, Phoenix reads the list again first. An item that changed while the request waited stays, and the result says which. A raw `todo.remove_item` action is refused instead if any item it names changed while it waited.
 
-Agents create, change and delete calendar events, which also needs Calendar write. MESA checks both to-do and calendar changes. Each calendar change leaves a receipt the agent can check later.
+Agents create, change, and delete calendar events, which also needs Calendar write. MESA checks both to-do and calendar changes. Each calendar change leaves a receipt the agent can check later.
 
 Allowed by: [{{label:caps.cap_calendar_write.label}}](guide:window.capabilities#calendar-write)
 
@@ -97,7 +97,7 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## Waiting for a change {#waiting}
 
-An agent can wait up to 30 seconds for an entity to change or reach a state, to confirm that an action worked. The tree and authority are checked again when the wait ends.
+An agent can wait up to 30 seconds for an entity to change or reach a state, to confirm that an action worked. When the wait ends, Phoenix checks again that the key is still valid and can read the entity.
 
 Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
 
@@ -107,25 +107,25 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 Before saving an automation, an agent can check that a trigger fires, waiting up to 30 seconds, or that a condition holds now. Nothing is saved, and the trigger is removed after the test.
 
-Every entity the trigger or condition reaches must be one the key can read. That includes entities in its templates, every entity of a device, area, floor or label it targets, and every entity of a device trigger's device. A device, area, floor or label with nothing in it is refused like one that doesn't exist.
+Every entity the trigger or condition reaches must be one the key can read. That includes entities in its templates and every entity of a device, area, floor, or label it targets. For a device trigger, it includes every entity of the device. A device, area, floor, or label with nothing in it is refused like one that doesn't exist.
 
 A condition's templates run in the same separate, limited process as Template render, on a copy of the states the key can read. Templates must name entities directly, such as `states('sensor.x')`.
 
-Templates in a trigger need {{label:caps.cap_automation_write.label}} set to Allow, because Home Assistant runs them itself on every change during the test, with no review. They're first tried in that separate process. Otherwise, test the template as a condition.
+Templates in a trigger need {{label:caps.cap_automation_write.label}} set to {{label:caps.modeAllow}}, because Home Assistant runs them itself on every change during the test, with no review. Phoenix first tries them in that separate process. If the capability isn't {{label:caps.modeAllow}}, test the template as a condition.
 
-Event, MQTT, webhook and conversation triggers are refused, because no key's scope limits what they reach.
+Event, MQTT, webhook, and conversation triggers are refused, because no key's scope limits what they reach.
 
-Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read); template triggers also need [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) set to Allow
+Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read); template triggers also need [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) set to {{label:caps.modeAllow}}
 
 Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-testing)
 
 ## Home Companion {#home-companion}
 
-A [{{label:personas.home_companion.label}}](guide:window.persona#home-companion) key offers a single tool. The app sends one plain request, such as "turn off the downstairs lights". Phoenix carries it out with its own model, checks the result and reports back.
+A [{{label:personas.home_companion.label}}](guide:window.persona#home-companion) key offers a single tool. The app sends one plain request, such as "turn off the downstairs lights". Phoenix carries it out with its own model, checks the result, and reports back.
 
-- It controls lights, fans, switches, climate, covers, valves, media players, vacuums, humidifiers and timers.
-- It reads sensors, weather, calendars and the sun, but can't change them. Sensors are limited to temperature, humidity, light, power, energy and battery.
-- Locks, alarms and cameras are out of its reach.
+- It controls lights, fans, switches, climate, covers, valves, media players, vacuums, humidifiers, and timers.
+- It reads sensors, weather, calendars, and the sun, but can't change them. Sensors are limited to temperature, humidity, light, power, energy, and battery.
+- Locks, alarms, and cameras are out of its reach.
 - Each key handles one request at a time, with up to 8 actions and 2 minutes per request.
 - Pass-through and **{{label:accessKeys.announceAllLabel}}** are always off.
 
@@ -137,13 +137,13 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## Automations and scripts {#automations}
 
-Agents read, create, edit and delete the automations and scripts that Home Assistant's own editor manages. On Confirm, the approval shows the new configuration, or the before and after of an edit. Every change is kept in [{{label:shell.tabChanges}}](guide:topic.configurationHistory).
+Agents read, create, edit, and delete the automations and scripts that Home Assistant's own editor manages. On Confirm, the approval shows the new configuration, or the before and after of an edit. Every change is kept in [{{label:shell.tabChanges}}](guide:topic.configurationHistory).
 
 An automation runs as Home Assistant, not as the agent. Its actions aren't limited by the key's tree or by MESA. So these capabilities let an agent control devices indirectly. Use Confirm to review each one.
 
 - Only the editor's own files change. Automations and scripts written by hand elsewhere in YAML are refused.
-- Automations, scripts and scenes in a package are read and searched, but never changed. Reading one names its package and file, so you can edit it there.
-- A new automation or script can't take an id a package already uses.
+- Automations, scripts, and scenes in a package are read and searched, but never changed. Reading one names its package and file, so you can edit it there.
+- A new automation or script can't take an ID a package already uses.
 - Listing them needs Registry read, and shows only those whose entity the key can read.
 - Blueprints need Manage blueprints plus the capability for the blueprint's kind, automation or script.
 
@@ -153,11 +153,11 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## Scenes {#scenes}
 
-Agents read, create, edit and delete scenes in Home Assistant's scene editor. Every entity in a scene needs Write in the tree, even just to read the scene. MESA doesn't check scene changes.
+Agents read, create, edit, and delete scenes in Home Assistant's scene editor. Every entity in a scene needs Write in the tree, even just to read the scene. MESA doesn't check scene changes.
 
-A group in a scene needs Write too, and it fails this check if the key is denied one of its members, or Phoenix can't read them.
+A group in a scene needs Write too. The group fails this check if the key is denied one of its members, or if Phoenix can't read them.
 
-Creating or editing a scene with a lock, alarm, cover or valve in it, directly or through a group, also needs Physical control. On Deny, the change is refused. On Confirm, it waits for your approval and lists them as `physical_entities`.
+Creating or editing a scene with a lock, alarm, cover, or valve in it, directly or through a group, also needs Physical control. On Deny, the change is refused. On Confirm, it waits for your approval and lists them as `physical_entities`.
 
 Allowed by: [{{label:caps.cap_scene_write.label}}](guide:window.capabilities#scene-write), [{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)
 
@@ -165,10 +165,10 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## Helpers {#helpers}
 
-Agents create, edit and delete helpers: toggles, numbers, text, lists, dates, buttons, counters, timers, schedules, zones, tags and people. They also manage helpers set up through an integration, such as Template, and change their settings.
+Agents create, edit, and delete helpers: toggles, numbers, text, lists, dates, buttons, counters, timers, schedules, zones, tags, and people. They also manage helpers set up through an integration, such as Template, and change their settings.
 
 - MESA checks helper changes. A MESA Confirm asks for its own approval, even when Manage helpers is Allow.
-- Only zones, tags and people follow the tree. Other helpers are limited by the capability and MESA alone, apart from the settings rule below.
+- Only zones, tags, and people follow the tree. Other helpers are limited by the capability and MESA alone, apart from the settings rule in this section.
 - Deleting a Template helper also needs Integration management.
 - Helpers defined in YAML can't be changed.
 
@@ -182,7 +182,7 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## Dashboards {#dashboards}
 
-Agents list, create, edit and delete dashboards, read and search their layouts, change cards and list the installed custom cards. All of it needs Manage dashboards, reads included.
+Agents list, create, edit, and delete dashboards, read and search their layouts, change cards, and list the installed custom cards. All of it needs Manage dashboards, reads included.
 
 - The tree and MESA don't limit dashboard changes. Entities the key can't read show as `<redacted>`, and a change that still contains one is refused.
 - A layout that wouldn't display is refused, and so is a change to a dashboard in YAML mode.
@@ -197,7 +197,7 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## Restoring a change {#restore}
 
-An agent can put back one of its own earlier changes to a Template helper, blueprint, Energy setup, dashboard or dashboard resource. It asks for a receipt first, then sends the restore, which goes through the usual approval for that capability. An agent sees only its own records.
+An agent can put back one of its own earlier changes to a Template helper, blueprint, Energy setup, dashboard, or dashboard resource. It asks for a receipt first, then sends the restore. The restore goes through the usual approval for that capability. An agent sees only its own records.
 
 Allowed by: any of [{{label:caps.cap_helper_write.label}}](guide:window.capabilities#helper-write), [{{label:caps.cap_blueprint_write.label}}](guide:window.capabilities#blueprint-write), [{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write), [{{label:caps.cap_lovelace_write.label}}](guide:window.capabilities#lovelace-write), [{{label:caps.cap_dashboard_resources.label}}](guide:window.capabilities#dashboard-resources)
 
@@ -207,7 +207,7 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## MESA profiles {#mesa}
 
-Agents read the MESA profiles of entities they can read, and see why a profile resolved the way it did. They can also take a short lease, up to 30 seconds, on entities they can write. A lease tells others the agent is working there; it grants nothing.
+Agents read the MESA profiles of entities they can read, and see why a profile resolved the way it did. They can also take a short lease, up to 30 seconds, on entities they can write. A lease tells others the agent is working there. It grants nothing.
 
 When a profile's reason or limit names an entity the key can't read, the agent sees `<redacted-entity>` and not the state the limit watches for.
 
@@ -217,23 +217,23 @@ Related: [How MESA decides](guide:topic.mesaRules)
 
 Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-mesa)
 
-## Configuration, templates and logs {#configuration}
+## Configuration, templates, and logs {#configuration}
 
-- Configuration read covers Home Assistant's basic setup, the Energy setup, solar forecasts and blueprints.
+- Configuration read covers Home Assistant's basic setup, the Energy setup, solar forecasts, and blueprints.
 - Manage Energy dashboard changes one part of the Energy setup. It can't add a second source of a type, and it refuses to change a type that already has several.
-- Template render renders templates in a separate, limited process. It works on a copy of the states the key can read, for up to 10 seconds, including starting the process.
-- System log read covers warnings and errors, the logbook and notifications. The fault log and captured debug records also need Diagnostics.
+- Template render renders templates in a separate, limited process. It works on a copy of the states the key can read, for up to 10 seconds.
+- System log read covers warnings and errors, the logbook, and notifications. The fault log and captured debug records also need Diagnostics.
 - Integration log levels changes how much an integration logs, such as turning on debug logging. A change can end after 5 to 120 minutes, last until the next restart, or stay until cleared.
 
-Only the key that turned an integration up reads its debug records, and only those written since. Capture stops when the level goes back down, Home Assistant restarts or you revoke the key. Debug logging you turned on yourself stays out of their reach.
+Only the key that turned an integration up reads its debug records, and only those written since. Capture stops when the level goes back down, Home Assistant restarts, or you revoke the key. Debug logging you turned on yourself stays out of their reach.
 
 Entity IDs the key can't read show as `<redacted-entity>` in log and logbook text, such as what triggered an automation.
 
 Template functions that need Home Assistant itself, such as area or device lookups, return nothing.
 
-Before Home Assistant checks the templates in a new or changed automation, script or Template helper, or in a configuration an agent validates, they're tried in that same process. A template that runs too long or stops the process is refused, so it can't stall or stop Home Assistant.
+Phoenix tries the templates in a new or changed automation, script, or Template helper in that same process, before Home Assistant checks them. It does the same for a configuration an agent validates. A template that runs too long or stops the process is refused, so it can't stall or stop Home Assistant.
 
-Only templates a change adds are tried; ones already saved aren't tried again. If that process stays busy with other requests, the agent is asked to retry, and nothing changes.
+Phoenix tries only the templates a change adds. It doesn't try saved ones again. If that process stays busy with other requests, the agent is asked to retry, and nothing changes.
 
 Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read), [{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write), [{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render), [{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read), [{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)
 
@@ -243,10 +243,10 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 These tools only read. They help an agent find its way before it acts.
 
-- Search & discovery searches and describes entities, areas and how things relate, compares them, and finds what actions are available.
-- Registry read lists areas, floors, zones, devices, labels, automations, scripts, scenes and helpers.
+- Search & discovery searches and describes entities, areas, and how things relate, compares them, and finds what actions are available.
+- Registry read lists areas, floors, zones, devices, labels, automations, scripts, scenes, and helpers.
 - Automation traces reads how automations ran. A step that used an entity the key can't read, even through a variable, shows no values. The settings, and what a webhook-started run recorded, also need {{label:caps.cap_automation_write.label}} or {{label:caps.cap_script_write.label}}.
-- Diagnostics checks the configuration and reads system health, repairs, radio networks and the ESPHome overview.
+- Diagnostics checks the configuration and reads system health, repairs, radio networks, and the ESPHome overview.
 
 A configuration check names the file and line only when YAML configuration isn't Deny.
 
@@ -256,11 +256,11 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## Files and YAML {#files}
 
-Read files lets an agent read text files in the www, themes and custom_templates folders, up to 1 MiB each. Folder lists come in pages, 500 entries by default and up to 1,000. It can't write these files.
+Read files lets an agent read text files in the www, themes, and custom_templates folders, up to 1 MiB each. Folder lists come in pages, 500 entries by default and up to 1,000. It can't write these files.
 
-YAML configuration lets an agent read your YAML files, apart from any file with secret in its name, the esphome folder and hidden files. Names in any language work, but a file name with control characters or hidden marks that change the text direction is refused.
+YAML configuration lets an agent read your YAML files, apart from any file with secret in its name, the esphome folder, and hidden files. Names in any language work, but a file name with control characters or hidden marks that change the text direction is refused.
 
-Values under names that suggest a secret show as `<redacted>`, and so do comments that mention one, but a password under an ordinary name is visible. A file with a YAML mistake isn't shown; the agent gets the line to fix instead. No tool writes YAML configuration.
+Values under names that suggest a secret show as `<redacted>`, and so do comments that mention one. A password under an ordinary name is visible. A file with a YAML mistake isn't shown. The agent gets the line to fix instead. No tool writes YAML configuration.
 
 Allowed by: [{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem), [{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
 
@@ -268,30 +268,30 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## ESPHome {#esphome}
 
-Agents read and search ESPHome device configuration, with passwords, keys, every request header value, credentials in web addresses and comments that mention them masked. With the ESPHome Device Builder add-on, they can also validate, compile, read device logs, analyse memory and check connections. Without the add-on, only reading and searching remain.
+Agents read and search ESPHome device configuration. Passwords, keys, every request header value, credentials in web addresses, and comments that mention them are masked. With the ESPHome Device Builder app, they can also validate, compile, read device logs, analyze memory, and check connections. Without the app, only reading and searching remain.
 
 A value from secrets.yaml is masked wherever it appears, even inside a web address or a comment. Entity IDs the key can't read show as `<redacted-entity>`, in files and in the Device Builder's output and logs. No agent can read or install a file with secret in its name.
 
-So is a substitution a password or key uses, directly or through another substitution, in the file or in a local package it includes. If the file uses a remote package, every substitution no local file uses is masked too.
+A substitution that a password or key uses is masked too, directly or through another substitution, in the file or in a local package it includes. If the file uses a remote package, every substitution no local file uses is masked too.
 
 Phoenix works out a file's device from the file name, the device name it states and any `use_address` or static IP. A key limited to some devices reads only their files. A file that states its own name and matches no device follows the capability alone.
 
 A file whose device Phoenix can't tell, such as a shared package or a deleted file, needs a key that reaches every ESPHome device.
 
-Compiling, cleaning and memory analysis need Write on the device. Installing firmware needs ESPHome firmware flashing, ESPHome device YAML and Write on the device, and MESA checks it.
+Compiling, cleaning, and memory analysis need Write on the device. Installing firmware needs ESPHome firmware flashing, ESPHome device YAML, and Write on the device. MESA also checks it.
 
 Allowed by: [{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#esphome-yaml), [{{label:caps.cap_esphome_flash.label}}](guide:window.capabilities#esphome-flash)
 
 Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-esphome)
 
-## Integrations, devices and the system {#system}
+## Integrations, devices, and the system {#system}
 
-- Integration management adds, enables, disables, reloads and removes integrations, and removes devices.
+- Integration management adds, enables, disables, reloads, and removes integrations, and removes devices.
 - Integration reconfiguration changes an integration's settings. It also adds or changes subentries, such as an AI agent, and fixes repair issues.
-- Subentries and repair fixes always wait for your approval. An agent's settings decide which tools it gets, and a fix runs the integration's own code.
-- Before asking, an agent can look at the first form of a reconfiguration, subentry or fix without your approval. It sees the fields and their labels, not the stored settings, and nothing is submitted.
-- Manage entity registry renames entities and devices and changes entity IDs, areas, floors, labels and categories. `recorder.purge_entities` needs it too, because it deletes history.
-- Radio management changes Zigbee networks. Groups, bindings and device properties also need Physical control. MESA checks changes to a Zigbee device.
+- Subentries and repair fixes always wait for your approval. An AI agent subentry's settings decide which tools it gets. A fix runs the integration's own code.
+- Before asking, an agent can look at the first form of a reconfiguration, subentry, or fix without your approval. It sees the fields and their labels, not the stored settings, and nothing is submitted.
+- Manage entity registry renames entities and devices and changes entity IDs, areas, floors, labels, and categories. `recorder.purge_entities` needs it too, because it deletes history.
+- Radio management changes Zigbee networks. Groups, bindings, and device properties also need Physical control. MESA checks changes to a Zigbee device.
 - A Zigbee device with no entities gives MESA nothing to check, so Advisory warns and goes ahead. MESA refuses when it's Enforced, when it failed to start, or when you stored a profile for that device.
 - Backup creates and lists backups, but can't restore one.
 - Restart or stop Home Assistant restarts it. The agent is told not to retry by itself.
@@ -305,14 +305,14 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 
 ## The key's own state {#introspection}
 
-Every key can check its own approval requests, wait up to 30 seconds for up to 50 of them, and read its capability summary and audit entries. These need no capability. Requests from another key look like they don't exist.
+Every key can check its own approval requests and wait up to 30 seconds for up to 50 of them. It can also read its capability summary and audit entries. These need no capability. Requests from another key look like they don't exist.
 
 Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-introspection)
 
-## On Voice, Assist and AI Task {#household}
+## On Voice, Assist, and AI Task {#household}
 
-Anyone in the household can speak to Assist or the Voice Agent. For someone who isn't a Home Assistant administrator, the key keeps five capabilities at most. They are Search & discovery, Registry read, Physical control, Broadcast and Service response data. The rest count as Deny.
+Anyone in the household can speak to Assist or the Voice Agent. For someone who isn't a Home Assistant administrator, the key keeps five capabilities at most. They are Search & discovery, Registry read, Physical control, Broadcast, and Service response data. The rest count as Deny.
 
-The approval and audit tools are hidden too, and Home Assistant's admin-only actions are refused. A speaker Home Assistant can't identify is treated the same way. AI Task always runs like this.
+The approval and audit tools are hidden too, and Home Assistant's admin-only actions are refused. A speaker Home Assistant can't identify is treated the same way. AI Task runs the same way, unless Home Assistant names an administrator as the person who started the task.
 
-Related: [Voice Agent, AI Task or Assist Tool Provider](guide:topic.homeAssistantFeatures), [Assist and the Voice Agent](guide:topic.permissionResolution#household)
+Related: [Voice Agent, AI Task, or Assist Tool Provider](guide:topic.homeAssistantFeatures), [Assist and the Voice Agent](guide:topic.permissionResolution#household)

@@ -5,17 +5,17 @@
 
 ## 在記錄間切換 {#step}
 
-**{{label:workspace.previousRecord}}** 和 **{{label:workspace.nextRecord}}** 會依你選擇記錄時日誌顯示的順序移動。之後到達的條目不會包含在內，直到你再次選擇記錄。
+**{{label:workspace.previousRecord}}** 和 **{{label:workspace.nextRecord}}** 會依日誌目前顯示的順序移動。它們也會到達之後才出現的條目，並在你重新排序日誌時跟隨新的順序。
 
 ## 稽核條目 {#audit-entry}
 
-條目的每個欄位，包括其 **{{label:audit.rowRequestId}}**。工具呼叫還會顯示其 **{{label:audit.rowPayload}}**：工具的名稱和參數，其中密碼、權杖、金鑰以及警報或門鎖代碼會被隱藏。過長的負載會被截斷。
+條目的每個欄位，包括其{{label:audit.rowRequestId}}。工具呼叫還會顯示其{{label:audit.rowPayload}}：工具的名稱和參數，其中密碼、權杖、金鑰以及警報或門鎖代碼會被隱藏。過長的負載會被截斷。
 
 如果存取金鑰事後被重新命名，它的舊名稱會顯示在目前名稱後的括號中。
 
-應用程式透過 OAuth 登入發出的請求會顯示 **{{label:audit.rowOAuthApp}}**：先是應用程式自稱的名稱，然後是它登入時使用的位址。只有位址經過核實，請以位址為準。
+應用程式透過 OAuth 登入發出的請求會顯示{{label:audit.rowOAuthApp}}：先是應用程式自稱的名稱，然後是它登入時使用的位址。只有位址經過核實，請以位址為準。
 
-由 Phoenix 的 AI 模型發出的請求會顯示其 **{{label:conversations.providerLabel}}** 和 **{{label:conversations.modelLabel}}**。這類請求來自 Agent Chat、Voice、AI Task、Home Companion 和決策提供者。如果請求曾等待核准，記錄核准結果的條目也會顯示同一個模型。
+由 Phoenix 的 AI 模型發出的請求會顯示其{{label:conversations.providerLabel}}和{{label:conversations.modelLabel}}。這類請求來自 Agent Chat、語音智慧體、AI 任務、Home Companion 和決策提供者。如果請求曾等待核准，記錄核准結果的條目也會顯示同一個模型。
 
 ## 對話 {#conversation}
 

@@ -1,7 +1,7 @@
 ---
 { "id": "window.review", "title": "{{label:workspace.review}}", "parent": "workspace.approvals", "order": 2, "keywords": ["差異", "比較", "決定"], "sectionKeywords": { "reject": ["原因", "拒絕請求"], "change": ["更改前", "更改後", "預覽", "程式碼編輯器", "並排", "使用方", "關聯", "刪除"] } }
 ---
-準確顯示所選請求會變更什麼，並讓你做出決定。已決定的請求會保留在這裡，並顯示其結果。
+準確顯示所選請求會變更什麼，並讓你做出決定。已決定的請求會保留在{{label:workspace.review}}中，並顯示其結果。
 
 ## 剩餘時間 {#context}
 
@@ -19,7 +19,7 @@
 
 拒絕請求。**{{label:approvals.reject}}** 會開啟一個用於填寫選填原因的方塊，智慧體會收到該原因，以便調整下一次提議。按 Enter 或選擇 **{{label:approvals.confirmReject}}** 拒絕，或選擇 **{{label:approvals.cancelReject}}** 退出。
 
-你輸入的原因也會同步到 Agent Chat 的拒絕按鈕。
+你輸入的原因也會同步到 Agent Chat 的 {{label:agentchat.reject}} 按鈕。
 
 ## 變更 {#change}
 
@@ -31,7 +31,7 @@
 - 刪除、重新命名、輔助項目、整合等系統操作：請求為何需要核准、將發生什麼、誰在使用它、哪些 Phoenix 設定提及它。展開底部的 **{{label:approvals.previewAllDetails}}** 查看全部。
 - 刪除待辦事項：每個事項及其狀態，並提示刪除後無法復原。
 
-儀表板變更中的範本已先在個別程序中試執行，範本在那裡失敗的變更不會送到你這裡。預覽從不執行範本：含範本的卡片會以文字顯示。
+Phoenix 會先試執行儀表板變更中的所有新範本。如果某個範本當機、執行太久或超出限制，該變更就不會送到你這裡。預覽從不執行範本：含範本的卡片會以文字顯示。
 
 其他檢視選擇會儲存在此瀏覽器中，變更也會使用它們。
 

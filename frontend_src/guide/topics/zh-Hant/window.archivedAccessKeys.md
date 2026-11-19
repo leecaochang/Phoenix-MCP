@@ -7,4 +7,4 @@
 
 ## {{label:accessKeys.deletePermanently}} {#delete-permanently}
 
-從此清單中移除金鑰。選擇它，然後選擇 **{{label:accessKeys.confirmDelete}}**。點選其他任意位置可取消。
+從此清單中移除金鑰。在金鑰所在列選擇 **{{label:accessKeys.deletePermanently}}**，然後選擇 **{{label:accessKeys.confirmDelete}}**。點選其他任意位置可取消。

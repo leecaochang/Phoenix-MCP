@@ -7,7 +7,7 @@ Each workspace is a set of windows you can arrange as you like. Phoenix remember
 
 The buttons switch workspaces. Approvals shows how many requests are waiting. **{{label:shell.agentChat}}** opens Agent Chat, and **{{label:shell.help}}** turns Quick Help and the Guide on or off.
 
-The second row holds the tools of the windows you have open, such as Filters or Refresh. A tool several windows share shows once and acts on all of them.
+The second row holds the tools of the windows you have open, such as {{label:logs.filters}} or {{label:common.refresh}}. A tool several windows share shows once and acts on all of them.
 
 ## {{label:workspace.toolbarOptions}} {#toolbar-options}
 
@@ -16,14 +16,14 @@ Open them from the toolbar's last button, or right-click the toolbar.
 - **{{label:workspace.iconsAndText}}** (default) or **{{label:workspace.iconsOnly}}**.
 - **{{label:workspace.singleRow}}** puts the tools on the same row as the workspace buttons while they fit, and goes back to two rows when they don't.
 - **{{label:workspace.singleColumn}}** does the same on a toolbar docked at a side or standing upright: one column instead of two. It's the same choice as {{label:workspace.singleRow}}, so it stays when the toolbar turns.
-- Dock the toolbar along any edge, or **{{label:workspace.floatToolbar}}** to place it anywhere. You can also drag its grip to float it.
+- Dock the toolbar along any edge, or **{{label:workspace.floatToolbar}}** to place it anywhere. Or drag its grip to float it.
 - **{{label:workspace.collapseToolbar}}** shrinks a floating toolbar to its grip. A docked toolbar doesn't collapse. While it's collapsed, the menu only offers **{{label:workspace.expandToolbar}}**.
 
 ## The title bar {#title-bar}
 
 Drag a window by its title bar. The buttons beside the title fold it to its title bar, float it above the workspace, maximize it, and close it.
 
-A floating window stays put while the workspace scrolls. **{{label:workspace.dockWindow}}** puts it back where it was. From its menu, the Move items nudge it across the workspace, and **{{label:workspace.resizeKeyboard}}** sizes it.
+A floating window stays put while the workspace scrolls. **{{label:workspace.dockWindow}}** puts it back where it was. From its menu, **{{label:workspace.moveLeft}}** and the other moves nudge it across the workspace, and **{{label:workspace.resizeKeyboard}}** sizes it.
 
 ## The window menu {#window-menu}
 
@@ -37,21 +37,21 @@ Open it from the title bar's menu button, or right-click the title bar.
 
 ## The Guide {#guide}
 
-The Guide is one window over every workspace. It shows the page for the window you're working in, and selecting a control takes it to the section about that control. Use Back and Forward, Contents and Search at the top to find your way.
+The Guide is one window over every workspace. It shows the page for the window you're working in. Selecting a control takes it to the section about that control. Use **{{label:guide.back}}**, **{{label:guide.forward}}**, **{{label:guide.contents}}**, and **{{label:guide.search}}** at the top to find your way.
 
-Selecting a control again brings the Guide back to its section, wherever it is. With nothing typed, Search lists the last 10 searches made in this browser; select one to search for it again.
+Selecting a control again brings the Guide back to its section, wherever it is. With nothing typed, Search lists the last 10 searches made in this browser. Select one to search for it again.
 
-The first time it opens, the Guide shows [Welcome to the Guide](guide:topic.welcome), a short demo of what it does. After that it opens on your page, and **{{label:guide.back}}** from the first page still reaches Welcome. **{{label:workspace.restorePanelDefaults}}** shows it first again.
+The first time it opens, the Guide shows [Welcome to the Guide](guide:topic.welcome), a short demo of what it does. After that, it opens on your page. **{{label:guide.back}}** from the first page still reaches Welcome. **{{label:workspace.restorePanelDefaults}}** shows it first again.
 
-Fold, maximize and close it from its title bar, or move and resize it with the keyboard from its menu. Closing it anywhere closes it everywhere. Beside the setup wizard it has none of these buttons and stays open, but you can still drag and resize it.
+Fold, maximize, and close it from its title bar, or move and resize it with the keyboard from its menu. Closing it anywhere closes it everywhere. Beside the setup wizard, it has none of these buttons and stays open. You can still drag and resize it.
 
 **{{label:agentchat.popOut}}** moves the Guide to a browser window of its own, so it can sit beside Home Assistant. It keeps following what you select in the panel. **{{label:agentchat.popIn}}** brings it back, and closing that window closes the Guide.
 
-It stays popped out only while the Phoenix panel is open. After a reload it's back inside the panel. It isn't offered on a phone, or while it sits beside the setup.
+It stays popped out only while the Phoenix panel is open. After a reload it's back inside the panel. **{{label:agentchat.popOut}}** isn't available on a phone, or while the Guide sits beside the setup wizard.
 
 ## Arranging windows {#arranging}
 
-Drop a window on another window's edge to put it beside, above or below it. Up to four windows fit side by side. Drag the border between two windows to resize them.
+Drop a window on another window's edge to put it beside, above, or below it. Up to four windows fit side by side. Drag the border between two windows to resize them.
 
 Access Keys and Settings scroll, and each window is as tall as its content. The other workspaces fit the screen, so their windows share its height.
 
@@ -67,7 +67,7 @@ Quick Help comes back from the **{{label:shell.help}}** menu, and Needs Attentio
 
 - **{{label:workspace.saveMyDefault}}** keeps this workspace's arrangement, including table columns. **{{label:workspace.restoreMyDefault}}** brings it back.
 - **{{label:workspace.restoreOriginal}}** puts this workspace back as Phoenix first arranged it, and resets its table columns. Your My Default stays.
-- **{{label:workspace.restorePanelDefaults}}** does that for every workspace, and also resets the toolbar, Quick Help and the Guide, and empties My Workspace. Every My Default stays.
+- **{{label:workspace.restorePanelDefaults}}** does that for every workspace, and also resets the toolbar, Quick Help, and the Guide, and empties My Workspace. Every My Default stays.
 
 ## How arrangements are saved {#saved}
 
@@ -77,13 +77,13 @@ Your arrangement is saved as you work, for your Home Assistant user. Another com
 
 A phone shows each workspace's windows in one column you scroll, with the toolbar in two rows across the top. The column stays when you turn the phone sideways. A narrow browser window on a computer or tablet shows the same column.
 
-Each title bar has buttons to fold the window, open its menu and close it. There's no dragging on a phone. Use the window menu instead:
+Each title bar has buttons to fold the window, open its menu, and close it. There's no dragging on a phone. Use the window menu instead:
 
 - **{{label:workspace.moveUp}}** and **{{label:workspace.moveDown}}** swap the window with its neighbor in the column.
 - **{{label:workspace.addToMy}}** and **{{label:workspace.alwaysLabels}}** work as they do on a computer.
 - **{{label:agentchat.maximize}}** fills the screen with the window, and **{{label:agentchat.restore}}** brings the column back.
 
-**{{label:workspace.options}}**, the toolbar's last button, shows closed windows again and saves, restores or resets your arrangement.
+**{{label:workspace.options}}**, the toolbar's last button, shows closed windows again and saves, restores, or resets your arrangement.
 
 Long lists show 10 rows at a time. **{{label:common.loadMore}}** shows the next 10.
 
@@ -91,18 +91,18 @@ The Guide opens at the bottom of the column. Quick Help and Notification History
 
 ## Keyboard {#keyboard}
 
-F6 moves to the next area: the toolbar, each window in the order you see them, the Guide and Agent Chat. Shift+F6 moves back. Coming back to an area returns you to where you were in it, and Tab still moves between the controls inside it.
+F6 moves to the next area: the toolbar, each window in the order you see them, the Guide, and Agent Chat. Shift+F6 moves back. Coming back to an area returns you to where you were in it. Tab still moves between the controls inside it.
 
-Every menu opens with Enter, Space or Down Arrow. Use the arrow keys, Home and End to move through it, and Escape to close it. The keyboard's menu key opens the menu of the control in focus.
+Every menu opens with Enter, Space, or Down Arrow. Use the arrow keys, Home, and End to move through it, and Escape to close it. The keyboard's menu key opens the menu of the control in focus.
 
-When the control you're on goes away, such as a window you close or a request you decide, focus moves to that window or the one in its place. Delete and Backspace never close a window.
+If the control you're on goes away, focus moves to its window or to the window in its place. This happens, for example, when you close a window or decide a request. Delete and Backspace never close a window.
 
 ## Using a screen reader {#screen-reader}
 
-The panel works with a screen reader. Windows, fields and buttons have names in your language, including the ones that show only an icon.
+The panel works with a screen reader. Windows, fields, and buttons have names in your language, including the ones that show only an icon.
 
-Phoenix announces changes that happen away from your focus. It says how many rows a filter or search left once you stop typing. Errors are read straight away and stay until you dismiss them. In Select Multiple, the number of ticked requests is read as you tick them.
+Phoenix announces changes that happen away from your focus. It says how many rows a filter or search left once you stop typing. Errors are read straight away and stay until you dismiss them. In **{{label:approvals.selectMultiple}}**, the screen reader reads the number of selected requests as you select them.
 
 Results that appear elsewhere, such as a finished batch approval or an import, are read too. Pressing F6 to reach Quick Help keeps the text of the control you just left.
 
-A table whose rows you can choose takes one Tab stop. Then use the arrow keys, Home and End to move between rows. In Permissions, the arrow keys only move between the levels; Enter or Space sets one, so nothing changes on the way past.
+A table with selectable rows takes one Tab stop. Then use the arrow keys, Home, and End to move between rows. In Permissions, the arrow keys only move between the levels, so nothing changes on the way past. Press Enter or Space to set one.

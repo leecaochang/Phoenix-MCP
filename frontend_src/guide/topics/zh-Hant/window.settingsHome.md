@@ -15,7 +15,7 @@
 
 ### {{label:settings.voiceEnableLabel}} {#voice-enable}
 
-開啟智慧體。預設為關閉。關閉它還會移除 Phoenix 建立的 Assist 助理。
+開啟智慧體。預設為關閉。關閉它還會移除 Phoenix 建立的 Assist 助理。若要保留智慧體而只移除助理，請改為關閉 **{{label:settings.voiceAssistSetup}}**。
 
 **{{label:settings.killSwitchCard}}** 開啟時，智慧體仍會保留，但只會回覆它無法使用。
 
@@ -47,7 +47,7 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 負責回答的模型。請先選擇帳戶。如果提供者停用該模型，Phoenix 會切換到其[後續模型](guide:window.settingsProviders#change-model)。
 
-智慧體最多等待 30 秒讓模型開始回答，本機 Ollama 或 OpenAI 相容伺服器除外。之後它最多等待 3 分鐘接收新內容，每次回覆最多等待 10 分鐘。
+智慧體最多等待 30 秒讓模型開始回答，本機 Ollama 或 OpenAI 相容伺服器除外。之後它最多等待 3 分鐘接收新內容。每次回覆最多可用 10 分鐘，在本機伺服器上最多可用一小時。
 
 ### {{label:routing.enableVoice}} {#voice-commands}
 
@@ -67,7 +67,7 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 ### {{label:settings.homeFocused}} {#voice-home-focused}
 
-要求模型只談論你的家。這是偏好，不是安全控制。
+要求模型只談論你的家。預設為關閉。這是偏好，不是安全控制。
 
 ### {{label:routingStats.title}} {#voice-statistics}
 
@@ -101,7 +101,7 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 ### {{label:settings.model}} {#ai-task-model}
 
-執行任務的模型。如果模型的一次回覆超過 10 分鐘，或 3 分鐘內沒有新內容，任務就會失敗。
+執行任務的模型。如果模型的一次回覆超過 10 分鐘（在本機 Ollama 或 OpenAI 相容伺服器上為超過一小時），任務就會失敗。如果模型 3 分鐘內沒有傳送新內容，任務也會失敗。
 
 ### {{label:settings.conversationStyle}} {#ai-task-style}
 
@@ -117,7 +117,7 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 為 Home Assistant 新增第二個實體 Phoenix MCP Decisions，用於「評估」動作。自動化和腳本可以用它對傳入的文字或資料提出是非題、選擇題和評分題。決策提供者負責回答，每個回答都附帶機率。
 
-每次回答後，該實體的 answering_model 屬性會寫明給出回答的模型，例如 jev-1.14.0。用閾值比較機率的自動化可以檢查它，因為 jev-latest 會隨每個新的 JEV 版本而變化。
+每次回答後，該實體的 `answering_model` 屬性會寫明給出回答的模型，例如 `jev-1.13.0`。用閾值比較機率的自動化可以檢查它，因為 `jev-latest` 會隨每個新的 JEV 版本而變化。
 
 此部分僅在 Home Assistant 2026.11 或更新版本上、且正在使用決策提供者時顯示。若要新增或選擇決策提供者，請前往 [{{label:workspace.aiProviders}}](guide:window.settingsProviders#decision-provider)。
 

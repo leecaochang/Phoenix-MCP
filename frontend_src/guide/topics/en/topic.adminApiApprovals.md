@@ -1,7 +1,7 @@
 ---
 { "id": "topic.adminApiApprovals", "title": "Approval and Change Endpoints", "parent": "topic.adminApi", "order": 20, "keywords": ["approvals API", "approve", "reject", "cancel", "versions", "rollback", "undo", "recovery", "Needs Attention", "card catalog"], "sectionKeywords": { "approvals": ["pending", "approval_id", "PendingApproval"], "list-approvals": ["in_progress", "status filter", "access_key_id"], "approve": ["approvalExecutionInterrupted", "approvalProcessing", "killSwitchEngaged", "approvalCapabilityDenied", "approvalAccessKeyInactive", "execution_failed", "refused_before_write"], "batch-approve": ["approval_ids", "batch", "applied", "remaining", "approve all"], "reject": ["reason", "closure_reason"], "cancel": ["DELETE", "admin_cancelled"], "claims": ["phoenix_mcp_approval_claimed", "phoenix_mcp_approval_resolved", "claim", "event"], "history": ["versions", "resource_type", "resource_id", "truncated"], "read-version": ["restore_refusals", "restore_active_content", "yaml_tags", "audit_only", "template_incompatible", "entity_missing"], "restore-version": ["expected_latest_id", "stale_version", "restore_unverified", "rollback", "side"], "attention": ["attention", "unknown outcome", "checked_outcome", "calendar"], "recovery": ["config-recovery", "safety copy", "snapshot", "phase"], "recovery-action": ["inspect", "reviewed", "delete", "recoveryBlocked"], "recovery-restore": ["isError", "recoveryManualOnly", "zigbee"], "card-catalog": ["custom cards", "harvest", "resource_fingerprint", "stub_config"] }, "covers": ["custom_components/phoenix_mcp/admin/approvals.py", "custom_components/phoenix_mcp/approvals.py", "custom_components/phoenix_mcp/config_recovery.py"] }
 ---
-These endpoints handle what agents ask you to approve, and the changes they make: approvals, configuration history, recovery records, Needs Attention and the dashboard card catalog. Signing in, the error body and request bodies work as described in [Admin API](guide:topic.adminApi).
+These endpoints handle what agents ask you to approve and the changes they make. They cover approvals, configuration history, recovery records, Needs Attention, and the dashboard card catalog. Signing in, the error body, and request bodies work as described in [Admin API](guide:topic.adminApi).
 
 Related: [Errors](guide:topic.adminApi#errors), [Request bodies](guide:topic.adminApi#bodies), [How an Approval Works](guide:topic.approvalLifecycle), [What Changes Records](guide:topic.configurationHistory)
 
@@ -16,19 +16,19 @@ POST   /api/phoenix-mcp/admin/approvals/batch/approve
 POST   /api/phoenix-mcp/admin/approvals/{approval_id}/reject
 ```
 
-Use these to review, approve, reject or cancel the actions agents are waiting on. The endpoints for one approval answer with this approval record:
+Use these to review, approve, reject, or cancel the actions agents are waiting on. The endpoints for one approval answer with this approval record:
 
 | Field | Notes |
 |---|---|
 | `id` | The approval ID. |
 | `access_key_id`, `access_key_name` | The access key that asked. |
 | `tool_name`, `cap_name` | The tool held for approval and the capability it needs. |
-| `args` | The tool's arguments. Secrets, device codes and every key starting with `_` show as `<redacted>`. |
+| `args` | The tool's arguments. Secrets, device codes, and every key starting with `_` show as `<redacted>`. |
 | `diff` | The proposed change. |
-| `status` | `pending`, `approved`, `rejected`, `failed`, `expired` or `cancelled`. |
-| `created_at`, `expires_at`, `resolved_at` | When it was asked, when it expires and when it ended. |
+| `status` | `pending`, `approved`, `rejected`, `failed`, `expired`, or `cancelled`. |
+| `created_at`, `expires_at`, `resolved_at` | When it was asked, when it expires, and when it ended. |
 | `approved_by_user_id`, `approved_at` | Who approved it, and when. |
-| `closure_reason` | Why it ended without running, or why its run failed. Values below. |
+| `closure_reason` | Why it ended without running, or why its run failed. See the list after this table. |
 | `result` | The tool's result after an approve. |
 | `request_id`, `client_ip` | The agent request that asked. |
 | `oauth_app` | `name` and `host` of the app whose OAuth sign-in asked, or `null` for a request sent with the key itself. |
@@ -63,7 +63,7 @@ Lists approvals, newest first.
 | `limit` | query, integer | Default 50, at most 500. A larger value counts as 500. |
 | `offset` | query, integer | Default 0. |
 
-The response is `{ approvals, total, limit, offset }`. Each item in `approvals` is the record plus `in_progress`, which is `true` while an approve is running it, or until Phoenix closes a run that never reported back. Treat such a row as not actionable, even when its status is still `pending`.
+The response is `{ approvals, total, limit, offset }`. Each item in `approvals` is the record plus `in_progress`. It's `true` while an approve is running the approval, or until Phoenix closes a run that never reported back. Treat such a row as not actionable, even when its status is still `pending`.
 
 Errors: the paging errors in [Request bodies](guide:topic.adminApi#bodies).
 
@@ -79,7 +79,7 @@ Returns the approval record plus `in_progress`, as in [List approvals](guide:#li
 
 Approves the approval and runs the held action as the agent asked it. The endpoint takes no body and ignores any you send.
 
-Phoenix checks the approval in the order of the error table below. Before running anything, it saves an execution marker to disk. If a run reaches the action and never reports back, that marker stays, and every later approve, reject or cancel answers `409`.
+Phoenix checks the approval in the order of the error table in this section. Before running anything, it saves an execution marker to disk. If a run reaches the action and never reports back, that marker stays, and every later approve, reject, or cancel answers `409`.
 
 If the client disconnects, the action still finishes. Read the outcome from the record or the `phoenix_mcp_approval_resolved` event.
 
@@ -110,7 +110,7 @@ The response is `200` with the updated record:
 | 500 | `internal_error` | `adminError.approvalExecutionUncertain` | The run raised an error. Phoenix closes the approval as `failed`, reason `execution_interrupted`, and won't offer it again. |
 | 500 | `internal_error` | `adminError.approvalOutcomeNotSaved` | The action finished, but Phoenix couldn't save its result. Phoenix won't offer the approval again and later closes it as `failed`, reason `execution_interrupted`. Its `approval/executed` or `approval/failed` audit row, with `finalization: "not_saved"`, says what happened. |
 
-Four of those errors sound temporary but close the approval for good: `approvalAccessKeyInactive`, `approvalCredentialEnded`, `approvalCapabilityDenied` and `killSwitchEngaged`. Fixing the condition afterwards doesn't bring it back.
+Four of those errors sound temporary but close the approval for good: `approvalAccessKeyInactive`, `approvalCredentialEnded`, `approvalCapabilityDenied`, and `killSwitchEngaged`. Fixing the condition afterwards doesn't bring it back.
 
 ### Approve several {#batch-approve}
 
@@ -120,7 +120,7 @@ Approves several approvals in order, one at a time, through the same steps as a 
 |---|---|---|
 | `approval_ids` | array of strings | Required. 1 to 50 IDs, each a non-empty string, with no repeats. |
 
-The response is always `200`:
+A valid request always answers `200`:
 
 ```json
 {
@@ -204,7 +204,7 @@ automation  script  scene      helper     dashboard  entity  device
 blueprint   energy  config_entry  area    floor      label   category
 ```
 
-Each version has an action: `create`, `edit`, `delete` or `rollback`.
+Each version has an action: `create`, `edit`, `delete`, or `rollback`.
 
 Phoenix keeps the newest 20 versions of each resource. Raw text over 100,000 bytes is stored as `{ "content": null, "truncated": true, "bytes": <size> }`, and you can't restore it.
 
@@ -227,7 +227,7 @@ The response is `{ resource_type, resource_id, versions, total }`. Each item in 
 |---|---|
 | `id` | The version ID. |
 | `resource_type`, `resource_id`, `alias` | What changed, and its name. |
-| `action` | `create`, `edit`, `delete` or `rollback`. |
+| `action` | `create`, `edit`, `delete`, or `rollback`. |
 | `access_key_id`, `access_key_name` | The access key that made the change. |
 | `approved_by_user_id` | The administrator who approved it, or who ran a restore. |
 | `timestamp` | When it changed. |
@@ -242,11 +242,11 @@ The paging errors in [Request bodies](guide:topic.adminApi#bodies) also apply.
 
 ### Read one version {#read-version}
 
-Returns one version in full: the summary fields without `has_before` and `has_after`, plus `before`, `after` and `request_id`.
+Returns one version in full: the summary fields without `has_before` and `has_after`, plus `before`, `after`, and `request_id`.
 
-It adds `restore_refusals: { before, after }`. Each side is `null`, or a reason Phoenix would refuse to restore that side: `yaml_tags`, `audit_only`, `template_incompatible` or `entity_missing`.
+It adds `restore_refusals: { before, after }`. Each side is `null`, or a reason Phoenix would refuse to restore that side: `yaml_tags`, `audit_only`, `template_incompatible`, or `entity_missing`.
 
-A dashboard version also has `restore_active_content: { before, after }`. Each side lists the templates, custom cards and external URLs that restoring it would add or change in the current layout. A restore doesn't wait for approval, so check them first.
+A dashboard version also has `restore_active_content: { before, after }`. Each side lists the templates, custom cards, and external URLs that restoring it would add or change in the current layout. A restore doesn't wait for approval, so check them first.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -261,7 +261,7 @@ Applies one side of a version to the live configuration. An empty body is fine.
 | `side` | string | Optional. `"before"` or `"after"`. Default `"after"`, or `"before"` when the version has no after side. |
 | `expected_latest_id` | string or null | Optional. When set, the restore applies nothing unless this is the ID of the resource's newest version. |
 
-Send `expected_latest_id` to make sure no other change landed since you last read the history. If one did, you get `stale_version`; read the history again and decide.
+Send `expected_latest_id` to make sure no other change landed since you last read the history. If one did, you get `stale_version`. Read the history again and decide.
 
 The restore runs with your authority as administrator. Phoenix records it as a `rollback` version, with you in `approved_by_user_id`. The audit log entry keeps the access key that made the original change, as `originating_access_key_id`.
 
@@ -274,7 +274,7 @@ The response is `200` with `{ "restored": true, version_id, resource_type, resou
 | 400 | `invalid_request` | `adminError.stringOrNull` | `expected_latest_id` isn't a string or null. `message_params.field` is `expected_latest_id`. |
 | 409 | `stale_version` | `adminError.restoreStale` | `expected_latest_id` isn't the newest version any more. Nothing was applied. |
 | 500 | `internal_error` | `adminError.restoreFailed` | The restore raised an error. |
-| 409 | `restore_unverified` | `adminError.restoreUnverified` | Phoenix sent the restore, but reading the resource back doesn't match. It may be partly applied, so check before retrying. |
+| 409 | `restore_unverified` | `adminError.restoreUnverified` | Phoenix sent the restore, but reading the resource back doesn't match. It might be partly applied, so check before you retry. |
 | 400 | `invalid_request` | `adminError.restoreNoConfigSide` | That side holds no configuration to restore. |
 | 400 | `invalid_request` | `adminError.restoreYamlTags` | The version holds YAML tags such as `!secret` or `!include`. Re-create it by hand. |
 | 400 | `invalid_request` | a recovery key | A recovery record refuses the restore. The keys are listed in [Act on a record](guide:#recovery-action). |
@@ -307,13 +307,13 @@ When a request wrote to a calendar, its calendar item replaces the agent item fo
 
 ### Mark an action checked {#attention-review}
 
-Records that you checked the outcome of one agent or calendar action. Use the item's `kind` and `id` in the path. Phoenix saves your review only; it doesn't run the action again or undo it.
+Records that you checked the outcome of one agent or calendar action. Use the item's `kind` and `id` in the path. Phoenix saves only your review. It doesn't run the action again or undo it.
 
 | Field | Type | Notes |
 |---|---|---|
 | `checked_outcome` | boolean | Required. Must be exactly `true`. |
 
-Phoenix reads your user from Home Assistant again, and you must still be an active administrator. The response is `{ "reviewed": true }`.
+You must still be an active administrator in Home Assistant. The response is `{ "reviewed": true }`.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -330,7 +330,7 @@ GET    /api/phoenix-mcp/admin/config-recovery
 POST   /api/phoenix-mcp/admin/config-recovery/{recovery_id}
 ```
 
-Use these to read the safety copies Phoenix takes before configuration writes, and to check, clear or restore them.
+Use these to read the safety copies Phoenix takes before configuration writes, and to check, clear, or restore them.
 
 Related: [Safety copies](guide:topic.configurationHistory#recovery)
 
@@ -344,13 +344,13 @@ Returns `{ records }`, newest first, without paging. Each record has these field
 | `resource`, `operation` | What the write changed, and how. |
 | `access_key_id` | The access key that made the write. |
 | `created_at` | When Phoenix took the copy. |
-| `phase` | `prepared`, `dispatching`, `partial`, `unknown`, `verified`, `not_applied` or `reviewed`. |
+| `phase` | `prepared`, `dispatching`, `partial`, `unknown`, `verified`, `not_applied`, or `reviewed`. |
 | `before`, `source`, `expected` | The stored copies, and what the write was meant to produce. |
 | `observations` | What Phoenix saw after the phase changed. |
 | `reviewed_by` | Who reviewed it, once someone has. |
 | `active` | `true` while the write is still running. |
 
-Phoenix always keeps active records and records in `unknown`. It keeps the rest for 30 days, at most 20 per resource and 256 in all.
+Phoenix always keeps active records and records in `prepared`, `dispatching`, `partial`, or `unknown`. It keeps the rest for 30 days, at most 20 per resource and 256 in all.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -358,11 +358,11 @@ Phoenix always keeps active records and records in `unknown`. It keeps the rest 
 
 ### Act on a record {#recovery-action}
 
-Inspects, reviews, deletes or restores one record, chosen by `action`.
+Inspects, reviews, deletes, or restores one record, chosen by `action`.
 
 | Field | Type | Notes |
 |---|---|---|
-| `action` | string | Required. `inspect`, `reviewed`, `delete` or `restore`. |
+| `action` | string | Required. `inspect`, `reviewed`, `delete`, or `restore`. |
 | `side` | string | For `restore` only. `"before"` or `"source"`. |
 
 | Status | `error` | `message_key` | When |
@@ -373,7 +373,7 @@ Inspects, reviews, deletes or restores one record, chosen by `action`.
 | 400 | `invalid_request` | `adminError.recoveryManualOnly` | Phoenix can't restore this kind of copy. Restore it by hand. |
 | 409 | `conflict` | a recovery key | The record refuses the action. The key names why. |
 
-The recovery keys are `adminError.recoveryStorageUnavailable`, `adminError.recoveryOperationActive`, `adminError.recoveryCommandRunning`, `adminError.recoveryResolveInApprovals`, `adminError.recoveryFull`, `adminError.recoveryReviewBeforeRemoving`, `adminError.recoveryReviewBeforeRestoring`, `adminError.recoveryChangedAfterReview`, `adminError.recoveryAuthorityChanged`, `adminError.recoveryHelperUnreadable`, `adminError.recoverySnapshotUnsafe` and `adminError.recoverySnapshotUnsafeAt`. Any other refusal uses `adminError.recoveryBlocked`. `adminError.recoverySnapshotUnsafeAt` names the refused place in `message_params.location`.
+The recovery keys are `adminError.recoveryStorageUnavailable`, `adminError.recoveryOperationActive`, `adminError.recoveryCommandRunning`, `adminError.recoveryResolveInApprovals`, `adminError.recoveryFull`, `adminError.recoveryReviewBeforeRemoving`, `adminError.recoveryReviewBeforeRestoring`, `adminError.recoveryChangedAfterReview`, `adminError.recoveryAuthorityChanged`, `adminError.recoveryHelperUnreadable`, `adminError.recoverySnapshotUnsafe`, and `adminError.recoverySnapshotUnsafeAt`. Any other refusal uses `adminError.recoveryBlocked`. `adminError.recoverySnapshotUnsafeAt` names the refused place in `message_params.location`.
 
 ### Inspect {#recovery-inspect}
 
@@ -386,16 +386,16 @@ Reads the current state of what the record covers. It never proves which request
 
 ### Review and delete {#recovery-review}
 
-`reviewed` marks the record reviewed and answers `{ "status": "reviewed" }`. `delete` removes it and answers `{ "status": "delete" }`. Delete needs the phase `verified`, `not_applied` or `reviewed`.
+`reviewed` marks the record reviewed and answers `{ "status": "reviewed" }`. `delete` removes it and answers `{ "status": "delete" }`. Delete needs the phase `verified`, `not_applied`, or `reviewed`.
 
 Both refuse while the write is still running, or while a Home Assistant command Phoenix sent hasn't finished.
 
 ### Restore {#recovery-restore}
 
-Writes the chosen side back. The record must be inactive, in phase `verified`, `not_applied` or `reviewed`, with a stored copy on that side.
+Writes the chosen side back. The record must be inactive, in phase `verified`, `not_applied`, or `reviewed`, with a stored copy on that side.
 
-- Phoenix restores storage helpers, Template helpers, Energy preferences, blueprint sources, and dashboard registry, layout and resource copies.
-- Copies of configuration file text are always refused, because Phoenix doesn't write file text back.
+- Phoenix restores storage helpers, Template helpers, Energy preferences, blueprint sources, and dashboard registry, layout, and resource copies.
+- Phoenix always refuses copies of configuration file text, because it doesn't write file text back.
 - Every other kind, including restart receipts and Zigbee copies, answers `400` with `adminError.recoveryManualOnly`.
 
 A restore answers `200` with `{ result, outcome }`, where `result` is the restore tool's result. A refused or failed restore also answers `200`, with `result.isError: true` and the tool's own text. Check `result`, not the status code.
@@ -407,13 +407,13 @@ GET    /api/phoenix-mcp/admin/card_catalog
 POST   /api/phoenix-mcp/admin/card_catalog
 ```
 
-The card catalog lists the custom dashboard cards a browser found. The panel sends the reports; you rarely need to.
+The card catalog lists the custom dashboard cards a browser found. The panel sends the reports, so you rarely need to.
 
 ### Read the catalog {#read-catalog}
 
 The response is `{ harvested, entries, harvested_at, resource_count, failed_imports, resource_fingerprint }`. `harvested` stays `false` until a browser has reported. That isn't the same as having no custom cards.
 
-Each item in `entries` has `type`, `name`, `description`, `documentation_url`, `preview`, `available`, `has_visual_editor`, `stub_config` and `source`. `source` is `picker` or `element`.
+Each item in `entries` has `type`, `name`, `description`, `documentation_url`, `preview`, `available`, `has_visual_editor`, `stub_config`, and `source`. `source` is `picker` or `element`.
 
 ### Report a harvest {#report-catalog}
 
@@ -421,7 +421,7 @@ Replaces the whole catalog with what a browser found.
 
 | Field | Type | Notes |
 |---|---|---|
-| `entries` | array | Required. At most 500 entries are kept, one per `type`. A `type` is at most 120 characters. A `stub_config` over 2000 bytes is dropped. |
+| `entries` | array | Required. At most 500 entries are kept, one per `type`. A `type` is at most 120 characters. A `stub_config` over 2,000 bytes is dropped. |
 | `resource_count` | number | Optional. How many dashboard resources the browser saw. |
 | `failed_imports` | array of `{ url, error }` | Optional. At most 50 are kept. |
 

@@ -9,7 +9,7 @@ Agent Chat（Phoenix 自己的聊天視窗）的設定。請在聊天視窗本�
 
 如果正在使用決策提供者，它會處理句子比對遺漏的命令。其他所有內容照常交給你的 AI 模型。
 
-這不適用於 Home Companion 金鑰，也不適用於非純文字訊息。
+這不適用於{{label:personas.home_companion.label}}金鑰，也不適用於非純文字訊息。
 
 相關：[決策提供者](guide:window.settingsProviders#decision-provider)、[命令如何路由](guide:topic.commandRouting)
 
@@ -27,7 +27,7 @@ Phoenix 隨每則新訊息傳送的較早對話量，以字元計：0 到 960,00
 
 工具結果同樣計入，而且通常占比最大。較早的輪次會整體捨棄，從最早的開始。設為 0 時不傳送較早的輪次。
 
-基本拉丁字母以外的字元（例如中文）每個按六個計算，因為 Phoenix 按這種方式衡量請求是否超出大小上限。
+基本拉丁字母以外的字元（例如中文）每個按六個計算。
 
 更多記憶會給模型更多上下文，但每則訊息的費用也更高。上下文視窗較小的模型（例如在本機執行的模型）需要更低的值。
 
@@ -68,7 +68,7 @@ Related: [長訊息](guide:window.agentChat#memory-warning)
 
 這是偏好，不是安全控制：模型是被要求，而不是被強制。它的存取金鑰決定它實際能做什麼。
 
-相關：[存取金鑰](guide:workspace.accessKeys)
+相關：[{{label:shell.tabAccessKeys}}](guide:workspace.accessKeys)
 
 ## {{label:routingStats.title}} {#chat-statistics}
 

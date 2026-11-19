@@ -1,7 +1,7 @@
 ---
 { "id": "topic.mesaRules", "title": "MESA 如何决定", "parent": "workspace.mesa", "order": 10, "keywords": ["MESA", "策略", "安全", "继承", "优先级"], "sectionKeywords": { "levels": ["继承", "主设备", "父设备", "范围"], "combining": ["最严格", "冲突", "放宽", "覆盖"], "baseline": ["默认", "无策略", "内置", "部署默认设置"], "modes": ["建议", "强制执行", "关闭", "警告", "阻止"], "privacy": ["受限", "敏感", "拒绝访问"], "coverage": ["读取", "摄像头", "自动化", "直通模式"], "not-in-editor": ["声明限制", "时间约束", "时间窗口", "访问角色", "仅导入"] } }
 ---
-在访问密钥允许之后，MESA 会检查智能体对设备采取的每个操作。策略描述对其覆盖范围要有多谨慎。本页说明不同层级的策略如何叠加，以及操作违反策略时会发生什么。
+在访问密钥允许之后，MESA 会检查智能体对设备采取的每个操作。策略描述对其覆盖范围要有多谨慎。
 
 MESA 是一项开放规范。Phoenix 内置了它的参考实现 mesa-core，你可以在 [GitHub](https://github.com/leecaochang/mesa-core) 上查看。
 
@@ -22,33 +22,33 @@ MESA 是一项开放规范。Phoenix 内置了它的参考实现 mesa-core，你
 
 MESA 按字段组合策略，而不是按策略整体组合。
 
-- **控制模式**：任一层级设置的最严格模式胜出。具体策略不能放宽更宽泛的策略，因此禁止的锁域下的自主锁实体仍为禁止。唯一的例外见下文。
+- **控制模式**：任一层级设置的最严格模式胜出。具体策略不能放宽更宽泛的策略，因此{{label:mesa.modeProhibited}}的锁域下的{{label:mesa.modeAutonomous}}锁实体仍为{{label:mesa.modeProhibited}}。实体覆盖是唯一的例外。
 - **隐私级别**：最严格的级别胜出，方式相同。
 - **触发自动化**：任一层级为可能则胜出。否则最具体的层级胜出。
 - **其他所有项**：最具体的层级胜出，但由人写入或确认的值，或由设备制造商写入的值，优先级高于任何层级推断出的值。
 
-放宽控制模式的唯一方式是带书面原因的实体覆盖，它可以把确认变为自主，但绝不会放宽禁止或只读。策略编辑器无法设置它；它只能通过导入出现。
+放宽控制模式的唯一方式是带书面原因的实体覆盖，它可以把{{label:mesa.modeConfirm}}变为{{label:mesa.modeAutonomous}}，但绝不会放宽{{label:mesa.modeProhibited}}或{{label:mesa.modeReadOnly}}。{{label:workspace.profileEditor}}无法设置它。它只能通过导入出现。
 
 相关：[生效值解析](guide:window.mesaEditor#effective-resolution)
 
 ## 内置基线 {#baseline}
 
-没有任何策略覆盖的实体遵循内置基线：灯为自主，锁和警报控制面板为禁止，其他所有为确认。
+没有任何策略覆盖的实体遵循内置基线：灯为{{label:mesa.modeAutonomous}}，锁和警报控制面板为{{label:mesa.modeProhibited}}，其他所有为{{label:mesa.modeConfirm}}。
 
 策略会改变这一点：
 
-- **设置控制模式的策略会替换基线**，无论它位于哪个层级，即使更宽松。锁上的确认策略会让锁变为确认，而不是禁止。
-- **不设置控制模式的策略保留基线**，但原本自主的都会变为确认。灯上的仅标签策略会让该灯需要确认。
+- 设置控制模式的策略会替换基线，无论它位于哪个层级，即使更宽松。锁上的{{label:mesa.modeConfirm}}策略会让锁变为{{label:mesa.modeConfirm}}，而不是{{label:mesa.modeProhibited}}。
+- 不设置控制模式的策略保留基线，但原本{{label:mesa.modeAutonomous}}的都会变为{{label:mesa.modeConfirm}}。灯上的仅标签策略会让该灯需要确认。
 
-因此，针对锁的自主域策略会让每把锁变为自主。在依赖某个策略之前，请在[生效值解析](guide:window.mesaEditor#effective-resolution)中检查它的效果。
+因此，针对锁的{{label:mesa.modeAutonomous}}域策略会让每把锁变为{{label:mesa.modeAutonomous}}，除非有更严格的策略覆盖它。在依赖某个策略之前，请在[生效值解析](guide:window.mesaEditor#effective-resolution)中检查它的效果。
 
-部署默认设置可以为没有策略的实体替换内置基线。它们来自导入的存档；策略编辑器无法编辑它们。
+部署默认设置可以为没有策略的实体替换内置基线。它们来自导入的存档。{{label:workspace.profileEditor}}无法编辑它们。
 
 ## 集成自带的策略 {#integration-profiles}
 
 自定义集成可以在其文件夹中附带自己的策略，即 `mesa_profile.json` 文件。Phoenix MCP 每次启动时都会把该文件添加为这个集成的策略，不会先询问你。
 
-这样的策略可以放宽基线。如果某个集成把它的锁标记为自主，这些锁就会变为自主。在[生效值解析](guide:window.mesaEditor#effective-resolution)中，这些值的 **{{label:mesa.colOrigin}}** 显示为 developer。
+这样的策略可以放宽基线。如果某个集成把它的锁标记为{{label:mesa.modeAutonomous}}，这些锁就会变为{{label:mesa.modeAutonomous}}。在[生效值解析](guide:window.mesaEditor#effective-resolution)中，这些值的 **{{label:mesa.colOrigin}}** 显示为 developer。
 
 若要覆盖它，请为该集成保存你自己的策略。之后 Phoenix MCP 会保留你的策略，并跳过该集成的文件。
 
@@ -57,10 +57,12 @@ MESA 按字段组合策略，而不是按策略整体组合。
 MESA 的行为取决于[设置](guide:window.settingsSafety#mesa-mode)中的 **{{label:settings.mesaModeLabel}}**，以及策略自身的 **{{label:mesa.fieldEnforcement}}**。
 
 - **{{label:settings.mesaModeOff}}**：MESA 允许一切。
-- **{{label:settings.mesaModeAdvisory}}**（默认）：被禁止的操作和违反的限制只会警告智能体，确认操作无需审批即可运行。只读实体和隐私方面的拒绝访问仍会阻止。
-- **{{label:settings.mesaModeEnforced}}**：被禁止、只读的操作和违反的限制会被阻止。确认操作会在[审批](guide:topic.approvalLifecycle)中等待你的审批。
+- **{{label:settings.mesaModeAdvisory}}**（默认）：{{label:mesa.modeProhibited}}操作和违反的限制只会警告智能体，{{label:mesa.modeConfirm}}操作无需审批即可运行。{{label:mesa.modeReadOnly}}实体和隐私方面的拒绝访问仍会阻止。
+- **{{label:settings.mesaModeEnforced}}**：MESA 会阻止{{label:mesa.modeProhibited}}和{{label:mesa.modeReadOnly}}操作以及违反的限制。{{label:mesa.modeConfirm}}操作会等待你的审批。
 
-设为 **{{label:mesa.modeEnforced}}** 的策略，在设置为建议模式时仍会强制执行。设置为关闭时，不会强制执行任何内容。
+相关：[审批如何运作](guide:topic.approvalLifecycle)
+
+设为 **{{label:mesa.modeEnforced}}** 的策略，在设置为{{label:settings.mesaModeAdvisory}}时仍会强制执行。设置为{{label:settings.mesaModeOff}}时，不会强制执行任何内容。
 
 当一个操作针对多个实体时，MESA 会去掉被阻止的实体，操作在其余实体上运行。警告或阻止会连同原因一起告知智能体。
 
@@ -68,9 +70,9 @@ MESA 的行为取决于[设置](guide:window.settingsSafety#mesa-mode)中的 **{
 
 ## 隐私 {#privacy}
 
-**{{label:mesa.privRestricted}}** 隐私级别会让自主实体需要确认。人员始终至少为 **{{label:mesa.privSensitive}}**。
+**{{label:mesa.privRestricted}}** 隐私级别会让{{label:mesa.modeAutonomous}}实体需要确认。人员始终至少为 **{{label:mesa.privSensitive}}**。
 
-导入的策略还可以对某些角色拒绝访问。这种拒绝访问会在除关闭之外的每种模式下阻止操作，包括摄像头图像。
+导入的策略还可以对某些角色拒绝访问。这种拒绝访问会在除{{label:settings.mesaModeOff}}之外的每种模式下阻止操作，包括摄像头图像。
 
 ## MESA 覆盖什么 {#coverage}
 
@@ -101,7 +103,7 @@ Phoenix 无法确定名称来自包或替换变量的文件，以及 Device Buil
 
 如果新 ID 已有策略，Phoenix 会保留两者。新 ID 采用两者中较严格的控制模式、执行方式和隐私设置，以及两者的全部限制，另一个策略显示为孤立策略，供你查看。智能体的重命名也一样，MESA 会先检查重命名本身。
 
-把对象移出设有策略的区域算作一次更改，因为这可能解除某条规则。移入则不算，因为新区域只会让规则更严格。
+把对象移出设有策略的区域算作一次更改，因为这可能解除某条规则。移入则不算作更改。
 
 ## MESA 无法读取策略时 {#storage}
 
@@ -109,11 +111,16 @@ Phoenix 无法确定名称来自包或替换变量的文件，以及 Device Buil
 
 Home Assistant 日志会说明该怎么做：放回日志中指明的副本，或删除它，从没有策略的状态开始。然后重新加载 Phoenix。
 
-如果 Phoenix 无法保存策略更改，它会撤销更改并显示错误，因此生效的规则始终是已保存的规则。重命名是例外：策略仍跟随重命名后的实体，{{label:attention.title}}会一直提示你，直到保存成功。
+如果 Phoenix 无法保存策略更改，它会撤销更改并显示错误，因此已保存的规则继续生效。重命名是例外：策略仍跟随重命名后的实体，{{label:attention.title}}会一直提示你，直到保存成功。
 
-## 策略编辑器无法设置什么 {#not-in-editor}
+## {{label:workspace.profileEditor}}无法设置什么 {#not-in-editor}
 
-策略还可以包含声明限制（例如最高温度）、适用更严格规则的时间窗口、对某些角色的隐私拒绝访问，以及实体覆盖。这些只能通过导入的存档出现。
+策略还可以包含只能通过导入的存档出现的字段：
+
+- 声明限制，例如最高温度
+- 适用更严格规则的时间窗口
+- 对某些角色的隐私拒绝访问
+- 实体覆盖
 
 限制也覆盖以其他方式发送的相同请求。`homeassistant.turn_on` 算作实体自身的开启操作，设置灯光亮度的每种方式都受亮度限制约束。
 
@@ -123,6 +130,6 @@ Home Assistant 日志会说明该怎么做：放回日志中指明的副本，�
 
 时间窗口可以跟随日历。它在日历为开启状态时适用，在 Phoenix 无法判断时也适用。
 
-在策略编辑器中保存策略，会用表单显示的内容替换整个策略，因此会移除这些字段。
+在{{label:workspace.profileEditor}}中保存策略，会用表单显示的内容替换整个策略，因此会移除这些字段。
 
 相关：[{{label:mesa.importTitle}}](guide:window.mesaProfiles#import)

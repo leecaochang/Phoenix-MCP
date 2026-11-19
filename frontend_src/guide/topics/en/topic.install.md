@@ -9,7 +9,7 @@ Home Assistant 2026.7.0 or newer. Phoenix needs nothing else installed: its safe
 
 ## Installing from the Marketplace {#marketplace}
 
-From Home Assistant 2026.11, go to Settings, Marketplace, and choose Add from link. Enter `https://github.com/leecaochang/Phoenix-MCP`, then choose Add. The Marketplace asks you to connect GitHub the first time. Open Phoenix MCP and choose Install. Restart Home Assistant only if it asks you to.
+From Home Assistant 2026.11, go to **Settings** > **Marketplace** and select **Add from link**. Enter `https://github.com/leecaochang/Phoenix-MCP`, then select **Add**. The first time, the Marketplace asks you to connect GitHub. Open Phoenix MCP and select **Install**. Restart Home Assistant only if it asks you to.
 
 If you upgrade from HACS, Phoenix moves to the Marketplace by itself. Connect GitHub there to keep getting updates.
 
@@ -23,22 +23,22 @@ Copy the `phoenix_mcp` folder into your Home Assistant's `custom_components` fol
 
 ## Adding the integration {#setup}
 
-In Home Assistant, go to Settings, Devices & services, then Add integration, and choose Phoenix MCP. There's nothing to fill in. You can add it only once.
+In Home Assistant, go to **Settings** > **Devices & services** > **Add integration** and select **Phoenix MCP**. There's nothing to fill in. You can add it only once.
 
 ## The panel {#panel}
 
-**Phoenix MCP** appears in the sidebar for administrators only. Everything else is set up from there, starting with an access key.
+**Phoenix MCP** appears in the sidebar for administrators only. Set up everything else from there, starting with an access key.
 
-Each access key also gets a device in Home Assistant, with sensors for its status, requests, refusals, rate limit hits, last use and expiry. Agents can't see these sensors.
+Each access key also gets a device in Home Assistant, with sensors for its status, requests, refusals, rate limit hits, last use, and expiry. Agents can't see these sensors.
 
 ## Language {#language}
 
-The panel speaks 16 languages. By default it follows your Home Assistant profile; choose another in [{{label:settings.languageLabel}}](guide:window.settingsGeneral#language). The choice applies to this browser only. The Guide shows each page in your language when it's translated, and in English otherwise.
+The panel speaks 16 languages. By default, it follows your Home Assistant profile. To use another language, choose it in [{{label:settings.languageLabel}}](guide:window.settingsGeneral#language). The choice applies to this browser only. If a page is translated, the Guide shows it in your language. Otherwise, it shows the English page.
 
 ## Removing Phoenix MCP {#removing}
 
-Deleting the integration revokes every access key, cancels requests waiting for approval, and erases every AI provider account and its API key. It also unlinks Phoenix from Assist, the voice agent, AI Task and the decision provider. Any log level an agent raised for a set time goes back straight away.
+Deleting the integration revokes every access key, cancels requests waiting for approval, and erases every AI provider account and its API key. It also unlinks Phoenix from Assist, the Voice Agent, AI Task, and the decision provider. Any log level an agent raised for a set time goes back straight away.
 
-Everything else stays in Home Assistant's storage: settings such as the kill switch and MESA mode, the audit log, Conversation Log, MESA profiles, change history and recovery copies. If you add Phoenix again, it picks them up, and the revoked keys are listed in Archived Access Keys.
+Everything else stays in Home Assistant's storage. That includes settings such as the kill switch and MESA mode, the audit log, Conversation Log, MESA profiles, change history, and recovery copies. If you add Phoenix again, it picks them up. The revoked keys appear in {{label:accessKeys.archivedTitle}}.
 
-To remove Phoenix's data too, use **{{label:settings.wipeCoreLabel}}** in [{{label:settings.wipeTitle}}](guide:window.settingsSafety#wipe-core) before deleting the integration. [A few things stay](guide:topic.security#removing), including safety copies.
+To remove Phoenix's data too, use **{{label:settings.wipeCoreLabel}}** in [{{label:settings.dataCard}}](guide:window.settingsSafety#wipe-core) before deleting the integration. [A few things stay](guide:topic.security#removing), including safety copies.

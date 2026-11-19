@@ -9,15 +9,15 @@
 
 选择工具栏上的 **{{label:shell.agentChat}}**。在你有一个访问密钥和一个 AI 提供商账户后，它会出现。Shift+A 也可以打开和关闭它，除非你正在字段中输入。它需要你的 Home Assistant 个人资料中开启键盘快捷键。
 
-**{{label:settings.agentcliGlobalLabel}}** 开启时（默认），你在 Home Assistant 中移动时 Chat 会保持打开。关闭时，Chat 位于 Phoenix 面板中，离开面板会结束正在进行的回复。
+**{{label:settings.agentcliGlobalLabel}}** 开启时（默认），你在 Home Assistant 中移动时 Agent Chat 会保持打开。关闭时，Agent Chat 只在 Phoenix 面板中打开。离开面板会结束正在进行的回复。
 
 紧急停止开关开启时，Chat 会关闭且无法打开。
 
 ## 窗口 {#window}
 
-拖动标题栏可移动它，从任意边缘可调整大小。靠近屏幕边缘时，边缘会吸附。最小化会把它缩成可移动的小条，最大化会填满屏幕。
+拖动标题栏可移动它，从任意边缘可调整大小。靠近屏幕边缘时，边缘会吸附。**{{label:agentchat.minimize}}**会把它缩成可移动的小条，**{{label:agentchat.maximize}}**会填满屏幕。
 
-当 Phoenix 对话框打开时（例如需要批准的登录），浮动的 Chat 会暂时离开屏幕，以免遮住对话框。对话框关闭后它会回来，对话保持原样。
+当 Phoenix 对话框打开时（例如需要批准的登录），浮动的 Agent Chat 会暂时离开屏幕，以免遮住对话框。对话框关闭后它会回来，对话保持原样。
 
 **{{label:agentchat.popOut}}** 会把 Chat 移到它自己的浏览器窗口，对话会在那里继续。在手机上，Chat 会全屏打开。
 
@@ -27,7 +27,7 @@
 
 标题栏中的菜单按钮：
 
-- **{{label:agentchat.connection}}** 显示下面的连接字段。
+- **{{label:agentchat.connection}}** 显示[连接字段](guide:#connection)。
 - **{{label:agentchat.verbose}}** 显示智能体调用的每个工具、其结果，以及模型在分享时的推理过程。默认关闭。
 - **{{label:agentchat.showTimestamps}}** 在每条消息下方添加时间。默认关闭。
 - **{{label:agentchat.showFooter}}** 显示带有文字大小和 token 用量的页脚。默认开启。
@@ -42,7 +42,7 @@
 - **{{label:agentchat.accessKey}}**：智能体按此密钥的权限工作。
 - **{{label:agentchat.provider}}**：运行智能体的 AI 提供商账户。
 - **{{label:agentchat.model}}**：要使用的模型，来自该账户的列表。
-- **{{label:agentchat.thinking}}** 和 **{{label:agentchat.temperature}}**：仅在模型提供它们时显示。思考从模型自己的默认级别开始，只有模型能停止思考时才提供关闭。温度留空表示使用提供商的默认值。
+- **{{label:agentchat.thinking}}** 和 **{{label:agentchat.temperature}}**：仅在模型提供它们时显示。{{label:agentchat.thinking}}从模型自己的默认级别开始。只有模型能停止思考时才提供{{label:agentchat.levelOff}}。**{{label:agentchat.temperature}}**留空表示使用提供商的默认值。
 
 有些提供商要在检查模型选项后才知道它的思考级别，因此选择从未检查过的模型时，会[检查](guide:window.settingsProviders#check-options)一次。
 
@@ -54,7 +54,7 @@
 
 如果回复期间连接中断，灰色提示会告诉你。只有在尚未收到任何内容时，你的消息才会放回输入框，因为智能体可能已经执行了操作。
 
-如果提供商表示已超出其速率限制并告知何时重试，Agent Chat 会等待并重试，最长一分钟。状态行会显示正在重试，**{{label:agentchat.stop}}** 仍然可用。Home Companion 角色和语音助手不会等待：它们会说明已达到提供商的速率限制，你可以一分钟后再试。
+如果提供商表示已超出其速率限制并告知何时重试，Agent Chat 会等待并重试，最长一分钟。状态行会显示正在重试，**{{label:agentchat.stop}}** 仍然可用。Home Companion 角色和语音智能体不会等待：它们会说明已达到提供商的速率限制，你可以一分钟后再试。
 
 用消息的复制按钮复制它。页脚显示此对话使用的 token，以及上一次请求占用了模型上下文的多大比例。
 
@@ -76,7 +76,7 @@
 
 ## 图像 {#images}
 
-粘贴图像、把图像拖到窗口上，或使用附加按钮：每条消息最多 4 张。Phoenix 会在发送前缩小大照片。缩小后，单张图像最大 2 MiB，一条消息的图像总计最大 4 MiB。
+粘贴图像、把图像拖到窗口上，或选择**{{label:agentchat.attachImage}}**。每条消息最多四张。Phoenix 会在发送前缩小大照片。缩小后，单张图像最大 2 MiB，一条消息的图像总计最大 4 MiB。
 
 Home Companion 密钥无法发送图像，也无法发送给只读取文本的模型。重新加载后不会保留图像，因此智能体之后无法再次看到它们。
 
@@ -84,13 +84,13 @@ Home Companion 密钥无法发送图像，也无法发送给只读取文本的�
 
 操作需要你的审批时，对话中会出现一张卡片。选择 **{{label:agentchat.approve}}** 或 **{{label:agentchat.reject}}**，或选择 **{{label:agentchat.review}}** 先在审批中查看完整更改。
 
-智能体最多等待 15 分钟。在审批中或从通知中批准也会更新卡片。停止、关闭 Chat 或重新加载会取消仍在等待的操作。
+智能体最多等待 15 分钟。在审批中或从通知中批准也会更新卡片。停止、关闭 Agent Chat 或重新加载会取消仍在等待的操作。
 
 相关：[审批如何运作](guide:topic.approvalLifecycle)
 
 ## {{label:agentchat.clearHistory}} {#clear}
 
-立即开始新对话，无需询问。输入 /clear 也会如此。对话日志会保留已记录的内容。
+立即开始新对话，无需询问。输入 `/clear` 也会如此。对话日志会保留已记录的内容。
 
 ## 保留什么，以及在哪里 {#privacy}
 
@@ -98,13 +98,11 @@ Home Companion 密钥无法发送图像，也无法发送给只读取文本的�
 
 如果两个标签页同时运行回复，保留最后完成的那个。另一个标签页运行回复时，此标签页会在消息框上方提示。
 
-很长的对话仍会显示在屏幕上，但最早的消息不再发送，并且会提示你一次。
-
 对话连续 30 天未使用后，或你在此浏览器中删除核心数据时，Phoenix 会将其删除。其他浏览器会保留各自的对话。
 
-非管理员在此浏览器中登录时，Phoenix 也会删除它，但前提是 **{{label:settings.agentcliGlobalLabel}}** 或 **{{label:settings.injectLabel}}** 已开启。两者都关闭时，Phoenix 不会为此人加载，对话会保留。
+**{{label:settings.agentcliGlobalLabel}}** 或 **{{label:settings.injectLabel}}** 开启时，如果非管理员在此浏览器中登录，Phoenix 也会删除它。两者都关闭时，Phoenix 不会为此人加载，对话会保留。
 
-页面隐藏 5 分钟后，Home Assistant 会关闭它的连接，正在进行的回复也会中断。如需长时间回复，请让页面保持可见，或在 Home Assistant 个人资料中关闭该选项。主页面位于弹出的 Agent Chat 后面时同样如此。
+页面隐藏 5 分钟后，Home Assistant 会关闭它的连接，正在进行的回复也会中断。如需长时间回复，请让页面保持可见，或在 Home Assistant 个人资料中关闭 **暂停后台连接**。Agent Chat 弹出时，它后面的主页面同样如此。
 
 相关：[哪些数据会离开你的家](guide:topic.security#leaves-home)
 

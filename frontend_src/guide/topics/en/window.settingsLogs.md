@@ -11,7 +11,7 @@ Related: [What the logs record](guide:topic.logRecords)
 
 ### {{label:settings.logEnableLabel}} {#log-enable}
 
-Records audit entries and conversations. Turn it off to stop all recording; the other logging settings are then greyed out. On by default.
+Records audit entries and conversations. Turn it off to stop all recording. The other logging settings are then greyed out. On by default.
 
 Phoenix's sensors keep counting, and notifications still arrive.
 
@@ -23,11 +23,11 @@ Records requests that were carried out. On by default.
 
 Records requests that were refused, malformed, not supported, or named something that doesn't exist. MESA blocks count here too. On by default.
 
-Requests waiting for approval, your approval decisions, and requests cut short while a change may have run are always recorded.
+While **{{label:settings.logEnableLabel}}** is on, Phoenix always records requests waiting for approval, your approval decisions, and requests cut short while a change might have run.
 
-A key's first 30 malformed, unsupported or rate-limited requests in a minute each get an entry. The rest of that minute share one entry, which counts them in its payload.
+A key's first 30 malformed, unsupported, or rate-limited requests in a minute each get an entry. The rest of that minute share one entry, which counts them in its payload.
 
-Requests refused by permissions or MESA, or naming something that doesn't exist, always get their own entry. So do writes that may have run.
+Requests refused by permissions or MESA, or naming something that doesn't exist, always get their own entry. So do writes that might have run.
 
 ### {{label:settings.logRateLimitedLabel}} {#log-rate-limited}
 
@@ -41,13 +41,13 @@ How often the audit log is saved to disk: every 5, 10, 15 (default), 30 or 60 mi
 
 ### {{label:settings.maxLogEntriesLabel}} {#log-max-entries}
 
-How many entries the audit log keeps: 100, 1,000, 5,000 or 10,000 (default). Lowering it removes the oldest entries straight away. The copy on disk shrinks at the next save.
+How many entries the audit log keeps: 100, 1,000, 5,000, or 10,000 (default). Lowering it removes the oldest entries straight away. The copy on disk shrinks at the next save.
 
-Approval decisions and results, and administrator entries, are kept apart, up to the same number, so agents' requests never push them out. A request waiting for approval, and its expiry, stay with the key's other requests.
+Phoenix keeps approval decisions and results, and administrator entries, in a separate list of the same size. Agents' requests never push them out. A request waiting for approval, and its expiry, stay with the key's other requests.
 
 ## {{label:conversations.title}} {#conversation-log}
 
-**{{label:conversations.enable}}** keeps a record of what agents say and do: Agent Chat and voice conversations, AI Task, and the tool calls of MCP clients, Assist and Home Companion. Review it in the {{label:workspace.logs}} workspace. Off by default. Turning it off keeps what was already recorded.
+**{{label:conversations.enable}}** keeps a record of what agents say and do. It covers Agent Chat and voice conversations, AI Task, and the tool calls of MCP clients, Assist, and {{label:personas.home_companion.label}}. Review it in the {{label:workspace.logs}} workspace. Off by default. Turning it off keeps what was already recorded.
 
 Three limits control how much is kept. Each one saves a moment after you change it. When the log goes over a limit, the oldest conversations are removed first.
 
@@ -69,13 +69,13 @@ Choose what the logs show about your home and the people using Phoenix.
 
 ### {{label:settings.logEntityIdsLabel}} {#log-entity-ids}
 
-When off, the audit log's {{label:audit.rowResource}} column shows [redacted], and the Conversation Log leaves out what was said and done. On by default.
+When off, the audit log's {{label:audit.rowResource}} column shows [redacted], and {{label:conversations.title}} leaves out what was said and done. On by default.
 
 The audit log's payload then keeps only the names of a tool call's arguments, not their values. Other payload text, such as an approval's reason, can still name an entity. Conversation content already recorded is removed the next time Phoenix starts.
 
 ### {{label:settings.logClientIpLabel}} {#log-client-ip}
 
-When off, both logs hide the caller's IP address, though an address written into a tool call's arguments stays in the audit payload. On by default. Agent Chat, voice, Assist, AI Task and Home Companion still show by name, since they aren't addresses.
+When off, both logs hide the caller's IP address. An address written into a tool call's arguments stays in the audit payload. On by default. Agent Chat, voice, Assist, AI Task, and {{label:personas.home_companion.label}} still show by name, since they aren't addresses.
 
 ## {{label:settings.haNotifications}} {#notifications}
 
@@ -83,7 +83,7 @@ Phoenix can send Home Assistant notifications, which appear in the Home Assistan
 
 ### {{label:settings.notifyApprovalLabel}} {#notify-approval}
 
-Sends a notification with a link to each request waiting for your approval. It goes away once you decide. On by default. The Approvals count on the toolbar shows either way.
+Sends a notification with a link to each request waiting for your approval. It goes away once you decide. On by default. The {{label:shell.tabApprovals}} count on the toolbar shows either way.
 
 ### {{label:settings.notifyRateLimitLabel}} {#notify-rate-limit}
 

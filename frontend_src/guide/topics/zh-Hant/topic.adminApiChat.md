@@ -39,7 +39,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `nvidia` | 對話 | `api_key` |
 | `mimo`（Xiaomi MiMo） | 對話 | `api_key`、`endpoint_id`：`payg`、`token_plan`、`token_plan_sgp`、`token_plan_ams` |
 | `tencent`（Tencent Cloud TokenHub） | 對話 | `api_key`、`endpoint_id`：`singapore`、`guangzhou`、`silicon_valley` |
-| `opencode` | 對話 | `api_key`、`endpoint_id`：`zen`、`console` |
+| `opencode` | 對話 | `api_key`、`endpoint_id`：`console`、`zen` |
 | `ollama_cloud` | 對話 | `api_key` |
 | `ollama`（本機） | 對話 | `base_url` |
 | `local_openai`（本機 OpenAI 相容伺服器） | 對話 | `base_url`、選填的 `api_key` |
@@ -66,7 +66,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 
 | 欄位 | 類型 | 說明 |
 |---|---|---|
-| `kind` | string | 必填。上方的類型之一。 |
+| `kind` | string | 必填。[提供者類型](guide:#provider-kinds)中的類型之一。 |
 | `api_key` | string | 除 `ollama`、`local_openai` 和 `local_decision` 外每種類型都必填。最多 4096 個字元，不能包含控制字元。Phoenix 絕不傳回它。 |
 | `base_url` | string | `ollama`、`local_openai`、`local_decision`、`qwen`、`azure` 和 `azure_decision` 必填。只有 `ollama`、`local_openai` 和 `local_decision` 可以使用私有位址。對於 `local_openai` 和 `local_decision`，位址沒有路徑時 Phoenix 會加上 `/v1`。對於 `azure` 和 `azure_decision`，Phoenix 只保留主機名稱，它必須是以 `.services.ai.azure.com`、`.openai.azure.com` 或 `.cognitiveservices.azure.com` 結尾的 HTTPS 位址。其他每種類型都使用固定端點，並忽略此欄位。 |
 | `endpoint_id` | string | 僅用於帶端點的類型。省略它表示預設值。 |
@@ -99,6 +99,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `base_url` | 按設定時的值。 |
 | `endpoint_id` | 按設定時的值。 |
 | `tool_loading` | `auto`（預設）、`always` 或 `never`。 |
+| `decision_threshold` | 僅限決策帳戶。帳戶執行前回答必須達到的確定程度。 |
 | `capabilities` | 依模型：提供者宣告的、探測發現的，以及提供者在過去 30 天拒絕的選項。 |
 | `capabilities_checked_at` | Phoenix 上次檢查能力的時間。 |
 
@@ -110,7 +111,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 
 如果通過，Phoenix 會儲存帳戶，並嘗試讀取其模型清單和宣告的能力。
 
-回應為 `201`，包含 `{"instance": {...}}`，帶有上方的帳戶欄位。
+回應為 `201`，包含 `{"instance": {...}}`，帶有[列出帳戶](guide:#list-providers)下列出的帳戶欄位。
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
@@ -119,7 +120,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | 400 | `invalid_request` | `adminError.providerEndpointInvalid` | `endpoint_id` 不是該類型的值之一。 |
 | 400 | `invalid_request` | `adminError.providerAccountIdInvalid` | `account_id` 不是 32 個十六進位字元。 |
 | 400 | `invalid_request` | `adminError.ollamaUrlRequired`、`adminError.providerServerUrlRequired`、`adminError.providerBaseUrlRequired` | 缺少必要的 `base_url`。 |
-| 400 | `invalid_request` | `adminError.providerUrlInvalid`、`adminError.providerUrlScheme`、`adminError.providerRemoteUrlScheme`、`adminError.providerUrlHostRequired`、`adminError.providerUrlCredentialsForbidden`、`adminError.providerUrlFragmentForbidden`、`adminError.providerUrlAddressForbidden`、`adminError.providerUrlResolutionForbidden`、`adminError.providerRemoteUrlAddressForbidden`、`adminError.providerRemoteUrlResolutionForbidden`、`adminError.providerRemoteUrlResolutionFailed` | `base_url` 不是可接受的 URL。 |
+| 400 | `invalid_request` | `adminError.providerUrlInvalid`、`adminError.providerUrlScheme`、`adminError.providerRemoteUrlScheme`、`adminError.providerUrlHostRequired`、`adminError.providerUrlCredentialsForbidden`、`adminError.providerUrlFragmentForbidden`、`adminError.providerUrlAddressForbidden`、`adminError.providerUrlResolutionForbidden`、`adminError.providerRemoteUrlAddressForbidden`、`adminError.providerRemoteUrlResolutionForbidden`、`adminError.providerRemoteUrlResolutionFailed`、`adminError.providerAzureEndpointInvalid` | `base_url` 不是可接受的 URL。 |
 | 400 | `invalid_request` | `adminError.providerConnectionFailed`，或提供者自身失敗的鍵 | 憑據檢查失敗。`adminError.providerConnectionFailed` 會帶有 `detail`。 |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | 決策類型沒有 `model`。 |
 | 400 | `invalid_request` | `adminError.providerModelNotListed` | 模型不在提供者的清單中。 |
@@ -143,7 +144,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
-| 400 | `invalid_request` | `adminError.unknownFields` | 本文包含 `model`、`auto` 和 `tool_loading` 以外的欄位。 |
+| 400 | `invalid_request` | `adminError.unknownFields` | 本文包含 `model`、`auto`、`tool_loading` 和 `decision_threshold` 以外的欄位。 |
 | 400 | `invalid_request` | `adminError.toolLoadingInvalid` | `tool_loading` 不是 `auto`、`always` 或 `never`。 |
 | 400 | `invalid_request` | `adminError.toolLoadingDecision` | `tool_loading` 傳送給了決策帳戶，而決策帳戶不使用工具。 |
 | 400 | `invalid_request` | `adminError.decisionThresholdInvalid` | `decision_threshold` 不是 0.70 到 1.00 之間精確到百分位的數字。 |
@@ -153,7 +154,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | 400 | `invalid_request` | `adminError.providerModelOrAuto` | `model` 和 `auto: true` 同時傳送。 |
 | 400 | `invalid_request` | `adminError.providerModelRequired` | 兩者都沒有傳送。 |
 | 400 | `invalid_request` | `adminError.decisionModelRequired` | `auto: true` 傳給了決策帳戶，而決策帳戶需要具體模型。 |
-| 400 | `invalid_request` | `adminError.providerModelNotListed` 以及[新增帳戶](guide:#add-provider)下的決策提供者錯誤 | 決策帳戶的模型既未列出，也不是 `jev-1.13.0` 這樣已審核的固定版本，或檢查失敗。 |
+| 400 | `invalid_request` | `adminError.providerModelNotListed` 以及[新增帳戶](guide:#add-provider)下的決策提供者錯誤 | 決策帳戶的模型既未列出，也不是 `jev-1.13.0` 這樣已審核的固定版本，或決策提供者檢查失敗。 |
 | 409 | `conflict` | `adminError.providerAccountChanged` | 決策帳戶在檢查期間發生了變化。請重新讀取並重試。 |
 | 409 | `already_exists` | `adminError.providerAlreadyConfigured` | 同一伺服器上的另一個本機 / System One 帳戶已在使用此模型。 |
 | 404 | `not_found` | `adminError.providerAccountNotFound` | 沒有帳戶具有此 ID。 |
@@ -162,9 +163,9 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 
 `DELETE /api/phoenix-mcp/admin/agentcli/providers/{instance_id}` 不接受本文。它會移除帳戶並清除所有指向它的設定：
 
-- 語音智慧體的提供者和模型。
-- AI 任務的提供者和模型，以及其實體和 Phoenix Assist 管線。
-- 對於正在使用的決策帳戶：`decision_provider_id`、`decision_shadow_enabled`、全部三種工具審核模式，以及任何 `hybrid` 路由模式（會變為 `off`）。
+- 語音智慧體的提供者和模型，以及 Phoenix Assist 管線
+- AI 任務的提供者和模型，以及其實體
+- 目前決策帳戶的 `decision_provider_id`、`decision_shadow_enabled`、`ai_task_decisions_enabled`、三種工具審核模式，以及 `hybrid` 路由（設為 `off`）
 
 如果你移除預設決策帳戶，另一個決策帳戶會成為預設。回應為 `200`，包含 `{"deleted": "<instance_id>"}`，即使 ID 不存在也是如此。
 
@@ -270,11 +271,11 @@ Phoenix 只在提供者支援的地方使用每個選項。
 
 | 欄位 | 類型 | 說明 |
 |---|---|---|
-| `thinking` | boolean | 開啟模型的推理。預設 `true`。對於 Claude，`false` 會傳送模型宣告的關閉設定，`effort` 最高為 `high`。 |
-| `effort` | string | `low`、`medium`、`high`、`xhigh` 或 `max`。預設 `high`。對於 Claude，空字串表示不傳送。 |
+| `thinking` | boolean | 開啟模型的推理。Claude 和 MiniMax 預設為 `true`。其他類型使用提供者自己的預設值。對於 Claude，`false` 會傳送模型宣告的關閉設定，`effort` 最高為 `high`。 |
+| `effort` | string | `low`、`medium`、`high`、`xhigh` 或 `max`。Claude 預設為 `high`。其他類型使用提供者自己的預設值。對於 Claude，空字串表示不傳送。 |
 | `show_thinking` | boolean | 是否顯示模型的推理。 |
 | `temperature` | number | 提供者的取樣溫度。 |
-| `max_tokens` | integer | 模型最多可以寫入的 token 數。預設 32000。 |
+| `max_tokens` | integer | 模型最多可以寫入的 token 數。僅限 Claude 和 MiniMax。預設 32000。 |
 
 ### 影像 {#chat-images}
 
@@ -289,7 +290,7 @@ Phoenix 只在提供者支援的地方使用每個選項。
 
 ### 串流開始前的錯誤 {#chat-errors}
 
-Phoenix 依此順序檢查本文大小、設定、緊急停止開關、存取金鑰、帳戶、模型、影像和訊息。第一次失敗會以 HTTP 狀態傳回。[本文錯誤](guide:topic.adminApi#bodies)也適用。
+Phoenix 以 HTTP 狀態回應第一個未通過的檢查。[本文錯誤](guide:topic.adminApi#bodies)也適用。
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
@@ -339,7 +340,7 @@ Phoenix 每 15 秒傳送一條 `: keepalive` 註解。串流開始後，問題�
 | `continue_required` | `iterations`、`turn_started_at` | 輪次在限制處暫停。使用 `continue: true` 和這個 `turn_started_at` 傳送下一個請求。 |
 | `error` | `code`、`message`；選填 `retryable`、`outcome`、`diagnostic`、`message_params`、`provider_detail`、`provider_code`、`rate_limit`、`refused` | `code` 包括 `cancelled`、`internal`、`kill_switch`、`unauthorized`、`review_changed`、`outcome_unknown`、`output_limit`、`invalid_request` 以及提供者自己的代碼。 |
 | `messages` | `messages` | 完整更新後的逐字稿。保留它用於下一輪次。 |
-| `done` | `stop_reason` | 一律是最後一個事件。失敗的輪次後，`stop_reason` 為 `error`。 |
+| `done` | `stop_reason` | 最後一個事件，除非輪次以 `internal` 錯誤結束。失敗的輪次後，`stop_reason` 為 `error`。 |
 
 當一次模型回應中的所有工具呼叫都只是讀取時，Phoenix 可能會同時執行它們。此時多個 `tool_call` 事件可能先於各自的 `tool_result` 事件到達。請依 `id` 將每個結果與其呼叫對應起來。
 

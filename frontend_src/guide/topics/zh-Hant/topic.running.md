@@ -1,7 +1,7 @@
 ---
 { "id": "topic.running", "title": "執行 Phoenix", "parent": "topic.about", "order": 50, "keywords": ["維運", "日常", "監控", "自動化"], "sectionKeywords": { "sensors": ["感測器", "遙測", "Request Count", "Denied Count", "Rate Limit Hits", "Last Access", "Expires In", "狀態", "實體 ID", "裝置", "統計"], "events": ["事件", "自動化觸發器", "phoenix_mcp_access_key_revoked", "phoenix_mcp_access_key_rotated", "phoenix_mcp_access_key_expired", "phoenix_mcp_rate_limited", "事件資料"], "approval-events": ["phoenix_mcp_approval_requested", "phoenix_mcp_approval_resolved", "phoenix_mcp_approval_claimed", "phoenix_mcp_config_changed", "手機通知", "行動應用程式", "通知核准"], "mesa-events": ["phoenix_mcp_mesa_blocked", "phoenix_mcp_mesa_lease_expired"], "notifications": ["notification_id", "持續性通知", "關閉"], "storage": [".storage", "檔案", "備份", "phoenix_mcp_audit", "phoenix_mcp_conversations"] } }
 ---
-Phoenix 會向 Home Assistant 新增一些內容，幫助你觀察它並圍繞它實現自動化。每個存取金鑰都會取得感測器，Phoenix 會觸發事件並顯示通知。本頁也列出 Phoenix 儲存資料的位置。
+Phoenix 會向 Home Assistant 新增一些內容，幫助你觀察它並圍繞它實現自動化。每個存取金鑰都會取得感測器，Phoenix 會觸發事件並顯示通知。
 
 ## 每個金鑰的感測器 {#sensors}
 
@@ -25,7 +25,7 @@ sensor.phoenix_mcp_access_key_my_access_key_last_access
 sensor.phoenix_mcp_access_key_my_access_key_expires_in
 ```
 
-這三個計數會儲存在記憶體中，因此 Home Assistant 重新啟動或 Phoenix 重新載入時會從 0 重新開始。關閉日誌記錄時它們仍會繼續計數。
+Home Assistant 重新啟動或 Phoenix 重新載入時，這三個計數會從 0 重新開始。關閉日誌記錄時它們仍會繼續計數。
 
 重新命名金鑰會重新命名其裝置，但保留實體 ID。撤銷金鑰、金鑰過期或刪除核心資料會移除裝置、其感測器及其統計。
 
@@ -47,7 +47,7 @@ Phoenix 會在 Home Assistant 的事件匯流排上觸發這些事件。將它�
 - `phoenix_mcp_approval_requested`：有請求正在等待核准。資料：`approval_id`、`access_key_id`、`access_key_name`、`tool_name`、`cap_name`、`review_url`、`expires_at`、`timestamp`。
 - `phoenix_mcp_approval_resolved`：請求達到最終狀態。資料：`approval_id`、`access_key_id`、`access_key_name`、`tool_name`、`status`、`closure_reason`、`approved_by_user_id`、`timestamp`。
 - `phoenix_mcp_approval_claimed`：已核准的請求開始執行（`claimed` 為 true），或在啟動失敗後被釋放（`claimed` 為 false）。資料：`approval_id`、`claimed`、`timestamp`。
-- `phoenix_mcp_config_changed`：變更中記錄了一次變更。資料：`resource_type`、`resource_id`、`action`。
+- `phoenix_mcp_config_changed`：{{label:shell.tabChanges}}中記錄了一次變更。資料：`resource_type`、`resource_id`、`action`。
 
 `status` 為 approved 表示你核准了它，而不是操作成功。安全副本審核使用存取金鑰 ID `__configuration_recovery__`。
 

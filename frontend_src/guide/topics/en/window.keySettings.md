@@ -5,9 +5,9 @@ More settings for the selected key, on three tabs. **{{label:accessKeys.cardGuid
 
 ## {{label:accessKeys.cardGuidance}} {#guidance}
 
-Notes Phoenix adds to the instructions of every agent that uses this key, such as what rooms and devices are called or who uses the agent. Up to 2,000 characters. Select **Save** to keep them, or **{{label:accessKeys.notesDiscard}}**.
+Notes Phoenix adds to the instructions of every agent that uses this key, such as room and device names or who uses the agent. Up to 2,000 characters. Select **{{label:common.save}}** to keep them, or **{{label:accessKeys.notesDiscard}}**.
 
-Guidance is advice. It never grants access, and an agent may ignore it. Agents and their model providers receive it, so never put passwords or other secrets here.
+Guidance is advice. It never grants access, and an agent might ignore it. Agents and their model providers receive it, so never put passwords or other secrets here.
 
 When you change it, connected agents get the new guidance with their next tool result. Phoenix hides entity IDs the key can't see, and removes text that looks like a secret.
 
@@ -15,21 +15,21 @@ When you change it, connected agents get the new guidance with their next tool r
 
 ### {{label:accessKeys.announceAllLabel}} {#announce-all}
 
-Offers the agent every Phoenix tool, even ones this key can't use. Calls to those tools are still refused. Off by default; use it for troubleshooting only, since it costs the model more and causes failed calls.
+Offers the agent every Phoenix tool, even ones this key can't use. Calls to those tools are still refused. Off by default. Use it only for troubleshooting, since it costs the model more and causes failed calls.
 
 ### {{label:accessKeys.inlineWaitLabel}} {#inline-wait}
 
-How long a request that needs approval waits for your decision before the app gets a "pending" answer: Off (default), or 30 to 180 seconds. With Off, the app hears straight away that the request is waiting in Approvals.
+How long a request that needs approval waits for your decision before the app gets a "pending" answer: Off (default), or 30 to 180 seconds. With Off, the app hears straight away that the request is waiting in {{label:shell.tabApprovals}}.
 
-This applies to external apps only. Agent Chat waits up to 15 minutes for your decision. The Voice Agent, Assist and AI Task report that the change is waiting and carry on. If the key already has a request waiting, a new one doesn't wait.
+This applies to external apps only. Agent Chat waits up to 15 minutes for your decision. The Voice Agent, Assist, and AI Task report that the change is waiting and carry on. If the key already has a request waiting, a new one doesn't wait.
 
 ### {{label:accessKeys.assistExposureLabel}} {#assist-exposure}
 
-Limits a pass-through key to the entities exposed to Assist in Home Assistant. Off by default. It appears only for pass-through keys; scoped keys use the permissions tree instead.
+Limits a pass-through key to the entities exposed to Assist in Home Assistant. Off by default. It appears only for pass-through keys. Scoped keys use the {{label:accessKeys.permissionsTree}} instead.
 
 ## {{label:accessKeys.tabOAuth}} {#oauth-sign-in}
 
-Lets apps that take only a server address, such as ChatGPT, Claude and their phone apps, use this key without you pasting it anywhere. Off by default. Agents that send the key keep working either way.
+Lets apps that take only a server address, such as ChatGPT, Claude, and their phone apps, use this key without you pasting it anywhere. Off by default. Agents that send the key keep working either way.
 
 When you turn on **{{label:oauth.switchLabel}}**, Phoenix shows **{{label:oauth.address}}**. Add a custom connector in the app with that address and leave any client ID empty. The app opens Home Assistant, where you approve the sign-in.
 
@@ -43,19 +43,17 @@ Related: [Apps that sign in with OAuth](guide:topic.connecting#oauth)
 
 An app can start a sign-in only for 10 minutes after you allow it. Turning the switch on starts the first 10 minutes. A countdown shows the time left.
 
-Approving a sign-in ends the period, and Phoenix shows which app signed in. Select **{{label:oauth.stopWindow}}** to end it early. Select **{{label:oauth.allowNew}}** before connecting another app, or when an app asks you to sign in again. A sign-in link that arrives while no period is open does nothing.
-
-The countdown is the same everywhere Phoenix shows it, including the connect instructions and the approval dialog.
+Approving a sign-in ends the period, and Phoenix shows which app signed in. Select **{{label:oauth.stopWindow}}** to end it early. Before you connect another app, or when an app asks you to sign in again, select **{{label:oauth.allowNew}}**. A sign-in link that arrives while no period is open does nothing.
 
 ### {{label:oauth.signInsTitle}} {#oauth-sign-ins}
 
-The apps approved for this key, with where each returns to and when it was last used. A signed-in app stays signed in for as long as the key lasts. Select **{{label:oauth.remove}}**, then **{{label:common.confirm}}**, to sign out one you no longer use; a click anywhere else cancels. A key can have 10 signed-in apps.
+The apps approved for this key, with where each returns to and when it was last used. A signed-in app stays signed in for as long as the key lasts. To sign out an app you no longer use, select **{{label:oauth.remove}}**, then **{{label:common.confirm}}**. Click anywhere else to cancel. A key can have up to 10 signed-in apps.
 
-Deleting or disconnecting the app on its own side doesn't always tell Phoenix. An app that does tell Phoenix disappears from this list; otherwise it stays until you remove it here. The last-used time shows which ones have stopped.
+Deleting or disconnecting the app on its own side doesn't always tell Phoenix. An app that tells Phoenix disappears from this list. Any other app stays until you remove it here. The last-used time shows which ones have stopped.
 
 ## {{label:accessKeys.cardRateLimiting}} {#rate-limiting}
 
-Rate limits are on the **{{label:accessKeys.cardAgentBehavior}}** tab. They apply to external apps only. Agent Chat, the Voice Agent, Assist and AI Task are never limited. Each field saves when you leave it.
+Rate limits are on the **{{label:accessKeys.cardAgentBehavior}}** tab. They apply to external apps only. Agent Chat, the Voice Agent, Assist, and AI Task are never limited. Each field saves when you leave it.
 
 ### {{label:accessKeys.rateRequestsLabel}} {#rate-requests}
 

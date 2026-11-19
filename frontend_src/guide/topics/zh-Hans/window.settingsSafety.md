@@ -25,9 +25,9 @@
 
 ## {{label:settings.dataCard}} {#data-management}
 
-删除 Phoenix 的数据。选择要删除的内容，选择 **{{label:settings.wipeSubmit}}**，然后输入 WIPE 确认。之后页面会重新加载。
+删除 Phoenix 的数据。选择要删除的数据，然后选择 **{{label:settings.wipeSubmit}}**。接着输入 `WIPE` 确认。之后页面会重新加载。
 
-清除无法撤销。有已批准请求仍在运行时，清除会被拒绝。
+清除无法撤销。如果清除包含 **{{label:settings.wipeCoreLabel}}**，有已批准请求仍在运行时，Phoenix 会拒绝它。
 
 ### {{label:settings.wipeCoreLabel}} {#wipe-core}
 
@@ -39,8 +39,8 @@
 
 ### {{label:settings.wipeProvidersLabel}} {#wipe-providers}
 
-删除所有 AI 和决策提供商账户及其密钥。语音智能体、AI 任务和命令路由会失去账户，Phoenix 会移除它创建的语音助手。
+删除所有 AI 和决策提供商账户及其密钥。语音智能体、AI 任务和命令路由会失去账户。Phoenix 还会移除它创建的语音助手。
 
 ### {{label:settings.wipeMesaLabel}} {#wipe-mesa}
 
-删除所有层级的每条 MESA 策略，以及你忽略的建议。默认关闭，因此除非你选择此项，清除会保留你的设备规则。
+删除所有层级的每条 MESA 策略，以及你忽略的建议。默认关闭。

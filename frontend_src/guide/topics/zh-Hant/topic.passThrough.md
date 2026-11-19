@@ -1,7 +1,7 @@
 ---
 { "id": "topic.passThrough", "title": "直通模式會開放什麼", "parent": "window.accessKeys", "order": 2, "keywords": ["直通模式", "不受限制", "完整存取", "限定範圍"] }
 ---
-直通金鑰會略過權限樹：它可以讀取和控制所有實體，Phoenix 自己的實體除外。請僅對可以放心託付整個家的智慧體使用。
+直通金鑰會略過{{label:accessKeys.permissionsTree}}：它可以讀取和控制所有實體，Phoenix 自己的實體除外。請僅對可以放心託付整個家的智慧體使用。
 
 ## 會開啟什麼 {#allows}
 

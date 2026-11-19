@@ -5,7 +5,7 @@
 
 ## 順序 {#order}
 
-1. 不存在的實體為未找到。
+1. 不存在的實體為 {{label:perms.stateNotFound}}。
 2. Phoenix 自己的實體永遠無法存取。
 3. Home Companion 金鑰只能存取其家用裝置。
 4. 直通金鑰可以存取其他所有內容，或者如果你限制了它，只能存取向 Assist 公開的實體。
@@ -19,17 +19,17 @@
 
 ## 最近的授權決定結果 {#nearest}
 
-否則由最近的 R 或 W 決定。實體自身的設定優先於其裝置，裝置的設定優先於其域。如果每一層都是 N，結果為無存取權限。
+否則由最近的 R 或 W 決定。實體自身的設定最先，然後依次是其裝置、其主裝置和其域的設定。如果每一層都是 N，結果為 {{label:perms.stateNoAccess}}。
 
 ## 範例 {#examples}
 
 ### 讀取所有燈，控制一個房間 {#example-one-room}
 
-把燈域設為 R，把客廳的燈設為 W。每盞燈都是唯讀，客廳的燈是讀寫，因為它自身的設定最近。
+把燈域設為 R，把客廳的燈設為 W。其他每盞燈都是 {{label:perms.stateRead}}。客廳的燈是 {{label:perms.stateWrite}}，因為它自身的設定最近。
 
 ### 控制所有燈，除了一間臥室 {#example-except}
 
-把燈域設為 W，把客臥的裝置設為 D。其他每盞燈都是讀寫，客臥的燈是拒絕存取。
+把燈域設為 W，把客臥的裝置設為 D。其他每盞燈都是 {{label:perms.stateWrite}}，客臥的燈是 {{label:perms.stateDeny}}。
 
 ### 在你允許的裝置上封鎖一個感測器 {#example-one-sensor}
 
@@ -47,7 +47,7 @@
 
 ## 權限樹顯示什麼 {#tree-label}
 
-樹中每個名稱後的結果與權限樹一致。在 Home Companion 金鑰上，它還會顯示 Home Companion 的限制：它無法存取的裝置顯示為無存取權限，感測器上的寫入顯示為讀取。它不會考慮說話者。
+權限樹在每個名稱後顯示依這些規則得出的結果。在 Home Companion 金鑰上，它還會顯示 Home Companion 的限制：它無法存取的裝置顯示 {{label:perms.stateNoAccess}}，感測器上的 W 顯示 {{label:perms.stateRead}}。它不會考慮說話者。
 
 ## 透過自動化、腳本和場景控制 {#indirect}
 
@@ -57,11 +57,11 @@ R 用於觸發是安全的：智慧體可以看到這些實體，但無法執行
 
 若要保護觸發器，請為自動化、腳本或場景設定一個設為確認的 MESA 策略。當{{label:settings.mesaModeLabel}}或該策略為{{label:settings.mesaModeEnforced}}時，每次執行都會等待你的核准，無論其操作做什麼。在{{label:settings.mesaModeAdvisory}}下，執行會直接進行。[{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions)會找出會觸及風險裝置的那些。
 
-核准只涵蓋請求時指定的確切實體及其任何群組成員。如果群組變更，智慧體必須重新詢問。Phoenix 不會檢查場景或腳本隨後做了什麼。
+核准只涵蓋智慧體請求的實體及其群組成員。如果群組變更，智慧體必須重新詢問。Phoenix 不會檢查場景或腳本隨後做了什麼。
 
 智慧體在執行輸入中指定的實體不同：它[需要與目標相同的存取權限](guide:topic.tools#actions)。Phoenix 只能看到輸入中直接寫明的內容，所以由片段拼出實體 ID 的腳本能繞過這項檢查。
 
-Phoenix 會檢查 `script.turn_on`、依名稱執行的腳本和 `automation.trigger` 的輸入，無論腳本是透過其 ID、區域還是裝置指定的。`homeassistant.turn_on`、`turn_off` 和 `toggle` 會把資料原樣交給腳本而不經檢查，因此它們只能在不帶資料時執行腳本。
+Phoenix 會檢查 `script.turn_on`、依名稱執行的腳本和 `automation.trigger` 的輸入，無論腳本是透過其 ID、區域還是裝置指定的。`homeassistant.turn_on`、`turn_off` 和 `toggle` 會把資料原樣交給腳本而不經檢查，Phoenix 只允許它們在不帶資料時執行腳本。
 
 通用恆溫器和通用濕度調節器輔助項目同樣以 Home Assistant 的身分動作。Phoenix 不會透過它們檢查其驅動的開關。
 

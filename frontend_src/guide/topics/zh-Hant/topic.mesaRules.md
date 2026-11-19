@@ -1,7 +1,7 @@
 ---
 { "id": "topic.mesaRules", "title": "MESA 如何決定", "parent": "workspace.mesa", "order": 10, "keywords": ["MESA", "策略", "安全", "繼承", "優先順序"], "sectionKeywords": { "levels": ["繼承", "主裝置", "父裝置", "範圍"], "combining": ["最嚴格", "衝突", "放寬", "覆蓋"], "baseline": ["預設", "無策略", "內建", "部署預設設定"], "modes": ["建議", "強制執行", "關閉", "警告", "阻止"], "privacy": ["受限", "敏感", "拒絕存取"], "coverage": ["讀取", "攝影機", "自動化", "直通模式"], "not-in-editor": ["宣告限制", "時間條件", "時間範圍", "存取角色", "僅匯入"] } }
 ---
-在存取金鑰允許之後，MESA 會檢查智慧體對裝置採取的每個操作。策略描述對其涵蓋範圍要有多謹慎。本頁說明不同層級的策略如何疊加，以及操作違反策略時會發生什麼。
+在存取金鑰允許之後，MESA 會檢查智慧體對裝置採取的每個操作。策略描述對其涵蓋範圍要有多謹慎。
 
 MESA 是一項開放規範。Phoenix 內建了它的參考實作 mesa-core，你可以在 [GitHub](https://github.com/leecaochang/mesa-core) 上查看。
 
@@ -22,33 +22,33 @@ MESA 是一項開放規範。Phoenix 內建了它的參考實作 mesa-core，你
 
 MESA 依欄位組合策略，而不是依策略整體組合。
 
-- **控制模式**：任一層級設定的最嚴格模式勝出。具體策略不能放寬更廣泛的策略，因此禁止的門鎖域下的自主門鎖實體仍為禁止。唯一的例外見下文。
+- **控制模式**：任一層級設定的最嚴格模式勝出。具體策略不能放寬更廣泛的策略，因此{{label:mesa.modeProhibited}}的門鎖域下的{{label:mesa.modeAutonomous}}門鎖實體仍為{{label:mesa.modeProhibited}}。實體覆蓋是唯一的例外。
 - **隱私級別**：最嚴格的層級勝出，方式相同。
 - **觸發自動化**：任一層級為可能則勝出。否則最具體的層級勝出。
 - **其他所有項目**：最具體的層級勝出，但由人寫入或確認的值，或由裝置製造商寫入的值，優先於任何層級推斷出的值。
 
-放寬控制模式的唯一方式是附書面原因的實體覆蓋，它可以將確認改為自主，但絕不會放寬禁止或唯讀。策略編輯器無法設定它；它只能透過匯入出現。
+放寬控制模式的唯一方式是附書面原因的實體覆蓋，它可以將{{label:mesa.modeConfirm}}改為{{label:mesa.modeAutonomous}}，但絕不會放寬{{label:mesa.modeProhibited}}或{{label:mesa.modeReadOnly}}。{{label:workspace.profileEditor}}無法設定它。它只能透過匯入出現。
 
 相關：[生效值解析](guide:window.mesaEditor#effective-resolution)
 
 ## 內建基線 {#baseline}
 
-沒有任何策略涵蓋的實體會遵循內建基線：燈為自主，門鎖和警報控制面板為禁止，其他所有為確認。
+沒有任何策略涵蓋的實體會遵循內建基線：燈為{{label:mesa.modeAutonomous}}，門鎖和警報控制面板為{{label:mesa.modeProhibited}}，其他所有為{{label:mesa.modeConfirm}}。
 
 策略會改變這一點：
 
-- **設定控制模式的策略會替換基線**，無論它位於哪個層級，即使更寬鬆。門鎖上的確認策略會讓門鎖變為確認，而不是禁止。
-- **未設定控制模式的策略會保留基線**，但原本自主的都會變為確認。燈上的僅標籤策略會讓該燈需要確認。
+- 設定控制模式的策略會替換基線，無論它位於哪個層級，即使更寬鬆。門鎖上的{{label:mesa.modeConfirm}}策略會讓門鎖變為{{label:mesa.modeConfirm}}，而不是{{label:mesa.modeProhibited}}。
+- 未設定控制模式的策略會保留基線，但原本{{label:mesa.modeAutonomous}}的都會變為{{label:mesa.modeConfirm}}。燈上的僅標籤策略會讓該燈需要確認。
 
-因此，針對門鎖的自主域策略會讓每把門鎖變為自主。在依賴某個策略之前，請在[生效值解析](guide:window.mesaEditor#effective-resolution)中檢查它的效果。
+因此，針對門鎖的{{label:mesa.modeAutonomous}}域策略會讓每把門鎖變為{{label:mesa.modeAutonomous}}，除非有更嚴格的策略涵蓋它。在依賴某個策略之前，請在[生效值解析](guide:window.mesaEditor#effective-resolution)中檢查它的效果。
 
-部署預設設定可以為沒有策略的實體替換內建基線。它們來自匯入的存檔；策略編輯器無法編輯它們。
+部署預設設定可以為沒有策略的實體替換內建基線。它們來自匯入的存檔。{{label:workspace.profileEditor}}無法編輯它們。
 
 ## 整合自帶的策略 {#integration-profiles}
 
 自訂整合可以在其資料夾中附帶自己的策略，即 `mesa_profile.json` 檔案。Phoenix MCP 每次啟動時都會把該檔案新增為這個整合的策略，不會先詢問你。
 
-這樣的策略可以放寬基線。如果某個整合把它的門鎖標記為自主，這些門鎖就會變為自主。在[生效值解析](guide:window.mesaEditor#effective-resolution)中，這些值的 **{{label:mesa.colOrigin}}** 顯示為 developer。
+這樣的策略可以放寬基線。如果某個整合把它的門鎖標記為{{label:mesa.modeAutonomous}}，這些門鎖就會變為{{label:mesa.modeAutonomous}}。在[生效值解析](guide:window.mesaEditor#effective-resolution)中，這些值的 **{{label:mesa.colOrigin}}** 顯示為 developer。
 
 若要覆寫它，請為該整合儲存你自己的策略。之後 Phoenix MCP 會保留你的策略，並略過該整合的檔案。
 
@@ -57,10 +57,12 @@ MESA 依欄位組合策略，而不是依策略整體組合。
 MESA 的行為取決於[設定](guide:window.settingsSafety#mesa-mode)中的 **{{label:settings.mesaModeLabel}}**，以及策略自身的 **{{label:mesa.fieldEnforcement}}**。
 
 - **{{label:settings.mesaModeOff}}**：MESA 允許一切。
-- **{{label:settings.mesaModeAdvisory}}**（預設）：被禁止的操作和違反的限制只會警告智慧體，確認操作無需核准即可執行。唯讀實體和隱私拒絕存取仍會阻止。
-- **{{label:settings.mesaModeEnforced}}**：被禁止、唯讀的操作和違反的限制會被阻止。確認操作會在[核准](guide:topic.approvalLifecycle)中等待你的核准。
+- **{{label:settings.mesaModeAdvisory}}**（預設）：{{label:mesa.modeProhibited}}操作和違反的限制只會警告智慧體，{{label:mesa.modeConfirm}}操作無需核准即可執行。{{label:mesa.modeReadOnly}}實體和隱私拒絕存取仍會阻止。
+- **{{label:settings.mesaModeEnforced}}**：MESA 會阻止{{label:mesa.modeProhibited}}和{{label:mesa.modeReadOnly}}操作以及違反的限制。{{label:mesa.modeConfirm}}操作會等待你的核准。
 
-設為 **{{label:mesa.modeEnforced}}** 的策略，在設定為建議模式時仍會強制執行。設定為關閉時，不會強制執行任何內容。
+相關：[核准如何運作](guide:topic.approvalLifecycle)
+
+設為 **{{label:mesa.modeEnforced}}** 的策略，在設定為{{label:settings.mesaModeAdvisory}}時仍會強制執行。設定為{{label:settings.mesaModeOff}}時，不會強制執行任何內容。
 
 當一個操作針對多個實體時，MESA 會去掉被阻止的實體，操作在其餘實體上執行。警告或阻止會連同原因一起告知智慧體。
 
@@ -68,9 +70,9 @@ MESA 的行為取決於[設定](guide:window.settingsSafety#mesa-mode)中的 **{
 
 ## 隱私 {#privacy}
 
-**{{label:mesa.privRestricted}}** 隱私級別會讓自主實體需要確認。人員始終至少為 **{{label:mesa.privSensitive}}**。
+**{{label:mesa.privRestricted}}** 隱私級別會讓{{label:mesa.modeAutonomous}}實體需要確認。人員始終至少為 **{{label:mesa.privSensitive}}**。
 
-匯入的策略還可以拒絕對某些角色的存取。這種拒絕存取會在除關閉之外的每種模式下阻止操作，包括攝影機影像。
+匯入的策略還可以拒絕對某些角色的存取。這種拒絕存取會在除{{label:settings.mesaModeOff}}之外的每種模式下阻止操作，包括攝影機影像。
 
 ## MESA 涵蓋什麼 {#coverage}
 
@@ -101,7 +103,7 @@ Phoenix 無法確定名稱來自套件或替換變數的檔案，以及 Device B
 
 如果新 ID 已有策略，Phoenix 會保留兩者。新 ID 採用兩者中較嚴格的控制模式、執行方式和隱私設定，以及兩者的全部限制，另一個策略顯示為孤立策略，供你檢視。智慧體的重新命名也一樣，MESA 會先檢查重新命名本身。
 
-把對象移出設有策略的分區算作一次變更，因為這可能解除某條規則。移入則不算，因為新分區只會讓規則更嚴格。
+把對象移出設有策略的分區算作一次變更，因為這可能解除某條規則。移入則不算作變更。
 
 ## MESA 無法讀取策略時 {#storage}
 
@@ -109,11 +111,16 @@ Phoenix 無法確定名稱來自套件或替換變數的檔案，以及 Device B
 
 Home Assistant 日誌會說明該怎麼做：放回日誌中指明的副本，或刪除它，從沒有策略的狀態開始。然後重新載入 Phoenix。
 
-如果 Phoenix 無法儲存策略變更，它會復原變更並顯示錯誤，因此生效的規則始終是已儲存的規則。重新命名是例外：策略仍跟隨重新命名後的實體，{{label:attention.title}}會一直提示你，直到儲存成功。
+如果 Phoenix 無法儲存策略變更，它會復原變更並顯示錯誤，因此已儲存的規則繼續生效。重新命名是例外：策略仍跟隨重新命名後的實體，{{label:attention.title}}會一直提示你，直到儲存成功。
 
-## 策略編輯器無法設定什麼 {#not-in-editor}
+## {{label:workspace.profileEditor}}無法設定什麼 {#not-in-editor}
 
-策略還可以包含宣告限制（例如最高溫度）、適用更嚴格規則的時間範圍、對某些角色的隱私拒絕存取，以及實體覆蓋。這些只能透過匯入的存檔出現。
+策略還可以包含只能透過匯入的存檔出現的欄位：
+
+- 宣告限制，例如最高溫度
+- 適用更嚴格規則的時間範圍
+- 對某些角色的隱私拒絕存取
+- 實體覆蓋
 
 限制也涵蓋以其他方式傳送的相同請求。`homeassistant.turn_on` 算作實體自身的開啟操作，設定燈光亮度的每種方式都受亮度限制約束。
 
@@ -123,6 +130,6 @@ Home Assistant 日誌會說明該怎麼做：放回日誌中指明的副本，�
 
 時間範圍可以跟隨行事曆。它在行事曆為開啟狀態時適用，在 Phoenix 無法判斷時也適用。
 
-在策略編輯器中儲存策略，會用表單顯示的內容替換整個策略，因此會移除這些欄位。
+在{{label:workspace.profileEditor}}中儲存策略，會用表單顯示的內容替換整個策略，因此會移除這些欄位。
 
 相關：[{{label:mesa.importTitle}}](guide:window.mesaProfiles#import)

@@ -1,7 +1,7 @@
 ---
 { "id": "window.requestDetails", "title": "{{label:workspace.requestDetails}}", "parent": "workspace.approvals", "order": 3, "keywords": ["參數", "原始", "結果", "錯誤"] }
 ---
-審核中所選請求的技術記錄。它隨工作區在審核下方開啟；如果關閉了它，可從 **{{label:workspace.options}}** 重新開啟。
+{{label:workspace.review}} 中所選請求的技術記錄。它隨工作區在 {{label:workspace.review}} 下方開啟；如果關閉了它，可從 **{{label:workspace.options}}** 重新開啟。
 
 每個部分都可以摺疊，並會為你選擇的下一個請求保持摺疊或展開狀態。
 
@@ -19,4 +19,4 @@
 
 ## 一小時之後 {#pruned}
 
-請求決定一小時後，Phoenix 會清除其參數、更改和結果。請求會連同結果保留在歷史中，但審核和這些部分沒有內容可顯示。
+請求決定一小時後，Phoenix 會清除其參數、更改和結果。操作被中斷的請求會把這些內容保留七天。請求會連同結果保留在歷史中，但 {{label:workspace.review}} 和這些部分沒有內容可顯示。

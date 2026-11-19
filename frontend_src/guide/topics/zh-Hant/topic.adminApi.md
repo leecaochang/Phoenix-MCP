@@ -14,15 +14,15 @@
 - Phoenix 仍在啟動時，除目錄外的每個端點都會傳回 `503`，錯誤為 `service_unavailable`。
 - Phoenix 存取金鑰（`phx_...`）以及應用程式透過 OAuth 登入取得的權杖都無法開啟這些端點。它們僅供智慧體使用。
 
-緊急停止開關開啟時，管理 API 仍會運作。只有 OAuth 登入步驟會拒絕：開放登入時段，以及載入或核准應用程式的登入。
+緊急停止開關開啟時，管理 API 仍會運作。只有以下操作會拒絕：為金鑰開啟 OAuth 登入、開放登入時段，以及載入或核准應用程式的登入。核准請求會改為取消它，但設定復原審核除外。
 
 相關：[管理員這一側](guide:topic.security#admin)
 
 ## 回應 {#responses}
 
-成功的呼叫會傳回 `200` 或 `201` 和 JSON 本文，或傳回 `204` 且沒有本文。每個回應都帶有 `X-Phoenix-Request-ID`，稽核日誌和 Home Assistant 的日誌也會記錄它。帶本文的回應還會新增 `Cache-Control: no-store`。
+成功的呼叫會傳回 `200` 或 `201` 和 JSON 本文，或傳回 `204` 且沒有本文。每個回應都帶有 `X-Phoenix-Request-ID`。Home Assistant 的日誌會在 info 層級記錄它，變更的稽核條目也會記錄它。帶本文的回應還會新增 `Cache-Control: no-store`。
 
-你透過 API 所做的每項變更都會以發起變更的管理員身分向稽核日誌新增一筆條目。讀取不會被記錄。
+{{label:settings.logEnableLabel}}和{{label:settings.logAllowedLabel}}開啟時，你透過 API 所做的每項變更都會以發起變更的管理員身分向稽核日誌新增一筆條目。讀取不會被記錄。
 
 ## 錯誤 {#errors}
 
@@ -37,14 +37,14 @@
 }
 ```
 
-- `error` 是下面代碼之一。請針對它撰寫程式碼，而不是針對訊息。
+- `error` 是本節表格中的代碼之一。請針對它撰寫程式碼，而不是針對訊息。
 - `message_key` 指定面板對訊息的翻譯，`message_params` 填入它。`message_params` 僅在訊息有值時出現。
 - 來自 Phoenix 外部的文字，例如 AI 提供者自己的錯誤，會帶有 `message_passthrough: true`，而不是鍵。
 
 | 代碼 | 通常狀態 | 含義 |
 |---|---|---|
 | `invalid_request` | 400 | 請求格式錯誤，或某個值超出範圍。 |
-| `unauthorized` | 401 | 未登入。通常由 Home Assistant 先傳回，如上所述。如果由 Phoenix 傳回，`message_key` 為 `adminError.authRequired`。 |
+| `unauthorized` | 401 | 未登入。通常由 Home Assistant 先傳回，如[登入](guide:#auth)所述。如果由 Phoenix 傳回，`message_key` 為 `adminError.authRequired`。 |
 | `forbidden` | 403 | 已登入，但不是管理員。 |
 | `not_found` | 404 | 項目不存在。 |
 | `conflict` | 409 | 項目的目前狀態不允許此操作，例如名稱已被使用。 |
@@ -67,7 +67,7 @@
 | 不是有效 JSON | 400 | `adminError.badJson` |
 | JSON 不是物件 | 400 | `adminError.bodyNotObject` |
 
-分頁清單接受 `limit` 和 `offset`，兩者都是大於等於 0 的整數。每個端點都會限制 `limit`；錯誤的值會傳回 `400` 和 `adminError.badPagination` 或 `adminError.paginationNonNegative`。
+分頁清單接受 `limit` 和 `offset`，兩者都是大於等於 0 的整數。每個端點都會限制 `limit`。錯誤的值會傳回 `400` 和 `adminError.badPagination` 或 `adminError.paginationNonNegative`。
 
 ## 路徑中的 ID {#ids}
 
@@ -82,7 +82,7 @@ API 對四種權限狀態的命名與面板不同：
 
 | API | 面板 | 含義 |
 |---|---|---|
-| `GREY` | N | 沒有自己的設定；沿用上一層。 |
+| `GREY` | N | 沒有自己的設定。沿用上一層。 |
 | `YELLOW` | R | 唯讀。 |
 | `GREEN` | W | 讀取和控制。 |
 | `RED` | D | 拒絕存取。 |

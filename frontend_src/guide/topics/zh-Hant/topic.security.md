@@ -1,19 +1,19 @@
 ---
 { "id": "topic.security", "title": "安全", "parent": "topic.about", "order": 40, "keywords": ["安全", "安全性", "保護", "威脅", "機密", "隱私"], "sectionKeywords": { "keys": ["phx_", "bearer", "雜湊", "指紋", "查詢字串", "Origin", "403", "DNS 重繫結", "OAuth", "登入連結"], "hidden": ["清除", "已遮蔽", "敏感屬性", "密碼", "權杖", "攝影機串流", "entity_picture"], "gaps": ["別名下的機密", "內嵌密碼", "日誌", "自由文字"], "untrusted": ["提示注入", "裝置名稱", "指令", "不可信資料"], "request-limits": ["413", "請求體大小", "批次", "速率限制", "429", "Retry-After"], "admin": ["管理員", "長期存取權杖", "管理 API", "Home Assistant MCP Server"], "stored": ["備份", ".storage", "API 金鑰", "加密", "對話"], "checklist": ["最佳實務", "建議", "強化"], "emergency": ["金鑰洩漏", "受損", "緊急停止開關", "輪換"], "removing": ["解除安裝", "清除", "刪除全部"] } }
 ---
-Phoenix 讓 AI 智慧體在你家中工作，因此它的設計目標是只給每個智慧體你允許的內容，並讓機密無法觸及。本頁說明 Phoenix 保護什麼、無法保護什麼，以及你可以怎樣保持安全。
+Phoenix 只給每個 AI 智慧體你允許的內容，並隱藏它能辨識出的機密。
 
 相關：[每個操作要經過什麼](guide:topic.about#checks)、[智慧體可以做什麼](guide:topic.tools)
 
 ## 存取金鑰 {#keys}
 
-每個應用程式用自己的存取金鑰連線。Phoenix 只儲存它的指紋，因此金鑰本身只在你建立或輪換它時顯示一次。
+每個應用程式用自己的存取金鑰連線。Phoenix 只儲存它的雜湊值，因此你只在建立或輪換金鑰時看到它一次。
 
 - 應用程式必須在 Authorization 標頭中傳送金鑰。放在網址中的金鑰會被拒絕。
 - MCP 連線會拒絕來自 Home Assistant 之外頁面的瀏覽器請求，因此惡意網站無法透過你的瀏覽器存取它。
-- 已撤銷或已過期的金鑰會立即失效。已在執行的請求會在下一次檢查時停止。Agent Chat、語音和 AI 任務會在每次向 AI 模型發出請求前檢查。
+- 已撤銷或已過期的金鑰會立即失效。已在執行的請求會在下一次檢查時停止。Agent Chat、語音智慧體和 AI 任務會在每次向 AI 模型發出請求前檢查。
 - 應用程式使用未知、已撤銷或已過期的金鑰時，Home Assistant 日誌會記下來源位址。這樣你就能找到仍在使用舊金鑰的應用程式。
-- 透過 OAuth 登入的應用程式會取得只對 Phoenix 有效的權杖，僅用於管理員核准的那一個金鑰。Home Assistant 自己的登入權杖永遠無法用於 Phoenix。
+- 透過 OAuth 登入的應用程式會取得只對 Phoenix 有效的權杖，僅用於管理員核准的那一個金鑰。Home Assistant 自己的登入權杖永遠無法用作存取金鑰。
 - 只在登入是你自己剛剛發起時才核准。有人可能會把他們自己應用程式的登入連結傳給你；核准它就會把金鑰交給他們。
 
 相關：[保護金鑰安全](guide:topic.connecting#credentials)、[{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)、[{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
@@ -34,7 +34,7 @@ Phoenix 讓 AI 智慧體在你家中工作，因此它的設計目標是只給�
 
 - YAML 設定會隱藏名稱暗示機密的值（無論它們在檔案中的什麼位置），以及提到機密的註解。使用普通名稱的密碼對智慧體可見。
 - ESPHome 檔案會隱藏相同的值，以及 ESPHome 的 secrets.yaml 中 8 個字元或更長的任何值，無論它們出現在哪裡。檔案其他位置的較短密碼是可見的。
-- 日誌是自由文字。Phoenix 會移除存取金鑰、權杖、登入請求標頭和網址中的密碼，也會隱藏名稱看似機密的任何值，規則同上。名稱普通的機密仍可能漏過。
+- 日誌是自由文字。Phoenix 會移除存取金鑰、權杖、登入請求標頭和網址中的密碼，也會隱藏名稱看似機密的任何值，與 YAML 設定中的做法相同。
 
 只把這些能力授予需要它們的智慧體。
 
@@ -42,16 +42,16 @@ Phoenix 讓 AI 智慧體在你家中工作，因此它的設計目標是只給�
 
 ## 家庭資料不可信 {#untrusted}
 
-裝置名稱或狀態可能包含任何人寫的文字，例如「忽略你的指令」。Phoenix 會告訴 Agent Chat、語音、AI 任務和 Home Companion 中的模型：工具結果是不可信的資料，而不是指令。它提供給外部應用程式的家庭描述也帶有同樣的標記。
+裝置名稱或狀態可能包含任何人寫的文字，例如「忽略你的指令」。Phoenix 會告訴 Agent Chat、語音智慧體、AI 任務和 Home Companion 中的模型：工具結果是不可信的資料，而不是指令。它提供給外部應用程式的家庭描述也帶有同樣的標記。
 
-這有幫助，但沒有模型是完美的。請把你重視的變更保持在確認狀態，這樣每個變更執行前你都能看到。
+模型仍可能照做這類文字。請把你重視的變更保持在 **{{label:caps.modeConfirm}}**，這樣每個變更執行前你都能看到。
 
 相關：[{{label:caps.modeConfirm}}](guide:window.capabilities#modes)
 
 ## 請求限制 {#request-limits}
 
-- 請求體最大 1 MB，批次最多 50 個請求。批次中的每個請求都計入速率限制。
-- 外部應用程式依金鑰套用速率限制，預設每分鐘 60 個請求、每秒 10 個。Agent Chat、語音、Assist 和 AI 任務不受限制。
+- 請求體最大 1 MiB，批次最多 50 個請求。批次中的每個請求都計入速率限制。
+- 外部應用程式依金鑰套用速率限制，預設每分鐘 60 個請求、每秒 10 個。Agent Chat、語音智慧體、Assist 和 AI 任務不受限制。
 - 超過限制的金鑰會被告知何時重試。
 
 相關：[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)
@@ -60,13 +60,13 @@ Phoenix 讓 AI 智慧體在你家中工作，因此它的設計目標是只給�
 
 面板及其設定需要 Home Assistant 管理員。存取金鑰無法開啟它們。任何管理員憑據都有效，包括管理員的長期存取權杖，而且它可以建立具有任何能力的金鑰。
 
-請保持管理員數量精簡，並保護他們的權杖。Home Assistant 的 MCP Server 存取 Phoenix 時不受 Phoenix 的速率限制。它是否需要管理員，取決於 Home Assistant 的版本和該整合的選項。其他能夠通過的人只擁有家庭工具和他們自己的 Home Assistant 權限。請為它綁定範圍較窄的金鑰。
+請保持管理員數量精簡，並保護他們的權杖。Home Assistant 的 MCP Server 存取 Phoenix 時不受 Phoenix 的速率限制。它是否需要管理員，取決於 Home Assistant 的版本和該整合的選項。非管理員只取得家庭工具，且限於自己的 Home Assistant 權限。請為它綁定範圍較窄的金鑰。
 
 相關：[透過 Home Assistant 的 MCP Server](guide:topic.connecting#ha-mcp-server)
 
 ## 什麼儲存在哪裡 {#stored}
 
-Phoenix 會把資料儲存在 Home Assistant 的儲存資料夾中。存取金鑰只以指紋形式儲存。AI 提供者的 API 金鑰和記錄的對話會按原樣儲存在那裡，並未加密。
+Phoenix 會把資料儲存在 Home Assistant 的儲存資料夾中。存取金鑰只以雜湊值形式儲存。AI 提供者的 API 金鑰和記錄的對話會按原樣儲存在那裡，並未加密。
 
 Home Assistant 備份會包含該資料夾。請把備份和設定資料夾視為機密。
 
@@ -94,9 +94,9 @@ Phoenix 透過不加密、無需密碼的一般 HTTP 存取本機 Ollama 伺服�
 ## 保持安全 {#checklist}
 
 - 為每個應用程式分配自己的金鑰，只賦予它需要的能力。
-- 只對完全信任的智慧體使用直通模式。它還會開放診斷和服務回應資料。
-- 把系統日誌讀取、診斷和 YAML 設定留給需要它們的智慧體。
-- 在為語音、AI 任務、決策或 Assist 使用的金鑰設定有效期之前，要知道過期會解除它們的關聯。
+- 只對完全信任的智慧體使用直通模式。它還會開放{{label:caps.cap_diagnostics.label}}和{{label:caps.cap_service_response.label}}。
+- 把 **{{label:caps.cap_log_read.label}}**、**{{label:caps.cap_diagnostics.label}}** 和 **{{label:caps.cap_yaml_edit.label}}** 留給需要它們的智慧體。
+- 當語音智慧體、AI 任務、決策或 Assist 使用的金鑰過期時，Phoenix 會解除它與這些功能的關聯。
 - 在你不信任的網路上連線應用程式時使用 HTTPS。金鑰會隨每個請求傳輸。
 
 相關：[直通模式會開放什麼](guide:topic.passThrough)
@@ -111,7 +111,7 @@ Phoenix 透過不加密、無需密碼的一般 HTTP 存取本機 Ollama 伺服�
 
 ## 完全移除 Phoenix {#removing}
 
-刪除整合會撤銷金鑰，但保留設定、日誌和已歸檔的金鑰。它會立即恢復智慧體限時調高的日誌層級，並刪除記錄這些層級的檔案。要同時移除 Phoenix 的資料，請先使用 **{{label:settings.wipeCoreLabel}}**。
+刪除整合會撤銷金鑰、清除所有 AI 提供者帳戶，並解除 Phoenix 與 Assist、語音智慧體、AI 任務和決策提供者的關聯。它會保留其他設定、日誌和已歸檔的金鑰。它也會立即恢復智慧體限時調高的日誌層級。要同時移除 Phoenix 的資料，請先使用 **{{label:settings.wipeCoreLabel}}**。
 
 這樣仍會留下安全副本、行事曆變更記錄、儀表板資源記錄，以及 MESA 策略（除非你選擇了[{{label:settings.wipeMesaLabel}}](guide:window.settingsSafety#wipe-mesa)）。刪除整合後，請刪除 `.storage` 資料夾中所有以 `phoenix_mcp` 開頭的剩餘檔案。
 

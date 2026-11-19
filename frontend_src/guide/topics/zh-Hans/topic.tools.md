@@ -1,13 +1,13 @@
 ---
 {"id": "topic.tools", "title": "智能体能做什么", "parent": "topic.about", "order": 30, "keywords": ["工具", "工具列表", "MCP 工具", "智能体能做什么", "tools/list"], "sectionKeywords": {"rules": ["拒绝访问", "隐藏工具", "声明全部工具", "结果大小"], "reading": ["get_state", "get_history", "get_statistics", "get_camera_image", "get_calendar_events", "get_todo_items", "GetLiveContext", "GetDateTime", "历史", "统计", "摄像头"], "controlling": ["HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed", "HassClimateSetTemperature", "HassSetPosition", "HassStopMoving", "HassMediaPause", "HassMediaSearchAndPlay", "HassSetVolume", "HassVacuumStart", "HassCancelAllTimers", "HassBroadcast", "原生工具", "锁", "卷帘", "HassMediaNext", "HassMediaPrevious", "HassMediaUnpause", "HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassSetVolumeRelative", "HassVacuumCleanArea", "HassVacuumReturnToBase"], "actions": ["call_service", "dry_run_service", "服务", "操作", "重新加载", "重启", "响应数据", "附件", "media-source"], "lists": ["set_todo_item", "create_calendar_event", "update_calendar_event", "delete_calendar_event", "get_calendar_write", "待办", "日历"], "waiting": ["watch_entity", "等待状态"], "testing": ["test_trigger", "test_condition", "测试自动化", "触发器", "条件"], "home-companion": ["home_request", "家庭请求"], "automations": ["list_automations", "get_automation", "create_automation", "edit_automation", "delete_automation", "list_scripts", "get_script", "create_script", "edit_script", "delete_script", "create_blueprint", "edit_blueprint", "delete_blueprint", "蓝图", "间接控制", "包", "packages"], "scenes": ["list_scenes", "get_scene", "create_scene", "edit_scene", "delete_scene"], "helpers": ["list_helpers", "create_helper", "edit_helper", "delete_helper", "get_helper_settings", "set_helper_settings", "input_boolean", "计数器", "定时器", "地点", "模板辅助元素"], "dashboards": ["list_dashboards", "create_dashboard", "edit_dashboard", "delete_dashboard", "get_dashboard_config", "set_dashboard_config", "卡片", "仪表盘"], "restore": ["还原", "回执", "回滚"], "mesa": ["MESA 策略", "租约"], "configuration": ["配置", "模板", "日志", "能源"], "diagnostics": ["搜索", "注册表", "跟踪", "诊断"], "files": ["文件", "YAML", "www", "themes"], "esphome": ["ESPHome", "固件"], "system": ["集成", "注册表", "无线电", "备份", "重启", "通知", "fix_repair", "set_integration_subentry", "子条目", "修复"], "introspection": ["自己的请求", "审计条目"], "household": ["语音", "Assist", "AI 任务", "非管理员"]}}
 ---
-智能体通过工具工作。本页按组说明它们：智能体可以用它们做什么、哪些能力允许它们，以及值得了解的限制。[工具参考](guide:topic.toolReference)列出每个工具的参数和调用示例。
+智能体通过工具工作。[工具参考](guide:topic.toolReference)列出每个工具的参数和调用示例。
 
 两个设置决定每个操作。[{{label:accessKeys.cardCapabilities}}](guide:window.capabilities)决定智能体可以做哪类事情。[{{label:accessKeys.permissionsTree}}](guide:window.permissions)决定它可以对哪些实体做。
 
 ## 能力如何生效 {#rules}
 
-- 能力为拒绝访问的工具不会提供给智能体，对它的调用会在运行前被拒绝。
+- 如果工具的能力为 {{label:caps.modeDeny}}，Phoenix 不会把它提供给智能体。Phoenix 会在运行前拒绝对它的调用。
 - **{{label:accessKeys.announceAllLabel}}** 会仍然列出所有工具，用于排查问题。智能体仍然无法使用隐藏的工具。
 - 确认会暂缓更改以等待你的审批。使用同一能力的读取会直接运行。
 - 列出许多实体的结果会在约 64 KB 时停止。
@@ -24,7 +24,7 @@
 
 - 历史和统计每页最多 1000 行。状态变化和统计以一张紧凑的表格交给智能体，使用你家的时区，时间精确到秒，统计值至少保留四位有效数字。
 - 一次日历读取最多覆盖 31 天和 500 个事件。
-- 摄像头图像每边最多 2048 像素。
+- 智能体可以请求每边最多 2048 像素的摄像头图像。不指定尺寸时，它得到摄像头本身的尺寸。Phoenix 会拒绝超过 4 MiB 的图像。
 - 属性值摘要最多覆盖 7 天。
 
 允许它的能力：[{{label:caps.cap_camera_read.label}}](guide:window.capabilities#camera-read)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)
@@ -43,7 +43,7 @@
 
 开启 `broadcast` 的 Z-Wave 组播会被拒绝，因为它会到达网络中的每个设备。
 
-通过 Assist 卫星设备播报消息或在其上发起对话需要广播。MESA 在能力和权限树之后最后检查每个命令。
+通过 Assist 卫星设备播报消息或在其上发起对话需要广播。MESA 也会检查每个命令。
 
 允许它的能力：[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)、[{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
 
@@ -58,7 +58,7 @@
 - 重启或停止 Home Assistant 需要重启能力。安装更新也需要它，并且始终需要您审批。
 - 重新加载自动化、脚本、场景、辅助元素或核心配置需要 YAML 配置。
 - 操作返回的数据需要服务响应数据。没有它，大多数操作仍会运行，但不返回数据。只返回数据的操作（例如 `weather.get_forecasts`）会被拒绝。
-- 发送消息的通知操作需要通知能力。集成自带的、通过通知实体发送消息的操作也需要。手机以外的旧版通知服务始终需要您审批。
+- 发送消息的通知操作需要通知能力。集成自带的、通过通知实体发送消息的操作也需要。手机以外的旧版通知操作始终需要您审批。
 - 通知播放需要广播能力：`assist_satellite.announce`、`start_conversation`、`ask_question`、`music_assistant.play_announcement`、带 `announce` 的 `media_player.play_media` 和 `tts.speak`。
 - `tts.speak` 还需要对其指定的每个音箱有 W。普通播放只需要 W。
 - 操作数据中以 `media-source://camera/<entity_id>` 或 `media-source://image/<entity_id>` 指定的摄像头或图像，需要 {{label:caps.cap_camera_read.label}} 和对它的 R，与获取静态图像相同。
@@ -102,7 +102,7 @@
 
 ## 等待更改 {#waiting}
 
-智能体最多可以等待 30 秒，让实体发生变化或达到某个状态，以确认操作生效。等待结束时，权限树和权限会再次检查。
+智能体最多可以等待 30 秒，让实体发生变化或达到某个状态，以确认操作生效。等待结束时，Phoenix 会再次检查密钥是否仍然有效，以及能否读取该实体。
 
 允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
 
@@ -116,11 +116,11 @@
 
 条件中的模板与模板渲染在同一个单独的受限进程中运行，作用于密钥可读取状态的副本。模板必须直接指定实体，例如 `states('sensor.x')`。
 
-触发器中的模板需要 {{label:caps.cap_automation_write.label}} 设为允许，因为测试期间 Home Assistant 会自己在每次变化时运行它们，不经审核。它们会先在那个单独的进程中试运行。否则，请把模板作为条件来测试。
+触发器中的模板需要 {{label:caps.cap_automation_write.label}} 设为 {{label:caps.modeAllow}}，因为测试期间 Home Assistant 会自己在每次变化时运行它们，不经审核。Phoenix 会先在那个单独的进程中试运行它们。如果该能力不是 {{label:caps.modeAllow}}，请把模板作为条件来测试。
 
 事件、MQTT、Webhook 和对话触发器会被拒绝，因为任何密钥的范围都无法限制它们涉及的内容。
 
-允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；模板触发器还需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) 设为允许
+允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；模板触发器还需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) 设为 {{label:caps.modeAllow}}
 
 本组每个工具及其参数：[工具参考](guide:topic.tools-testing)
 
@@ -226,7 +226,7 @@
 
 - 读取配置涵盖 Home Assistant 的基本设置、能源设置、太阳能预测和蓝图。
 - 管理能源仪表盘会更改能源设置的一部分。它不能为某一类型添加第二个来源，也会拒绝更改已有多个来源的类型。
-- 模板渲染会在单独的受限进程中渲染模板。它作用于密钥可读取状态的副本，最长 10 秒，包括启动该进程的时间。
+- 模板渲染会在单独的受限进程中渲染模板。它作用于密钥可读取状态的副本，最长 10 秒。
 - 读取系统日志涵盖警告和错误、日志簿和通知。故障日志和捕获的调试记录还需要诊断。
 - 集成日志级别会更改集成的日志量，例如开启调试日志。更改可以在 5 到 120 分钟后结束、持续到下次重启，或一直保留到清除。
 
@@ -275,7 +275,7 @@ YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文�
 
 智能体可以读取和搜索 ESPHome 设备配置，密码、密钥、所有请求头的值、网址中的凭据以及提到它们的注释都会被遮蔽。
 
-使用 ESPHome Device Builder 加载项时，它们还可以校验、编译、读取设备日志、分析内存并检查连接。没有该加载项时，只能读取和搜索。
+使用 ESPHome Device Builder 应用时，它们还可以校验、编译、读取设备日志、分析内存并检查连接。没有该应用时，只能读取和搜索。
 
 secrets.yaml 中的值无论出现在哪里都会被遮蔽，即使在网址或注释中。密钥无法读取的实体 ID 显示为 `<redacted-entity>`，在文件中以及 Device Builder 的输出和日志中都是如此。任何智能体都不能读取或安装名称含 secret 的文件。
 
@@ -295,7 +295,7 @@ Phoenix 无法确定所属设备的文件（例如共享包或已删除的文件
 
 - 集成管理会添加、启用、禁用、重新加载和移除集成，并移除设备。
 - 集成重新配置会更改集成的设置，也会添加或更改子条目（例如 AI 代理）并执行修复项的修复。
-- 子条目和修复始终等待你的批准。代理的设置决定它获得哪些工具，而修复运行的是集成自身的代码。
+- 子条目和修复始终等待你的批准。AI 代理子条目的设置决定它获得哪些工具。修复运行的是集成自身的代码。
 - 在提出请求之前，代理可以查看重新配置、子条目或修复的第一个表单，无需你的批准。它能看到字段及其标签，但看不到已存储的设置，也不会提交任何内容。
 - 管理实体注册表会重命名实体和设备，并更改实体 ID、区域、楼层、标签和类别。`recorder.purge_entities` 也需要它，因为该操作会删除历史记录。
 - 无线电管理会更改 Zigbee 网络。群组、绑定和设备属性还需要物理控制。MESA 会检查对 Zigbee 设备的更改。
@@ -320,6 +320,6 @@ Phoenix 无法确定所属设备的文件（例如共享包或已删除的文件
 
 家庭中的任何人都可以对 Assist 或语音智能体说话。对于不是 Home Assistant 管理员的人，密钥最多保留五项能力。它们是搜索与发现、读取注册表、物理控制、广播和服务响应数据。其余都算作拒绝访问。
 
-审批和审计工具也会被隐藏，Home Assistant 仅限管理员的操作会被拒绝。Home Assistant 无法识别的说话者也会被同样对待。AI 任务始终如此运行。
+审批和审计工具也会被隐藏，Home Assistant 仅限管理员的操作会被拒绝。Home Assistant 无法识别的说话者也会被同样对待。AI 任务也以同样方式运行，除非 Home Assistant 指明发起任务的人是管理员。
 
 相关：[语音智能体、AI 任务或 Assist 工具提供商](guide:topic.homeAssistantFeatures)、[Assist 和语音智能体](guide:topic.permissionResolution#household)

@@ -13,4 +13,4 @@ Phoenix 在你此次訪問面板期間顯示的訊息。
 
 列出最近 30 則訊息，最新的在前，並顯示每則出現的時間；來自更早日期的會顯示日期。它們會保留到你重新載入面板。**{{label:notifications.clear}}** 會移除一則。
 
-視窗預設為關閉。可從工作區選項中的 **{{label:notifications.showHistory}}** 開啟。手機上不提供此功能，但訊息仍會顯示。
+視窗預設為關閉。可從 **{{label:workspace.options}}** 中的 **{{label:notifications.showHistory}}** 開啟。手機上不提供此功能，但訊息仍會顯示。

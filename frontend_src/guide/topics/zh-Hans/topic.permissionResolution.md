@@ -5,7 +5,7 @@
 
 ## 顺序 {#order}
 
-1. 不存在的实体为未找到。
+1. 不存在的实体为 {{label:perms.stateNotFound}}。
 2. Phoenix 自己的实体永远无法访问。
 3. Home Companion 密钥只能访问其家用设备。
 4. 直通密钥可以访问其他所有内容，或者如果你限制了它，只能访问向 Assist 公开的实体。
@@ -19,17 +19,17 @@
 
 ## 最近的授权决定结果 {#nearest}
 
-否则由最近的 R 或 W 决定。实体自身的设置优先于其设备，设备的设置优先于其域。如果每一层都是 N，结果为无访问权限。
+否则由最近的 R 或 W 决定。实体自身的设置最先，然后依次是其设备、其主设备和其域的设置。如果每一层都是 N，结果为 {{label:perms.stateNoAccess}}。
 
 ## 示例 {#examples}
 
 ### 读取所有灯，控制一个房间 {#example-one-room}
 
-把灯域设为 R，把客厅的灯设为 W。每盏灯都是只读，客厅的灯是读写，因为它自身的设置最近。
+把灯域设为 R，把客厅的灯设为 W。其他每盏灯都是 {{label:perms.stateRead}}。客厅的灯是 {{label:perms.stateWrite}}，因为它自身的设置最近。
 
 ### 控制所有灯，除了一间卧室 {#example-except}
 
-把灯域设为 W，把客卧的设备设为 D。其他每盏灯都是读写，客卧的灯是拒绝访问。
+把灯域设为 W，把客卧的设备设为 D。其他每盏灯都是 {{label:perms.stateWrite}}，客卧的灯是 {{label:perms.stateDeny}}。
 
 ### 在你允许的设备上屏蔽一个传感器 {#example-one-sensor}
 
@@ -47,7 +47,7 @@
 
 ## 权限树显示什么 {#tree-label}
 
-树中每个名称后的结果与权限树一致。在 Home Companion 密钥上，它还会显示 Home Companion 的限制：它无法访问的设备显示为无访问权限，传感器上的写入显示为读取。它不会考虑说话者。
+权限树在每个名称后显示按这些规则得出的结果。在 Home Companion 密钥上，它还会显示 Home Companion 的限制：它无法访问的设备显示 {{label:perms.stateNoAccess}}，传感器上的 W 显示 {{label:perms.stateRead}}。它不会考虑说话者。
 
 ## 通过自动化、脚本和场景控制 {#indirect}
 
@@ -57,11 +57,11 @@ R 用于触发是安全的：智能体可以看到这些实体，但无法运行
 
 要保护触发器，请为自动化、脚本或场景设置一个设为确认的 MESA 策略。当{{label:settings.mesaModeLabel}}或该策略为{{label:settings.mesaModeEnforced}}时，每次运行都会等待你的审批，无论其操作做什么。在{{label:settings.mesaModeAdvisory}}下，运行会直接进行。[{{label:mesa.suggestTitle}}](guide:window.mesaSuggestions)会找出会触及风险设备的那些。
 
-审批只覆盖请求时指定的确切实体及其任何组成员。如果组发生变化，智能体必须重新询问。Phoenix 不会检查场景或脚本随后做了什么。
+审批只覆盖智能体请求的实体及其组成员。如果组发生变化，智能体必须重新询问。Phoenix 不会检查场景或脚本随后做了什么。
 
 智能体在运行输入中指定的实体不同：它[需要与目标相同的访问权限](guide:topic.tools#actions)。Phoenix 只能看到输入中直接写明的内容，所以由片段拼出实体 ID 的脚本能绕过这项检查。
 
-Phoenix 会检查 `script.turn_on`、按名称运行的脚本和 `automation.trigger` 的输入，无论脚本是通过其 ID、区域还是设备指定的。`homeassistant.turn_on`、`turn_off` 和 `toggle` 会把数据原样交给脚本而不经检查，因此它们只能在不带数据时运行脚本。
+Phoenix 会检查 `script.turn_on`、按名称运行的脚本和 `automation.trigger` 的输入，无论脚本是通过其 ID、区域还是设备指定的。`homeassistant.turn_on`、`turn_off` 和 `toggle` 会把数据原样交给脚本而不经检查，Phoenix 只允许它们在不带数据时运行脚本。
 
 通用恒温器和通用湿度调节器辅助元素同样以 Home Assistant 的身份动作。Phoenix 不会透过它们检查其驱动的开关。
 

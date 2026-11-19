@@ -39,16 +39,18 @@ Phoenix 在寫入任何內容之前檢查每個值。第一個問題會拒絕整
 - 開啟 `access_key_presets_enabled` 會給每個金鑰一個名為 Default 的預設。
 - 開啟 `kill_switch` 會捨棄開放中的 OAuth 登入時段和等待核准的登入。已核准的登入會保留並暫停。
 - 關閉 `kill_switch` 會重新開啟智慧體路由。
-- Phoenix 會立即套用 `mesa_mode`，並更新語音智慧體、AI 任務和 Assist 工具提供者。
+- Phoenix 會立即套用 `mesa_mode`。
+- 變更 `kill_switch` 會更新語音智慧體、AI 任務和 Assist 工具提供者。
+- 變更 `voice_agent_` 或 `ai_task_` 設定會更新該功能。變更 `decision_provider_id` 也會更新 AI 任務。
 - `mesa_inject_enabled` 和 `agentcli_global` 會在頁面下次完整載入時生效。
 
-稽核日誌會記錄變更，包含已變更設定的名稱，而不是其值。回應與讀取相同。當語音智慧體不再完全設定好，但 Home Assistant 保留 Phoenix 的助理作為其唯一助理時，它會新增 `voice_agent_pipeline_kept: true`。
+稽核日誌會記錄變更，包含已變更設定的名稱，而不是其值。回應與讀取相同。如果語音智慧體不再完全設定好，但 Home Assistant 保留了 Phoenix 的助理，回應會新增 `voice_agent_pipeline_kept: true`。它是唯一助理或刪除失敗時，Home Assistant 會保留它。
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.unknownFields` | 某個欄位不可寫，例如 `voice_agent_pipeline_id`。`message_params` 包含 `fields`。 |
 | 400 | `invalid_request` | `adminError.booleanRequired` | 某個布林設定收到了其他類型。`message_params` 包含 `field`。 |
-| 400 | `invalid_request` | `adminError.valueAllowed` | 某個選擇設定收到了其他值：`mesa_mode`、某種風格、某個詳細級別、某種路由模式或某個稽核選單。`message_params` 包含 `field` 和 `values`。 |
+| 400 | `invalid_request` | `adminError.valueAllowed` | 某個選擇設定收到了其他值：`mesa_mode`、某種風格、某個詳細級別、某種路由模式、`audit_flush_interval` 或 `audit_log_maxlen`。`message_params` 包含 `field` 和 `values`。 |
 | 400 | `invalid_request` | `adminError.integerRequired` | 某個整數設定收到了其他類型。`message_params` 包含 `field`。 |
 | 400 | `invalid_request` | `adminError.routingLanguagesInvalid` | `command_routing_languages` 指定了不是已安裝 Assist 語言的語言。 |
 | 400 | `invalid_request` | `adminError.conversationLimitInvalid` | 對話記錄限制、`command_routing_timeout_ms`、`decision_timeout_ms` 或 `decision_request_budget` 超出範圍。`message_params` 包含 `field`、`min` 和 `max`。 |
@@ -135,7 +137,7 @@ Phoenix 在寫入任何內容之前檢查每個值。第一個問題會拒絕整
 三種工具審核模式要求決策提供者在模型提議的每次工具呼叫執行前檢查它。它們是 `agentcli_tool_routing_mode`、`voice_agent_tool_routing_mode` 和 `ai_task_tool_routing_mode`。
 
 - `observe` 和 `advise` 需要決策帳戶。
-- `advise` 還需要合格語言。`tool_routing_qualified_languages` 列出它們；為空時，Phoenix 會以 `adminError.toolRoutingUnqualified` 拒絕 `advise`。
+- `advise` 還需要合格語言。`tool_routing_qualified_languages` 列出它們。為空時，Phoenix 會以 `adminError.toolRoutingUnqualified` 拒絕 `advise`。
 - Home Companion 金鑰跳過工具審核。
 
 相關：[命令如何路由](guide:topic.commandRouting)
@@ -193,7 +195,7 @@ DELETE /api/phoenix-mcp/admin/wipe
 
 ### 確認欄位 {#confirmations}
 
-只有三個路由在本文中要求確認。設定 PATCH 不要求任何確認。
+本頁有三個路由在本文中要求確認。設定 PATCH 不要求任何確認。
 
 | 路由 | 本文 |
 |---|---|
@@ -261,7 +263,7 @@ GET    /api/phoenix-mcp/admin/audit
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.badPagination`、`adminError.paginationNonNegative` | `limit` 或 `offset` 不是大於等於 0 的整數。 |
 | 400 | `invalid_request` | `adminError.sinceTimestampInvalid` | `since` 不是有效時間。 |
-| 400 | `invalid_request` | `adminError.outcomeFilterUnknown` | `outcome` 不是上方的值之一，或為空。`message_params` 包含 `value`。 |
+| 400 | `invalid_request` | `adminError.outcomeFilterUnknown` | `outcome` 不是欄位表中的 `outcome` 值之一，或為空。`message_params` 包含 `value`。 |
 
 相關：[{{label:shell.tabAudit}}](guide:window.auditLog)、[日誌記錄](guide:topic.logRecords)
 
@@ -354,7 +356,7 @@ DELETE /api/phoenix-mcp/admin/voice_agent/pipeline/preferred
 
 ### 移除助理 {#remove-pipeline}
 
-`DELETE /api/phoenix-mcp/admin/voice_agent/pipeline` 會在需要時把慣用權移到另一個助理，然後刪除 Phoenix 的助理。回應為 `{"ok": true, "kept": false}`。
+`DELETE /api/phoenix-mcp/admin/voice_agent/pipeline` 會在需要時把慣用權移到另一個助理，然後刪除 Phoenix 的助理。回應包含 `ok: true` 和 `kept`。
 
 當 Home Assistant 仍保留該助理時，`kept` 為 `true`，因為它已經是唯一助理，或刪除失敗。
 
@@ -382,7 +384,7 @@ DELETE /api/phoenix-mcp/admin/ai_task/evaluate_preferred
 
 讀取和設定 Home Assistant 的預設資料產生實體。`POST` 讓 Phoenix 的 AI 任務實體成為預設，替換其他任何實體。`DELETE` 僅在預設實體是 Phoenix 的時候清除它。
 
-三者都傳回相同欄位：
+`preferred` 路由傳回以下欄位：
 
 | 欄位 | 說明 |
 |---|---|
@@ -392,12 +394,15 @@ DELETE /api/phoenix-mcp/admin/ai_task/evaluate_preferred
 | `gen_data_name` | 目前預設實體的名稱。 |
 | `is_preferred` | Phoenix 的實體是否為預設。 |
 
+`evaluate_preferred` 路由對 Home Assistant 的預設 Decisions 實體執行相同操作。它們傳回 `entity_id`、`evaluate_entity_id`、`evaluate_name` 和 `is_preferred`。
+
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
 | 404 | `not_found` | `adminError.setupMissing` | Phoenix 尚未設定。 |
-| 400 | `invalid_request` | `adminError.aiTaskNotConfigured` | 僅限 `POST`。Phoenix 的 AI 任務尚未完全設定並開啟。 |
+| 400 | `invalid_request` | `adminError.aiTaskNotConfigured` | 僅限對 `preferred` 的 `POST`。Phoenix 的 AI 任務尚未完全設定並開啟。 |
+| 400 | `invalid_request` | `adminError.aiDecisionsNotConfigured` | 僅限對 `evaluate_preferred` 的 `POST`。Phoenix 的 Decisions 實體尚未用存取金鑰開啟。 |
 | 400 | `invalid_request` | `adminError.aiTaskPreferencesUnavailable` | 僅限 `POST`。Home Assistant 沒有儲存預設值的位置。 |
-| 400 | `invalid_request` | `adminError.aiTaskPreferredFailed` | 僅限 `POST`。儲存預設值失敗。 |
+| 400 | `invalid_request` | `adminError.aiTaskPreferredFailed` | 僅限對 `preferred` 的 `POST`。儲存預設值失敗。 |
 
 相關：[Home Assistant 設定](guide:window.settingsHome#ai-task-default)
 
@@ -416,7 +421,7 @@ DELETE /api/phoenix-mcp/admin/command-routing/statistics
 
 ### 即時計數器 {#routing-counters}
 
-`GET /api/phoenix-mcp/admin/command-routing/preview` 傳回儲存在記憶體中的計數器。Phoenix 重新啟動時它們從零開始。
+`GET /api/phoenix-mcp/admin/command-routing/preview` 傳回即時計數器。Phoenix 重新啟動時它們從零開始。
 
 | 欄位 | 說明 |
 |---|---|
@@ -440,7 +445,7 @@ DELETE /api/phoenix-mcp/admin/command-routing/statistics
 | `messages` | list | 更早的輪次，用於歷史審核。需要 `decision`，且不能有 `targets`。 |
 | `references` | boolean | 需要 `messages`。 |
 
-不允許其他欄位。任何需要 `decision` 的選項都會聯絡決策帳戶，並計入 `decision_request_budget`。
+不允許其他欄位。任何需要 `decision` 的選項都會向決策提供者傳送請求。該請求計入 `decision_request_budget`。
 
 回應包含 `route`（`local_candidate` 或 `provider`）、`reason`、`proposal`、`executed: false`、`elapsed_ms`、`voice_observations` 和 `decision_observations`。依選項，它還可能包含 `decision_shadow`、`batch_review` 或 `context_review`。
 
@@ -456,9 +461,11 @@ DELETE /api/phoenix-mcp/admin/command-routing/statistics
 `GET /api/phoenix-mcp/admin/command-routing/statistics` 傳回已儲存的總量，跨重新啟動保留。回應包含 `voice`、`chat` 和 `ai_task`（「評估」動作），各含：
 
 - `since`
-- `outcomes`：`local`、`decision`、`provider`、`pending`、`failed`、`cancelled` 和 `refused`；`ai_task` 用 `decision` 表示回答，用 `refused` 表示拒絕
+- `outcomes`：`local`、`decision`、`provider`、`pending`、`failed`、`cancelled` 和 `refused`
 - `provider_turns`
 - `decision_usage` 和 `provider_usage`，各含 `requests`、`reports`、`input_tokens` 和 `output_tokens`
+
+對於 `ai_task`，`decision` 表示回答，`refused` 表示拒絕。
 
 ### 重設統計 {#reset-statistics}
 

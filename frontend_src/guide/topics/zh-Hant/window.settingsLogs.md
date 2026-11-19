@@ -23,7 +23,7 @@ Phoenix 的感測器會繼續計數，通知仍會到達。
 
 記錄被拒絕存取、格式錯誤、不受支援或指向不存在內容的請求。MESA 阻止也計在這裡。預設為開啟。
 
-等待核准的請求、你的核准決定，以及在變更可能已執行時中斷的請求一律會被記錄。
+**{{label:settings.logEnableLabel}}** 開啟時，Phoenix 一律會記錄等待核准的請求、你的核准決定，以及在變更可能已執行時中斷的請求。
 
 每把金鑰每分鐘的前 30 個格式錯誤、不受支援或超出速率限制的請求各有一筆條目。該分鐘內其餘的此類請求共用一筆條目，並在其負載中計數。
 
@@ -43,11 +43,11 @@ Phoenix 的感測器會繼續計數，通知仍會到達。
 
 稽核日誌保留多少筆條目：100、1,000、5,000 或 10,000（預設）。降低它會立即移除最舊的條目。磁碟上的副本會在下次儲存時縮小。
 
-核准決定和結果，以及管理員條目，分開保留，數量上限相同，因此代理程式的請求不會將它們擠出。等待核准的請求及其過期，與該金鑰的其他請求保存在一起。
+Phoenix 把核准決定和結果以及管理員條目保存在一個大小相同的獨立清單中。智慧體的請求不會將它們擠出。等待核准的請求及其過期，與該金鑰的其他請求保存在一起。
 
 ## {{label:conversations.title}} {#conversation-log}
 
-**{{label:conversations.enable}}** 會保留智慧體說了什麼、做了什麼：Agent Chat 和語音對話、AI 任務，以及 MCP 用戶端、Assist 和 Home Companion 的工具呼叫。在{{label:workspace.logs}}工作區中檢視。預設為關閉。關閉它會保留已記錄的內容。
+**{{label:conversations.enable}}** 會保留智慧體說了什麼、做了什麼：Agent Chat 和語音對話、AI 任務，以及 MCP 用戶端、Assist 和{{label:personas.home_companion.label}}的工具呼叫。在{{label:workspace.logs}}工作區中檢視。預設為關閉。關閉它會保留已記錄的內容。
 
 三個限制控制保留多少內容。每個限制在你變更後片刻儲存。日誌超過限制時，最舊的對話會先被移除。
 
@@ -69,13 +69,13 @@ Phoenix 的感測器會繼續計數，通知仍會到達。
 
 ### {{label:settings.logEntityIdsLabel}} {#log-entity-ids}
 
-關閉時，稽核日誌的 {{label:audit.rowResource}} 欄會顯示 [redacted]，對話記錄會省略說了什麼和做了什麼。預設為開啟。
+關閉時，稽核日誌的 {{label:audit.rowResource}} 欄會顯示 [redacted]，{{label:conversations.title}}會省略說了什麼和做了什麼。預設為開啟。
 
 此時稽核日誌的負載只保留工具呼叫參數的名稱，不保留它們的值。負載中的其他文字（例如核准原因）仍可能提到實體。已記錄的對話內容會在 Phoenix 下次啟動時移除。
 
 ### {{label:settings.logClientIpLabel}} {#log-client-ip}
 
-關閉時，兩種日誌都會隱藏呼叫方的 IP 位址，但寫入工具呼叫參數中的位址會留在稽核負載中。預設為開啟。Agent Chat、語音、Assist、AI 任務和 Home Companion 仍會依名稱顯示，因為它們不是位址。
+關閉時，兩種日誌都會隱藏呼叫方的 IP 位址，但寫入工具呼叫參數中的位址會留在稽核負載中。預設為開啟。Agent Chat、語音、Assist、AI 任務和{{label:personas.home_companion.label}}仍會依名稱顯示，因為它們不是位址。
 
 ## {{label:settings.haNotifications}} {#notifications}
 
@@ -83,7 +83,7 @@ Phoenix 可以傳送 Home Assistant 通知，它們會出現在 Home Assistant �
 
 ### {{label:settings.notifyApprovalLabel}} {#notify-approval}
 
-為每個等待你核准的請求傳送一則帶連結的通知。你做出決定後它會消失。預設為開啟。工具列上的核准計數無論如何都會顯示。
+為每個等待你核准的請求傳送一則帶連結的通知。你做出決定後它會消失。預設為開啟。工具列上的{{label:shell.tabApprovals}}計數無論如何都會顯示。
 
 ### {{label:settings.notifyRateLimitLabel}} {#notify-rate-limit}
 

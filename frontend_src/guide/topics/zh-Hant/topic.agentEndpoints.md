@@ -14,17 +14,18 @@ GET    /api/phoenix-mcp/context
 GET    /api/phoenix-mcp/skill
 ```
 
-智慧體向第一個路由傳送 MCP 請求，從第二個路由讀取其金鑰的內容，並從最後一個路由取得技能指南。透過 OAuth 登入的應用程式還會使用[登入路由](guide:#oauth)。
+智慧體向 `POST /api/phoenix-mcp` 傳送 MCP 請求，用 `DELETE` 關閉舊版工作階段，從 `/context` 讀取其金鑰的內容，並從 `/skill` 取得技能指南。透過 OAuth 登入的應用程式還會使用[登入路由](guide:#oauth)。
 
 - POST 和 DELETE 也支援帶尾隨斜線的 `/api/phoenix-mcp/`。
-- `GET /api/phoenix-mcp` 傳回 `405`，因為該端點沒有 GET 處理常式。
+- `GET /api/phoenix-mcp` 傳回 `405`。
 - 緊急停止開關開啟時，這些路由不會服務智慧體。
+- 如果 Home Assistant 啟動時緊急停止開關已開啟，在你關閉它之前，這些路由和[登入路由](guide:#oauth)都會傳回 `404`。
 
 ## 傳送金鑰 {#bearer}
 
 在 `Authorization` 標頭中把金鑰作為 `Bearer phx_...` 傳送。金鑰是 `phx_` 後接 64 個字元。絕不要把它放在 URL 中：即使標頭正確，`token` 或 `access_token` 查詢參數也會被拒絕。
 
-透過 OAuth 登入的應用程式會以同樣方式傳送其存取權杖，即 `Bearer phxo_...`。該權杖代表登入時被核准的金鑰，下方每項檢查都適用於該金鑰。
+透過 OAuth 登入的應用程式會以同樣方式傳送其存取權杖，即 `Bearer phxo_...`。該權杖代表登入時被核准的金鑰。本節中的每項金鑰檢查都適用於該金鑰。
 
 除技能外的每個路由都會依此順序檢查金鑰：
 
@@ -39,7 +40,7 @@ GET    /api/phoenix-mcp/skill
 | 401 | `unauthorized` | 金鑰已被撤銷或已過期。已過期的金鑰會移到歸檔。 |
 | 429 | `rate_limited` | 金鑰超過其速率限制。參見[速率限制](guide:#rate-limit)。 |
 
-每個 `401` 都帶有 `WWW-Authenticate: Bearer realm="Phoenix MCP"`。當金鑰允許 OAuth 登入且請求透過 HTTPS 送達時，它還會指明 `resource_metadata`；對於已結束的 OAuth 權杖，還會加上 `error="invalid_token"`。通過檢查的金鑰會在速率限制檢查前更新其 `last_used_at`。
+每個 `401` 都帶有 `WWW-Authenticate: Bearer realm="Phoenix MCP"`。當金鑰允許 OAuth 登入且請求透過 HTTPS 送達時，該標頭還會指明 `resource_metadata`。在這種情況下，對於已結束的 OAuth 權杖，它還會加上 `error="invalid_token"`。Phoenix 會更新通過這些檢查的金鑰的 `last_used_at`，即使速率限制隨後拒絕了該請求。
 
 當 `phx_` 金鑰未知、已撤銷或已過期時，Home Assistant 日誌會記錄一則警告，包含用戶端位址，但絕不包含金鑰。第一次之後，每個位址每 10 分鐘最多記錄一則警告，並附上期間被拒絕的次數。
 
@@ -75,7 +76,9 @@ POST   /api/phoenix-mcp/oauth/revoke
 - 第四次使用、之後的任何使用，或再次使用更早的重新整理權杖，都會結束此次登入。
 - 撤銷端點接受任一種權杖，並結束整個登入。
 
-在有金鑰允許 OAuth 登入之前，以及對任何不是透過 HTTPS 送達的請求，這些路由都會傳回 `404`，即使緊急停止開關開啟也是如此。除此之外，緊急停止開關開啟時，它們會傳回 `503`。每個位址每分鐘最多可向它們發出 30 個請求，IPv6 位址按其 /64 網段計數。
+在有金鑰允許 OAuth 登入之前，這些路由會傳回 `404`。對任何不是透過 HTTPS 送達的請求，它們也會傳回 `404`。即使緊急停止開關開啟，這兩點也適用。除此之外，緊急停止開關開啟時，它們會傳回 `503`。
+
+每個位址每分鐘最多可向它們發出 30 個請求。IPv6 位址按其 /64 網段計數。
 
 相關：[透過 OAuth 登入的應用程式](guide:topic.connecting#oauth)、[OAuth 登入端點](guide:topic.adminApiKeys#oauth)
 
@@ -136,7 +139,7 @@ Phoenix 在執行前會按整個批次計入速率限制。當剩餘限制太少
 
 ## 內容 {#context}
 
-`GET /api/phoenix-mcp/context` 描述金鑰可以存取什麼。預設以純文字傳回；新增 `?format=json` 取得 JSON。它會執行金鑰檢查和速率限制，每次呼叫都會進入稽核日誌。
+`GET /api/phoenix-mcp/context` 描述金鑰可以存取什麼。預設以純文字傳回。新增 `?format=json` 取得 JSON。它會執行金鑰檢查和速率限制。Phoenix 會像記錄其他請求一樣，在稽核日誌中記錄每次被允許的呼叫。
 
 | 欄位 | 類型 | 說明 |
 |---|---|---|
@@ -160,9 +163,9 @@ Phoenix 正在啟動或關閉，或緊急停止開關開啟時，它傳回 `503`
 
 ## 速率限制 {#rate-limit}
 
-每個金鑰有兩個限制。`rate_limit_requests` 統計滑動 60 秒內的請求。`rate_limit_burst` 統計任意一秒內的請求；0 會關閉突發限制。`rate_limit_requests` 為 0 會同時關閉兩者。
+每個金鑰有兩個限制。`rate_limit_requests` 統計滑動 60 秒內的請求。`rate_limit_burst` 統計任意一秒內的請求。將其設為 0 可關閉突發限制。`rate_limit_requests` 為 0 會同時關閉兩者。
 
-單獨的 `notifications/initialized` 和工作階段 `DELETE` 計入每分鐘限制，但從不計入突發限制。同時開啟多個工作階段的用戶端會一次傳送很多這類訊息。
+單獨的 `notifications/initialized` 和工作階段 `DELETE` 計入每分鐘限制，但從不計入突發限制。
 
 相關：[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)
 
@@ -182,7 +185,7 @@ X-RateLimit-Reset: 1793612345
 | `X-RateLimit-Remaining` | 目前 60 秒內，在本次請求之後剩餘的請求數。批次會計入每一項。 |
 | `X-RateLimit-Reset` | Unix 時間，以整秒為單位，表示時間範圍中最舊的請求離開的時間。 |
 
-這些標頭只出現在 `POST /api/phoenix-mcp` 的 `200` JSON 和 SSE 回應中，包括批次。通知、協定錯誤、其他錯誤、DELETE、內容和技能不會收到它們。關閉速率限制的金鑰不會收到任何標頭。
+這些標頭只出現在 `POST /api/phoenix-mcp` 的 `200` JSON 和 SSE 回應中，以及它的批次回應中。通知、協定錯誤、其他錯誤、DELETE、內容和技能不會收到它們。關閉速率限制的金鑰不會收到任何標頭。
 
 ### 達到限制時 {#limit-hit}
 

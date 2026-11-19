@@ -3,4 +3,4 @@
 ---
 Agent Chat is open, with a test question typed in. Send it, and watch the agent work with the light you granted.
 
-The wizard closes when you send your first message. Changes that need your approval wait in [Approvals](guide:workspace.approvals).
+When you send your first message, the wizard closes. Changes that need your approval wait in [{{label:shell.tabApprovals}}](guide:workspace.approvals).

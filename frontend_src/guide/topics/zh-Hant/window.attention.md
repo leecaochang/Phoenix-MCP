@@ -19,13 +19,13 @@ Phoenix 在寫入任何內容之前就拒絕的變更不會列出，你拒絕的
 
 ## 需要修復的問題 {#problems}
 
-- **{{label:attention.mesaTitle}}**：MESA 啟動失敗，因此受保護的變更被暫停。請檢查 Home Assistant 日誌。如果日誌提示策略儲存已損壞，請[依其中的步驟操作](guide:topic.mesaRules#storage)。然後重新載入 Phoenix。
-- **{{label:attention.mesa_renameTitle}}**：重新命名實體的策略已跟隨實體並正在生效，但 Phoenix 無法儲存它。請在 Home Assistant 記錄中尋找儲存錯誤，然後重新載入 Phoenix。下一次儲存成功後，此項目會消失。
+- **{{label:attention.mesaTitle}}**：受保護的變更已暫停。請檢查 Home Assistant 日誌。如果日誌提示策略儲存已損壞，請[依其中的步驟操作](guide:topic.mesaRules#storage)。然後重新載入 Phoenix。
+- **{{label:attention.mesa_renameTitle}}**：該策略仍適用於重新命名後的實體。請在 Home Assistant 記錄中尋找儲存錯誤，然後重新載入 Phoenix。
 - **{{label:attention.calendar_storageTitle}}**：行事曆變更會暫停，直到 Phoenix 能再次讀取其儲存的行事曆歷史。
-- **{{label:attention.audit_storageTitle}}**：Phoenix 無法將稽核記錄寫入磁碟，重新啟動後最近的項目會遺失。請在 Home Assistant 記錄中尋找磁碟或儲存錯誤。下一次儲存成功後，此項目會消失。
+- **{{label:attention.audit_storageTitle}}**：現在重新啟動會遺失最近的項目。請在 Home Assistant 記錄中尋找磁碟或儲存錯誤。
 
 問題修復後，這些會自行消失。
 
 ## 關閉視窗 {#window}
 
-關閉視窗會在目前工作區隱藏它，直到出現它未顯示過的項目。工作區選項中的 **{{label:workspace.showAttention}}** 會把它帶回來，重設目前工作區或所有工作區也會如此。在手機上，請從標題列關閉它。
+關閉視窗會在目前工作區隱藏它，直到出現它未顯示過的項目。**{{label:workspace.options}}** 中的 **{{label:workspace.showAttention}}** 會把它帶回來，重設目前工作區或所有工作區也會如此。在手機上，請從標題列關閉它。

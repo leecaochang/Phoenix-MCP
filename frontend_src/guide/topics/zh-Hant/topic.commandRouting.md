@@ -17,9 +17,9 @@
 
 ## 何時適用 {#when}
 
-你可以分別為 [Agent Chat](guide:window.settingsChat#chat-commands) 和[語音智慧體](guide:window.settingsHome#voice-commands)開啟命令處理。
+分別為 [Agent Chat](guide:window.settingsChat#chat-commands) 和 [{{label:settings.voiceCard}}](guide:window.settingsHome#voice-commands) 開啟命令處理。
 
-它只適用於純文字訊息。Home Companion 金鑰的訊息一律直接交給 Home Companion。
+它只適用於純文字訊息。{{label:personas.home_companion.label}} 金鑰的訊息一律直接交給它處理。
 
 ## 後續訊息 {#follow-ups}
 
@@ -40,7 +40,7 @@
 
 ## 限制 {#limits}
 
-決策提供者對每個請求有時間限制，並可設定每小時限制。達到任一限制時，命令會交給你的 AI 模型，確保不會無人回應。
+決策提供者對每個請求有時間限制，並可設定每小時限制。達到任一限制時，命令會交給你的 AI 模型。
 
 相關：[連線設定](guide:window.settingsProviders#decision-connection)
 

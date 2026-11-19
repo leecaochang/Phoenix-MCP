@@ -17,9 +17,9 @@
 
 ## 列表 {#list}
 
-选择一条策略，即可在[{{label:workspace.profileEditor}}](guide:window.mesaEditor)中打开它。策略被强制执行时，控制模式旁会显示“{{label:mesa.modeEnforced}}”。
+选择一条策略，即可在[{{label:workspace.profileEditor}}](guide:window.mesaEditor)中打开它。策略被强制执行时，控制模式旁会显示 {{label:mesa.modeEnforced}}。
 
-**{{label:mesa.colTags}}** 和 **{{label:mesa.colSource}}** 最初隐藏；可从列菜单中显示。**{{label:mesa.colSource}}** 对集成随代码提供的策略显示 **{{label:mesa.vendorBadge}}**。
+**{{label:mesa.colTags}}** 和 **{{label:mesa.colSource}}** 最初隐藏；可从列菜单中显示。{{label:mesa.colSource}} 列对集成随代码提供的策略显示 {{label:mesa.vendorBadge}}。
 
 ## {{label:mesa.delete}} {#delete}
 
@@ -27,15 +27,15 @@
 
 集成自己的供应商策略会在 Home Assistant 下次启动时恢复，除非你已为该集成保存了自己的策略。
 
-## MESA 操作 {#actions}
+## {{label:mesa.menu}} {#actions}
 
 菜单包含：
 
-- **{{label:mesa.importTitle}}** 和 **{{label:mesa.exportTitle}}**，见下文。
-- **{{label:mesa.suggestTitle}}**，用于显示或隐藏该窗口。
-- **{{label:mesa.rescan}}**，会立即查找新的[建议](guide:window.mesaSuggestions)和建议性提示中的发现。
-- **{{label:mesa.restoreDismissed}}**，会恢复你忽略的所有建议。
-- **{{label:mesa.restoreNotices}}**，会恢复你在[{{label:workspace.advisory}}](guide:window.mesaAdvisory)中忽略的发现。
+- [{{label:mesa.importTitle}}](guide:#import) 和 [{{label:mesa.exportTitle}}](guide:#export)
+- **{{label:mesa.suggestTitle}}**，用于显示或隐藏该窗口
+- **{{label:mesa.rescan}}**，会立即查找新的[建议](guide:window.mesaSuggestions)和{{label:workspace.advisory}}中的发现
+- **{{label:mesa.restoreDismissed}}**，会为所有管理员恢复所有已忽略的建议
+- **{{label:mesa.restoreNotices}}**，会恢复你在[{{label:workspace.advisory}}](guide:window.mesaAdvisory)中忽略的发现，仅限此浏览器
 
 ## {{label:mesa.importTitle}} {#import}
 
@@ -45,9 +45,9 @@
 
 导入的策略会立即生效。Phoenix 会检查每条策略，并列出它拒绝的策略。针对此家庭没有的目标的策略会出现在[{{label:workspace.advisory}}](guide:window.mesaAdvisory#orphans)中。
 
-存档可以包含策略编辑器无法设置的字段，例如声明限制、时间窗口和部署默认设置。
+存档可以包含{{label:workspace.profileEditor}}无法设置的字段，例如声明限制、时间窗口和部署默认设置。
 
-相关：[策略编辑器无法设置什么](guide:topic.mesaRules#not-in-editor)
+相关：[{{label:workspace.profileEditor}}无法设置什么](guide:topic.mesaRules#not-in-editor)
 
 ## {{label:mesa.exportTitle}} {#export}
 

@@ -3,9 +3,9 @@
 ---
 角色會一次設定金鑰的所有能力，以配合某類智慧體。選擇一個角色，然後如有需要，在[{{label:accessKeys.cardCapabilities}}](guide:window.capabilities)中調整個別能力。你的選擇會立即生效。
 
-角色決定智慧體可以使用哪些工具，而不是它可以存取哪些裝置。後者由[{{label:accessKeys.permissionsTree}}](guide:window.permissions)決定。唯一的例外是 Home Companion。
+角色決定智慧體可以使用哪些工具，而不是它可以存取哪些裝置。後者由[{{label:accessKeys.permissionsTree}}](guide:window.permissions)決定。唯一的例外是{{label:personas.home_companion.label}}。
 
-角色不會阻止智慧體控制裝置。除 Home Companion 外，使用任何角色時，智慧體都可以控制你在權限樹中設為 W 的任何內容。只有門鎖、警報控制面板、捲簾和閥門還需要[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)。
+角色不會阻止智慧體控制裝置。除{{label:personas.home_companion.label}}外，使用任何角色時，智慧體都可以控制你在權限樹中設為 W 的任何內容。只有門鎖、警報控制面板、捲簾和閥門還需要[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)。
 
 除 {{label:settings.colorTheme.spartan}} 外的任何[{{label:settings.colorThemeLabel}}](guide:window.settingsGeneral#color-theme)下，三個角色有自己的色彩：{{label:personas.home_companion.label}}為金色，{{label:personas.new_user.label}}為綠色，{{label:personas.custom.label}}為藍色。
 
@@ -31,11 +31,11 @@
 
 ## {{label:personas.power_user.label}} {#power-user}
 
-包含自動化建置器的所有內容，並可無需詢問地重新啟動。整合、儀表板、實體登錄檔、無線電、能源儀表板、儀表板資源和備份需要你的核准。
+包含{{label:personas.automation_builder.label}}的所有內容，並可無需詢問地重新啟動。整合、儀表板、實體登錄檔、無線電、能源儀表板、儀表板資源和備份需要你的核准。
 
 ## {{label:personas.home_admin.label}} {#home-admin}
 
-包含進階使用者的所有內容，並讀取主題和卡片檔案以及 ESPHome 裝置 YAML。重新啟動和 YAML 設定也需要你的核准。它不允許攝影機影像、整合日誌級別或 ESPHome 韌體刷寫。
+包含{{label:personas.power_user.label}}的所有內容，並讀取主題和卡片檔案以及 ESPHome 裝置 YAML。重新啟動和 YAML 設定也需要你的核准。它不允許攝影機影像、整合日誌級別或 ESPHome 韌體刷寫。
 
 ## {{label:personas.new_user.label}} {#new-user}
 
@@ -51,12 +51,12 @@
 
 它可以控制燈、風扇、開關、開關輔助項目、溫控、遮蔽裝置、閥門、媒體播放器、掃地機、加濕器和計時器。
 
-它可以讀取二元感測器、天氣、行事曆和太陽，以及溫度、濕度、照度、功率、電能和電池感測器。即使設為 W，它也不能變更這些。其他內容它都無法存取，因此權限樹在那裡顯示無存取權限。
+它可以讀取二元感測器、天氣、行事曆和太陽，以及溫度、濕度、照度、功率、電能和電池感測器。即使設為 W，它也不能變更這些。其他內容它都無法存取，因此權限樹在那裡顯示{{label:perms.stateNoAccess}}。
 
-在 Agent Chat 中它使用那裡選擇的帳戶；其他所有場合使用語音智慧體的帳戶和模型。它不能使用直通模式或宣告全部工具：選擇它會將兩者關閉，並在關閉時告知你。變更能力不會使它變為自訂。
+在 Agent Chat 中它使用那裡選擇的帳戶；其他所有場合使用語音智慧體的帳戶和模型。它不能使用直通模式或宣告全部工具：選擇它會將兩者關閉，並在關閉時告知你。變更能力不會使它變為{{label:personas.custom.label}}。
 
 ## {{label:personas.custom.label}} {#custom}
 
-能力的任意組合。變更個別能力後，角色會變為自訂，或變為設定現在符合的角色。
+能力的任意組合。變更個別能力後，角色會變為{{label:personas.custom.label}}，或變為設定現在符合的角色。
 
-如果切換離開時角色是自訂，且你尚未重新載入頁面，再次選擇自訂會恢復金鑰之前的自訂設定。
+如果切換離開時角色是{{label:personas.custom.label}}，且你尚未重新載入頁面，再次選擇{{label:personas.custom.label}}會恢復金鑰之前的自訂設定。

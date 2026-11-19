@@ -1,7 +1,7 @@
 ---
 { "id": "topic.running", "title": "运行 Phoenix", "parent": "topic.about", "order": 50, "keywords": ["运维", "日常", "监控", "自动化"], "sectionKeywords": { "sensors": ["传感器", "遥测", "Request Count", "Denied Count", "Rate Limit Hits", "Last Access", "Expires In", "状态", "实体 ID", "设备", "统计"], "events": ["事件", "自动化触发器", "phoenix_mcp_access_key_revoked", "phoenix_mcp_access_key_rotated", "phoenix_mcp_access_key_expired", "phoenix_mcp_rate_limited", "事件数据"], "approval-events": ["phoenix_mcp_approval_requested", "phoenix_mcp_approval_resolved", "phoenix_mcp_approval_claimed", "phoenix_mcp_config_changed", "手机通知", "移动应用", "通知审批"], "mesa-events": ["phoenix_mcp_mesa_blocked", "phoenix_mcp_mesa_lease_expired"], "notifications": ["notification_id", "持久通知", "消除"], "storage": [".storage", "文件", "备份", "phoenix_mcp_audit", "phoenix_mcp_conversations"] } }
 ---
-Phoenix 会向 Home Assistant 添加一些内容，帮助你观察它并围绕它实现自动化。每个访问密钥都会获得传感器，Phoenix 会触发事件并显示通知。本页还列出 Phoenix 保存数据的位置。
+Phoenix 会向 Home Assistant 添加一些内容，帮助你观察它并围绕它实现自动化。每个访问密钥都会获得传感器，Phoenix 会触发事件并显示通知。
 
 ## 每个密钥的传感器 {#sensors}
 
@@ -25,7 +25,7 @@ sensor.phoenix_mcp_access_key_my_access_key_last_access
 sensor.phoenix_mcp_access_key_my_access_key_expires_in
 ```
 
-这三个计数保存在内存中，因此 Home Assistant 重启或 Phoenix 重新加载时它们会从 0 重新开始。关闭日志记录时它们仍会继续计数。
+Home Assistant 重启或 Phoenix 重新加载时，这三个计数会从 0 重新开始。关闭日志记录时它们仍会继续计数。
 
 重命名密钥会重命名其设备，但保留实体 ID。吊销密钥、密钥过期或删除核心数据会移除设备、其传感器及其统计。
 
@@ -47,7 +47,7 @@ Phoenix 会在 Home Assistant 的事件总线上触发这些事件。把它们�
 - `phoenix_mcp_approval_requested`：有请求正在等待审批。数据：`approval_id`、`access_key_id`、`access_key_name`、`tool_name`、`cap_name`、`review_url`、`expires_at`、`timestamp`。
 - `phoenix_mcp_approval_resolved`：请求达到最终状态。数据：`approval_id`、`access_key_id`、`access_key_name`、`tool_name`、`status`、`closure_reason`、`approved_by_user_id`、`timestamp`。
 - `phoenix_mcp_approval_claimed`：已批准的请求开始运行（`claimed` 为 true），或在启动失败后被释放（`claimed` 为 false）。数据：`approval_id`、`claimed`、`timestamp`。
-- `phoenix_mcp_config_changed`：变更中记录了一次更改。数据：`resource_type`、`resource_id`、`action`。
+- `phoenix_mcp_config_changed`：{{label:shell.tabChanges}}中记录了一次更改。数据：`resource_type`、`resource_id`、`action`。
 
 `status` 为 approved 表示你批准了它，而不是操作成功。安全副本审核使用访问密钥 ID `__configuration_recovery__`。
 

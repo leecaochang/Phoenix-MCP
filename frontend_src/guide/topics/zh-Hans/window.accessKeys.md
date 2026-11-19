@@ -7,9 +7,9 @@
 
 每行显示密钥的名称、模式和状态，以及创建、最后更改、过期和最后使用的时间。已吊销和已过期的密钥会移到[{{label:accessKeys.archivedTitle}}](guide:window.archivedAccessKeys)。
 
-在列表上方的筛选框中输入，可按名称或状态查找密钥。你可以排序、移动、调整大小和隐藏列；布局会保存在此浏览器中。
+在列表上方的筛选框中输入，可按名称或状态查找密钥。你可以排序、移动、调整大小和隐藏列。Phoenix 会把布局随工作区排列一起保存，归属于你的 Home Assistant 用户。
 
-模式列显示限定范围，跳过权限树的密钥则显示 {{label:accessKeys.passThrough}}。
+{{label:accessKeys.colMode}} 列显示 {{label:accessKeys.scoped}}，跳过权限树的密钥则显示 {{label:accessKeys.passThrough}}。
 
 相关：[直通模式会开放什么](guide:topic.passThrough)
 
@@ -23,23 +23,23 @@
 
 ### {{label:accessKeys.expiryLabel}} {#key-expiry}
 
-永不过期（默认），或若干分钟、小时、天或周。密钥过期时，Phoenix 会将其归档。密钥创建后无法更改有效期。
+{{label:accessKeys.expiryNone}}（默认），或若干分钟、小时、天或周。密钥过期时，Phoenix 会将其归档。密钥创建后无法更改有效期。
 
 ### 速率限制 {#key-rate-limits}
 
-**{{label:accessKeys.rateRequestsShort}}**（默认 60）和 **{{label:accessKeys.rateBurstShort}}**（默认 10）。设为 0 表示不限制。两者之后都可以更改。
+限制外部应用使用此密钥发送请求的速度。Agent Chat、语音智能体、Assist 和 AI 任务不受限制。**{{label:accessKeys.rateRequestsShort}}**（默认 60）和 **{{label:accessKeys.rateBurstShort}}**（默认 10）。设为 0 表示不限制。两者之后都可以更改。
 
-相关：[速率限制](guide:window.keySettings#rate-limiting)
+相关：[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)
 
 ### {{label:accessKeys.passThroughMode}} {#key-pass-through}
 
-让密钥跳过权限树，从而可以访问所有实体。默认关闭。创建前请开启确认。
+让密钥跳过权限树，从而可以访问所有实体。只对你完全信任的智能体使用。默认关闭。创建前请开启确认。
 
 相关：[直通模式会开放什么](guide:topic.passThrough)
 
 ### {{label:oauth.switchLabel}} {#key-oauth}
 
-让只接受服务器地址的应用（例如 ChatGPT 或 Claude）登录以使用此密钥。默认关闭。你也可以稍后在[密钥设置](guide:window.keySettings#oauth-sign-in)中开启它。
+为无法发送访问密钥的应用（例如 ChatGPT 或 Claude）开启它。该应用改为登录，并使用此密钥。默认关闭。如需稍后开启，请使用[{{label:workspace.keySettings}}](guide:window.keySettings#oauth-sign-in)。
 
 ### 创建密钥之后 {#key-created}
 
@@ -53,7 +53,7 @@ Phoenix 会询问你将如何使用新密钥：
 
 ## {{label:workspace.keyActions}} {#key-actions}
 
-工具栏上的 **{{label:workspace.keyActions}}** 会作用于所选密钥。除重命名外，每个操作都会在列表上方要求你确认。
+工具栏上的 **{{label:workspace.keyActions}}** 会作用于所选密钥。除 {{label:workspace.rename}} 外，每个操作都会在列表上方要求你确认。
 
 ### {{label:workspace.rename}} {#rename}
 
@@ -73,7 +73,7 @@ Phoenix 会询问你将如何使用新密钥：
 
 ### {{label:accessKeys.revoke}} {#revoke}
 
-永久结束密钥。它的请求会被拒绝，等待中的审批会被取消。Phoenix 还会将其从语音智能体、AI 任务和 Assist 工具提供商中移除，并移到 {{label:accessKeys.archivedTitle}}。此操作无法撤销。
+永久结束密钥。Phoenix 会拒绝它的请求，并取消它等待中的审批。Phoenix 还会将其从语音智能体、AI 任务和 Assist 工具提供商中移除，并移到 {{label:accessKeys.archivedTitle}}。此操作无法撤销。适用于你不再需要的密钥。如果密钥泄露，请改为轮换它。
 
 ## 重新连接智能体 {#reconnect}
 

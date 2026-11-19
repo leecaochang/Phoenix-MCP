@@ -11,28 +11,28 @@ Simple commands like "turn off the kitchen light" don't need a full AI model. Wh
 
 Once a step carries out a command, the later steps aren't used. When sentence matching or the decision provider changes something, the reply names the action that ran, so you hear what happened.
 
-Before the decision provider carries out a command, Phoenix also asks it whether you asked for the action now. When it judges a command negated, quoted, put off or conditional, such as "don't turn on the bed light", the command goes to your AI model instead.
+Before the decision provider carries out a command, Phoenix also asks it whether you asked for the action now. If it judges a command negated, quoted, put off, or conditional, the command goes to your AI model instead. For example, "don't turn on the bed light" goes to your AI model.
 
 Related: [Decision provider](guide:window.settingsProviders#decision-provider)
 
 ## When it applies {#when}
 
-You turn command handling on separately for [Agent Chat](guide:window.settingsChat#chat-commands) and the [Voice Agent](guide:window.settingsHome#voice-commands).
+Turn on command handling separately for [Agent Chat](guide:window.settingsChat#chat-commands) and the [{{label:settings.voiceCard}}](guide:window.settingsHome#voice-commands).
 
-It only applies to plain text messages. Messages for Home Companion keys always go straight to the companion.
+It only applies to plain text messages. Messages for {{label:personas.home_companion.label}} keys always go straight to the companion.
 
 ## Follow-up messages {#follow-ups}
 
 Later messages in a conversation can go to the decision provider too. Each one is first checked against the conversation: whether it's a real request, and whether an earlier instruction rules it out. If that check isn't sure, the message goes to your AI model.
 
-A follow-up that says "it" instead of naming the device, such as "Now turn it off", works for one light: turning it on or off, or asking whether it's on.
+A follow-up that says "it" instead of naming the device, such as "Now turn it off", works for one light. It can turn the light on or off, or ask whether it's on.
 
 ## Actions the decision provider never runs {#risky-actions}
 
 The decision provider picks the action from your words. Phoenix checks that you named the device, but it can't check the action. So the decision provider never runs these actions:
 
 - Unlocking or opening a lock
-- Opening or toggling a cover, garage door or valve
+- Opening or toggling a cover, garage door, or valve
 - Turning on or toggling a siren
 - Disarming or triggering an alarm
 
@@ -40,7 +40,7 @@ These commands go to your AI model instead, just as when the decision provider i
 
 ## Limits {#limits}
 
-The decision provider has a time limit for each request, and an optional hourly limit. If either is reached, the command goes to your AI model, so nothing goes unanswered.
+The decision provider has a time limit for each request, and an optional hourly limit. If either limit is reached, the command goes to your AI model.
 
 Related: [Connection settings](guide:window.settingsProviders#decision-connection)
 

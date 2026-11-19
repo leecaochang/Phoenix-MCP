@@ -120,7 +120,7 @@ MESA 為確認而暫緩的核准，以及復原審核，會跳過能力檢查。
 |---|---|---|
 | `approval_ids` | 字串陣列 | 必填。1 到 50 個 ID，每個為非空字串，不能重複。 |
 
-回應一律為 `200`：
+有效的請求一律回應 `200`：
 
 ```json
 {
@@ -313,7 +313,7 @@ POST   /api/phoenix-mcp/admin/attention/{kind}/{record_id}
 |---|---|---|
 | `checked_outcome` | boolean | 必填。必須完全為 `true`。 |
 
-Phoenix 會再次從 Home Assistant 讀取你的使用者，你仍必須是有效管理員。回應為 `{ "reviewed": true }`。
+你必須仍是 Home Assistant 中的有效管理員。回應為 `{ "reviewed": true }`。
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|
@@ -350,7 +350,7 @@ POST   /api/phoenix-mcp/admin/config-recovery/{recovery_id}
 | `reviewed_by` | 有人審核後，審核者。 |
 | `active` | 寫入仍在執行時為 `true`。 |
 
-Phoenix 始終保留有效記錄和處於 `unknown` 的記錄。其餘記錄保留 30 天，每個資源最多 20 筆，總共 256 筆。
+Phoenix 始終保留有效記錄，以及處於 `prepared`、`dispatching`、`partial` 或 `unknown` 的記錄。其餘記錄保留 30 天，每個資源最多 20 筆，總共 256 筆。
 
 | 狀態 | `error` | `message_key` | 條件 |
 |---|---|---|---|

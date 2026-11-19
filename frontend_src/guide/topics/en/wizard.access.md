@@ -3,9 +3,11 @@
 ---
 A new key can't reach any device until you grant it something. Grant one light you can see, so the test shows everything working.
 
-Select the triangle beside **light** to open the light group. It lists your light devices, and any lights that belong to no device. Select the triangle beside a device to see its light entities. To skip the browsing, type your light's name in the filter box above the list.
+The **light** group lists your light devices, and any lights that belong to no device. Open it, then the device that has your light, or find the light with the filter box.
 
-Each row has four buttons: N follows the level above, R reads, W reads and controls, and D denies ([more about them](guide:window.permissions#states)). Choose **W** on a light. **{{label:wizard.next}}** stays greyed out until something is set to W; R isn't enough for the test.
+Each row has four buttons: N follows the level above, R reads, W reads and controls, and D denies. Select **W** on a light. **{{label:wizard.next}}** stays greyed out until something is set to W. R isn't enough for the test.
+
+Related: [Setting access](guide:window.permissions#states)
 
 A grant on a device covers its entities. A grant on the whole light domain covers every light, including ones added later.
 

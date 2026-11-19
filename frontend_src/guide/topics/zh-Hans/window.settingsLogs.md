@@ -23,7 +23,7 @@ Phoenix 的传感器会继续计数，通知仍会到达。
 
 记录被拒绝、格式错误、不受支持或指向不存在内容的请求。MESA 阻止也计在这里。默认开启。
 
-等待审批的请求、你的审批决定，以及在更改可能已运行时中断的请求始终会被记录。
+**{{label:settings.logEnableLabel}}** 开启时，Phoenix 始终会记录等待审批的请求、你的审批决定，以及在更改可能已运行时中断的请求。
 
 每个密钥每分钟的前 30 个格式错误、不受支持或超出速率限制的请求各有一条条目。该分钟内其余的此类请求共用一条条目，并在其负载中计数。
 
@@ -43,11 +43,11 @@ Phoenix 的传感器会继续计数，通知仍会到达。
 
 审计日志保留多少条目：100、1,000、5,000 或 10,000（默认）。降低它会立即移除最旧的条目。磁盘上的副本会在下次保存时缩小。
 
-审批决定和结果，以及管理员条目，单独保留，数量上限相同，因此智能体的请求不会将它们挤出。等待审批的请求及其过期，与该密钥的其他请求保存在一起。
+Phoenix 把审批决定和结果以及管理员条目保存在一个大小相同的单独列表中。智能体的请求不会将它们挤出。等待审批的请求及其过期，与该密钥的其他请求保存在一起。
 
 ## {{label:conversations.title}} {#conversation-log}
 
-**{{label:conversations.enable}}** 会保留智能体说了什么、做了什么：Agent Chat 和语音对话、AI 任务，以及 MCP 客户端、Assist 和 Home Companion 的工具调用。在{{label:workspace.logs}}工作区中查看。默认关闭。关闭它会保留已记录的内容。
+**{{label:conversations.enable}}** 会保留智能体说了什么、做了什么：Agent Chat 和语音对话、AI 任务，以及 MCP 客户端、Assist 和{{label:personas.home_companion.label}}的工具调用。在{{label:workspace.logs}}工作区中查看。默认关闭。关闭它会保留已记录的内容。
 
 三个限制控制保留多少内容。每个限制在你更改后片刻保存。日志超过限制时，最旧的对话会先被移除。
 
@@ -69,13 +69,13 @@ Phoenix 的传感器会继续计数，通知仍会到达。
 
 ### {{label:settings.logEntityIdsLabel}} {#log-entity-ids}
 
-关闭时，审计日志的 {{label:audit.rowResource}} 列显示 [redacted]，对话日志会省略说了什么和做了什么。默认开启。
+关闭时，审计日志的 {{label:audit.rowResource}} 列显示 [redacted]，{{label:conversations.title}}会省略说了什么和做了什么。默认开启。
 
 此时审计日志的负载只保留工具调用参数的名称，不保留它们的值。负载中的其他文本（例如审批原因）仍可能提到实体。已记录的对话内容会在 Phoenix 下次启动时移除。
 
 ### {{label:settings.logClientIpLabel}} {#log-client-ip}
 
-关闭时，两种日志都会隐藏调用方的 IP 地址，但写入工具调用参数中的地址会留在审计负载中。默认开启。Agent Chat、语音、Assist、AI 任务和 Home Companion 仍会按名称显示，因为它们不是地址。
+关闭时，两种日志都会隐藏调用方的 IP 地址，但写入工具调用参数中的地址会留在审计负载中。默认开启。Agent Chat、语音、Assist、AI 任务和{{label:personas.home_companion.label}}仍会按名称显示，因为它们不是地址。
 
 ## {{label:settings.haNotifications}} {#notifications}
 
@@ -83,7 +83,7 @@ Phoenix 可以发送 Home Assistant 通知，它们会出现在 Home Assistant �
 
 ### {{label:settings.notifyApprovalLabel}} {#notify-approval}
 
-为每个等待你批准的请求发送一条带链接的通知。你做出决定后它会消失。默认开启。工具栏上的审批计数无论如何都会显示。
+为每个等待你批准的请求发送一条带链接的通知。你做出决定后它会消失。默认开启。工具栏上的{{label:shell.tabApprovals}}计数无论如何都会显示。
 
 ### {{label:settings.notifyRateLimitLabel}} {#notify-rate-limit}
 

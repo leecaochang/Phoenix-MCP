@@ -31,7 +31,7 @@ Agent Chat、语音智能体和 AI 任务各使用其中一个账户，并搭配
 
 ### {{label:settings.accountCheckOptions}} {#check-options}
 
-通过发送几个非常简短的请求，查明模型支持哪些努力级别以及是否能读取图像。
+通过发送几个非常简短的请求，查明模型支持哪些思考级别以及是否能读取图像。
 
 这会消耗少量额度，因此 Phoenix 会先询问。将指针悬停在按钮上可查看上次运行的时间。
 
@@ -55,7 +55,7 @@ Microsoft Azure、Infron、NVIDIA NIM、OpenCode 和 Tencent Cloud TokenHub 的�
 
 **{{label:settings.toolLoadingAlways}}** 无论工具多少都分批加载。**{{label:settings.toolLoadingNever}}** 总是发送全部工具，但只接受 128 个工具的提供商除外。
 
-工具加载不会给模型更多权限，Phoenix 照常检查每次调用。Home Companion 密钥不受 **{{label:settings.toolLoadingLabel}}** 设置影响。
+分批加载工具不会给模型更多权限，Phoenix 照常检查每次调用。Home Companion 密钥不受{{label:settings.toolLoadingLabel}}设置影响。
 
 ## 添加账户 {#provider-add}
 
@@ -81,9 +81,11 @@ Microsoft Azure、Infron、NVIDIA NIM、OpenCode 和 Tencent Cloud TokenHub 的�
 - Ollama（本地）：你的 Ollama 服务器地址。Home Assistant 会连接它，因此请使用 Home Assistant 主机可以访问的地址。普通 `http://` 流量不加密；请参阅[哪些数据会离开你的家](guide:topic.security#leaves-home)。
 - {{label:settings.providerLocalOpenAI}}：你的 llama.cpp、vLLM、Bionic 或 LocalAI 服务器地址，例如 `http://host:8080/v1`。地址没有路径时，Phoenix 会加上 `/v1`。只有服务器需要时才填写 API 密钥。
 
-有些方案只供编程工具使用：Z.ai 的 Coding Plan、Xiaomi MiMo 的 Token Plan，以及阿里云的 Coding Plan 和 Token Plan。它们的条款禁止在 Home Assistant 这类应用中使用，提供商可能会限流或封禁密钥。选择这些方案时 Phoenix 会给出警告。语音、AI Task 和 Agent Chat 请使用提供商的按量付费 API。
+有些方案只供编程工具使用：Z.ai 的 Coding Plan、Xiaomi MiMo 的 Token Plan，以及阿里云的 Coding Plan 和 Token Plan。它们的条款禁止在 Home Assistant 这类应用中使用，提供商可能会限流或封禁密钥。
 
-Groq、Mistral AI 和 Z.ai 每个请求最多接受 128 个工具。Phoenix 对 Gemini、Kimi、OpenRouter、Infron、Cloudflare Workers AI、Microsoft Azure 和本地 OpenAI 兼容服务器也采用同样的上限。访问密钥的工具更多时，无论[工具加载](guide:#tool-loading)如何设置，Phoenix 都会为它们分批加载工具。
+选择这些方案时 Phoenix 会给出警告。语音、AI Task 和 Agent Chat 请使用提供商的按量付费 API。
+
+Groq、Mistral AI 和 Z.ai 每个请求最多接受 128 个工具。Phoenix 对 Gemini、Kimi、OpenRouter、Infron、Cloudflare Workers AI、Microsoft Azure 和本地 OpenAI 兼容服务器也采用同样的上限。访问密钥的工具更多时，无论[{{label:settings.toolLoadingLabel}}](guide:#tool-loading)如何设置，Phoenix 都会为它们分批加载工具。
 
 Groq 的免费套餐限制每个模型每分钟接受的 Token 数，而单个 Phoenix 请求就超过了这个上限。Groq 会拒绝该请求，等待也无济于事。请使用 Groq 的付费套餐或其他提供商。
 
@@ -91,11 +93,11 @@ Groq 的免费套餐限制每个模型每分钟接受的 Token 数，而单个 P
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 
-Phoenix 会不时重新读取每个账户的模型列表。这能让列表保持最新，使 **{{label:settings.agentcliModelAuto}}** 可以切换到更新的模型。
+Phoenix 会按计划重新读取每个账户的模型列表。这能让列表保持最新，使 **{{label:settings.agentcliModelAuto}}** 可以切换到更新的模型。
 
 ### {{label:settings.providerChecksLabel}} {#provider-checks}
 
-每小时一次，Phoenix 会重新读取早于以下时段的模型列表。这不消耗 token。默认开启。
+每小时一次，Phoenix 会重新读取早于 **{{label:settings.providerChecksHoursLabel}}** 所设时段的模型列表。这不消耗 token。默认开启。
 
 关闭时，Phoenix 仍会在需要时读取列表：新账户、提供商报告缺少模型，以及你切换到 **{{label:settings.agentcliModelAuto}}** 时。
 
@@ -113,7 +115,7 @@ Phoenix 会按计划重新检查提供商的模型列表：6 到 720 小时（�
 
 - Cloudflare / Clef：Workers AI 上的 Clef 或 Clef Flash，使用你的 Cloudflare 账户 ID 和 API 令牌。
 - Google / Gemini Decision：Google 的 Gemini Decision 模型，使用 Gemini API 密钥。
-- 本地 / System One：你自己服务器上的决策模型，例如 Ollama 或 llama.cpp。使用 Ollama 时，请设置 `OLLAMA_KEEP_ALIVE` 让模型保持加载，并把 `num_ctx`（d3 还有 `num_batch`）调到 16384。
+- 本地 / System One：你自己服务器上的决策模型，例如 Ollama 或 llama.cpp。使用 Ollama 时，请设置 `OLLAMA_KEEP_ALIVE` 让模型保持加载，并把 `num_ctx` 调到 16384，d3 模型的 `num_batch` 也要调到这个值。
 - Microsoft / Decision：Azure AI Foundry 中的 Microsoft-Decision-1，使用资源的终结点和密钥。
 - OpenAI / Decisions：OpenAI 的 gpt-6-luna 决策模型，使用 OpenAI API 密钥。
 - OpenCode / System One：JEV、Gemini Decision 或 GPT Luna Decision，使用 OpenCode Console API 密钥。
@@ -135,9 +137,9 @@ Phoenix 会按计划重新检查提供商的模型列表：6 到 720 小时（�
 
 决策账户执行命令前必须达到的确定程度，范围 0.70 到 1.00（默认 0.90）。选择账户即可显示此设置。每个账户各自保存。
 
-阈值越低，决策提供商自己处理的命令越多，转给你的 AI 提供商的命令越少。这可能会让更多错误通过，因为每个模型各不相同。
+阈值越低，决策提供商自己处理的命令越多，转给你的 AI 提供商的命令越少。这也可能让更多错误通过，具体取决于模型。
 
-后续消息会先对照对话进行检查：这条消息是否是真正的请求、之前的指示是否排除了它，以及“它”指的是什么。无论阈值是多少，这项检查始终至少需要 0.90，因为更低的阈值曾让对话中已排除的命令通过。
+决策提供商会先对照对话检查后续消息：这条消息是否是真正的请求、之前的指示是否排除了它，以及“它”指的是什么。无论阈值是多少，这项检查始终至少需要 0.90。
 
 决策提供商选择设备和操作时，仍然使用该阈值。
 

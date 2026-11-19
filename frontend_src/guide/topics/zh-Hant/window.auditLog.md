@@ -20,7 +20,7 @@
 
 ## {{label:logs.filters}} {#filters}
 
-依 **{{label:audit.rowOutcome}}**、**{{label:audit.colAccessKey}}** 和時間，以及 **{{label:audit.rowMethod}}**、**{{label:audit.rowResource}}** 和 **{{label:audit.rowIp}}** 中的文字縮小清單範圍。**{{label:audit.rowRequestId}}** 可尋找一個確切的請求，例如來自對話記錄的請求。像過去 5 分鐘這樣的時間範圍會隨日誌更新而移動。
+依 **{{label:audit.rowOutcome}}**、**{{label:audit.colAccessKey}}** 和時間，以及 **{{label:audit.rowMethod}}**、**{{label:audit.rowResource}}** 和 **{{label:audit.rowIp}}** 中的文字縮小清單範圍。**{{label:audit.rowRequestId}}** 可尋找一個確切的請求，例如來自{{label:conversations.title}}的請求。像過去 5 分鐘這樣的時間範圍會隨日誌更新而移動。
 
 隱藏篩選會停止套用它們，直到你再次顯示。兩個日誌都開啟時，一個 **{{label:logs.filters}}** 按鈕會顯示兩者的篩選條件。
 
@@ -28,6 +28,6 @@
 
 視窗顯示且未摺疊時，新條目每 5 秒出現一次。**{{label:logs.pauseUpdates}}** 會在你閱讀時讓清單保持不動。暫停期間，**{{label:common.refresh}}** 會載入一次最新條目。
 
-## 來自需要關注 {#attention}
+## 來自{{label:attention.title}} {#attention}
 
-需要關注視窗中的 **{{label:attention.showInAudit}}** 會開啟此日誌，並篩選到那一個請求。
+{{label:attention.title}}中的 **{{label:attention.showInAudit}}** 會開啟此日誌，並篩選到那一個請求。

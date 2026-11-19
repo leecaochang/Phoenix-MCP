@@ -9,7 +9,7 @@
 
 當同一類型有 5 個或更多未被涵蓋時，會合併為一條域建議，車庫門、門和閘門除外。
 
-**{{label:mesa.signalBlastRadius}}**：沒有策略、且使用風險裝置或 8 個或更多實體的自動化、腳本或場景。它會被建議為 {{label:mesa.modeConfirm}}，這樣智慧體在啟動它之前會先詢問。
+**{{label:mesa.signalBlastRadius}}**：沒有策略、且使用風險裝置或 8 個或更多實體的自動化、腳本或場景。它會被建議為 {{label:mesa.modeConfirm}}，這樣在 MESA 強制執行時，智慧體在啟動它之前會先詢問。
 
 以模板表示的目標無法被看到，因此永遠不會被建議。
 
@@ -19,6 +19,6 @@
 
 ## {{label:mesa.dismiss}} {#dismiss}
 
-對使用此家庭的所有人隱藏你不想要的建議。選擇 **{{label:mesa.dismiss}}**，然後選擇 **{{label:common.confirm}}**。
+對所有管理員隱藏你不想要的建議。選擇 **{{label:mesa.dismiss}}**，然後選擇 **{{label:common.confirm}}**。
 
-若要再次看到已忽略的建議，請在 MESA 操作選單中選擇 **{{label:mesa.restoreDismissed}}**。同一選單中的 **{{label:mesa.rescan}}** 會立即尋找新建議；否則清單每 30 秒更新一次。
+若要再次看到已忽略的建議，請在 **{{label:mesa.menu}}** 選單中選擇 **{{label:mesa.restoreDismissed}}**。同一選單中的 **{{label:mesa.rescan}}** 會立即尋找新建議；否則清單每 30 秒更新一次。

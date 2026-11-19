@@ -14,17 +14,18 @@ GET    /api/phoenix-mcp/context
 GET    /api/phoenix-mcp/skill
 ```
 
-智能体向第一个路由发送 MCP 请求，从第二个路由读取其密钥的上下文，并从最后一个路由获取技能指南。通过 OAuth 登录的应用还会使用[登录路由](guide:#oauth)。
+智能体向 `POST /api/phoenix-mcp` 发送 MCP 请求，用 `DELETE` 关闭旧版会话，从 `/context` 读取其密钥的上下文，并从 `/skill` 获取技能指南。通过 OAuth 登录的应用还会使用[登录路由](guide:#oauth)。
 
 - POST 和 DELETE 也支持带尾随斜杠的 `/api/phoenix-mcp/`。
-- `GET /api/phoenix-mcp` 返回 `405`，因为该端点没有 GET 处理器。
+- `GET /api/phoenix-mcp` 返回 `405`。
 - 紧急停止开关开启时，这些路由不会服务智能体。
+- 如果 Home Assistant 启动时紧急停止开关已开启，在你关闭它之前，这些路由和[登录路由](guide:#oauth)都返回 `404`。
 
 ## 发送密钥 {#bearer}
 
 在 `Authorization` 头中把密钥作为 `Bearer phx_...` 发送。密钥是 `phx_` 后跟 64 个字符。绝不要把它放在 URL 中：即使头正确，`token` 或 `access_token` 查询参数也会被拒绝。
 
-通过 OAuth 登录的应用以同样方式发送其访问令牌，即 `Bearer phxo_...`。该令牌代表登录时被批准的密钥，下面的每项检查都适用于该密钥。
+通过 OAuth 登录的应用以同样方式发送其访问令牌，即 `Bearer phxo_...`。该令牌代表登录时被批准的密钥。本节中的每项密钥检查都适用于该密钥。
 
 除技能外的每个路由都会按此顺序检查密钥：
 
@@ -39,7 +40,7 @@ GET    /api/phoenix-mcp/skill
 | 401 | `unauthorized` | 密钥已被吊销或已过期。已过期的密钥会移到归档。 |
 | 429 | `rate_limited` | 密钥超过其速率限制。参见[速率限制](guide:#rate-limit)。 |
 
-每个 `401` 都带有 `WWW-Authenticate: Bearer realm="Phoenix MCP"`。当密钥允许 OAuth 登录且请求通过 HTTPS 到达时，它还会指明 `resource_metadata`；对于已结束的 OAuth 令牌，还会添加 `error="invalid_token"`。通过检查的密钥会在速率限制检查前更新其 `last_used_at`。
+每个 `401` 都带有 `WWW-Authenticate: Bearer realm="Phoenix MCP"`。当密钥允许 OAuth 登录且请求通过 HTTPS 到达时，该头还会指明 `resource_metadata`。在这种情况下，对于已结束的 OAuth 令牌，它还会添加 `error="invalid_token"`。Phoenix 会更新通过这些检查的密钥的 `last_used_at`，即使速率限制随后拒绝了该请求。
 
 当 `phx_` 密钥未知、已吊销或已过期时，Home Assistant 日志会记录一条警告，包含客户端地址，但绝不包含密钥。第一次之后，每个地址每 10 分钟最多记录一条警告，并附上期间被拒绝的次数。
 
@@ -68,14 +69,16 @@ POST   /api/phoenix-mcp/oauth/revoke
 - 颁发者是你的 HTTPS 地址加上 `/api/phoenix-mcp/oauth`。它的文档也在两个 OpenID 发现路径上提供。
 - 应用用 Client ID Metadata Document 表明身份：`client_id` 是一个 https 地址。不支持动态注册。
 - 只接受 S256 PKCE。如果发送了 `resource`，它必须是你的地址加上 `/api/phoenix-mcp`。
-- 授权会把浏览器转到 Phoenix 面板，由管理员为一个密钥批准此次登录。无论登录窗口期是否打开，它的响应都一样。授权响应带有 `iss`。
+- 授权会把浏览器转到 Phoenix 面板，由管理员为一个密钥批准此次登录。无论登录时段是否开放，它的响应都一样。授权响应带有 `iss`。
 - 授权码只能使用一次，且须在 60 秒内使用。客户端、重定向地址、resource 或 PKCE 验证码不对时，授权码会被用掉。再次使用授权码会结束它产生的登录。
 - 访问令牌（`phxo_`）有效期为一小时。一小时结束时已在运行的工具调用仍会完成并返回结果。每次刷新都会替换刷新令牌（`phxr_`）。
 - 在 60 秒内，应用可以再使用被替换的刷新令牌两次，以防响应丢失或同时发起了多次刷新。
 - 第四次使用、之后的任何使用，或再次使用更早的刷新令牌，都会结束此次登录。
 - 吊销端点接受任一种令牌，并结束整个登录。
 
-在有密钥允许 OAuth 登录之前，以及对任何不是通过 HTTPS 到达的请求，这些路由都返回 `404`，即使紧急停止开关开启也是如此。除此之外，紧急停止开关开启时，它们返回 `503`。每个地址每分钟最多可向它们发出 30 个请求，IPv6 地址按其 /64 网段计数。
+在有密钥允许 OAuth 登录之前，这些路由返回 `404`。对任何不是通过 HTTPS 到达的请求，它们也返回 `404`。即使紧急停止开关开启，这两点也适用。除此之外，紧急停止开关开启时，它们返回 `503`。
+
+每个地址每分钟最多可向它们发出 30 个请求。IPv6 地址按其 /64 网段计数。
 
 相关：[通过 OAuth 登录的应用](guide:topic.connecting#oauth)、[OAuth 登录端点](guide:topic.adminApiKeys#oauth)
 
@@ -136,7 +139,7 @@ Phoenix 在运行前会按整个批处理计入速率限制。当剩余限制太
 
 ## 上下文 {#context}
 
-`GET /api/phoenix-mcp/context` 描述密钥可以访问什么。默认以纯文本返回；添加 `?format=json` 获取 JSON。它会运行密钥检查和速率限制，每次调用都会进入审计日志。
+`GET /api/phoenix-mcp/context` 描述密钥可以访问什么。默认以纯文本返回。添加 `?format=json` 获取 JSON。它会运行密钥检查和速率限制。Phoenix 会像记录其他请求一样，在审计日志中记录每次被允许的调用。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
@@ -160,9 +163,9 @@ Phoenix 正在启动或关闭，或紧急停止开关开启时，它返回 `503`
 
 ## 速率限制 {#rate-limit}
 
-每个密钥有两个限制。`rate_limit_requests` 统计滑动 60 秒内的请求。`rate_limit_burst` 统计任意一秒内的请求；0 会关闭突发限制。`rate_limit_requests` 为 0 会同时关闭两者。
+每个密钥有两个限制。`rate_limit_requests` 统计滑动 60 秒内的请求。`rate_limit_burst` 统计任意一秒内的请求。将其设为 0 可关闭突发限制。`rate_limit_requests` 为 0 会同时关闭两者。
 
-单独的 `notifications/initialized` 和会话 `DELETE` 计入每分钟限制，但从不计入突发限制。同时打开多个会话的客户端会一次发送很多这类消息。
+单独的 `notifications/initialized` 和会话 `DELETE` 计入每分钟限制，但从不计入突发限制。
 
 相关：[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)
 
@@ -182,7 +185,7 @@ X-RateLimit-Reset: 1793612345
 | `X-RateLimit-Remaining` | 当前 60 秒内，在本次请求之后剩余的请求数。批处理会计入每一项。 |
 | `X-RateLimit-Reset` | Unix 时间，以整秒为单位，表示窗口中最旧的请求离开窗口的时间。 |
 
-这些头只出现在 `POST /api/phoenix-mcp` 的 `200` JSON 和 SSE 响应中，包括批处理。通知、协议错误、其他错误、DELETE、上下文和技能不会收到它们。关闭速率限制的密钥不会收到任何头。
+这些头只出现在 `POST /api/phoenix-mcp` 的 `200` JSON 和 SSE 响应中，以及它的批处理响应中。通知、协议错误、其他错误、DELETE、上下文和技能不会收到它们。关闭速率限制的密钥不会收到任何头。
 
 ### 达到限制时 {#limit-hit}
 

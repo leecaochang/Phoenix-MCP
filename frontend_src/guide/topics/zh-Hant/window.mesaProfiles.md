@@ -17,9 +17,9 @@
 
 ## 清單 {#list}
 
-選擇一條策略，即可在[{{label:workspace.profileEditor}}](guide:window.mesaEditor)中開啟它。策略被強制執行時，控制模式旁會顯示「{{label:mesa.modeEnforced}}」。
+選擇一條策略，即可在[{{label:workspace.profileEditor}}](guide:window.mesaEditor)中開啟它。策略被強制執行時，控制模式旁會顯示 {{label:mesa.modeEnforced}}。
 
-**{{label:mesa.colTags}}** 和 **{{label:mesa.colSource}}** 最初為隱藏；可從欄選單中顯示。**{{label:mesa.colSource}}** 對整合隨程式碼提供的策略顯示 **{{label:mesa.vendorBadge}}**。
+**{{label:mesa.colTags}}** 和 **{{label:mesa.colSource}}** 最初為隱藏；可從欄選單中顯示。{{label:mesa.colSource}} 欄對整合隨程式碼提供的策略顯示 {{label:mesa.vendorBadge}}。
 
 ## {{label:mesa.delete}} {#delete}
 
@@ -27,15 +27,15 @@
 
 整合自己的供應商策略會在 Home Assistant 下次啟動時恢復，除非你已為該整合儲存了自己的策略。
 
-## MESA 操作 {#actions}
+## {{label:mesa.menu}} {#actions}
 
 選單包含：
 
-- **{{label:mesa.importTitle}}** 和 **{{label:mesa.exportTitle}}**，見下文。
-- **{{label:mesa.suggestTitle}}**，用於顯示或隱藏該視窗。
-- **{{label:mesa.rescan}}**，會立即尋找新的[建議](guide:window.mesaSuggestions)和建議性提示中的發現。
-- **{{label:mesa.restoreDismissed}}**，會恢復你忽略的所有建議。
-- **{{label:mesa.restoreNotices}}**，會恢復你在[{{label:workspace.advisory}}](guide:window.mesaAdvisory)中忽略的發現。
+- [{{label:mesa.importTitle}}](guide:#import) 和 [{{label:mesa.exportTitle}}](guide:#export)
+- **{{label:mesa.suggestTitle}}**，用於顯示或隱藏該視窗
+- **{{label:mesa.rescan}}**，會立即尋找新的[建議](guide:window.mesaSuggestions)和{{label:workspace.advisory}}中的發現
+- **{{label:mesa.restoreDismissed}}**，會為所有管理員恢復所有已忽略的建議
+- **{{label:mesa.restoreNotices}}**，會恢復你在[{{label:workspace.advisory}}](guide:window.mesaAdvisory)中忽略的發現，僅限此瀏覽器
 
 ## {{label:mesa.importTitle}} {#import}
 
@@ -45,9 +45,9 @@
 
 匯入的策略會立即生效。Phoenix 會檢查每條策略，並列出它拒絕的策略。針對此家庭沒有的目標的策略會出現在[{{label:workspace.advisory}}](guide:window.mesaAdvisory#orphans)中。
 
-存檔可以包含策略編輯器無法設定的欄位，例如宣告限制、時間範圍和部署預設設定。
+存檔可以包含{{label:workspace.profileEditor}}無法設定的欄位，例如宣告限制、時間範圍和部署預設設定。
 
-相關：[策略編輯器無法設定什麼](guide:topic.mesaRules#not-in-editor)
+相關：[{{label:workspace.profileEditor}}無法設定什麼](guide:topic.mesaRules#not-in-editor)
 
 ## {{label:mesa.exportTitle}} {#export}
 

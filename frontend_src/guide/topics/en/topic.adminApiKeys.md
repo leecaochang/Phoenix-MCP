@@ -1,9 +1,9 @@
 ---
 { "id": "topic.adminApiKeys", "title": "Access Key Endpoints", "parent": "topic.adminApi", "order": 10, "keywords": ["access key API", "token API", "phx_", "create key", "permissions API", "capabilities API"], "sectionKeywords": { "access-keys": ["access key record", "key list"], "capability-fields": ["cap_", "deny", "allow", "confirm", "capability field"], "oauth": ["OAuth", "sign-in", "connector", "window"], "key-create": ["new key", "access_key", "raw value", "201"], "key-change": ["PATCH", "persona", "notes", "rename", "unknownFields"], "key-revoke": ["delete key", "revoke", "phoenix_mcp_access_key_revoked"], "key-rotate": ["rotate", "new value", "phoenix_mcp_access_key_rotated"], "key-stats": ["request_count", "denied_count", "rate_limit_hits"], "key-tools": ["tools/list", "tool catalog", "catalog_bytes", "loads_in_parts"], "key-audit": ["audit rows", "outcome filter", "client IP"], "key-archived": ["archived keys", "expired keys", "revoked keys"], "presets": ["preset", "saved settings", "access_key_presets_enabled"], "permissions": ["permission tree", "nodes", "domains", "devices", "entities"], "permissions-replace": ["PUT", "replace tree", "clear all"], "permissions-node": ["single node", "set state"], "bulk-select": ["area", "label", "integration", "selector"], "integration-options": ["config entry", "integration list"], "entity-hints": ["hint", "global hint", "entity_hints"], "entities": ["entity tree", "scope", "resolve", "force_reload"], "resolve": ["resolution_path", "effective permission", "NO_ACCESS", "NOT_FOUND"], "scope": ["readable", "writable", "capability_flags"] }, "covers": ["custom_components/phoenix_mcp/admin/access_keys.py", "custom_components/phoenix_mcp/admin/permissions.py", "custom_components/phoenix_mcp/access_key_store.py", "custom_components/phoenix_mcp/admin/oauth.py", "custom_components/phoenix_mcp/oauth_grants.py"] }
 ---
-These endpoints manage access keys: creating them, changing their settings and capabilities, and setting what each one may read and control. Every path starts with `/api/phoenix-mcp/admin` and needs an administrator.
+These endpoints manage access keys: creating them, changing their settings and capabilities, and setting what each one can read and control. Every path starts with `/api/phoenix-mcp/admin` and needs an administrator.
 
-Request bodies, the error envelope and the ID rules work as described on [Admin API](guide:topic.adminApi). The error tables below list each endpoint's own errors. Body errors from [Request bodies](guide:topic.adminApi#bodies) apply to every endpoint that takes a body.
+Request bodies, the error envelope, and the ID rules work as described on [Admin API](guide:topic.adminApi). Each endpoint's error table lists its own errors. Body errors from [Request bodies](guide:topic.adminApi#bodies) apply to every endpoint that takes a body.
 
 Related: [Errors](guide:topic.adminApi#errors), [IDs in paths](guide:topic.adminApi#ids), [Permission states](guide:topic.adminApi#states)
 
@@ -28,9 +28,9 @@ GET    /api/phoenix-mcp/admin/access-keys/archived
 DELETE /api/phoenix-mcp/admin/access-keys/archived/{id}
 ```
 
-Use these to create, change, rotate and revoke keys, and to read their use. `{id}` is the access key's ID.
+Use these to create, change, rotate, and revoke keys, and to read their use. `{id}` is the access key's ID.
 
-Every endpoint that names a key answers `404` when the key doesn't exist:
+If no active key has the ID, an endpoint that names a key answers with this error, unless its own table says otherwise:
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -58,15 +58,15 @@ Most endpoints answer with the key's record. It never contains the key itself.
 | `rate_limit_burst` | integer | Requests per second. |
 | `persona` | string | The persona label. |
 | `notes` | string or null | Notes for the agent. |
-| `oauth_enabled` | boolean | Whether apps may sign in with OAuth to use this key. See [OAuth sign-in](guide:#oauth). |
+| `oauth_enabled` | boolean | Whether apps can sign in with OAuth to use this key. See [OAuth sign-in](guide:#oauth). |
 | `permissions` | object | The permission tree, as in [Permissions](guide:#permissions). |
 | `presets` | array | Saved presets, as in [Presets](guide:#presets). |
 | `active_preset_id` | string or null | The preset the key matches. |
-| `cap_*` | string | One field per capability: `deny`, `allow` or `confirm`. |
+| `cap_*` | string | One field per capability: `deny`, `allow`, or `confirm`. |
 
 ### Capability fields {#capability-fields}
 
-Each key has these 32 fields. Each takes `deny`, `allow` or `confirm`, but only the fields marked Yes accept `confirm`.
+Each key has these 32 fields. Each takes `deny`, `allow`, or `confirm`, but only the fields marked Yes accept `confirm`.
 
 | Field | Accepts `confirm` | Capability |
 |---|---|---|
@@ -103,7 +103,7 @@ Each key has these 32 fields. Each takes `deny`, `allow` or `confirm`, but only 
 | `cap_esphome_yaml` | No | [{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#esphome-yaml) |
 | `cap_esphome_flash` | Yes | [{{label:caps.cap_esphome_flash.label}}](guide:window.capabilities#esphome-flash) |
 
-Related: [Deny, Allow and Confirm](guide:window.capabilities#modes)
+Related: [Deny, Allow, and Confirm](guide:window.capabilities#modes)
 
 ### List keys {#key-list}
 
@@ -115,16 +115,16 @@ Related: [Deny, Allow and Confirm](guide:window.capabilities#modes)
 
 | Field | Type | Notes |
 |---|---|---|
-| `name` | string | Required. 3 to 32 letters, digits, `-` or `_`. It must differ from every active key's name, ignoring case and treating `-` and `_` as the same. Names of archived keys are free to reuse. |
+| `name` | string | Required. 3 to 32 letters, digits, `-`, or `_`. It must differ from every active key's name, ignoring case and treating `-` and `_` as the same. Names of archived keys are free to reuse. |
 | `pass_through` | boolean | Default `false`. |
 | `confirm_pass_through` | boolean | Must be `true` when `pass_through` is `true`. |
 | `use_assist_exposure` | boolean | Default `false`. Kept only when `pass_through` is `true`. |
-| `expires_at` | string | Optional. An ISO 8601 time in the future. Without a time zone, Phoenix reads it as Home Assistant's local time and stores it in UTC. Leave the field out for no expiry; `null` is refused. |
-| `rate_limit_requests` | integer | 0 to 100000 (default 60). Set to 0 to turn rate limiting off. |
-| `rate_limit_burst` | integer | 0 to 100000 (default 10). Stored as 0 when `rate_limit_requests` is 0. |
-| `oauth_enabled` | boolean | Default `false`. `true` also opens the key's sign-in window. |
+| `expires_at` | string | Optional. An ISO 8601 time in the future. Without a time zone, Phoenix reads it as Home Assistant's local time and stores it in UTC. Leave the field out for no expiry. Phoenix refuses `null`. |
+| `rate_limit_requests` | integer | 0 to 100,000 (default 60). Set to 0 to turn rate limiting off. |
+| `rate_limit_burst` | integer | 0 to 100,000 (default 10). Stored as 0 when `rate_limit_requests` is 0. |
+| `oauth_enabled` | boolean | Default `false`. `true` also opens the key's sign-in period. |
 
-Create reads only these fields. A new key starts with persona `custom`, every capability `deny`, an empty permission tree, `confirm_inline_wait_seconds` 0 and `announce_all_tools` off. Set the rest with [a PATCH](guide:#key-change) afterwards.
+Create reads only these fields. A new key starts with persona `custom`, every capability `deny`, an empty permission tree, `confirm_inline_wait_seconds` 0, and `announce_all_tools` off. Set the rest with [a PATCH](guide:#key-change) afterwards.
 
 The response is `201` with the new record plus `access_key`, the key itself: `phx_` followed by 64 characters. Phoenix shows it only in this response, so store it now.
 
@@ -132,7 +132,7 @@ The response is `201` with the new record plus `access_key`, the key itself: `ph
 |---|---|---|---|
 | 400 | `invalid_request` | `adminError.nameRequired` | `name` is missing. |
 | 400 | `invalid_request` | `adminError.accessKeyNameLengthPattern` | `name` breaks the naming rule. `message_params` has `min` and `max`. |
-| 400 | `invalid_request` | `adminError.booleanRequired` | `pass_through`, `use_assist_exposure` or `oauth_enabled` isn't a boolean. `message_params` names the `field`. |
+| 400 | `invalid_request` | `adminError.booleanRequired` | `pass_through`, `use_assist_exposure`, or `oauth_enabled` isn't a boolean. `message_params` names the `field`. |
 | 400 | `invalid_request` | `adminError.passThroughConfirmationRequired` | `pass_through` is `true` without `confirm_pass_through: true`. |
 | 503 | `service_unavailable` | `adminError.oauthKillSwitch` | `oauth_enabled` is `true` while the kill switch is on. |
 | 400 | `invalid_request` | `adminError.oauthNoHttps` | `oauth_enabled` is `true` but Home Assistant has no HTTPS address. |
@@ -140,7 +140,7 @@ The response is `201` with the new record plus `access_key`, the key itself: `ph
 | 400 | `invalid_request` | `adminError.expiresInPast` | `expires_at` isn't in the future. |
 | 400 | `invalid_request` | `adminError.rateLimitsInteger` | A rate limit isn't a whole number. |
 | 400 | `invalid_request` | `adminError.rateLimitsNonNegative` | A rate limit is negative. |
-| 400 | `invalid_request` | `adminError.rateLimitsMaximum` | A rate limit is over `max` (100000). |
+| 400 | `invalid_request` | `adminError.rateLimitsMaximum` | A rate limit is over `max` (100,000). |
 | 409 | `conflict` | `adminError.accessKeyNameTaken` | An active key already has this name. |
 
 ### Read a key {#key-read}
@@ -159,18 +159,18 @@ The response is `201` with the new record plus `access_key`, the key itself: `ph
 | `use_assist_exposure` | boolean | Allowed only when the key ends up with `pass_through` on. |
 | `announce_all_tools` | boolean | |
 | `confirm_inline_wait_seconds` | integer | 0 (off) or 30 to 180. |
-| `rate_limit_requests` | integer | 0 to 100000. Setting it to 0 also sets `rate_limit_burst` to 0. |
-| `rate_limit_burst` | integer | 0 to 100000. |
+| `rate_limit_requests` | integer | 0 to 100,000. Setting it to 0 also sets `rate_limit_burst` to 0. |
+| `rate_limit_burst` | integer | 0 to 100,000. |
 | `persona` | string | One of `home_companion`, `read_only`, `voice_assistant`, `automation_builder`, `power_user`, `home_admin`, `new_user`, `dashboard_designer`, `maintenance`, `esphome`, `custom`. |
-| `notes` | string or null | At most 2000 characters, after line endings become LF and surrounding spaces are trimmed. Control, bidirectional override and tag characters are refused. `null` or `""` clears the notes. |
-| `oauth_enabled` | boolean | Turning it on opens the sign-in window. Turning it off ends every OAuth sign-in of the key and cancels the approvals they queued, with reason `oauth_turned_off`. |
-| `cap_*` | string | Any [capability field](guide:#capability-fields): `deny`, `allow` or `confirm`. |
+| `notes` | string or null | At most 2,000 characters, after line endings become LF and surrounding spaces are trimmed. Control, bidirectional override, and tag characters are refused. `null` or `""` clears the notes. |
+| `oauth_enabled` | boolean | Turning it on opens the sign-in period. Turning it off ends every OAuth sign-in of the key and cancels the approvals they queued, with reason `oauth_turned_off`. |
+| `cap_*` | string | Any [capability field](guide:#capability-fields): `deny`, `allow`, or `confirm`. |
 
-PATCH refuses any field not in this table, and `expires_at` can't be changed at all.
+PATCH refuses any field not in this table. You can't change `expires_at` at all.
 
 `persona` sets the key's persona label. It doesn't change any capability, so send the capability values you want in the same request.
 
-A key with persona `home_companion` always has `pass_through` and `announce_all_tools` off. Asking to turn either on is refused.
+A key with persona `home_companion` always has `pass_through` and `announce_all_tools` off. Phoenix refuses a request to turn either on.
 
 Renaming a key changes the display name of its sensors and device in Home Assistant. Their entity IDs stay the same.
 
@@ -189,13 +189,13 @@ Renaming a key changes the display name of its sensors and device in Home Assist
 | 400 | `invalid_request` | `adminError.inlineWaitRange` | `confirm_inline_wait_seconds` is out of range. `message_params` gives `min` and `max`. |
 | 400 | `invalid_request` | `adminError.integerRequired` | A rate limit isn't a whole number. `message_params` names the `field`. |
 | 400 | `invalid_request` | `adminError.nonNegativeRequired` | A rate limit is negative. `message_params` names the `field`. |
-| 400 | `invalid_request` | `adminError.maximumRequired` | A rate limit is over 100000. `message_params` gives `field` and `max`. |
+| 400 | `invalid_request` | `adminError.maximumRequired` | A rate limit is over 100,000. `message_params` gives `field` and `max`. |
 | 400 | `invalid_request` | `adminError.unknownPersona` | `persona` isn't one of the listed values. |
 | 400 | `invalid_request` | `adminError.companionSettingRefused` | A Home Companion key asks for `pass_through` or `announce_all_tools`. |
 | 400 | `invalid_request` | `adminError.notesString` | `notes` isn't a string or `null`. |
 | 400 | `invalid_request` | `adminError.notesTooLong` | `notes` is over `max` characters. |
 | 400 | `invalid_request` | `adminError.notesInvalidCharacters` | `notes` contains a refused character. |
-| 400 | `invalid_request` | `adminError.capabilityModeInvalid` | A `cap_*` value isn't `deny`, `allow` or `confirm`. `message_params` names the `capability`. |
+| 400 | `invalid_request` | `adminError.capabilityModeInvalid` | A `cap_*` value isn't `deny`, `allow`, or `confirm`. `message_params` names the `capability`. |
 | 400 | `invalid_request` | `adminError.capabilityConfirmUnsupported` | `confirm` on a capability that doesn't accept it. `message_params` names the `capability`. |
 | 400 | `invalid_request` | `adminError.capabilityAllowUnsupported` | `allow` on `cap_dashboard_resources`, which always needs approval. `message_params` names the `capability`. |
 | 404 | `not_found` | `adminError.accessKeyNotFound` | No active key has this ID. |
@@ -204,11 +204,11 @@ Renaming a key changes the display name of its sensors and device in Home Assist
 
 `DELETE /access-keys/{id}` revokes the key straight away and moves it to the archive. The response is `204` with no body. Phoenix also:
 
-- Removes the key from the Assist, Voice Agent, AI Task and Decisions bindings. An Assist pipeline, AI Task entity or Decisions entity that Phoenix created for the key goes too.
+- Removes the key from the Assist, Voice Agent, AI Task, and Decisions bindings. An Assist pipeline, AI Task entity, or Decisions entity that Phoenix created for the key goes too.
 - Cancels the key's queued approvals and releases its MESA leases.
 - Drops its rate-limit state and request counters, and removes its sensors.
 - Ends every OAuth sign-in of the key.
-- Fires the `phoenix_mcp_access_key_revoked` event with `access_key_id`, `access_key_name`, `revoked_by` and `timestamp`.
+- Fires the `phoenix_mcp_access_key_revoked` event with `access_key_id`, `access_key_name`, `revoked_by`, and `timestamp`.
 
 Related: [{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
 
@@ -216,9 +216,9 @@ Related: [{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
 
 `POST /access-keys/{id}/rotate` gives the key a new value and takes no body. The old value and every OAuth sign-in of the key stop working straight away. The key keeps its rate-limit state and counters.
 
-Rotating also cancels every approval apps queued with the key, with reason `access_key_rotated`, because whoever held the old value may have queued them. Requests from the Voice Agent, Assist and AI Task stay.
+Rotating also cancels every approval apps queued with the key, with reason `access_key_rotated`, because whoever held the old value might have queued them. Requests from the Voice Agent, Assist, and AI Task stay.
 
-The response is `200` with the record plus `access_key`, the new value. As on create, Phoenix shows it only once. Phoenix fires the `phoenix_mcp_access_key_rotated` event with `access_key_id`, `access_key_name`, `rotated_by` and `timestamp`.
+The response is `200` with the record plus `access_key`, the new value. As on create, Phoenix shows it only once. Phoenix fires the `phoenix_mcp_access_key_rotated` event with `access_key_id`, `access_key_name`, `rotated_by`, and `timestamp`.
 
 Related: [{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)
 
@@ -238,7 +238,7 @@ Related: [{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)
 
 ### Key tools {#key-tools}
 
-`GET /access-keys/{id}/tools` lists the tools an agent using this key is offered. It's the same list the key's MCP clients get from `tools/list`, built from the key's persona, capabilities and write scope. Agent Chat leaves out the date tool, since every turn already carries the time.
+`GET /access-keys/{id}/tools` lists the tools an agent using this key is offered. It's the same list the key's MCP clients get from `tools/list`, built from the key's persona, capabilities, and write scope. Agent Chat leaves out the date tool, since every turn already carries the time.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -246,16 +246,16 @@ Related: [{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)
 | `persona` | string | The key's persona. |
 | `count` | integer | How many tools are offered. |
 | `catalog_bytes` | integer | Size of the tool definitions as compact JSON. |
-| `loads_in_parts` | boolean | Whether Agent Chat, with {{label:settings.toolLoadingLabel}} set to {{label:settings.toolLoadingAuto}}, loads this catalog in parts. |
-| `tools` | array | One object per tool: `name`, `read_only` (whether the tool only reads) and `group` (the group Agent Chat loads it with when it loads in parts, or `null` for the tools it always declares). |
+| `loads_in_parts` | boolean | Whether {{label:agentchat.title}}, with {{label:settings.toolLoadingLabel}} set to {{label:settings.toolLoadingAuto}}, loads this catalog in parts. |
+| `tools` | array | One object per tool, with `name`, `read_only`, and `group`. `read_only` says whether the tool only reads. `group` is the group {{label:agentchat.title}} loads it with when it loads in parts, or `null` for the tools it always declares. |
 
-| Status | `error` | `key` | When |
+| Status | `error` | `message_key` | When |
 |---|---|---|---|
 | 404 | `not_found` | `adminError.accessKeyNotFound` | No active key has this ID. |
 
 ### Connection check {#key-connection}
 
-`GET /access-keys/{id}/connection` answers with `last_used_at` and `request_count`. Every request an agent sends with a valid key raises `request_count`, so poll this to see whether an app has connected.
+`GET /access-keys/{id}/connection` answers with `last_used_at` and `request_count`. Every request an agent sends with a valid key raises `request_count`. To see whether an app has connected, poll this endpoint.
 
 ### OAuth sign-in {#oauth}
 
@@ -275,34 +275,36 @@ POST   /api/phoenix-mcp/admin/oauth/requests/{request_id}/deny
 | Field | Type | Notes |
 |---|---|---|
 | `oauth_enabled` | boolean | |
-| `window_open_until` | string or null | When the sign-in window closes, or `null` when it's closed. |
+| `window_open_until` | string or null | When the sign-in period closes, or `null` when it's closed. |
 | `kill_switch` | boolean | |
 | `public_url` | string or null | The HTTPS address apps should use, or `null` when Home Assistant has none. |
-| `max_sign_ins` | integer | The most sign-ins one key may have (10). |
-| `sign_ins` | array | Each with `id`, `client_id`, `client_name`, `redirect_host`, `created_at`, `created_by` and `last_used_at`. |
+| `max_sign_ins` | integer | The most sign-ins one key can have (10). |
+| `sign_ins` | array | Each with `id`, `client_id`, `client_name`, `redirect_host`, `created_at`, `created_by`, and `last_used_at`. |
 
 `GET /oauth/summary` answers with `keys`, keyed by the ID of each key that allows OAuth sign-in. Each entry has `sign_ins`, the number of signed-in apps, and `window_open_until`. It also has `kill_switch`.
 
-`POST /access-keys/{id}/oauth/window` opens the sign-in window for 10 minutes and answers with the same status. It takes no body.
+`POST /access-keys/{id}/oauth/window` opens the sign-in period for 10 minutes and answers with the same status. It takes no body.
 
-`DELETE /access-keys/{id}/oauth/window` closes the window early and answers with the same status. It works while the kill switch is on.
+`DELETE /access-keys/{id}/oauth/window` closes the sign-in period early and answers with the same status. It works while the kill switch is on.
 
 `DELETE /access-keys/{id}/oauth/sign-ins/{sign_in_id}` ends one sign-in and answers `204`. It also cancels the approvals that sign-in queued, with reason `oauth_sign_in_removed`. It works while the kill switch is on.
 
-`GET /oauth/requests/{request_id}` answers with a waiting request. Its fields are `client_id`, `client_host`, `client_name`, `verified`, `problem` and `redirect_host`. It also has `loopback_only`, `created_at`, `expires_at` and `keys`. Opening it fetches the app's metadata document once. `keys` lists the keys a request may be approved for now.
+`GET /oauth/requests/{request_id}` answers with a waiting request. Its fields are `client_id`, `client_host`, `client_name`, `verified`, `problem`, and `redirect_host`.
 
-`POST /oauth/requests/{request_id}/approve` takes `access_key_id` and answers with `redirect_to`, the app's address with `code`, `state` and `iss`. Send the browser there. `POST .../deny` answers with `redirect_to`, or `null` when the app wasn't verified.
+It also has `loopback_only`, `created_at`, `expires_at`, and `keys`. Opening it fetches the app's metadata document once. `keys` lists the keys you can approve the request for now.
+
+`POST /oauth/requests/{request_id}/approve` takes `access_key_id` and answers with `redirect_to`, the app's address with `code`, `state`, and `iss`. Send the browser there. `POST .../deny` answers with `redirect_to`, or `null` when the app wasn't verified.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
 | 503 | `service_unavailable` | `adminError.oauthKillSwitch` | The kill switch is on. Removing a sign-in still works. |
-| 404 | `not_found` | `adminError.oauthRequestExpired` | The request ended, was answered or never existed. |
-| 404 | `oauth_busy` | `adminError.oauthBusy` | `GET` only: the app's address already had too many requests waiting, so this one was never parked. The app was told nothing. |
+| 404 | `not_found` | `adminError.oauthRequestExpired` | The request ended, was answered, or never existed. |
+| 404 | `oauth_busy` | `adminError.oauthBusy` | `GET` only: the app's address already had too many requests waiting, so Phoenix didn't add this one. Phoenix told the app nothing. |
 | 400 | `invalid_request` | `adminError.oauthClientNotVerified` | Approving a request whose app wasn't verified. |
-| 400 | `invalid_request` | `adminError.oauthKeyNotEligible` | The key is missing, has OAuth off, or has no open window. |
+| 400 | `invalid_request` | `adminError.oauthKeyNotEligible` | The key is missing, has OAuth off, or has no open sign-in period. |
 | 409 | `conflict` | `adminError.oauthSignInLimit` | The key already has `max` sign-ins. |
-| 400 | `invalid_request` | `adminError.oauthNotEnabled` | Opening a window on a key with OAuth off. |
-| 400 | `invalid_request` | `adminError.oauthNoHttps` | Opening a window while Home Assistant has no HTTPS address. |
+| 400 | `invalid_request` | `adminError.oauthNotEnabled` | Opening a sign-in period on a key with OAuth off. |
+| 400 | `invalid_request` | `adminError.oauthNoHttps` | Opening a sign-in period while Home Assistant has no HTTPS address. |
 | 404 | `not_found` | `adminError.oauthSignInNotFound` | No sign-in of this key has this ID. |
 | 503 | `service_unavailable` | `adminError.oauthSaveFailed` | The sign-in could not be removed. |
 
@@ -310,7 +312,7 @@ Related: [OAuth sign-in for apps](guide:topic.connecting#oauth), [Agent endpoint
 
 ### Key audit log {#key-audit}
 
-`GET /access-keys/{id}/audit` answers with a bare array of the key's audit rows, newest first. Changes administrators make to the key are logged under the administrator, so they don't appear here.
+`GET /access-keys/{id}/audit` answers with a bare array of the key's audit rows, newest first. Phoenix logs an administrator's changes to the key under that administrator, so this endpoint doesn't return them.
 
 | Query | Notes |
 |---|---|
@@ -319,7 +321,7 @@ Related: [OAuth sign-in for apps](guide:topic.connecting#oauth), [Agent endpoint
 | `outcome` | One of `allowed`, `denied`, `not_found`, `rate_limited`, `not_implemented`, `invalid_request`, `pending_approval`, `cancelled`, `unknown`. |
 | `ip` | Matches rows whose client IP contains this text. |
 
-Each row has `request_id`, `timestamp`, `access_key_id`, `access_key_name`, `method`, `resource`, `outcome`, `client_ip` and `pass_through`. When set, a row also has `payload`, `mesa_advisory`, `preset`, `stale_tools_advisory`, `ha_user_id` and `originating_access_key_id`.
+Each row has `request_id`, `timestamp`, `access_key_id`, `access_key_name`, `method`, `resource`, `outcome`, `client_ip`, and `pass_through`. When set, a row also has `payload`, `mesa_advisory`, `preset`, `stale_tools_advisory`, `ha_user_id`, and `originating_access_key_id`.
 
 A row written for a request an OAuth sign-in made also has `oauth_app`, with that sign-in's `name` and `host`.
 
@@ -334,7 +336,7 @@ A row written for a request one of Phoenix's AI models made also has `provider` 
 
 ### Archived keys {#key-archived}
 
-`GET /access-keys/archived` answers with a bare array of revoked and expired keys. Each entry has `id`, `name`, `created_at`, `created_by`, `revoked_at`, `revoked`, `expires_at` and `last_used_at`. An expired key shows `revoked: false`.
+`GET /access-keys/archived` answers with a bare array of revoked and expired keys. Each entry has `id`, `name`, `created_at`, `created_by`, `revoked_at`, `revoked`, `expires_at`, and `last_used_at`. An expired key shows `revoked: false`.
 
 `DELETE /access-keys/archived/{id}` deletes an archived record for good. The response is `204` with no body.
 
@@ -355,9 +357,11 @@ A preset saves a key's settings so you can switch back to them later. `{pid}` is
 
 Presets are off by default. Turn on the `access_key_presets_enabled` setting first. Until then, every preset endpoint answers `403`, before it looks up the key.
 
-A preset holds the key's settings: `caps` (all 32 capabilities), `persona`, `permissions`, `pass_through`, `use_assist_exposure` and `announce_all_tools`. It also holds `confirm_inline_wait_seconds`, `rate_limit_requests` and `rate_limit_burst`, plus its own `id`, `name` and `created_at`. The key's name and notes aren't part of it.
+A preset holds the key's settings: `caps` (all 32 capabilities), `persona`, `permissions`, `pass_through`, `use_assist_exposure`, and `announce_all_tools`.
 
-Each key holds up to 8 presets. A preset name is 1 to 40 characters after trimming, without `<`, `>`, `"`, `'`, `&` or `;`. Names must differ within a key, ignoring case.
+It also holds `confirm_inline_wait_seconds`, `rate_limit_requests`, and `rate_limit_burst`, plus its own `id`, `name`, and `created_at`. The key's name and notes aren't part of it.
+
+Each key holds up to 8 presets. A preset name is 1 to 40 characters after trimming, without `<`, `>`, `"`, `'`, `&`, or `;`. Names must differ within a key, ignoring case.
 
 Every preset endpoint can also answer:
 
@@ -372,7 +376,7 @@ Every preset endpoint can also answer:
 
 | Field | Type | Notes |
 |---|---|---|
-| `name` | string | Required. The preset name rule above. |
+| `name` | string | Required. Follows the preset name rule in [Presets](guide:#presets). |
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -411,7 +415,7 @@ Every preset endpoint can also answer:
 
 Before switching to a different preset, Phoenix saves the key's current settings into the active one. Applying the active preset again puts the key back to that preset's saved state.
 
-Applying sets the persona, pass-through, Assist exposure, tool announcement, inline wait, rate limits, capabilities and permission tree. It also restarts the key's rate-limit count.
+Applying sets the persona, pass-through, Assist exposure, tool announcement, inline wait, rate limits, capabilities, and permission tree. It also restarts the key's rate-limit count.
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -430,7 +434,7 @@ GET    /api/phoenix-mcp/admin/access-keys/{id}/permissions/integration-options
 POST   /api/phoenix-mcp/admin/access-keys/{id}/permissions/bulk-select
 ```
 
-These read and set the permission tree: which domains, devices and entities a key may read and control. Each node has a `state` and an optional `hint` for the agent.
+These read and set the permission tree: which domains, devices, and entities a key can read and control. Each node has a `state` and an optional `hint` for the agent.
 
 ```json
 {
@@ -440,7 +444,7 @@ These read and set the permission tree: which domains, devices and entities a ke
 }
 ```
 
-Node IDs follow [IDs in paths](guide:topic.adminApi#ids): domains under `domains`, device IDs under `devices` and entity IDs under `entities`. The states are in [Permission states](guide:topic.adminApi#states).
+Node IDs follow [IDs in paths](guide:topic.adminApi#ids): domains under `domains`, device IDs under `devices`, and entity IDs under `entities`. The states are in [Permission states](guide:topic.adminApi#states).
 
 Related: [How a Permission Is Decided](guide:topic.permissionResolution), [{{label:accessKeys.permissionsTree}}](guide:window.permissions)
 
@@ -470,7 +474,7 @@ Related: [{{label:workspace.clearAllPermissions}}](guide:window.permissions#clea
 | 400 | `invalid_request` | `adminError.nodeIdInvalidChars` | A node ID contains a refused character. |
 | 400 | `invalid_request` | `adminError.badDomain` | A domain ID isn't a valid domain. |
 | 400 | `invalid_request` | `adminError.badEntityId` | An entity ID isn't a valid entity ID. |
-| 400 | `invalid_request` | `adminError.permissionStateInvalidDomain`, `adminError.permissionStateInvalidDevice` or `adminError.permissionStateInvalidEntity` | A node's `state` isn't one of the four. The key names the node's type; `message_params` gives `state`, `node` and `states`. |
+| 400 | `invalid_request` | `adminError.permissionStateInvalidDomain`, `adminError.permissionStateInvalidDevice`, or `adminError.permissionStateInvalidEntity` | A node's `state` isn't one of the four. The `message_key` names the node's type. `message_params` gives `state`, `node`, and `states`. |
 | 400 | `invalid_request` | `adminError.permissionHintString` | A node's `hint` isn't a string or `null`. |
 | 400 | `invalid_request` | `adminError.permissionHintTooLong` | A node's `hint` is over `max` characters. |
 | 400 | `invalid_request` | `adminError.permissionTreeInvalid` | The tree can't be saved as sent. |
@@ -478,12 +482,12 @@ Related: [{{label:workspace.clearAllPermissions}}](guide:window.permissions#clea
 
 ### Set one node {#permissions-node}
 
-`PATCH /access-keys/{id}/permissions/domains/{node}`, `.../devices/{node}` and `.../entities/{node}` set one node. `{node}` is the domain, device ID or entity ID. The response is `200` with the whole tree.
+`PATCH /access-keys/{id}/permissions/domains/{node}`, `.../devices/{node}`, and `.../entities/{node}` set one node. `{node}` is the domain, device ID, or entity ID. The response is `200` with the whole tree.
 
 | Field | Type | Notes |
 |---|---|---|
 | `state` | string | Required. One of the four states. |
-| `hint` | string or null | Optional. At most 200 characters. Leave it out to keep the node's hint; `null` or `""` clears it. |
+| `hint` | string or null | Optional. At most 200 characters. Leave it out to keep the node's hint. `null` or `""` clears it. |
 
 Setting `GREY` on a node without a hint removes the node.
 
@@ -500,7 +504,7 @@ Setting `GREY` on a node without a hint removes the node.
 
 ### Integration options {#integration-options}
 
-`GET /access-keys/{id}/permissions/integration-options` lists the integrations you can use with [bulk select](guide:#bulk-select). The response is `{"integrations": [...]}`, sorted by title, domain and entry ID.
+`GET /access-keys/{id}/permissions/integration-options` lists the integrations you can use with [bulk select](guide:#bulk-select). The response is `{"integrations": [...]}`, sorted by title, domain, and entry ID.
 
 There's one row per config entry that owns at least one device or live entity without a device:
 
@@ -519,11 +523,11 @@ There's one row per config entry that owns at least one device or live entity wi
 
 ### Bulk select {#bulk-select}
 
-`POST /access-keys/{id}/permissions/bulk-select` sets one state on everything in an area, label or integration.
+`POST /access-keys/{id}/permissions/bulk-select` sets one state on everything in an area, label, or integration.
 
 | Field | Type | Notes |
 |---|---|---|
-| `selector_type` | string | `area`, `label` or `integration`. |
+| `selector_type` | string | `area`, `label`, or `integration`. |
 | `selector_id` | string | Required. The area ID, label ID or config entry ID. |
 | `state` | string | One of the four states. |
 
@@ -582,7 +586,7 @@ Related: [Entity hints](guide:window.permissions#hints)
 
 | Field | Type | Notes |
 |---|---|---|
-| `hint` | string or null | Trimmed, at most 200 characters. `null`, `""` or no `hint` field clears it. |
+| `hint` | string or null | Trimmed, at most 200 characters. `null`, `""`, or no `hint` field clears it. |
 
 | Status | `error` | `message_key` | When |
 |---|---|---|---|
@@ -598,11 +602,11 @@ GET    /api/phoenix-mcp/admin/access-keys/{id}/resolve/{entity_id}
 GET    /api/phoenix-mcp/admin/access-keys/{id}/scope
 ```
 
-These show your home as the permissions editor sees it, and what one key can actually reach.
+These show your home as the {{label:accessKeys.permissionsTree}} sees it, and what one key can reach.
 
 ### Entity tree {#entity-tree}
 
-`GET /entities` answers with every entity, grouped by domain and device. It isn't paged. Phoenix keeps the tree cached; add `force_reload` with any non-empty value to rebuild it.
+`GET /entities` answers with every entity, grouped by domain and device. It isn't paged. Phoenix caches the tree. To rebuild it, add `force_reload` with any non-empty value.
 
 ```json
 {
@@ -624,10 +628,10 @@ These show your home as the permissions editor sees it, and what one key can act
 }
 ```
 
-- Disabled entities, the `phoenix_mcp` domain and Phoenix's own sensors are left out.
+- Disabled entities, the `phoenix_mcp` domain, and Phoenix's own sensors are left out.
 - An entity with a state but no registry entry appears in `deviceless_entities`.
 - A child device's main device appears in every domain where the child does.
-- `person`, `tag` and `zone` are always present, even when empty.
+- `person`, `tag`, and `zone` are always present, even when empty.
 - An entity's `labels` include its device's labels.
 
 ### Explain one permission {#resolve}
@@ -638,7 +642,7 @@ These show your home as the permissions editor sees it, and what one key can act
 |---|---|---|
 | `entity_id` | string | |
 | `resolution_path` | array | `{level, state}` steps, outermost first. |
-| `effective` | string | `WRITE`, `READ`, `DENY`, `NO_ACCESS` or `NOT_FOUND`. |
+| `effective` | string | `WRITE`, `READ`, `DENY`, `NO_ACCESS`, or `NOT_FOUND`. |
 | `effective_hint` | string or null | The hint agents see, in the order given under [Entity hints](guide:#entity-hints). |
 
 The `level` values run `global` (always `GREY`), `domain:<domain>`, then `device:<name>` for each device above the entity, main device first, then `entity:<entity_id>`. Device levels show the device's name, not its ID.

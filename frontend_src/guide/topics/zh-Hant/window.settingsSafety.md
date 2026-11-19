@@ -25,9 +25,9 @@
 
 ## {{label:settings.dataCard}} {#data-management}
 
-刪除 Phoenix 的資料。選擇要刪除的內容，選擇 **{{label:settings.wipeSubmit}}**，然後輸入 WIPE 確認。之後頁面會重新載入。
+刪除 Phoenix 的資料。選擇要刪除的資料，然後選擇 **{{label:settings.wipeSubmit}}**。接著輸入 `WIPE` 確認。之後頁面會重新載入。
 
-清除無法復原。有已核准請求仍在執行時，清除會被拒絕。
+清除無法復原。如果清除包含 **{{label:settings.wipeCoreLabel}}**，有已核准請求仍在執行時，Phoenix 會拒絕它。
 
 ### {{label:settings.wipeCoreLabel}} {#wipe-core}
 
@@ -39,8 +39,8 @@
 
 ### {{label:settings.wipeProvidersLabel}} {#wipe-providers}
 
-刪除所有 AI 和決策提供者帳戶及其金鑰。語音智慧體、AI 任務和命令路由會失去帳戶，Phoenix 會移除它建立的語音助理。
+刪除所有 AI 和決策提供者帳戶及其金鑰。語音智慧體、AI 任務和命令路由會失去帳戶。Phoenix 也會移除它建立的語音助理。
 
 ### {{label:settings.wipeMesaLabel}} {#wipe-mesa}
 
-刪除所有層級的每條 MESA 策略，以及你忽略的建議。預設為關閉，因此除非你選擇此項，清除會保留你的裝置規則。
+刪除所有層級的每條 MESA 策略，以及你忽略的建議。預設為關閉。

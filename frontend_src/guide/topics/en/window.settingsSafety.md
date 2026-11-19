@@ -16,7 +16,7 @@ Related: [What the kill switch stops](guide:topic.killSwitch)
 What MESA, Phoenix's device safety layer, does when an action breaks a profile's rules. Default: {{label:settings.mesaModeAdvisory}}.
 
 - {{label:settings.mesaModeOff}}: MESA is skipped, and every action is allowed.
-- {{label:settings.mesaModeAdvisory}}: most rules only warn. Privacy rules, read-only devices and profiles set to enforce still block.
+- {{label:settings.mesaModeAdvisory}}: most rules only warn. Privacy rules, read-only devices, and profiles set to enforce still block.
 - {{label:settings.mesaModeEnforced}}: forbidden actions are blocked, and actions that need confirmation wait for your approval.
 
 Devices with no MESA profile at any level follow a built-in baseline: lights are allowed, locks and alarm panels are forbidden, and everything else needs approval. Imported deployment defaults replace that baseline. Add profiles before you rely on {{label:settings.mesaModeEnforced}}.
@@ -25,22 +25,22 @@ Related: [MESA](guide:workspace.mesa)
 
 ## {{label:settings.dataCard}} {#data-management}
 
-Deletes Phoenix's data. Choose what to delete, select **{{label:settings.wipeSubmit}}**, then type WIPE to confirm. The page reloads afterwards.
+Deletes Phoenix's data. Select the data to delete, and select **{{label:settings.wipeSubmit}}**. Then enter `WIPE` to confirm. The page reloads afterwards.
 
-You can't undo a wipe. It's refused while an approved request is still running.
+You can't undo a wipe. If the wipe includes **{{label:settings.wipeCoreLabel}}**, Phoenix refuses it while an approved request is still running.
 
 ### {{label:settings.wipeCoreLabel}} {#wipe-core}
 
-Deletes every access key, pending approval and entity hint, and resets all settings to their defaults. This also turns off the kill switch.
+Deletes every access key, pending approval, and entity hint, and resets all settings to their defaults. This also turns off the kill switch.
 
-It also deletes the audit log, Conversation Log, change history, routing statistics and rate-limit counts, and removes the voice assistant Phoenix created, unless it's Home Assistant's only assistant. Agent Chat conversations go too, in this browser only.
+It also deletes the audit log, Conversation Log, change history, routing statistics, and rate-limit counts. It removes the voice assistant Phoenix created, unless it's Home Assistant's only assistant. Agent Chat conversations go too, in this browser only.
 
-Safety copies, the calendar change journal and dashboard resource records stay. To remove those, see [Removing Phoenix completely](guide:topic.security#removing).
+Safety copies, the calendar change journal, and dashboard resource records stay. To remove those, see [Removing Phoenix completely](guide:topic.security#removing).
 
 ### {{label:settings.wipeProvidersLabel}} {#wipe-providers}
 
-Deletes every AI and decision provider account, with their keys. The Voice Agent, AI Task and command routing lose their accounts, and Phoenix removes the voice assistant it created.
+Deletes every AI and decision provider account, with their keys. The Voice Agent, AI Task, and command routing lose their accounts. Phoenix also removes the voice assistant it created.
 
 ### {{label:settings.wipeMesaLabel}} {#wipe-mesa}
 
-Deletes every MESA profile, at every level, and the suggestions you dismissed. Off by default, so a wipe keeps your device rules unless you choose this.
+Deletes every MESA profile, at every level, and the suggestions you dismissed. Off by default.

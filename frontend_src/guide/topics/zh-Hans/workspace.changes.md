@@ -7,4 +7,4 @@
 - [{{label:workspace.comparison}}](guide:window.comparison)：所选更改前后该项目的状态，以及 **{{label:changes.restore}}**。
 - [{{label:workspace.itemHistory}}](guide:window.itemHistory)：同一项目的其他更改。
 
-相关：[变更记录的内容](guide:topic.configurationHistory)、[审批](guide:workspace.approvals)
+相关：[变更记录的内容](guide:topic.configurationHistory)、[{{label:shell.tabApprovals}}](guide:workspace.approvals)

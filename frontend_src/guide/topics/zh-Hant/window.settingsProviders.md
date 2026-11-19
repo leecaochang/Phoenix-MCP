@@ -31,7 +31,7 @@ Agent Chat、語音智慧體和 AI 任務各使用其中一個帳戶，並搭配
 
 ### {{label:settings.accountCheckOptions}} {#check-options}
 
-透過傳送幾個非常簡短的請求，查明模型支援哪些努力層級以及是否能讀取影像。
+透過傳送幾個非常簡短的請求，查明模型支援哪些思考層級以及是否能讀取影像。
 
 這會消耗少量額度，因此 Phoenix 會先詢問。將指標懸停在按鈕上可查看上次執行的時間。
 
@@ -55,7 +55,7 @@ Microsoft Azure、Infron、NVIDIA NIM、OpenCode 和 Tencent Cloud TokenHub 的�
 
 **{{label:settings.toolLoadingAlways}}** 無論工具多少都分批載入。**{{label:settings.toolLoadingNever}}** 一律傳送全部工具，但只接受 128 個工具的提供者除外。
 
-工具載入不會給模型更多權限，Phoenix 照常檢查每次呼叫。Home Companion 金鑰不受 **{{label:settings.toolLoadingLabel}}** 設定影響。
+分批載入工具不會給模型更多權限，Phoenix 照常檢查每次呼叫。Home Companion 金鑰不受{{label:settings.toolLoadingLabel}}設定影響。
 
 ## 新增帳戶 {#provider-add}
 
@@ -85,7 +85,7 @@ Microsoft Azure、Infron、NVIDIA NIM、OpenCode 和 Tencent Cloud TokenHub 的�
 
 選擇這些方案時 Phoenix 會發出警告。語音、AI Task 和 Agent Chat 請使用提供商的按量付費 API。
 
-Groq、Mistral AI 和 Z.ai 每個請求最多接受 128 個工具。Phoenix 對 Gemini、Kimi、OpenRouter、Infron、Cloudflare Workers AI、Microsoft Azure 和本機 OpenAI 相容伺服器也採用同樣的上限。存取金鑰的工具更多時，無論[工具載入](guide:#tool-loading)如何設定，Phoenix 都會為它們分批載入工具。
+Groq、Mistral AI 和 Z.ai 每個請求最多接受 128 個工具。Phoenix 對 Gemini、Kimi、OpenRouter、Infron、Cloudflare Workers AI、Microsoft Azure 和本機 OpenAI 相容伺服器也採用同樣的上限。存取金鑰的工具更多時，無論[{{label:settings.toolLoadingLabel}}](guide:#tool-loading)如何設定，Phoenix 都會為它們分批載入工具。
 
 Groq 的免費方案限制每個模型每分鐘接受的 Token 數，而單一 Phoenix 請求就超過了這個上限。Groq 會拒絕該請求，等待也無濟於事。請使用 Groq 的付費方案或其他供應商。
 
@@ -93,11 +93,11 @@ Groq 的免費方案限制每個模型每分鐘接受的 Token 數，而單一 P
 
 ## {{label:settings.catalogChecks}} {#catalog-checks}
 
-Phoenix 會不時重新讀取每個帳戶的模型清單。這能讓清單保持最新，使 **{{label:settings.agentcliModelAuto}}** 可以切換到更新的模型。
+Phoenix 會按排程重新讀取每個帳戶的模型清單。這能讓清單保持最新，使 **{{label:settings.agentcliModelAuto}}** 可以切換到更新的模型。
 
 ### {{label:settings.providerChecksLabel}} {#provider-checks}
 
-每小時一次，Phoenix 會重新讀取早於以下期間的模型清單。這不消耗 token。預設為開啟。
+每小時一次，Phoenix 會重新讀取早於 **{{label:settings.providerChecksHoursLabel}}** 所設期間的模型清單。這不消耗 token。預設為開啟。
 
 關閉時，Phoenix 仍會在需要時讀取清單：新帳戶、提供者回報缺少模型，以及你切換到 **{{label:settings.agentcliModelAuto}}** 時。
 
@@ -115,7 +115,7 @@ Phoenix 會按排程重新檢查提供者的模型清單：6 到 720 小時（�
 
 - Cloudflare / Clef：Workers AI 上的 Clef 或 Clef Flash，使用你的 Cloudflare 帳戶 ID 和 API 權杖。
 - Google / Gemini Decision：Google 的 Gemini Decision 模型，使用 Gemini API 金鑰。
-- 本機 / System One：你自己伺服器上的決策模型，例如 Ollama 或 llama.cpp。使用 Ollama 時，請設定 `OLLAMA_KEEP_ALIVE` 讓模型保持載入，並把 `num_ctx`（d3 還有 `num_batch`）調到 16384。
+- 本機 / System One：你自己伺服器上的決策模型，例如 Ollama 或 llama.cpp。使用 Ollama 時，請設定 `OLLAMA_KEEP_ALIVE` 讓模型保持載入，並把 `num_ctx` 調到 16384，d3 模型的 `num_batch` 也要調到這個值。
 - Microsoft / Decision：Azure AI Foundry 中的 Microsoft-Decision-1，使用資源的端點和金鑰。
 - OpenAI / Decisions：OpenAI 的 gpt-6-luna 決策模型，使用 OpenAI API 金鑰。
 - OpenCode / System One：JEV、Gemini Decision 或 GPT Luna Decision，使用 OpenCode Console API 金鑰。
@@ -137,9 +137,9 @@ Phoenix 會按排程重新檢查提供者的模型清單：6 到 720 小時（�
 
 決策帳戶執行命令前必須達到的確定程度，範圍 0.70 到 1.00（預設 0.90）。選擇帳戶即可顯示此設定。每個帳戶各自保存。
 
-閾值越低，決策提供者自己處理的命令越多，轉給你的 AI 提供者的命令越少。這可能會讓更多錯誤通過，因為每個模型各不相同。
+閾值越低，決策提供者自己處理的命令越多，轉給你的 AI 提供者的命令越少。這也可能讓更多錯誤通過，具體取決於模型。
 
-後續訊息會先對照對話進行檢查：這則訊息是否是真正的請求、之前的指示是否排除了它，以及「它」指的是什麼。無論閾值是多少，這項檢查始終至少需要 0.90，因為更低的閾值曾讓對話中已排除的命令通過。
+決策提供者會先對照對話檢查後續訊息：這則訊息是否是真正的請求、之前的指示是否排除了它，以及「它」指的是什麼。無論閾值是多少，這項檢查始終至少需要 0.90。
 
 決策提供者選擇裝置和操作時，仍然使用該閾值。
 

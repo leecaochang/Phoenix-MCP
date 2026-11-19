@@ -5,7 +5,7 @@ Phoenix MCP 让 AI 智能体安全地在你的 Home Assistant 中工作。每个
 
 ## 三种使用方式 {#ways}
 
-- **Agent Chat**：直接在 Home Assistant 内与 AI 模型聊天。你添加 AI 提供商的账户，Phoenix 替你运行智能体。
+- **{{label:agentchat.title}}**：直接在 Home Assistant 内与 AI 模型聊天。你添加 AI 提供商的账户，Phoenix 替你运行智能体。
 - **外部应用**：用访问密钥连接 MCP 客户端，例如桌面助手或编码工具。应用自己的模型负责思考。
 - **Home Assistant 自带的助手**：Phoenix 可以作为语音智能体回答、运行 AI 任务操作，或把自己的工具借给其他助手。
 
@@ -15,10 +15,10 @@ Phoenix MCP 让 AI 智能体安全地在你的 Home Assistant 中工作。每个
 
 ## 这些检查 {#checks}
 
-1. **能力**：密钥整体上可以做哪类事情，例如控制设备或编辑自动化。每项能力可设为拒绝访问、允许或确认。
+1. **能力**：密钥整体上可以做哪类事情，例如控制设备或编辑自动化。每项能力可设为{{label:caps.modeDeny}}、{{label:caps.modeAllow}}或{{label:caps.modeConfirm}}。
 2. **权限**：密钥可以查看和更改哪些区域、设备和实体。
 3. **MESA**：对每个设备要多谨慎：让智能体操作、先询问你，还是不让它碰。默认情况下它大多只发出警告。[{{label:settings.mesaModeEnforced}}](guide:window.settingsSafety#mesa-mode) 会让规则生效。它[并未涵盖所有操作](guide:topic.mesaRules#coverage)。
-4. **审批**：设为确认的操作会等待你批准。
+4. **审批**：设为{{label:caps.modeConfirm}}的操作会等待你批准。
 
 相关：[智能体能做什么](guide:topic.tools)、[安全](guide:topic.security)、[运行 Phoenix](guide:topic.running)、[管理 API](guide:topic.adminApi)、[{{label:accessKeys.cardCapabilities}}](guide:window.capabilities)、[权限如何判定](guide:topic.permissionResolution)、[MESA 如何决定](guide:topic.mesaRules)、[审批如何运作](guide:topic.approvalLifecycle)
 
@@ -30,6 +30,6 @@ Home Assistant 长期访问令牌会以你的用户身份在 Home Assistant 的�
 
 ## 从哪里开始 {#start}
 
-在{{label:shell.tabAccessKeys}}工作区中，选择 **{{label:accessKeys.setUpAgent}}**。设置流程会带你创建一个密钥、设置其权限，并选择 Agent Chat 或外部应用，最后让你测试连接。
+在{{label:shell.tabAccessKeys}}工作区中，选择 **{{label:accessKeys.setUpAgent}}**。设置流程会带你创建一个密钥、设置其权限，并选择 {{label:agentchat.title}} 或外部应用，最后让你测试连接。
 
 相关：[智能体如何连接](guide:wizard.choose)、[安装 Phoenix MCP](guide:topic.install)

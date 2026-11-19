@@ -3,7 +3,7 @@
 ---
 每個智慧體都會用自己的存取金鑰連線到 Phoenix。金鑰決定智慧體可以做什麼：可以使用哪些工具，以及可以存取哪些裝置和實體。
 
-- [{{label:shell.tabAccessKeys}}](guide:window.accessKeys)：你的金鑰。選擇一個即可顯示下方的視窗。
+- [{{label:shell.tabAccessKeys}}](guide:window.accessKeys)：你的金鑰。選擇一個即可顯示此工作區中的其他視窗。
 - [{{label:accessKeys.cardPersona}}](guide:window.persona) 和 [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities)：金鑰可以使用哪些工具，哪些需要等待你的核准。
 - [{{label:accessKeys.permissionsTree}}](guide:window.permissions)：金鑰可以讀取或控制哪些裝置和實體。
 - [{{label:accessKeys.permissionSummary}}](guide:window.permissionSummary)：權限樹中設定的規則，彙整成一張表。

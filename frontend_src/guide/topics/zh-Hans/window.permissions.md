@@ -16,9 +16,9 @@
 
 使用键盘时，每行的四个按钮只占一个 Tab 位置。用方向键在 N、R、W 和 D 之间移动，然后按 Enter 或空格设置当前所在的按钮。仅移动不会更改任何内容。
 
-每个名称后的文字显示结果：读写、只读、拒绝访问、无访问权限或未找到。
+每个名称后的文字显示结果：{{label:perms.stateWrite}}、{{label:perms.stateRead}}、{{label:perms.stateDeny}}、{{label:perms.stateNoAccess}}或{{label:perms.stateNotFound}}。
 
-无论你如何设置，{{label:personas.home_companion.label}} 密钥都只能访问家用设备。其他类型的设备显示无访问权限；传感器、天气、日历和太阳即使设为 W 也显示只读。参见[{{label:personas.home_companion.label}}](guide:window.persona#home-companion)。
+无论你如何设置，{{label:personas.home_companion.label}} 密钥都只能访问家用设备。其他类型的设备显示{{label:perms.stateNoAccess}}；传感器、天气、日历和太阳即使设为 W 也显示{{label:perms.stateRead}}。参见[{{label:personas.home_companion.label}}](guide:window.persona#home-companion)。
 
 相关：[权限如何判定](guide:topic.permissionResolution)
 
@@ -26,7 +26,7 @@
 
 域位于顶部，其设备和实体在下方。没有设备的实体归在 **{{label:perms.deviceless}}** 下，由部件组成的设备会把它们嵌套显示在下面。
 
-对域或设备的授权也会覆盖之后添加给它的实体；**{{label:perms.dynamicBadge}}** 徽标表示这一点。“!”标记的是 W 会延伸得比看起来更远的域，例如 homeassistant、backup、automation、script 和 scene。
+对域或设备的授权也会覆盖之后添加给它的实体。{{label:perms.dynamicBadge}}徽标标记这类授权。“!”标记的是 W 会延伸得比看起来更远的域，例如 homeassistant、backup、automation、script 和 scene。
 
 标记为“{{label:perms.missingBadge}}”的行，是对不在 Home Assistant 已启用实体列表中的实体的授权。末尾的“{{label:perms.unmatchedDevicesTitle}}”列出对已不存在设备的授权；把它们设为 N 即可移除。
 
@@ -38,13 +38,13 @@
 
 ## {{label:selectBy.menu}} {#select-by}
 
-把权限树缩小到一个区域、标签或集成。它只改变你看到的内容；绝不会授予任何权限。选择重置可再次显示所有内容。
+把权限树缩小到一个区域、标签或集成。它只改变你看到的内容；绝不会授予任何权限。选择 **{{label:selectBy.reset}}** 可再次显示所有内容。
 
 ## 实体提示 {#hints}
 
 提示会告诉智能体某个实体的情况，例如它是哪盏灯。**{{label:perms.addHint}}** 会出现在设为 R、W 或 D 的实体上。
 
-选择提示是仅用于此密钥还是用于所有密钥，输入最多 200 个字符，然后选择**保存**。保存空文本会移除提示。密钥自己的提示优先于适用于所有密钥的提示。
+选择提示是仅用于此密钥还是用于所有密钥，输入最多 200 个字符，然后选择 **{{label:common.save}}**。保存空文本会移除提示。密钥自己的提示优先于适用于所有密钥的提示。
 
 提示只是建议，绝不授予访问权限。智能体及其模型提供商会收到它们，因此绝不要在提示中填写机密。把实体设回 N 会删除此密钥自己的提示。
 

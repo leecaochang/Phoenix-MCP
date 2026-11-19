@@ -3,7 +3,7 @@
 ---
 每个智能体都用自己的访问密钥连接到 Phoenix。密钥决定智能体可以做什么：可以使用哪些工具，以及可以访问哪些设备和实体。
 
-- [{{label:shell.tabAccessKeys}}](guide:window.accessKeys)：你的密钥。选择一个即可显示下面的窗口。
+- [{{label:shell.tabAccessKeys}}](guide:window.accessKeys)：你的密钥。选择一个即可显示此工作区中的其他窗口。
 - [{{label:accessKeys.cardPersona}}](guide:window.persona) 和 [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities)：密钥可以使用哪些工具，哪些需要等待你的审批。
 - [{{label:accessKeys.permissionsTree}}](guide:window.permissions)：密钥可以读取或控制哪些设备和实体。
 - [{{label:accessKeys.permissionSummary}}](guide:window.permissionSummary)：权限树中设置的规则，汇总在一张表里。

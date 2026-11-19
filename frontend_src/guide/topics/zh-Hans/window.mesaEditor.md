@@ -16,22 +16,22 @@
 智能体可以如何更改策略覆盖的内容：
 
 - **{{label:mesa.modeAutonomous}}**：智能体可以自由操作。
-- **{{label:mesa.modeConfirm}}**：MESA 强制执行时，操作会等待你的审批。
-- **{{label:mesa.modeReadOnly}}**：除关闭外的任何 MESA 模式下，智能体都不能更改它。
+- **{{label:mesa.modeConfirm}}**：用它亲自审批每个操作。只有在 MESA 强制执行时，操作才会等待你的审批。
+- **{{label:mesa.modeReadOnly}}**：除 {{label:settings.mesaModeOff}} 外的任何 MESA 模式下，智能体都不能更改它。
 - **{{label:mesa.modeProhibited}}**：MESA 强制执行时，智能体不能对它操作。在 {{label:settings.mesaModeAdvisory}} 模式下，它只会警告智能体。
 - **{{label:mesa.unset}}**：策略不做决定。由其他策略或内置基线决定，列表会显示 **{{label:mesa.modeInherited}}**。
 
 新建的实体策略从实体当前的模式开始。其他新策略从 {{label:mesa.unset}} 开始。
 
-设置模式会替换内置基线，即使模式更宽松。确认的锁域策略会让每把锁变为确认，而不是禁止。
+设置模式会替换内置基线，即使模式更宽松。例如，设为 {{label:mesa.modeConfirm}} 的锁域策略会让每把锁变为 {{label:mesa.modeConfirm}}，而不是 {{label:mesa.modeProhibited}}。
 
 相关：[策略如何组合](guide:topic.mesaRules#combining)、[内置基线](guide:topic.mesaRules#baseline)
 
 ## {{label:mesa.fieldEnforcement}} {#enforcement}
 
-当设置中的 **{{label:settings.mesaModeLabel}}** 为 {{label:settings.mesaModeAdvisory}} 时，**{{label:mesa.modeEnforced}}** 会强制执行此策略。可用于只对一个设备严格，而不让 MESA 在所有地方都严格。设置为关闭时，不会强制执行任何内容。
+要在设置中的 **{{label:settings.mesaModeLabel}}** 保持为 {{label:settings.mesaModeAdvisory}} 时让一个设备严格，请将此项设为 **{{label:mesa.modeEnforced}}**。设置为 {{label:settings.mesaModeOff}} 时，不会强制执行任何内容。
 
-**{{label:mesa.modeAdvisory}}**（默认）交由设置决定。它不会被保存，因此更宽泛且设为强制的策略仍然适用。
+**{{label:mesa.modeAdvisory}}**（默认）交由设置决定。更宽泛且设为 {{label:mesa.modeEnforced}} 的策略仍然适用。
 
 相关：[操作违反规则时会发生什么](guide:topic.mesaRules#modes)
 
@@ -45,19 +45,19 @@
 
 ## {{label:mesa.fieldPrivacyLevel}} {#privacy-level}
 
-此策略向智能体公开的数据有多敏感。默认：**{{label:mesa.privNormal}}**。**{{label:mesa.privRestricted}}** 会让自主策略需要确认。
+此策略向智能体公开的数据有多敏感。默认：**{{label:mesa.privNormal}}**。**{{label:mesa.privRestricted}}** 会让 {{label:mesa.modeAutonomous}} 策略需要确认。
 
 相关：[隐私](guide:topic.mesaRules#privacy)
 
 ## 保存 {#save}
 
-**{{label:mesa.save}}** 会保存策略。它会立即生效。对于已有策略，在你更改内容后保存才可用。
+**{{label:mesa.save}}** 会保存策略。它会立即生效。对于已有策略，在你更改内容后 {{label:mesa.save}} 才可用。
 
 **{{label:mesa.discardChanges}}** 会把表单恢复为已保存的状态，或关闭新策略。在列表中选择另一条策略也会替换表单，因此未保存的更改会丢失。
 
 保存会用表单显示的内容替换整个策略。表单不显示的字段，例如导入的声明限制或时间窗口，会被移除。供应商策略会变为你自己的策略。
 
-相关：[策略编辑器无法设置什么](guide:topic.mesaRules#not-in-editor)
+相关：[{{label:workspace.profileEditor}}无法设置什么](guide:topic.mesaRules#not-in-editor)
 
 ### 触发警告 {#save-warnings}
 
@@ -69,12 +69,12 @@
 
 ## {{label:mesa.effectiveResolution}} {#effective-resolution}
 
-对于已保存的实体策略，这是合并所有层级后 MESA 实际使用的值。**{{label:mesa.colFrom}}** 注明每个值来自哪个层级。**{{label:mesa.colOrigin}}** 说明由谁写入：user 表示你，developer 表示集成供应商策略。
+对于已保存的实体策略，这是合并所有层级后 MESA 使用的值。当某项设置的表现与策略不符时，请查看它。**{{label:mesa.colFrom}}** 注明每个值来自哪个层级。**{{label:mesa.colOrigin}}** 说明由谁写入：user 表示你，developer 表示集成供应商策略。
 
 其上的 **{{label:mesa.resolutionWarnings}}** 表示有规则未能按原样生效，例如 MESA 忽略了某个覆盖。警告来自 MESA 本身，且为英文。
 
 ## 来自 Home Assistant 的页面 {#from-home-assistant}
 
-开启策略按钮后，同一个编辑器会从 Home Assistant 自己的页面以对话框形式打开，针对你正在查看的实体、设备、区域或集成。取消时会先询问，再丢弃你的更改。
+开启策略按钮后，同一个编辑器会从 Home Assistant 自己的页面以对话框形式打开。它针对你正在查看的实体、设备、区域或集成打开。{{label:mesa.cancel}} 会先询问，再丢弃你的更改。
 
 相关：[{{label:settings.injectLabel}}](guide:window.settingsGeneral#inject)

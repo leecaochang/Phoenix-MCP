@@ -8,4 +8,4 @@ This is the Guide. It explains each step here, and later whatever you work on. I
 - **{{label:wizard.choiceChatTitle}}** runs the agent in a chat window inside Home Assistant. You need an API key from a model provider, or the address of a local Ollama or OpenAI-compatible server.
 - **{{label:wizard.choiceAppTitle}}** connects an MCP app you already use, such as Claude Code or an IDE, with a bearer access key.
 
-Either way, the agent gets its own access key, and the next steps decide what that key can do. You can set up more agents later with **{{label:accessKeys.setUpAgent}}**.
+Either way, the agent gets its own access key. The next steps decide what that key can do. Set up more agents later with **{{label:accessKeys.setUpAgent}}**.

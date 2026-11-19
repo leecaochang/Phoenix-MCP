@@ -5,17 +5,17 @@
 
 预设包含密钥的角色、能力、权限树、直通模式、Assist 公开范围、工具声明、审批等待和速率限制。它不包含密钥的名称或指引。
 
-每个密钥最多可以有 8 个预设。正在使用的预设标记为 **{{label:accessKeys.presetActive}}**。**{{label:accessKeys.presetModified}}** 表示密钥自该预设上次保存以来已发生变化。
+每个密钥最多可以有 8 个预设。正在使用的预设显示 {{label:accessKeys.presetActive}}。{{label:accessKeys.presetModified}} 表示密钥自该预设上次保存以来已发生变化。
 
 ## {{label:accessKeys.presetSwitchTo}} {#switch-to}
 
-把密钥的当前设置保存到当前预设，然后应用你选择的预设。会先显示更改内容列表，供你确认。如果预设会开启直通模式，也要确认这一点。
+应用你选择的预设。Phoenix 会先把密钥的当前设置保存到当前预设。如果想丢弃这些设置，请在切换前使用 **{{label:accessKeys.presetRevertToSaved}}**。会先显示更改内容列表，供你确认。如果预设会开启直通模式，也要确认这一点。
 
 切换会告知已连接的智能体其工具已更改，并重新开始密钥的速率限制计数。
 
 ## {{label:accessKeys.presetRevertToSaved}} {#revert}
 
-在你确认后，丢弃自当前预设保存以来所做的更改。
+在你确认后，丢弃自当前预设保存以来所做的更改。在 **{{label:accessKeys.presetSwitchTo}}** 之前使用它，可以让这些更改不进入当前预设。
 
 ## {{label:accessKeys.presetSaveCurrent}} {#save-current}
 

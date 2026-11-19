@@ -1,19 +1,19 @@
 ---
 { "id": "topic.security", "title": "安全", "parent": "topic.about", "order": 40, "keywords": ["安全", "安全性", "保护", "威胁", "机密", "隐私"], "sectionKeywords": { "keys": ["phx_", "Bearer", "哈希", "指纹", "查询字符串", "Origin", "403", "DNS 重绑定", "OAuth", "登录链接"], "hidden": ["擦除", "已隐去", "敏感属性", "密码", "令牌", "摄像头流", "entity_picture"], "gaps": ["别名下的机密", "内联密码", "日志", "自由文本"], "untrusted": ["提示注入", "设备名称", "指令", "不可信数据"], "request-limits": ["413", "请求体大小", "批处理", "速率限制", "429", "Retry-After"], "admin": ["管理员", "长期访问令牌", "管理 API", "Home Assistant MCP Server"], "stored": ["备份", ".storage", "API 密钥", "加密", "对话"], "checklist": ["最佳实践", "建议", "加固"], "emergency": ["密钥泄露", "受损", "紧急停止开关", "轮换"], "removing": ["卸载", "清除", "删除全部"] } }
 ---
-Phoenix 让 AI 智能体在你家中工作，因此它的设计目标是只给每个智能体你允许的内容，并让机密无法触及。本页说明 Phoenix 保护什么、无法保护什么，以及你可以怎样保持安全。
+Phoenix 只给每个 AI 智能体你允许的内容，并隐藏它能识别出的机密。
 
 相关：[每个操作要经过什么](guide:topic.about#checks)、[智能体能做什么](guide:topic.tools)
 
 ## 访问密钥 {#keys}
 
-每个应用用自己的访问密钥连接。Phoenix 只存储它的指纹，因此密钥本身只在你创建或轮换它时显示一次。
+每个应用用自己的访问密钥连接。Phoenix 只存储它的哈希值，因此你只在创建或轮换密钥时看到它一次。
 
 - 应用必须在 Authorization 头中发送密钥。放在网址中的密钥会被拒绝。
 - MCP 连接会拒绝来自 Home Assistant 之外页面的浏览器请求，因此恶意网站无法通过你的浏览器访问它。
-- 已吊销或已过期的密钥会立即失效。已在运行的请求会在下一次检查时停止。Agent Chat、语音和 AI 任务会在每次向 AI 模型发出请求前检查。
+- 已吊销或已过期的密钥会立即失效。已在运行的请求会在下一次检查时停止。Agent Chat、语音智能体和 AI 任务会在每次向 AI 模型发出请求前检查。
 - 应用使用未知、已吊销或已过期的密钥时，Home Assistant 日志会记下来源地址。这样你就能找到仍在使用旧密钥的应用。
-- 通过 OAuth 登录的应用会获得一个只对 Phoenix 有效的令牌，仅用于管理员批准的那一个密钥。Home Assistant 自己的登录令牌永远无法用于 Phoenix。
+- 通过 OAuth 登录的应用会获得一个只对 Phoenix 有效的令牌，仅用于管理员批准的那一个密钥。Home Assistant 自己的登录令牌永远无法用作访问密钥。
 - 只在登录是你自己刚刚发起时才批准。有人可能会把他们自己应用的登录链接发给你；批准它就会把密钥交给他们。
 
 相关：[保护密钥安全](guide:topic.connecting#credentials)、[{{label:accessKeys.rotate}}](guide:window.accessKeys#rotate)、[{{label:accessKeys.revoke}}](guide:window.accessKeys#revoke)
@@ -34,7 +34,7 @@ Phoenix 让 AI 智能体在你家中工作，因此它的设计目标是只给�
 
 - YAML 配置会隐藏名称暗示机密的值（无论它们在文件中的什么位置），以及提到机密的注释。使用普通名称的密码对智能体可见。
 - ESPHome 文件会隐藏相同的值，以及 ESPHome 的 secrets.yaml 中 8 个字符或更长的任何值，无论它们出现在哪里。文件其他位置的较短密码是可见的。
-- 日志是自由文本。Phoenix 会移除访问密钥、令牌、登录请求头和网址中的密码，也会隐藏名称看似机密的任何值，规则同上。名称普通的机密仍可能漏过。
+- 日志是自由文本。Phoenix 会移除访问密钥、令牌、登录请求头和网址中的密码，也会隐藏名称看似机密的任何值，与 YAML 配置中的做法相同。
 
 只把这些能力授予需要它们的智能体。
 
@@ -42,16 +42,16 @@ Phoenix 让 AI 智能体在你家中工作，因此它的设计目标是只给�
 
 ## 家庭数据不可信 {#untrusted}
 
-设备名称或状态可能包含任何人写的文本，例如“忽略你的指令”。Phoenix 会告诉 Agent Chat、语音、AI 任务和 Home Companion 中的模型：工具结果是不可信的数据，而不是指令。它提供给外部应用的家庭描述也带有同样的标记。
+设备名称或状态可能包含任何人写的文本，例如“忽略你的指令”。Phoenix 会告诉 Agent Chat、语音智能体、AI 任务和 Home Companion 中的模型：工具结果是不可信的数据，而不是指令。它提供给外部应用的家庭描述也带有同样的标记。
 
-这有帮助，但没有模型是完美的。请把你在意的更改保持在确认状态，这样每个更改运行前你都能看到。
+模型仍可能照做这类文本。请把你在意的更改保持在 **{{label:caps.modeConfirm}}**，这样每个更改运行前你都能看到。
 
 相关：[{{label:caps.modeConfirm}}](guide:window.capabilities#modes)
 
 ## 请求限制 {#request-limits}
 
-- 请求体最大 1 MB，批处理最多 50 个请求。批处理中的每个请求都计入速率限制。
-- 外部应用按密钥应用速率限制，默认每分钟 60 个请求、每秒 10 个。Agent Chat、语音、Assist 和 AI 任务不受限制。
+- 请求体最大 1 MiB，批处理最多 50 个请求。批处理中的每个请求都计入速率限制。
+- 外部应用按密钥应用速率限制，默认每分钟 60 个请求、每秒 10 个。Agent Chat、语音智能体、Assist 和 AI 任务不受限制。
 - 超过限制的密钥会被告知何时重试。
 
 相关：[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)
@@ -60,13 +60,13 @@ Phoenix 让 AI 智能体在你家中工作，因此它的设计目标是只给�
 
 面板及其设置需要 Home Assistant 管理员。访问密钥无法打开它们。任何管理员凭据都有效，包括管理员的长期访问令牌，并且它可以创建具有任何能力的密钥。
 
-请保持管理员数量较少，并保护他们的令牌。Home Assistant 的 MCP Server 访问 Phoenix 时不受 Phoenix 的速率限制。它是否需要管理员，取决于 Home Assistant 的版本和该集成的选项。其他能够通过的人只拥有家庭工具和他们自己的 Home Assistant 权限。请为它绑定一个范围较窄的密钥。
+请保持管理员数量较少，并保护他们的令牌。Home Assistant 的 MCP Server 访问 Phoenix 时不受 Phoenix 的速率限制。它是否需要管理员，取决于 Home Assistant 的版本和该集成的选项。非管理员只获得家庭工具，且限于自己的 Home Assistant 权限。请为它绑定一个范围较窄的密钥。
 
 相关：[通过 Home Assistant 的 MCP Server](guide:topic.connecting#ha-mcp-server)
 
 ## 什么存储在哪里 {#stored}
 
-Phoenix 把数据保存在 Home Assistant 的存储文件夹中。访问密钥只以指纹形式存储。AI 提供商的 API 密钥和记录的对话按原样保存在那里，并未加密。
+Phoenix 把数据保存在 Home Assistant 的存储文件夹中。访问密钥只以哈希值形式存储。AI 提供商的 API 密钥和记录的对话按原样保存在那里，并未加密。
 
 Home Assistant 备份会包含该文件夹。请把备份和配置文件夹视为机密。
 
@@ -94,9 +94,9 @@ Phoenix 通过不加密、无需密码的普通 HTTP 访问本地 Ollama 服务�
 ## 保持安全 {#checklist}
 
 - 为每个应用分配自己的密钥，只赋予它需要的能力。
-- 只对完全信任的智能体使用直通模式。它还会开放诊断和服务响应数据。
-- 把系统日志读取、诊断和 YAML 配置留给需要它们的智能体。
-- 在为语音、AI 任务、决策或 Assist 使用的密钥设置有效期之前，要知道过期会解除它们的关联。
+- 只对完全信任的智能体使用直通模式。它还会开放{{label:caps.cap_diagnostics.label}}和{{label:caps.cap_service_response.label}}。
+- 把 **{{label:caps.cap_log_read.label}}**、**{{label:caps.cap_diagnostics.label}}** 和 **{{label:caps.cap_yaml_edit.label}}** 留给需要它们的智能体。
+- 当语音智能体、AI 任务、决策或 Assist 使用的密钥过期时，Phoenix 会解除它与这些功能的关联。
 - 在你不信任的网络上连接应用时使用 HTTPS。密钥会随每个请求传输。
 
 相关：[直通模式会开放什么](guide:topic.passThrough)
@@ -111,7 +111,7 @@ Phoenix 通过不加密、无需密码的普通 HTTP 访问本地 Ollama 服务�
 
 ## 完全移除 Phoenix {#removing}
 
-删除集成会吊销密钥，但保留设置、日志和已归档的密钥。它会立即恢复智能体限时调高的日志级别，并删除记录这些级别的文件。要同时移除 Phoenix 的数据，请先使用 **{{label:settings.wipeCoreLabel}}**。
+删除集成会吊销密钥、清除所有 AI 提供商账户，并解除 Phoenix 与 Assist、语音智能体、AI 任务和决策提供商的关联。它会保留其他设置、日志和已归档的密钥。它还会立即恢复智能体限时调高的日志级别。要同时移除 Phoenix 的数据，请先使用 **{{label:settings.wipeCoreLabel}}**。
 
 这样仍会留下安全副本、日历更改记录、仪表盘资源记录，以及 MESA 策略（除非你选择了[{{label:settings.wipeMesaLabel}}](guide:window.settingsSafety#wipe-mesa)）。删除集成后，请删除 `.storage` 文件夹中所有以 `phoenix_mcp` 开头的剩余文件。
 

@@ -1,15 +1,15 @@
 ---
 { "id": "topic.logRecords", "title": "日誌記錄的內容", "parent": "workspace.logs", "order": 10, "keywords": ["稽核", "歷史", "保留", "隱私", "遮蔽"], "sectionKeywords": { "audit-entries": ["工具呼叫", "管理", "核准", "MESA"], "not-audited": ["缺少", "401", "未授權"], "outcomes": ["已允許", "已拒絕存取", "速率受限", "待核准", "無效請求", "未找到", "未實現", "已取消", "結果未知"], "audit-keeping": ["保留", "儲存", "磁碟", "清除"], "conversation-sources": ["agent chat", "語音", "AI 任務", "Assist", "MCP 用戶端", "Home Companion"], "conversation-contents": ["工具結果", "提供者", "模型", "機密", "代碼"], "conversation-keeping": ["保留", "儲存", "限制"], "linked": ["請求 ID", "核准 ID"] } }
 ---
-Phoenix 保留兩種日誌。稽核日誌是每個操作及其結果的簡短記錄。對話記錄在開啟後會完整保留智慧體說過和做過的事情。
+Phoenix 保留兩種日誌。稽核日誌是操作及其結果的簡短記錄。對話記錄在開啟後會完整保留智慧體說過和做過的事情。
 
 ## 什麼構成稽核條目 {#audit-entries}
 
 - **智慧體操作**：來自 MCP 用戶端、Agent Chat、語音智慧體、Assist、AI 任務或 Home Companion 的每次工具呼叫。條目包含工具名稱和參數，絕不包含其結果。
-- **Phoenix 的 AI 模型**：來自 Agent Chat、Voice、AI Task、Home Companion 或決策提供者的操作還會在 [{{label:workspace.logDetails}}](guide:window.logDetails#audit-entry) 中寫明發出請求的提供者和模型。
+- **Phoenix 的 AI 模型**：來自 Agent Chat、語音智慧體、AI 任務、Home Companion 或決策提供者的操作還會在 [{{label:workspace.logDetails}}](guide:window.logDetails#audit-entry) 中寫明發出請求的提供者和模型。
 - **其他 MCP 請求**：列出工具、開始和結束工作階段，以及金鑰無權發出的請求。如果應用程式在變更期間中斷連線，名為 `request/cancelled` 的條目會記錄這一情況。
 - **評估動作**：每次 `ai_task/evaluate` 呼叫和拒絕，記在 Decisions 存取金鑰名下。條目包含拒絕原因，絕不包含問題或資料。
-- **MESA 阻止**：MESA 每拒絕一個實體就增加一筆條目。這些條目需要 mesa_core.audit 記錄器處於預設層級 INFO；在 Home Assistant 的記錄器設定中提高層級會隱藏它們，但阻止仍會發生。
+- **MESA 阻止**：MESA 每拒絕一個實體就多一筆條目。這需要 `mesa_core.audit` 記錄器保持預設層級 INFO。若在 Home Assistant 的記錄器設定中提高其層級，這些條目會停止，但 MESA 仍會阻止。
 - **OAuth 登入**：應用程式每次獲得或被拒絕權杖。已登入應用程式的請求所寫入的任何條目，都會在[{{label:workspace.logDetails}}](guide:window.logDetails#audit-entry)中註明該應用程式。
 - **核准**：每個進入核准佇列的請求，以及它的後續結果：已核准、已執行、已拒絕、已取消或失敗。取消會註明原因，例如金鑰已輪換或登入已移除。
 - **你在面板中的變更**：存取金鑰、權限、設定、MESA 策略、還原、清除等管理員操作，顯示為管理員而非存取金鑰。設定變更會說明改了什麼，即使關閉日誌記錄。
@@ -22,12 +22,12 @@ Phoenix 保留兩種日誌。稽核日誌是每個操作及其結果的簡短記
 
 ## 結果 {#outcomes}
 
-- **{{label:audit.outcomeAllowed}}**：已執行。
-- **{{label:audit.outcomeDenied}}**：被權限或 MESA 拒絕存取，或被拒絕、過期、取消的核准。
-- **{{label:audit.outcomePendingApproval}}**：等待你的核准。
-- **{{label:audit.outcomeRateLimited}}**：金鑰傳送過多請求。
-- **{{label:audit.outcomeInvalidRequest}}**、**{{label:audit.outcomeNotFound}}** 和 **{{label:audit.outcomeNotImplemented}}**：請求格式錯誤、指向不存在的對象，或要求 Phoenix 不支援的操作。Phoenix 無法確認的變更也記為{{label:audit.outcomeInvalidRequest}}，儘管它可能已經生效。
-- **{{label:audit.outcomeCancelled}}** 和 **{{label:audit.outcomeUnknown}}**：請求完成之前，應用程式已離開或失去權限。{{label:audit.outcomeCancelled}}表示沒有任何操作到達你的家。{{label:audit.outcomeUnknown}}表示變更可能已執行，請在 Home Assistant 中檢查。
+- {{label:audit.outcomeAllowed}}：已執行。
+- {{label:audit.outcomeDenied}}：被權限或 MESA 拒絕存取，或被拒絕、過期、取消的核准。
+- {{label:audit.outcomePendingApproval}}：在[{{label:shell.tabApprovals}}](guide:workspace.approvals)中等待你的核准。
+- {{label:audit.outcomeRateLimited}}：金鑰傳送過多請求。如果這在預期之內，請在[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)中提高它的限制。
+- {{label:audit.outcomeInvalidRequest}}、{{label:audit.outcomeNotFound}}和{{label:audit.outcomeNotImplemented}}：請求格式錯誤、指向不存在的對象，或要求 Phoenix 不支援的操作。Phoenix 無法確認的變更也記為{{label:audit.outcomeInvalidRequest}}，儘管它可能已經生效。請在 Home Assistant 中檢查。
+- {{label:audit.outcomeCancelled}}和{{label:audit.outcomeUnknown}}：請求完成之前，應用程式已離開或失去權限。{{label:audit.outcomeCancelled}}表示沒有任何操作到達你的家。{{label:audit.outcomeUnknown}}表示變更可能已執行，請在 Home Assistant 中檢查。
 
 記錄哪些結果由[稽核日誌設定](guide:window.settingsLogs#audit-log)決定。
 
@@ -50,7 +50,7 @@ Phoenix 保留兩種日誌。稽核日誌是每個操作及其結果的簡短記
 
 ## 對話包含什麼 {#conversation-contents}
 
-每次工具呼叫及其完整結果、帶變更前後內容的變更、核准、錯誤，以及請求經過的路由。來自 Agent Chat、語音和 AI 任務的條目還會註明 AI 提供者和模型。
+每次工具呼叫及其完整結果、帶變更前後內容的變更、核准、錯誤，以及請求經過的路由。來自 Agent Chat、語音智慧體和 AI 任務的條目還會註明 AI 提供者和模型。
 
 密碼、權杖、金鑰以及警報或門鎖代碼在儲存前會被隱藏。影像和檔案只做記錄，不會儲存。Phoenix 給 AI 的指令不會被記錄，token 用量則進入路由統計。
 
@@ -64,4 +64,4 @@ Phoenix 保留兩種日誌。稽核日誌是每個操作及其結果的簡短記
 
 工具呼叫的請求 ID 在兩種日誌中相同，核准的 ID 也相同。在稽核日誌中，依 **{{label:audit.rowRequestId}}** 或 **{{label:audit.rowResource}}** 篩選；在對話記錄中，搜尋它。
 
-已執行或已取消的核准會記錄在發出它的請求 ID 下。即使隱藏了實體名稱，每筆核准條目也會包含核准的 ID。
+已執行或已取消的核准會記錄在發出它的請求 ID 下。即使隱藏了實體名稱，核准條目也會包含核准的 ID。Phoenix 啟動時關閉的核准，其條目是例外。

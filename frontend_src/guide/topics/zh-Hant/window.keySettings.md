@@ -5,7 +5,7 @@
 
 ## {{label:accessKeys.cardGuidance}} {#guidance}
 
-Phoenix 會把這些備註新增到使用此金鑰的每個智慧體的指令中，例如房間和裝置的名稱，或誰使用該智慧體。最多 2,000 個字元。選擇儲存以保留它們，或選擇 **{{label:accessKeys.notesDiscard}}**。
+Phoenix 會把這些備註新增到使用此金鑰的每個智慧體的指令中，例如房間和裝置的名稱，或誰使用該智慧體。最多 2,000 個字元。選擇 **{{label:common.save}}** 以保留它們，或選擇 **{{label:accessKeys.notesDiscard}}**。
 
 指引只是建議。它絕不授予存取權限，智慧體可能忽略它。智慧體及其模型提供者會收到它，因此絕不要在這裡填寫密碼或其他機密。
 
@@ -19,13 +19,13 @@ Phoenix 會把這些備註新增到使用此金鑰的每個智慧體的指令中
 
 ### {{label:accessKeys.inlineWaitLabel}} {#inline-wait}
 
-需要核准的請求在應用程式收到「待處理」回覆之前，等待你決定的時間：關閉（預設），或 30 到 180 秒。關閉時，應用程式會立即得知請求正在核准中等待。
+需要核准的請求在應用程式收到「待處理」回覆之前，等待你決定的時間：關閉（預設），或 30 到 180 秒。關閉時，應用程式會立即得知請求正在{{label:shell.tabApprovals}}中等待。
 
 這僅適用於外部應用程式。Agent Chat 最多等待你的決定 15 分鐘。語音智慧體、Assist 和 AI 任務會回報變更正在等待核准，然後繼續。如果金鑰已有請求在等待，新請求不會等待。
 
 ### {{label:accessKeys.assistExposureLabel}} {#assist-exposure}
 
-把直通金鑰限制為 Home Assistant 中向 Assist 公開的實體。預設為關閉。它只對直通金鑰顯示；限定範圍的金鑰改用權限樹。
+把直通金鑰限制為 Home Assistant 中向 Assist 公開的實體。預設為關閉。它只對直通金鑰顯示；限定範圍的金鑰改用{{label:accessKeys.permissionsTree}}。
 
 ## {{label:accessKeys.tabOAuth}} {#oauth-sign-in}
 
@@ -44,8 +44,6 @@ Phoenix 會把這些備註新增到使用此金鑰的每個智慧體的指令中
 應用程式只能在你允許後的 10 分鐘內發起登入。開啟開關會開始第一個 10 分鐘。倒數計時會顯示剩餘時間。
 
 核准一次登入會結束登入時段，Phoenix 會顯示哪個應用程式已登入。選擇 **{{label:oauth.stopWindow}}** 可提前結束它。在連線另一個應用程式之前，或當應用程式要求你重新登入時，請選擇 **{{label:oauth.allowNew}}**。在沒有開放登入時段時送達的登入連結不會有作用。
-
-Phoenix 在每個地方顯示的倒數計時都相同，包括連線說明和核准對話方塊。
 
 ### {{label:oauth.signInsTitle}} {#oauth-sign-ins}
 

@@ -7,7 +7,7 @@ Related: [Working with Windows](guide:topic.windows)
 
 ## Adding a window {#adding}
 
-Choose **{{label:workspace.addToMy}}** in a window's menu. The window stays in its own workspace too, and both copies show the same chosen record. Filters, columns and sizes are separate in each copy.
+Select **{{label:workspace.addToMy}}** in a window's menu. The window also stays in its own workspace. Both copies show the same selected record. Filters, columns, and sizes are separate in each copy.
 
 The first window fills the workspace. Each next one goes beside or under the others, a row at a time.
 
@@ -23,10 +23,10 @@ Off by default, so the windows share the screen's height. Turn it on from any wi
 
 With it on, drag the border under a window to make it taller.
 
-## Agent Chat {#chat}
+## {{label:agentchat.title}} {#chat}
 
-Choose **{{label:workspace.addToMy}}** in Agent Chat's own menu to dock it here. While another workspace is shown, Chat floats over it, and it docks again when you come back here. If you closed it meanwhile, it stays closed; **{{label:shell.agentChat}}** in its window opens it. **{{label:agentchat.floatChat}}** undocks it, and closing it here closes Chat.
+To dock {{label:agentchat.title}} here, select **{{label:workspace.addToMy}}** in its own menu. While another workspace is shown, {{label:agentchat.title}} floats over it. It docks again when you come back here. If you closed it meanwhile, it stays closed. To open it, select **{{label:shell.agentChat}}** in its empty window here. **{{label:agentchat.floatChat}}** undocks it. Closing it here closes {{label:agentchat.title}}.
 
 ## On a phone {#phones}
 
-Choose **{{label:workspace.addToMy}}** in a window's menu to add it here, and close it here to remove it. Agent Chat can't be added on a phone. A phone keeps its own My Workspace, apart from the one on a computer.
+To add a window here, select **{{label:workspace.addToMy}}** in its menu. To remove it, close it here. {{label:agentchat.title}} can't be added on a phone. A phone keeps its own My Workspace, apart from the one on a computer.

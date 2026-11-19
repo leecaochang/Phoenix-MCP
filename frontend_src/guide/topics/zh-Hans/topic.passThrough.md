@@ -1,7 +1,7 @@
 ---
 { "id": "topic.passThrough", "title": "直通模式会开放什么", "parent": "window.accessKeys", "order": 2, "keywords": ["直通模式", "不受限制", "完全访问", "限定范围"] }
 ---
-直通密钥会跳过权限树：它可以读取和控制所有实体，Phoenix 自己的实体除外。请仅对可以放心托付整个家的智能体使用。
+直通密钥会跳过{{label:accessKeys.permissionsTree}}：它可以读取和控制所有实体，Phoenix 自己的实体除外。请仅对可以放心托付整个家的智能体使用。
 
 ## 会开启什么 {#allows}
 

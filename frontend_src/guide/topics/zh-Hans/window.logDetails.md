@@ -5,17 +5,17 @@
 
 ## 在记录间切换 {#step}
 
-**{{label:workspace.previousRecord}}** 和 **{{label:workspace.nextRecord}}** 会按你选择记录时日志显示的顺序移动。之后到达的条目不会包含在内，直到你再次选择记录。
+**{{label:workspace.previousRecord}}** 和 **{{label:workspace.nextRecord}}** 会按日志当前显示的顺序移动。它们也会到达之后才出现的条目，并在你重新排序日志时跟随新的顺序。
 
 ## 审计条目 {#audit-entry}
 
-条目的每个字段，包括其 **{{label:audit.rowRequestId}}**。工具调用还会显示其 **{{label:audit.rowPayload}}**：工具的名称和参数，其中密码、令牌、密钥以及警报或门锁代码会被隐藏。过长的负载会被截断。
+条目的每个字段，包括其{{label:audit.rowRequestId}}。工具调用还会显示其{{label:audit.rowPayload}}：工具的名称和参数，其中密码、令牌、密钥以及警报或门锁代码会被隐藏。过长的负载会被截断。
 
 如果访问密钥此后被重命名，它的旧名称会显示在当前名称后的括号中。
 
-应用通过 OAuth 登录发出的请求会显示 **{{label:audit.rowOAuthApp}}**：先是应用自称的名称，然后是它登录时使用的地址。只有地址经过核实，请以地址为准。
+应用通过 OAuth 登录发出的请求会显示{{label:audit.rowOAuthApp}}：先是应用自称的名称，然后是它登录时使用的地址。只有地址经过核实，请以地址为准。
 
-由 Phoenix 的 AI 模型发出的请求会显示其 **{{label:conversations.providerLabel}}** 和 **{{label:conversations.modelLabel}}**。这类请求来自 Agent Chat、Voice、AI Task、Home Companion 和决策提供商。如果请求曾等待审批，记录审批结果的条目也会显示同一个模型。
+由 Phoenix 的 AI 模型发出的请求会显示其{{label:conversations.providerLabel}}和{{label:conversations.modelLabel}}。这类请求来自 Agent Chat、语音智能体、AI 任务、Home Companion 和决策提供商。如果请求曾等待审批，记录审批结果的条目也会显示同一个模型。
 
 ## 对话 {#conversation}
 

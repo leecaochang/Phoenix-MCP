@@ -10,7 +10,7 @@
 - **{{label:wizard.methodKey}}**：应用在每个请求中都发送访问密钥。适用于编码助手和其他允许你设置标头的应用。
 - **{{label:wizard.methodOAuth}}**：应用只接受一个地址，并通过 Home Assistant 登录。适用于 ChatGPT、Claude 及其手机应用。不会复制任何机密内容。
 
-如果密钥已经允许 OAuth，说明会直接打开 OAuth 方式。每种方式只列出支持它的应用。
+如果密钥已经允许 OAuth 登录，说明会直接打开 **{{label:wizard.methodOAuth}}**。每种方式只列出支持它的应用。
 
 ## 获取设置命令 {#commands}
 
@@ -22,9 +22,9 @@ Codex 的设置还会把工具超时提高到 330 秒，这样较长的 ESPHome 
 
 这些说明出现在三个位置：
 
-- [{{label:accessKeys.setUpAgent}}](guide:wizard.connect) 的连接步骤。
-- **{{label:accessKeys.postCreateConnectTitle}}**，就在你创建密钥之后。
-- **{{label:accessKeys.helpConnect}}**，在你轮换密钥之后。
+- [{{label:accessKeys.setUpAgent}}](guide:wizard.connect) 的 **{{label:wizard.stepConnect}}** 步骤
+- **{{label:accessKeys.postCreateConnectTitle}}**，就在你创建密钥之后
+- **{{label:accessKeys.helpConnect}}**，在你轮换密钥之后
 
 命令中包含密钥本身，Phoenix 只显示一次。要为现有密钥再次查看这些命令，请轮换该密钥并更新应用。
 
@@ -32,9 +32,9 @@ Codex 的设置还会把工具超时提高到 330 秒，这样较长的 ESPHome 
 
 ## 保护密钥安全 {#credentials}
 
-访问密钥就像密码，可用于其权限允许的一切。Phoenix 只存储它的指纹，因此无法再次显示它。
+访问密钥就像密码，可用于其权限允许的一切。Phoenix 只存储它的哈希值，因此无法再次显示它。
 
-不要把它放在共享文件和聊天记录中。Claude Code、Gemini 和 Codex 的设置命令会把它放在命令行上，如果别人能读取你的 shell 历史记录，请清除它。如果泄露了，请[轮换](guide:window.accessKeys#rotate)密钥：旧值会立即失效。
+不要把它放在共享文件和聊天记录中。Claude Code、Gemini CLI 和 Codex 的设置命令会把密钥放在命令行上。如果别人能读取你的 shell 历史记录，请清除它。如果泄露了，请[轮换](guide:window.accessKeys#rotate)密钥：旧值会立即失效。
 
 ## 使用多个密钥 {#several-keys}
 
@@ -44,7 +44,7 @@ Codex 的设置还会把工具超时提高到 330 秒，这样较长的 ESPHome 
 
 ## 连接 {#connection}
 
-应用连接到你的 Home Assistant 地址加 /api/phoenix-mcp，并把密钥作为 Bearer 令牌发送。设置命令中的 URL 是你的浏览器使用的地址；如果应用通过其他方式访问 Home Assistant，请在那里修改。
+应用连接到你的 Home Assistant 地址加 `/api/phoenix-mcp`，并把密钥作为 Bearer 令牌发送。设置命令中的 URL 是你的浏览器使用的地址；如果应用通过其他方式访问 Home Assistant，请在那里修改。
 
 Phoenix 通过 Streamable HTTP 使用 MCP。使用 SSE 传输的旧应用设置无法连接。耗时较长的操作会每 15 秒发送一条消息来保持连接。
 
@@ -52,7 +52,7 @@ Phoenix 通过 Streamable HTTP 使用 MCP。使用 SSE 传输的旧应用设置�
 
 ChatGPT、Claude 及其手机应用无法发送访问密钥。它们只接受服务器地址，并改为登录。为此，Phoenix 运行自己的登录流程，与 Home Assistant 的登录分开。
 
-1. 在连接说明中选择 **{{label:wizard.methodOAuth}}**，或打开密钥的[密钥设置](guide:window.keySettings#oauth-sign-in)。开启 **{{label:oauth.switchLabel}}**。
+1. 在连接说明中选择 **{{label:wizard.methodOAuth}}**，或打开密钥的[{{label:workspace.keySettings}}](guide:window.keySettings#oauth-sign-in)。开启 **{{label:oauth.switchLabel}}**。
 2. 选择你的应用的选项卡，并按其中的步骤操作。每个应用都使用 Phoenix 显示的地址。如有客户端 ID 和机密，请留空。
 3. 应用会在你的浏览器中打开 Home Assistant。以管理员身份登录，然后在 Phoenix 中批准该请求。
 
@@ -78,13 +78,15 @@ Phoenix 会显示应用自报的名称、识别它的完整地址，以及它返
 
 ## 从家庭网络外连接 {#remote}
 
-Phoenix 没有自己的远程服务。家庭网络外的应用会像浏览器一样访问它：通过你的 Nabu Casa 地址、你自己的域名，或 Tailscale 等 VPN。把设置命令中的 URL 改为该地址，后面加上 /api/phoenix-mcp。
+Phoenix 没有自己的远程服务。家庭网络外的应用会像浏览器一样访问它：通过你的 Nabu Casa 地址、你自己的域名，或 Tailscale 等 VPN。把设置命令中的 URL 改为该地址，后面加上 `/api/phoenix-mcp`。
 
 在家庭网络外请使用 https 地址，因为密钥会随每个请求发送。反向代理必须传递 Authorization 标头、允许长时间响应，并传递原始主机和 https。托管应用从其提供商的服务器连接，因此家庭网络或 VPN 地址对它们无效。
 
 ## 工具发生变化时 {#reconnect}
 
-有些应用只在连接时读取工具列表。在你更改密钥的能力或权限后，请重新连接应用以查看新列表。Phoenix 也会在智能体下次调用时告知它：工具已更改时重新连接；如果只是需要审批的操作变了，则告知其工具没有变化。
+有些应用只在连接时读取工具列表。在你更改密钥的能力或权限后，请重新连接应用以查看新列表。
+
+Phoenix 也会在智能体下次调用时提醒它。如果它的工具已更改，Phoenix 会让它请你重新连接。如果只是需要审批的操作变了，Phoenix 会告诉它工具没有变化。
 
 相关：[重新连接智能体](guide:window.accessKeys#reconnect)
 
@@ -98,23 +100,25 @@ Phoenix 没有自己的远程服务。家庭网络外的应用会像浏览器一
 
 登录 Home Assistant 本身的应用也可以通过 Home Assistant 的 Model Context Protocol 集成访问 Phoenix 的工具。对大多数应用来说，[OAuth 登录](guide:#oauth)更简单，并把它们限定在一个密钥上。在 2026.11 之前，它叫 MCP Server。它们使用绑定到 [Assist 工具提供商](guide:topic.homeAssistantFeatures#assist-tool-provider)的密钥。
 
-从 2026.8 起，请使用 /api/mcp/phoenix_mcp，它需要管理员登录。Home Assistant 2026.7 没有这个地址，因此请在该版本上使用 /api/mcp。
+从 2026.8 起，请使用 `/api/mcp/phoenix_mcp`，它需要管理员登录。Home Assistant 2026.7 没有这个地址，因此请在该版本上使用 `/api/mcp`。
 
-从 2026.10 起，/api/mcp 地址遵循该集成的 Require an administrator account 选项。新条目会开启它，较早的条目会保持关闭。2026.10 之前没有这个选项，因此任何登录 Home Assistant 的人都可以使用 /api/mcp。非管理员只能使用家庭工具，并受他们自己的 Home Assistant 权限限制。
+从 2026.10 起，`/api/mcp` 地址遵循该集成的 **Require an administrator account** 选项。新条目会开启它，较早的条目会保持关闭。2026.10 之前没有这个选项，因此任何登录 Home Assistant 的人都可以使用 `/api/mcp`。非管理员只能使用家庭工具，并受他们自己的 Home Assistant 权限限制。
 
 在这条路径上，密钥的速率限制不适用，审计日志会把调用显示为 Assist，应用只有主动请求时才会收到 Phoenix 的说明。
 
-从 2026.10 起，请检查该集成的选项。新条目默认开启 Expose all AI tools，会提供每一组工具，包括 Phoenix 的工具。请关闭它，并在 AI tools 下选择 Phoenix MCP（限定范围）。从 2026.11 起，Read-only 选项只给应用留下标记为只读的工具，但它不能替代密钥的能力设置。
+从 2026.10 起，请检查该集成的选项。新条目默认开启 Expose all AI tools，会提供每一组工具，包括 Phoenix 的工具。请关闭 **Expose all AI tools**，并在 **AI tools** 下选择 **Phoenix MCP (scoped)**。
+
+从 2026.11 起，Read-only 选项只给应用留下标记为只读的工具，但它不能替代密钥的能力设置。
 
 使用过 Home Assistant 自带的 Home Assistant API 的应用会看到 Phoenix 的工具名称，而不是 Home Assistant 的。Phoenix 没有设置集成或读取完整日志的工具。
 
 在这条路径上，Home Assistant 其他 API 的工具不经过 Phoenix，因此密钥、审批、MESA 和审计日志都不覆盖它们。当两个 API 提供同名工具时，Home Assistant 会添加前缀，例如 `phoenix-mcp__`。
 
-“Home Assistant”这组 AI 工具是 2026.11 为管理员新增的，能触及一切：任何实体或操作、模板、日志和配置。若要让应用保持在 Phoenix 的检查之内，只选择 Phoenix MCP（限定范围）。
+“Home Assistant”这组 AI 工具是 2026.11 为管理员新增的，能触及一切：任何实体或操作、模板、日志和配置。若要让应用保持在 Phoenix 的检查之内，只选择 **Phoenix MCP (scoped)**。
 
 ## 无法连接时 {#problems}
 
-- **未授权 (401)**：密钥错误、已吊销或已过期，或者被放在 URL 中而不是 Authorization 头中。对于已登录的应用，登录已结束：请重新批准。
-- **禁止 (403)**：某个网页试图从其他站点连接。桌面应用和命令行应用不受影响。
-- **请求过多 (429)**：密钥达到速率限制，或同时打开的连接过多。应用应等待后重试。
-- **不可用 (503)**：紧急停止开关已开启，或 Phoenix 仍在启动。
+- “未授权”(401)：密钥错误、已吊销或已过期，或者被放在 URL 中而不是 Authorization 头中。对于已登录的应用，登录已结束：请重新批准。
+- “禁止”(403)：某个网页试图从其他站点连接。桌面应用和命令行应用不受影响。
+- “请求过多”(429)：密钥达到速率限制，或同时打开的连接过多。请稍等，然后从应用重试。
+- “不可用”(503)：紧急停止开关已开启，或 Phoenix 仍在启动。
