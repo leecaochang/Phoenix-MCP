@@ -37,7 +37,8 @@ An entity that no profile covers follows a built-in baseline: lights are {{label
 
 A profile changes that:
 
-- A profile that sets a control mode replaces the baseline at any level, even when it's looser. A {{label:mesa.modeConfirm}} profile on a lock makes the lock {{label:mesa.modeConfirm}} instead of {{label:mesa.modeProhibited}}.
+- A profile that sets a control mode replaces the baseline, even when it's looser. A {{label:mesa.modeConfirm}} profile on a lock makes the lock {{label:mesa.modeConfirm}} instead of {{label:mesa.modeProhibited}}.
+- Only an entity, device, or domain profile can loosen a {{label:mesa.modeProhibited}} or {{label:mesa.modeReadOnly}} baseline. An area, main device, or integration profile can only make it stricter, so a lock in an {{label:mesa.modeAutonomous}} area stays {{label:mesa.modeProhibited}}.
 - A profile that leaves control mode unset keeps the baseline, but anything {{label:mesa.modeAutonomous}} becomes {{label:mesa.modeConfirm}}. A tags-only profile on a light makes that light need confirmation.
 
 So an {{label:mesa.modeAutonomous}} domain profile for locks makes every lock {{label:mesa.modeAutonomous}}, unless a stricter profile covers it. Check a profile's effect in [Effective Resolution](guide:window.mesaEditor#effective-resolution) before you rely on it.
@@ -48,7 +49,7 @@ Deployment defaults can replace the built-in baseline for unprofiled entities. T
 
 A custom integration can include its own profile, a `mesa_profile.json` file in its folder. Each time Phoenix starts, it adds that file as the integration's profile. It doesn't ask you first.
 
-Such a profile can loosen the baseline. An integration that marks its locks {{label:mesa.modeAutonomous}} makes them {{label:mesa.modeAutonomous}}. In [Effective Resolution](guide:window.mesaEditor#effective-resolution), **{{label:mesa.colOrigin}}** shows developer for these values.
+Such a profile can loosen the baseline, except a {{label:mesa.modeProhibited}} or {{label:mesa.modeReadOnly}} one. An integration that marks its switches {{label:mesa.modeAutonomous}} makes them {{label:mesa.modeAutonomous}}, but its locks stay {{label:mesa.modeProhibited}}. In [Effective Resolution](guide:window.mesaEditor#effective-resolution), **{{label:mesa.colOrigin}}** shows developer for these values.
 
 To override it, save your own profile for that integration. Phoenix leaves your profile in place and skips the integration's file.
 
@@ -81,7 +82,7 @@ MESA applies the same way to every source: MCP clients, Agent Chat, the Voice Ag
 It checks:
 
 - Device actions, whichever command the agent uses.
-- Renaming, enabling, disabling, and removing entities and devices, and moving them out of a profiled area.
+- Renaming, enabling, disabling, and removing entities and devices, and moving them out of a profiled area or into one that would loosen them.
 - Integration and helper changes, areas, and floors.
 - Calendar and to-do changes, and notifications.
 - Zigbee device changes, raw Z-Wave and ISY commands, `update.install`, ESPHome firmware installs, and ESPHome device actions. These must pass on every entity of the device and its child devices.
@@ -103,7 +104,7 @@ When you rename an entity in Home Assistant, its profile follows it straight awa
 
 If the new ID already has a profile, Phoenix keeps both. The new ID takes the stricter control mode, enforcement, and privacy of the two and the limits of both. The other profile shows as an orphan for you to review. An agent's rename works the same way, after MESA has checked the rename itself.
 
-Moving something out of an area with a profile counts as a change, because it could lift a rule. Moving into one doesn't count as a change.
+Moving something out of an area with a profile counts as a change, because it could lift a rule. Moving something into one counts as a change only when the area's profile would loosen its control mode, such as a switch moved into an {{label:mesa.modeAutonomous}} area. MESA checks the move against the control mode the entity has before it moves.
 
 ## If MESA can't read its profiles {#storage}
 

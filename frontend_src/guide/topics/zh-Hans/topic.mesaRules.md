@@ -37,7 +37,8 @@ MESA 按字段组合策略，而不是按策略整体组合。
 
 策略会改变这一点：
 
-- 设置控制模式的策略会替换基线，无论它位于哪个层级，即使更宽松。锁上的{{label:mesa.modeConfirm}}策略会让锁变为{{label:mesa.modeConfirm}}，而不是{{label:mesa.modeProhibited}}。
+- 设置控制模式的策略会替换基线，即使更宽松。锁上的{{label:mesa.modeConfirm}}策略会让锁变为{{label:mesa.modeConfirm}}，而不是{{label:mesa.modeProhibited}}。
+- 只有实体、设备或域策略可以放宽{{label:mesa.modeProhibited}}或{{label:mesa.modeReadOnly}}基线。区域、主设备或集成策略只能让它更严格，因此{{label:mesa.modeAutonomous}}区域中的锁仍为{{label:mesa.modeProhibited}}。
 - 不设置控制模式的策略保留基线，但原本{{label:mesa.modeAutonomous}}的都会变为{{label:mesa.modeConfirm}}。灯上的仅标签策略会让该灯需要确认。
 
 因此，针对锁的{{label:mesa.modeAutonomous}}域策略会让每把锁变为{{label:mesa.modeAutonomous}}，除非有更严格的策略覆盖它。在依赖某个策略之前，请在[生效值解析](guide:window.mesaEditor#effective-resolution)中检查它的效果。
@@ -48,7 +49,7 @@ MESA 按字段组合策略，而不是按策略整体组合。
 
 自定义集成可以在其文件夹中附带自己的策略，即 `mesa_profile.json` 文件。Phoenix MCP 每次启动时都会把该文件添加为这个集成的策略，不会先询问你。
 
-这样的策略可以放宽基线。如果某个集成把它的锁标记为{{label:mesa.modeAutonomous}}，这些锁就会变为{{label:mesa.modeAutonomous}}。在[生效值解析](guide:window.mesaEditor#effective-resolution)中，这些值的 **{{label:mesa.colOrigin}}** 显示为 developer。
+这样的策略可以放宽基线，但{{label:mesa.modeProhibited}}或{{label:mesa.modeReadOnly}}基线除外。如果某个集成把它的开关标记为{{label:mesa.modeAutonomous}}，这些开关就会变为{{label:mesa.modeAutonomous}}，但它的锁仍为{{label:mesa.modeProhibited}}。在[生效值解析](guide:window.mesaEditor#effective-resolution)中，这些值的 **{{label:mesa.colOrigin}}** 显示为 developer。
 
 若要覆盖它，请为该集成保存你自己的策略。之后 Phoenix MCP 会保留你的策略，并跳过该集成的文件。
 
@@ -81,7 +82,7 @@ MESA 对每个来源的处理都相同：MCP 客户端、Agent Chat、语音智�
 它会检查：
 
 - 设备操作，无论智能体使用哪种命令。
-- 重命名、启用、停用和移除实体与设备，以及把它们移出设有策略的区域。
+- 重命名、启用、停用和移除实体与设备，以及把它们移出设有策略的区域，或移入会放宽它们的区域。
 - 集成和辅助元素更改、区域和楼层。
 - 日历和待办事项更改，以及通知。
 - Zigbee 设备更改、原始 Z-Wave 和 ISY 命令、`update.install`、ESPHome 固件安装和 ESPHome 设备操作。设备及其子设备的每个实体都必须通过检查。
@@ -103,7 +104,7 @@ Phoenix 无法确定名称来自包或替换变量的文件，以及 Device Buil
 
 如果新 ID 已有策略，Phoenix 会保留两者。新 ID 采用两者中较严格的控制模式、执行方式和隐私设置，以及两者的全部限制，另一个策略显示为孤立策略，供你查看。智能体的重命名也一样，MESA 会先检查重命名本身。
 
-把对象移出设有策略的区域算作一次更改，因为这可能解除某条规则。移入则不算作更改。
+把对象移出设有策略的区域算作一次更改，因为这可能解除某条规则。只有当区域的策略会放宽对象的控制模式时，移入才算作更改，例如把开关移入{{label:mesa.modeAutonomous}}区域。MESA 按对象移动之前的控制模式检查这次移动。
 
 ## MESA 无法读取策略时 {#storage}
 

@@ -624,8 +624,9 @@ mode: single
   `device_registry.rename|enable|disable`, so entity, device, area, integration,
   and domain MESA layers all contribute. One denial blocks the whole device and
   one enforced confirmation joins the ordinary registry approval. An area change
-  that takes an entity out of an area with a MESA profile is evaluated the same
-  way under `device_registry.move_area`, for those entities only. Label edits have
+  that takes an entity out of an area with a MESA profile, or into one whose
+  profile would loosen its control mode, is evaluated the same way under
+  `device_registry.move_area`, for those entities only. Label edits have
   no MESA gate. With MESA active, an entity-less device cannot be renamed or
   enabled/disabled because mesa-core has no complete entity context from which to
   resolve it.

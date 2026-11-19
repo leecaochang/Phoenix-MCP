@@ -1024,13 +1024,15 @@ async def async_persist_renamed_profile(hass: HomeAssistant, runtime: MesaRuntim
         refresh_orphans(hass, runtime)
 
 
-def area_profile_exits(
+def gated_area_moves(
     data: PhoenixData, moves: Mapping[str, str | None]
 ) -> list[str]:
-    """Return the entities an area change would take out of a profiled area.
+    """Return the entities whose area change MESA judges as ``move_area``.
 
-    ``moves`` maps each affected entity to its effective area after the change. Only an exit
-    can lift a restriction. With the runtime unavailable every changed entity is returned.
+    ``moves`` maps each affected entity to its effective area after the change. Leaving a profiled
+    area can lift that area's rule, so every exit counts. Entering one can replace a ``confirm``
+    floor with the area's looser declaration, so an entry counts when the entity's effective
+    control mode would loosen. With the runtime unavailable every changed entity is returned.
     """
     runtime = data.mesa
     if data.store.get_settings().mesa_mode == MESA_MODE_OFF:
@@ -1038,13 +1040,49 @@ def area_profile_exits(
     if runtime is None:
         return sorted(moves)
     get_area = _build_get_entity_area(runtime.hass)
-    return sorted(
-        entity_id
-        for entity_id, after in moves.items()
-        if (before := get_area(entity_id)) is not None
-        and before != after
-        and runtime.store.get_area_profile(before) is not None
+    gated: set[str] = set()
+    entries: dict[str, str] = {}
+    for entity_id, after in moves.items():
+        before = get_area(entity_id)
+        if before == after:
+            continue
+        if before is not None and runtime.store.get_area_profile(before) is not None:
+            gated.add(entity_id)
+        elif after is not None and runtime.store.get_area_profile(after) is not None:
+            entries[entity_id] = after
+    if entries:
+        gated.update(_loosening_entries(runtime, entries, get_area))
+    return sorted(gated)
+
+
+def _loosening_entries(
+    runtime: MesaRuntime, entries: Mapping[str, str], get_area: Callable[[str], str | None]
+) -> list[str]:
+    """The entering entities whose effective control mode is looser in the proposed area.
+
+    Resolves against a second store over the same profiles with only the area lookup changed.
+    An entity that cannot be resolved either way counts, so the move is judged.
+    """
+    current = runtime.store
+    proposed = ProfileStore(
+        current.backend,
+        get_entity_area=lambda entity_id: entries.get(entity_id) or get_area(entity_id),
+        get_entity_integration=current.get_entity_integration,
+        get_entity_device=current.get_entity_device,
+        get_device_parent=current.get_device_parent,
+        get_entity_domain=current.get_entity_domain,
     )
+    loosening: list[str] = []
+    for entity_id in entries:
+        try:
+            before = current.get_effective(entity_id).operational_boundaries.control_mode
+            after = proposed.get_effective(entity_id).operational_boundaries.control_mode
+        except _POLICY_READ_ERRORS:
+            loosening.append(entity_id)
+            continue
+        if CONTROL_MODE_RANK[after] < CONTROL_MODE_RANK[before]:
+            loosening.append(entity_id)
+    return loosening
 
 
 # ---------------------------------------------------------------------------

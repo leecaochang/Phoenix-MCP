@@ -37,7 +37,8 @@ MESA 依欄位組合策略，而不是依策略整體組合。
 
 策略會改變這一點：
 
-- 設定控制模式的策略會替換基線，無論它位於哪個層級，即使更寬鬆。門鎖上的{{label:mesa.modeConfirm}}策略會讓門鎖變為{{label:mesa.modeConfirm}}，而不是{{label:mesa.modeProhibited}}。
+- 設定控制模式的策略會替換基線，即使更寬鬆。門鎖上的{{label:mesa.modeConfirm}}策略會讓門鎖變為{{label:mesa.modeConfirm}}，而不是{{label:mesa.modeProhibited}}。
+- 只有實體、裝置或域策略可以放寬{{label:mesa.modeProhibited}}或{{label:mesa.modeReadOnly}}基線。分區、主裝置或整合策略只能讓它更嚴格，因此{{label:mesa.modeAutonomous}}分區中的門鎖仍為{{label:mesa.modeProhibited}}。
 - 未設定控制模式的策略會保留基線，但原本{{label:mesa.modeAutonomous}}的都會變為{{label:mesa.modeConfirm}}。燈上的僅標籤策略會讓該燈需要確認。
 
 因此，針對門鎖的{{label:mesa.modeAutonomous}}域策略會讓每把門鎖變為{{label:mesa.modeAutonomous}}，除非有更嚴格的策略涵蓋它。在依賴某個策略之前，請在[生效值解析](guide:window.mesaEditor#effective-resolution)中檢查它的效果。
@@ -48,7 +49,7 @@ MESA 依欄位組合策略，而不是依策略整體組合。
 
 自訂整合可以在其資料夾中附帶自己的策略，即 `mesa_profile.json` 檔案。Phoenix MCP 每次啟動時都會把該檔案新增為這個整合的策略，不會先詢問你。
 
-這樣的策略可以放寬基線。如果某個整合把它的門鎖標記為{{label:mesa.modeAutonomous}}，這些門鎖就會變為{{label:mesa.modeAutonomous}}。在[生效值解析](guide:window.mesaEditor#effective-resolution)中，這些值的 **{{label:mesa.colOrigin}}** 顯示為 developer。
+這樣的策略可以放寬基線，但{{label:mesa.modeProhibited}}或{{label:mesa.modeReadOnly}}基線除外。如果某個整合把它的開關標記為{{label:mesa.modeAutonomous}}，這些開關就會變為{{label:mesa.modeAutonomous}}，但它的門鎖仍為{{label:mesa.modeProhibited}}。在[生效值解析](guide:window.mesaEditor#effective-resolution)中，這些值的 **{{label:mesa.colOrigin}}** 顯示為 developer。
 
 若要覆寫它，請為該整合儲存你自己的策略。之後 Phoenix MCP 會保留你的策略，並略過該整合的檔案。
 
@@ -81,7 +82,7 @@ MESA 對每個來源的處理都相同：MCP 用戶端、Agent Chat、語音智�
 它會檢查：
 
 - 裝置操作，無論智慧體使用哪種命令。
-- 重新命名、啟用、停用和移除實體與裝置，以及把它們移出設有策略的分區。
+- 重新命名、啟用、停用和移除實體與裝置，以及把它們移出設有策略的分區，或移入會放寬它們的分區。
 - 整合和輔助項目變更、分區和樓層。
 - 行事曆和待辦事項變更，以及通知。
 - Zigbee 裝置變更、原始 Z-Wave 和 ISY 命令、`update.install`、ESPHome 韌體安裝和 ESPHome 裝置操作。裝置及其子裝置的每個實體都必須通過檢查。
@@ -103,7 +104,7 @@ Phoenix 無法確定名稱來自套件或替換變數的檔案，以及 Device B
 
 如果新 ID 已有策略，Phoenix 會保留兩者。新 ID 採用兩者中較嚴格的控制模式、執行方式和隱私設定，以及兩者的全部限制，另一個策略顯示為孤立策略，供你檢視。智慧體的重新命名也一樣，MESA 會先檢查重新命名本身。
 
-把對象移出設有策略的分區算作一次變更，因為這可能解除某條規則。移入則不算作變更。
+把對象移出設有策略的分區算作一次變更，因為這可能解除某條規則。只有當分區的策略會放寬對象的控制模式時，移入才算作變更，例如把開關移入{{label:mesa.modeAutonomous}}分區。MESA 按對象移動之前的控制模式檢查這次移動。
 
 ## MESA 無法讀取策略時 {#storage}
 

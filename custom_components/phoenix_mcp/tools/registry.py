@@ -29,7 +29,7 @@ from ..catalog_text import diff_summary_fields as _summary
 from ..capability import effective_cap
 from ..redaction import _scrub_log_text, redact_diagnostics
 from ..mesa import (
-    area_profile_exits, evaluate_registry_action, fire_mesa_blocked_event, RegistryMesaDecision,
+    gated_area_moves, evaluate_registry_action, fire_mesa_blocked_event, RegistryMesaDecision,
     unresolved_context_refused, UNRESOLVED_CONTEXT_WARNING,
 )
 from ..policy_engine import (
@@ -552,8 +552,8 @@ def _entity_mesa_actions(
 ) -> list[tuple[str, dict[str, Any]]]:
     """The MESA actions in one set_entity edit, each with its synthetic parameters.
 
-    Rename, disable and leaving a profiled area are actions; other metadata is not, and an edit
-    leaving the state as it is gates nothing.
+    Rename, disable, leaving a profiled area and an entry that loosens are actions; other metadata
+    is not, and an edit leaving the state as it is gates nothing.
     """
     if entry is None:
         return []
@@ -569,7 +569,7 @@ def _entity_mesa_actions(
         actions.append(("disable" if disabled else "enable", {"enabled": not disabled}))
     if "area_id" in args:
         after = args["area_id"] or device_effective_area_id(hass, entry.device_id)
-        if area_profile_exits(data, {entry.entity_id: after}):
+        if gated_area_moves(data, {entry.entity_id: after}):
             actions.append(("move_area", {}))
     return actions
 
@@ -879,7 +879,7 @@ def _device_mesa_actions(args: dict, *, restoring: bool) -> list[str]:
 def _device_area_exits(
     data: PhoenixData, hass: HomeAssistant, device: Any, args: dict
 ) -> list[str]:
-    """Entities a set_device area change would take out of a profiled area.
+    """Entities a set_device area change takes out of a profiled area, or into one that loosens them.
 
     Entities and child devices with their own area stay; a child without one follows this device,
     and clearing a child's area returns it to its parent's.
@@ -899,7 +899,7 @@ def _device_area_exits(
             own_after if entry.device_id == device.id
             else device_entry_value(snapshot.get(entry.device_id), "area_id") or new_area
         )
-    return area_profile_exits(data, moves)
+    return gated_area_moves(data, moves)
 
 
 def _device_mesa_service_data(args: dict) -> dict[str, Any]:
@@ -931,7 +931,7 @@ def _device_mesa_decision(
 ) -> _DeviceMesaDecision | tuple[dict, str, str]:
     """Resolve all device MESA actions across the exact attached membership.
 
-    ``area_exits`` adds move_area for just the entities leaving a profiled area.
+    ``area_exits`` adds move_area for just the entities whose move ``gated_area_moves`` returned.
     """
     if area_exits:
         actions = [*actions, "move_area"]

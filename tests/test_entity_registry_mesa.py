@@ -531,7 +531,7 @@ async def test_a_failure_after_the_registry_write_starts_is_not_typed_as_refused
     assert not isinstance(content, RefusedBeforeWrite)
 
 
-# --- moves out of a profiled area, and entity enable/disable --------------------
+# --- moves out of or into a profiled area, and entity enable/disable ------------
 
 
 def _device_key(device_id: str, **caps) -> AccessKeyRecord:
@@ -598,6 +598,72 @@ async def test_moving_into_a_profiled_area_only_tightens(hass: HomeAssistant, re
 
     assert outcome == "allowed"
     assert er.async_get(hass).async_get(entity_id).area_id == vault
+
+
+def _light_floor(data: PhoenixData, mode: str) -> None:
+    """Give unprofiled lights a deployment floor, as the built-in baseline gives switches and locks."""
+    data.mesa.store.set_deployment_defaults({"domain_overrides": {"light": {"control_mode": mode}}})
+
+
+async def test_an_entry_that_loosens_a_confirm_floor_needs_approval(hass: HomeAssistant, registry_entity, areas):
+    """An Autonomous area replaces a Confirm floor, so the move is judged under the current mode."""
+    entity_id, _device_id = registry_entity
+    vault, hall = areas
+    _place(hass, entity_id, hall)
+    data = await _data(hass, "enforced")
+    _light_floor(data, "confirm")
+    data.mesa.store.set_area_profile(vault, _profile(vault, "autonomous"))
+    create = AsyncMock(return_value=({}, "pending_approval", "approval"))
+    key = _access_key()
+
+    with patch("custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval", create):
+        _content, outcome, _ = await _call_tool(
+            "set_entity", {"entity_id": entity_id, "changes": {"area_id": vault}}, key, hass, data,
+        )
+
+    assert outcome == "pending_approval"
+    assert er.async_get(hass).async_get(entity_id).area_id == hall
+    _content, outcome, _ = await async_execute_approved_tool("set_entity", create.await_args.kwargs["args"], key, hass, data)
+    assert outcome == "allowed"
+    assert er.async_get(hass).async_get(entity_id).area_id == vault
+
+
+async def test_an_entry_into_an_area_that_cannot_lift_a_prohibited_floor_is_not_gated(
+    hass: HomeAssistant, registry_entity, areas,
+):
+    """An area cannot lift a Prohibited floor, so the move loosens nothing and MESA has nothing to judge."""
+    entity_id, _device_id = registry_entity
+    vault, hall = areas
+    _place(hass, entity_id, hall)
+    data = await _data(hass, "enforced")
+    _light_floor(data, "prohibited")
+    data.mesa.store.set_area_profile(vault, _profile(vault, "autonomous"))
+
+    _content, outcome, _ = await _call_tool(
+        "set_entity", {"entity_id": entity_id, "changes": {"area_id": vault}}, _access_key(), hass, data,
+    )
+
+    assert outcome == "allowed"
+    assert data.mesa.store.get_effective(entity_id).operational_boundaries.control_mode.value == "prohibited"
+
+
+async def test_a_device_entry_that_loosens_its_entities_needs_approval(hass: HomeAssistant, registry_entity, areas):
+    _entity_id, device_id = registry_entity
+    vault, hall = areas
+    devices = dr.async_get(hass)
+    devices.async_update_device(device_id, area_id=hall)
+    data = await _data(hass, "enforced")
+    _light_floor(data, "confirm")
+    data.mesa.store.set_area_profile(vault, _profile(vault, "autonomous"))
+    create = AsyncMock(return_value=({}, "pending_approval", "approval"))
+
+    with patch("custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval", create):
+        _content, outcome, _ = await _call_tool(
+            "set_device", {"device_id": device_id, "area_id": vault}, _device_key(device_id), hass, data,
+        )
+
+    assert outcome == "pending_approval"
+    assert devices.async_get(device_id).area_id == hall
 
 
 async def test_a_room_change_without_area_profiles_ignores_mesa(hass: HomeAssistant, registry_entity, areas):
