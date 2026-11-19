@@ -6,8 +6,8 @@
 #
 # Source-qualified protocol target, used only to add context to failures. The compiler and
 # the Builder use independent version families.
-ESPHOME_BUILDER_VERIFIED_VERSION = "1.25.0"
-ESPHOME_COMPILER_VERIFIED_VERSION = "2026.10.1"
+ESPHOME_BUILDER_VERIFIED_VERSION = "1.28.1"
+ESPHOME_COMPILER_VERIFIED_VERSION = "2026.11.0"
 ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS = 10.0
 # Validation runs the config through ESPHome itself (no compile), which is
 # seconds on a small file but can pull external_components on a large one.

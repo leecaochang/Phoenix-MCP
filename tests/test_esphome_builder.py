@@ -378,20 +378,20 @@ async def test_validate_queue_and_idle_refusals_are_command_errors(
 async def test_current_handshake_reports_both_versions_without_a_note(
     hass, aiohttp_client, monkeypatch, socket_enabled
 ):
-    """The 1.25.0 ServerInfoMessage keeps both version fields beside its new metadata."""
+    """The 1.28.1 ServerInfoMessage keeps both version fields beside its new metadata."""
     fake = FakeDeviceBuilder(replies={"firmware/get_job": {"message_id": "1", "result": None}})
     url = await connect(fake, aiohttp_client, monkeypatch)
     res = await async_builder_command(hass, url, "firmware/get_job", {"job_id": "x"}, timeout_seconds=5)
-    assert (res.server_version, res.esphome_version) == ("1.25.0", "2026.10.1")
+    assert (res.server_version, res.esphome_version) == ("1.28.1", "2026.11.0")
     assert res.result is None
     assert version_mismatch_note("firmware/get_job", res.server_version, res.esphome_version) is None
 
 
 def test_version_diagnostics_keep_builder_and_compiler_separate():
-    assert version_mismatch_note("x", "1.25.0", "2026.10.1") is None
-    note = version_mismatch_note("x", "1.25.0", "2099.1.0")
+    assert version_mismatch_note("x", "1.28.1", "2026.11.0") is None
+    note = version_mismatch_note("x", "1.28.1", "2099.1.0")
     assert "ESPHome compiler 2099.1.0" in note
-    assert "Device Builder 1.25.0" not in note
+    assert "Device Builder 1.28.1" not in note
 
 
 async def test_capture_returns_what_arrived_before_the_deadline(hass, aiohttp_client, monkeypatch, socket_enabled):

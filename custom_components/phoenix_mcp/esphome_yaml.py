@@ -58,6 +58,11 @@ ESPHOME_SECRET_PATHS: tuple[tuple[str, ...], ...] = (
     ("ota", "[]", "encryption", "key"),
     ("web_server", "auth", "password"),
     ("mqtt", "password"),
+    # Credentials under names no key rule can take: the hex Thread dataset carries the network
+    # key and PSKc, and a numeric PIN would read as a GPIO.
+    ("openthread", "tlv"),
+    ("delta_wallbox", "pin"),
+    ("delta_wallbox", "[]", "pin"),
 )
 
 # Layer 2: key names that mark what they hold as a credential wherever they appear, on top

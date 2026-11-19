@@ -133,6 +133,27 @@ def test_ota_encryption_keys_are_masked_and_scrubbed(prefix, dotted):
     assert key not in scrub_secret_values("compiler reports " + key, inline_secret_values(disk))
 
 
+@pytest.mark.parametrize("text,dotted,value", [
+    # The operational dataset holds the Thread network key and PSKc in plain hex.
+    ("openthread:\n  tlv: 0e08000000000001000000030000123506\n", "openthread.tlv",
+     "0e08000000000001000000030000123506"),
+    # A numeric BLE PIN under a key the GPIO rule leaves readable.
+    ("delta_wallbox:\n  password: wbpass\n  pin: 135790\n", "delta_wallbox.pin", "135790"),
+    ("delta_wallbox:\n  - password: wbpass\n    pin: 135790\n", "delta_wallbox[0].pin", "135790"),
+])
+def test_credentials_under_ordinary_key_names_are_curated(text, dotted, value):
+    masked, paths = redact_esphome_text(text)
+    assert dotted in paths
+    assert value not in masked
+
+
+def test_a_gpio_pin_elsewhere_stays_readable():
+    text = "output:\n  - platform: ledc\n    pin: GPIO16\n"
+    masked, paths = redact_esphome_text(text)
+    assert paths == []
+    assert masked == text
+
+
 class TestLayer2KeyNameHeuristic:
     def test_credential_key_at_an_uncurated_path(self):
         text = "ble_client:\n  - mac_address: AA\n    bindkey: abcdef0123456789\n"
