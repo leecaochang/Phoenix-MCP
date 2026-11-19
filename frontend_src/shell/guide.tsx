@@ -20,6 +20,7 @@ import { createPortal } from "react-dom";
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { clampPosToViewport, snapResizeRect } from "../components/AgentCliWindow";
 import { ANCHOR, GUIDE_FORMAT, HEADING, LABEL, type GuideBundle, type GuideTopic } from "../guide/compile";
+import { FOLD_CLOSE, FOLD_OPEN, withRefLabels, withToolText, withoutToolText } from "../guide/reference";
 import { fold, searchGuide, topicSections, type SearchSection } from "../guide/search";
 import type { GuideTarget, GuideTargetTracker } from "./guideTarget";
 import { displayedLanguage, hasMessage, t } from "../i18n";
@@ -49,7 +50,7 @@ const RESIZE_EDGES = ["n", "s", "e", "w", "ne", "nw", "se", "sw"] as const;
 
 const loaded = new Map<string, Promise<GuideBundle | null>>();
 /** Forget the fetched topics, so tests can serve their own. */
-export function clearGuideCache(): void { loaded.clear(); }
+export function clearGuideCache(): void { loaded.clear(); shared.clear(); }
 
 /** Section keywords as shipped, with anything that is not a list of words left out. */
 function sectionKeywordsOf(raw: object): Record<string, string[]> {
@@ -73,12 +74,16 @@ function validBundle(raw: unknown): GuideBundle | null {
       ...(typeof topic.order === "number" ? { order: topic.order } : {}),
       ...(Array.isArray(topic.keywords) ? { keywords: topic.keywords.filter((k) => typeof k === "string") } : {}),
       ...(topic.sectionKeywords && typeof topic.sectionKeywords === "object" ? { sectionKeywords: sectionKeywordsOf(topic.sectionKeywords) } : {}),
+      ...(typeof topic.more === "string" && /^[a-z]+$/.test(topic.more) ? { more: topic.more } : {}),
     };
   }
   const labels = b.labels && typeof b.labels === "object"
     ? Object.fromEntries(Object.entries(b.labels).filter(([, v]) => typeof v === "string"))
     : undefined;
-  return { format: GUIDE_FORMAT, language: String(b.language ?? ""), topics, ...(labels ? { labels } : {}) };
+  const refLabels = b.refLabels && typeof b.refLabels === "object"
+    ? Object.fromEntries(Object.entries(b.refLabels).filter(([, v]) => typeof v === "string"))
+    : undefined;
+  return { format: GUIDE_FORMAT, language: String(b.language ?? ""), topics, ...(labels ? { labels } : {}), ...(refLabels ? { refLabels } : {}) };
 }
 
 /**
@@ -127,6 +132,30 @@ export function loadGuide(language: string): Promise<GuideBundle | null> {
       .catch(() => null);
     loaded.set(language, pending);
     void pending.then((b) => { if (!b) loaded.delete(language); });
+  }
+  return pending;
+}
+
+const shared = new Map<string, Promise<Record<string, string> | null>>();
+
+/**
+ * Text a page leaves to a file every language shares (`guide/<name>.json`), fetched once per page
+ * when the reader first opens such a page; a failed fetch is tried again next time.
+ */
+export function loadShared(name: string): Promise<Record<string, string> | null> {
+  let pending = shared.get(name);
+  if (!pending) {
+    pending = fetch(`${GUIDE_URL}/${encodeURIComponent(name)}.json?v=${encodeURIComponent(JS_BUILD)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((raw: unknown) => {
+        const file = raw as { format?: unknown; blocks?: unknown } | null;
+        if (!file || file.format !== GUIDE_FORMAT || !file.blocks || typeof file.blocks !== "object") return null;
+        return Object.fromEntries(Object.entries(file.blocks).filter(([, v]) => typeof v === "string")) as Record<string, string>;
+      })
+      .catch(() => null);
+    shared.set(name, pending);
+    const settled = pending;
+    void settled.then((b) => { if (!b && shared.get(name) === settled) shared.delete(name); });
   }
   return pending;
 }
@@ -192,6 +221,10 @@ export function renderTopic(body: string): string {
   const flush = () => { if (chunk.length) { out.push(renderMarkdown(chunk.join("\n"), { guideLinks: true, stackTables: true })); chunk = []; } };
   for (const line of body.split("\n")) {
     if (/^```/.test(line)) inCode = !inCode;
+    // A folded list: `+++ <summary>` opens it and `+++` closes it.
+    const fold = inCode ? null : FOLD_OPEN.exec(line);
+    if (fold) { flush(); out.push(`<details class="phx-guide-fold"><summary>${escapeHtml(fold[1])}</summary>`); continue; }
+    if (!inCode && line === FOLD_CLOSE) { flush(); out.push("</details>"); continue; }
     const h = inCode ? null : HEADING.exec(line);
     if (!h || !ANCHOR.test(h[3])) { chunk.push(line); continue; }
     flush();
@@ -489,7 +522,7 @@ export function useSearchSections(bundles: Guide["bundles"]): SearchSection[] {
     const order: string[] = [];
     const walk = (nodes: ContentsNode[]) => { for (const n of nodes) { order.push(n.id); walk(n.children); } };
     walk(guideContents(topics));
-    return order.flatMap((id) => topicSections(id, topics[id].title, topics[id].body, topics[id].keywords ?? [], labelText, topics[id].sectionKeywords));
+    return order.flatMap((id) => topicSections(id, topics[id].title, withoutToolText(topics[id].body), topics[id].keywords ?? [], labelText, topics[id].sectionKeywords));
   }, [bundles]);
 }
 
@@ -588,8 +621,30 @@ function useFocusAfterMove(guide: Guide, frame: RefObject<HTMLElement | null>) {
   }, [guide.moves, guide.view, guide.topic?.id, guide.anchor]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
+/**
+ * A page's body as shown: one that leaves text to a shared file shows its headings and
+ * summaries until that file loads, and in full after.
+ */
+function useTopicBody(topic: FoundTopic | null, bundles: ReadonlyArray<GuideBundle | null> | null): string {
+  const [blocks, setBlocks] = useState<{ name: string; blocks: Record<string, string> } | null>(null);
+  const more = topic?.more;
+  useEffect(() => {
+    if (!more) return;
+    let live = true;
+    void loadShared(more).then((b) => { if (live && b) setBlocks({ name: more, blocks: b }); });
+    return () => { live = false; };
+  }, [more]);
+  if (!topic) return "";
+  if (!more) return topic.body;
+  const full = blocks?.name === more ? withToolText(topic.body, blocks.blocks) : null;
+  // The details' words come in the page's own language, from its Guide file.
+  const labels = bundles?.find((b) => b?.language === (topic.lang ?? "en"))?.refLabels ?? {};
+  return full ? withRefLabels(full, labels) : withoutToolText(topic.body);
+}
+
 function GuideBody({ guide }: { guide: Guide }) {
-  const html = useMemo(() => (guide.topic ? renderTopic(guide.topic.body) : ""), [guide.topic]);
+  const text = useTopicBody(guide.topic, guide.bundles);
+  const html = useMemo(() => (text ? renderTopic(text) : ""), [text]);
   const body = useRef<HTMLDivElement | null>(null);
   const frame = useRef<HTMLDivElement | null>(null);
   useFocusAfterMove(guide, frame);
@@ -620,7 +675,7 @@ function guidePage(guide: Guide, html: string, body: RefObject<HTMLDivElement | 
   return (
     <>
       <GuideTools guide={guide} />
-      <article className="phx-guide-topic" lang={guide.topic.lang}>
+      <article className={`phx-guide-topic${guide.topic.more ? " phx-guide-reference" : ""}`} lang={guide.topic.lang}>
         <Breadcrumbs guide={guide} id={guide.topic.id} />
         <h3>{topicTitle(guide.topic.title)}</h3>
         {/* Escape-first renderer output: source text is escaped before the fixed set of tags is added. */}

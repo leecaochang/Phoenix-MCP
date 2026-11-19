@@ -1,7 +1,7 @@
 ---
 {"id": "topic.tools", "title": "智能体能做什么", "parent": "topic.about", "order": 30, "keywords": ["工具", "工具列表", "MCP 工具", "智能体能做什么", "tools/list"], "sectionKeywords": {"rules": ["拒绝访问", "隐藏工具", "声明全部工具", "结果大小"], "reading": ["get_state", "get_history", "get_statistics", "get_camera_image", "get_calendar_events", "get_todo_items", "GetLiveContext", "GetDateTime", "历史", "统计", "摄像头"], "controlling": ["HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed", "HassClimateSetTemperature", "HassSetPosition", "HassStopMoving", "HassMediaPause", "HassMediaSearchAndPlay", "HassSetVolume", "HassVacuumStart", "HassCancelAllTimers", "HassBroadcast", "原生工具", "锁", "卷帘", "HassMediaNext", "HassMediaPrevious", "HassMediaUnpause", "HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassSetVolumeRelative", "HassVacuumCleanArea", "HassVacuumReturnToBase"], "actions": ["call_service", "dry_run_service", "服务", "操作", "重新加载", "重启", "响应数据", "附件", "media-source"], "lists": ["set_todo_item", "create_calendar_event", "update_calendar_event", "delete_calendar_event", "get_calendar_write", "待办", "日历"], "waiting": ["watch_entity", "等待状态"], "testing": ["test_trigger", "test_condition", "测试自动化", "触发器", "条件"], "home-companion": ["home_request", "家庭请求"], "automations": ["list_automations", "get_automation", "create_automation", "edit_automation", "delete_automation", "list_scripts", "get_script", "create_script", "edit_script", "delete_script", "create_blueprint", "edit_blueprint", "delete_blueprint", "蓝图", "间接控制", "包", "packages"], "scenes": ["list_scenes", "get_scene", "create_scene", "edit_scene", "delete_scene"], "helpers": ["list_helpers", "create_helper", "edit_helper", "delete_helper", "get_helper_settings", "set_helper_settings", "input_boolean", "计数器", "定时器", "地点", "模板辅助元素"], "dashboards": ["list_dashboards", "create_dashboard", "edit_dashboard", "delete_dashboard", "get_dashboard_config", "set_dashboard_config", "卡片", "仪表盘"], "restore": ["还原", "回执", "回滚"], "mesa": ["MESA 策略", "租约"], "configuration": ["配置", "模板", "日志", "能源"], "diagnostics": ["搜索", "注册表", "跟踪", "诊断"], "files": ["文件", "YAML", "www", "themes"], "esphome": ["ESPHome", "固件"], "system": ["集成", "注册表", "无线电", "备份", "重启", "通知", "fix_repair", "set_integration_subentry", "子条目", "修复"], "introspection": ["自己的请求", "审计条目"], "household": ["语音", "Assist", "AI 任务", "非管理员"]}}
 ---
-智能体通过工具工作。本页按组说明它们：智能体可以用它们做什么、哪些能力允许它们，以及值得了解的限制。客户端从工具本身读取每个工具的详细信息。
+智能体通过工具工作。本页按组说明它们：智能体可以用它们做什么、哪些能力允许它们，以及值得了解的限制。[工具参考](guide:topic.toolReference)列出每个工具的参数和调用示例。
 
 两个设置决定每个操作。[{{label:accessKeys.cardCapabilities}}](guide:window.capabilities)决定智能体可以做哪类事情。[{{label:accessKeys.permissionsTree}}](guide:window.permissions)决定它可以对哪些实体做。
 
@@ -29,6 +29,8 @@
 
 允许它的能力：[{{label:caps.cap_camera_read.label}}](guide:window.capabilities#camera-read)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-reading)
+
 ## 控制设备 {#controlling}
 
 智能体可以打开和关闭设备，设置灯、风扇、温控、卷帘和音量，控制媒体播放器和吸尘器，并取消定时器。这些命令与 Home Assistant 自带助手使用的命令相同。每个目标都需要权限树中的 W。
@@ -46,6 +48,8 @@
 允许它的能力：[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)、[{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
 
 相关：[MESA 如何决定](guide:topic.mesaRules)
+
+本组每个工具及其参数：[工具参考](guide:topic.tools-controlling)
 
 ## 运行任意操作 {#actions}
 
@@ -82,6 +86,8 @@
 
 允许它的能力：[{{label:caps.cap_restart.label}}](guide:window.capabilities#restart)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)、[{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response)、[{{label:caps.cap_notify.label}}](guide:window.capabilities#notify)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)（用于预览）
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-actions)
+
 ## 列表和日历 {#lists}
 
 智能体可以添加、更改和移除待办事项，也可以清除已完成的事项，这只需要列表上的 W。移除事项是永久性的：Phoenix 不保留副本，因此[无法还原](guide:topic.configurationHistory#not-recorded)。结果会列出移除了哪些事项。仍带有读取时留下的 `<redacted>` 标记的事项文本会被拒绝。
@@ -92,11 +98,15 @@
 
 允许它的能力：[{{label:caps.cap_calendar_write.label}}](guide:window.capabilities#calendar-write)
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-lists)
+
 ## 等待更改 {#waiting}
 
 智能体最多可以等待 30 秒，让实体发生变化或达到某个状态，以确认操作生效。等待结束时，权限树和权限会再次检查。
 
 允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
+
+本组每个工具及其参数：[工具参考](guide:topic.tools-waiting)
 
 ## 测试触发器和条件 {#testing}
 
@@ -112,6 +122,8 @@
 
 允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；模板触发器还需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) 设为允许
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-testing)
+
 ## Home Companion {#home-companion}
 
 [{{label:personas.home_companion.label}}](guide:window.persona#home-companion)密钥只提供一个工具。应用发送一个普通请求，例如“关掉楼下的灯”。Phoenix 用自己的模型执行，检查结果并回报。
@@ -125,6 +137,8 @@
 在 Agent Chat 中它使用聊天的模型。其他所有场合使用语音智能体的提供商和模型。
 
 相关：[语音智能体](guide:topic.homeAssistantFeatures#voice-agent)
+
+本组每个工具及其参数：[工具参考](guide:topic.tools-home-companion)
 
 ## 自动化和脚本 {#automations}
 
@@ -140,6 +154,8 @@
 
 允许它的能力：[{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write)、[{{label:caps.cap_script_write.label}}](guide:window.capabilities#script-write)、[{{label:caps.cap_blueprint_write.label}}](guide:window.capabilities#blueprint-write)
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-automations)
+
 ## 场景 {#scenes}
 
 智能体可以读取、创建、编辑和删除 Home Assistant 场景编辑器中的场景。场景中的每个实体都需要权限树中的 W，即使只是读取场景。MESA 不检查场景更改。
@@ -149,6 +165,8 @@
 创建或编辑包含锁、警报、卷帘或阀门的场景（直接包含或通过组包含）还需要物理控制。设为拒绝访问时，更改会被拒绝。设为确认时，它会等待你的审批，并把它们列为 `physical_entities`。
 
 允许它的能力：[{{label:caps.cap_scene_write.label}}](guide:window.capabilities#scene-write)、[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)
+
+本组每个工具及其参数：[工具参考](guide:topic.tools-scenes)
 
 ## 辅助元素 {#helpers}
 
@@ -165,6 +183,8 @@
 
 允许它的能力：[{{label:caps.cap_helper_write.label}}](guide:window.capabilities#helper-write)、[{{label:caps.cap_integration_write.label}}](guide:window.capabilities#integration-write)
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-helpers)
+
 ## 仪表盘 {#dashboards}
 
 智能体可以列出、创建、编辑和删除仪表盘，读取和搜索其布局，更改卡片并列出已安装的自定义卡片。所有这些都需要管理仪表盘，包括读取。
@@ -178,6 +198,8 @@
 
 允许它的能力：[{{label:caps.cap_lovelace_write.label}}](guide:window.capabilities#lovelace-write)、[{{label:caps.cap_dashboard_resources.label}}](guide:window.capabilities#dashboard-resources)
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-dashboards)
+
 ## 还原更改 {#restore}
 
 智能体可以放回自己之前对模板辅助元素、蓝图、能源设置、仪表盘或仪表盘资源所做的更改。它会先请求回执，然后发送还原，还原会经过该能力通常的审批。智能体只能看到自己的记录。
@@ -185,6 +207,8 @@
 允许它的能力：以下任一项：[{{label:caps.cap_helper_write.label}}](guide:window.capabilities#helper-write)、[{{label:caps.cap_blueprint_write.label}}](guide:window.capabilities#blueprint-write)、[{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write)、[{{label:caps.cap_lovelace_write.label}}](guide:window.capabilities#lovelace-write)、[{{label:caps.cap_dashboard_resources.label}}](guide:window.capabilities#dashboard-resources)
 
 相关：[还原可以放回什么](guide:topic.configurationHistory#restore)
+
+本组每个工具及其参数：[工具参考](guide:topic.tools-restore)
 
 ## MESA 策略 {#mesa}
 
@@ -195,6 +219,8 @@
 允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
 
 相关：[MESA 如何决定](guide:topic.mesaRules)
+
+本组每个工具及其参数：[工具参考](guide:topic.tools-mesa)
 
 ## 配置、模板和日志 {#configuration}
 
@@ -216,6 +242,8 @@
 
 允许它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)、[{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write)、[{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render)、[{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read)、[{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-configuration)
+
 ## 发现和诊断 {#diagnostics}
 
 这些工具只读取。它们帮助智能体在行动前找到方向。
@@ -229,6 +257,8 @@
 
 允许它的能力：[{{label:caps.cap_search.label}}](guide:window.capabilities#search)、[{{label:caps.cap_registry_read.label}}](guide:window.capabilities#registry-read)、[{{label:caps.cap_traces.label}}](guide:window.capabilities#traces)、[{{label:caps.cap_diagnostics.label}}](guide:window.capabilities#diagnostics)
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-diagnostics)
+
 ## 文件和 YAML {#files}
 
 读取文件让智能体读取 www、themes 和 custom_templates 文件夹中的文本文件，每个最大 1 MiB。文件夹列表分页返回，默认每页 500 项，最多 1000 项。它不能写入这些文件。
@@ -238,6 +268,8 @@ YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文�
 名称暗示机密的值以及提到机密的注释显示为 `<redacted>`，但使用普通名称的密码可见。有 YAML 错误的文件不会显示，智能体只会得到需要修复的行号。没有工具会写入 YAML 配置。
 
 允许它的能力：[{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
+
+本组每个工具及其参数：[工具参考](guide:topic.tools-files)
 
 ## ESPHome {#esphome}
 
@@ -257,6 +289,8 @@ Phoenix 无法确定所属设备的文件（例如共享包或已删除的文件
 
 允许它的能力：[{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#esphome-yaml)、[{{label:caps.cap_esphome_flash.label}}](guide:window.capabilities#esphome-flash)
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-esphome)
+
 ## 集成、设备和系统 {#system}
 
 - 集成管理会添加、启用、禁用、重新加载和移除集成，并移除设备。
@@ -274,9 +308,13 @@ Phoenix 无法确定所属设备的文件（例如共享包或已删除的文件
 
 允许它的能力：[{{label:caps.cap_integration_write.label}}](guide:window.capabilities#integration-write)、[{{label:caps.cap_integration_reconfigure.label}}](guide:window.capabilities#integration-reconfigure)、[{{label:caps.cap_registry_write.label}}](guide:window.capabilities#registry-write)、[{{label:caps.cap_radio_write.label}}](guide:window.capabilities#radio-write)、[{{label:caps.cap_backup.label}}](guide:window.capabilities#backup)、[{{label:caps.cap_restart.label}}](guide:window.capabilities#restart)、[{{label:caps.cap_notify.label}}](guide:window.capabilities#notify)
 
+本组每个工具及其参数：[工具参考](guide:topic.tools-system)
+
 ## 密钥自身的状态 {#introspection}
 
 每个密钥都可以检查自己的审批请求，最多等待 30 秒以获取其中 50 个，并读取自己的能力摘要和审计条目。这些不需要能力。来自其他密钥的请求看起来就像不存在。
+
+本组每个工具及其参数：[工具参考](guide:topic.tools-introspection)
 
 ## 在语音、Assist 和 AI 任务中 {#household}
 

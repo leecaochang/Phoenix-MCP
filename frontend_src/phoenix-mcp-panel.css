@@ -587,6 +587,16 @@
 .phx-guide-topic a { color: var(--phx-accent); text-decoration: underline; text-underline-offset: 2px; }
 /* A code block wider than the page scrolls sideways by itself rather than the whole page. */
 .phx-guide-topic pre { max-width: 100%; overflow-x: auto; }
+/* The tool reference's exact text is mostly prose: it wraps in the narrow Guide instead of scrolling sideways. */
+.phx-guide-reference pre {
+  white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px;
+  margin: 0 0 10px; padding: 8px 10px; background: var(--phx-surface-2); border-radius: var(--phx-radius-xs);
+}
+/* A folded list, such as the tools a capability allows. */
+.phx-guide-fold { margin: 0 0 10px; }
+.phx-guide-fold > summary { cursor: pointer; color: var(--phx-text-2); }
+.phx-guide-fold > summary:focus-visible { outline: 2px solid var(--phx-focus); outline-offset: 2px; border-radius: var(--phx-radius-xs); }
+.phx-guide-fold > ul { margin: 6px 0 0; }
 /* Tables keep whole words: the page breaks long tokens anywhere, which would let every column shrink to
    one character. A table wider than the page scrolls sideways in its own box. */
 .phx-md-table { max-width: 100%; overflow-x: auto; margin: 0 0 10px; }

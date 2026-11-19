@@ -23,37 +23,55 @@ Related: [Inline approval wait](guide:window.keySettings#inline-wait), [What pas
 
 Reads Home Assistant's configuration, Energy settings, solar forecast, blueprints and MESA profiles. Pass-through allows it.
 
+{{tools:cap_config_read}}
+
 ### {{label:caps.cap_camera_read.label}} {#camera-read}
 
 Takes still images from cameras the key can reach. An action that names a camera, an image or a camera recording as a media source, such as an AI Task attachment, needs it too. So does one that names a private photo, file or capture library. No persona allows it, and pass-through doesn't either.
+
+{{tools:cap_camera_read}}
 
 ### {{label:caps.cap_template_render.label}} {#template-render}
 
 Renders Home Assistant templates. Pass-through allows it.
 
+{{tools:cap_template_render}}
+
 ### {{label:caps.cap_log_read.label}} {#log-read}
 
 Reads the system log, the logbook, notifications and integration log levels. Pass-through doesn't allow it.
+
+{{tools:cap_log_read}}
 
 ### {{label:caps.cap_search.label}} {#search}
 
 Searches entities and describes areas, entities, relationships and available actions, including dry runs. Every persona and pass-through allow it.
 
+{{tools:cap_search}}
+
 ### {{label:caps.cap_registry_read.label}} {#registry-read}
 
 Lists areas, floors, zones, devices, automations, scripts, scenes, helpers and labels. Every persona and pass-through allow it.
+
+{{tools:cap_registry_read}}
 
 ### {{label:caps.cap_traces.label}} {#traces}
 
 Reads automation traces. Pass-through allows it.
 
+{{tools:cap_traces}}
+
 ### {{label:caps.cap_diagnostics.label}} {#diagnostics}
 
 Reads system health, repairs, configuration checks, radio networks and the ESPHome overview, and validates automations and scripts. With {{label:caps.cap_log_read.label}}, it also reads the fault log, captured debug records and Phoenix's own diagnostics. Pass-through allows it.
 
+{{tools:cap_diagnostics}}
+
 ### {{label:caps.cap_filesystem.label}} {#filesystem}
 
 Reads files in the www, themes and custom_templates folders. Pass-through doesn't allow it.
+
+{{tools:cap_filesystem}}
 
 ## {{label:caps.tierEveryday}} {#everyday}
 
@@ -61,13 +79,19 @@ Reads files in the www, themes and custom_templates folders. Pass-through doesn'
 
 Broadcasts a message through Assist satellites, starts conversations on them and plays announcements and spoken text on speakers, on top of Write on the speaker. Ordinary playback needs only Write. Pass-through allows it.
 
+{{tools:cap_broadcast}}
+
 ### {{label:caps.cap_service_response.label}} {#service-response}
 
 Returns the data an action responds with. Without it, most actions still run but return no data. Phoenix refuses actions that only return data, such as weather forecasts and Music Assistant library searches. Pass-through allows it.
 
+{{tools:cap_service_response}}
+
 ### {{label:caps.cap_esphome_yaml.label}} {#esphome-yaml}
 
 Reads and searches ESPHome device configuration. With the ESPHome Device Builder, it also validates, compiles and inspects devices. Pass-through doesn't allow it.
+
+{{tools:cap_esphome_yaml}}
 
 ## {{label:caps.tierConfigWrite}} {#config-changes}
 
@@ -77,25 +101,37 @@ Pass-through never changes these; each keeps its own setting.
 
 Reads, creates, edits and deletes automations. Adding a call that runs code or reaches the host, a restart or update, a templated action name, or a blueprint always needs your approval, even on Allow.
 
+{{tools:cap_automation_write}}
+
 ### {{label:caps.cap_script_write.label}} {#script-write}
 
 Reads, creates, edits and deletes scripts. The approval rule for automations applies here too.
+
+{{tools:cap_script_write}}
 
 ### {{label:caps.cap_blueprint_write.label}} {#blueprint-write}
 
 Creates, edits and deletes blueprints. Writing a blueprint also needs the matching automations or scripts capability: Deny on either refuses it, and Confirm on either holds it for approval. The approval rule for automations applies here too.
 
+{{tools:cap_blueprint_write}}
+
 ### {{label:caps.cap_scene_write.label}} {#scene-write}
 
 Reads, creates, edits and deletes scenes.
+
+{{tools:cap_scene_write}}
 
 ### {{label:caps.cap_helper_write.label}} {#helper-write}
 
 Creates, edits and deletes helpers, and changes their settings.
 
+{{tools:cap_helper_write}}
+
 ### {{label:caps.cap_calendar_write.label}} {#calendar-write}
 
 Creates, changes and deletes calendar events.
+
+{{tools:cap_calendar_write}}
 
 ## {{label:caps.tierSystem}} {#system}
 
@@ -107,25 +143,37 @@ The agent also needs W on them in the {{label:accessKeys.permissionsTree}}. A ra
 
 Creating or editing a scene with one of these in it needs this capability as well.
 
+{{tools:cap_physical_control}}
+
 ### {{label:caps.cap_notify.label}} {#notify}
 
 Sends notifications, through its own tool, a notify action or any other action that sends through a notify entity. A legacy notify service other than a phone's always needs your approval, even on Allow.
+
+{{tools:cap_notify}}
 
 ### {{label:caps.cap_restart.label}} {#restart}
 
 Restarts or stops Home Assistant and installs updates. Every update needs your approval, even on Allow. ESPHome firmware uses its own capability instead.
 
+{{tools:cap_restart}}
+
 ### {{label:caps.cap_log_control.label}} {#log-control}
 
 Changes an integration's log level. It also needs {{label:caps.cap_log_read.label}}. No persona allows it.
+
+{{tools:cap_log_control}}
 
 ### {{label:caps.cap_integration_write.label}} {#integration-write}
 
 Adds, changes, enables, disables, reloads and removes integrations, and removes devices.
 
+{{tools:cap_integration_write}}
+
 ### {{label:caps.cap_integration_reconfigure.label}} {#integration-reconfigure}
 
 Reconfigures an integration, adds or changes its subentries, such as an AI agent, and fixes its repair issues. Subentries and repair fixes always need your approval, even at Allow.
+
+{{tools:cap_integration_reconfigure}}
 
 ### {{label:caps.cap_lovelace_write.label}} {#lovelace-write}
 
@@ -137,25 +185,37 @@ A custom card already on the dashboard and left unchanged doesn't count. Built-i
 
 Templates in a dashboard change are first tried in a separate process, and a change whose template fails there is refused.
 
+{{tools:cap_lovelace_write}}
+
 ### {{label:caps.cap_registry_write.label}} {#registry-write}
 
 Renames entities, changes their area, device, labels and categories, and deletes them. An entity's ID can change within its domain. Purging an entity's recorded history with `recorder.purge_entities` needs this capability too.
+
+{{tools:cap_registry_write}}
 
 ### {{label:caps.cap_radio_write.label}} {#radio-write}
 
 Manages Zigbee networks. Scanning the network also needs {{label:caps.cap_diagnostics.label}}; changing devices, bindings and groups also needs {{label:caps.cap_physical_control.label}}.
 
+{{tools:cap_radio_write}}
+
 ### {{label:caps.cap_energy_write.label}} {#energy-write}
 
 Changes the Energy dashboard's settings.
+
+{{tools:cap_energy_write}}
 
 ### {{label:caps.cap_esphome_flash.label}} {#esphome-flash}
 
 Installs firmware on ESPHome devices, through the ESPHome Device Builder. It also needs {{label:caps.cap_esphome_yaml.label}}. Only the ESPHome Devices persona allows it, with your approval. `update.install` on an ESPHome device needs this capability as well.
 
+{{tools:cap_esphome_flash}}
+
 ### {{label:caps.cap_yaml_edit.label}} {#yaml-edit}
 
 Reads Home Assistant's YAML configuration files and runs its reload actions. It also adds file and line numbers to configuration checks.
+
+{{tools:cap_yaml_edit}}
 
 ## {{label:caps.tierIrreversible}} {#high-risk}
 
@@ -163,8 +223,20 @@ Reads Home Assistant's YAML configuration files and runs its reload actions. It 
 
 Lists and creates backups.
 
+{{tools:cap_backup}}
+
 ### {{label:caps.cap_dashboard_resources.label}} {#dashboard-resources}
 
 Adds and changes dashboard resources, the JavaScript files that custom cards load. Every change needs your approval, so Allow isn't available. Files must come from `/local/` or `/hacsfiles/`, and Phoenix MCP changes only the resources it added itself.
 
 Every browser that opens a dashboard runs these files with that person's Home Assistant access. An administrator's browser also runs them when it opens the Phoenix MCP panel, which reads the custom cards they add.
+
+{{tools:cap_dashboard_resources}}
+
+## Tools that need no capability {#no-capability}
+
+These tools need no capability of their own. The [{{label:accessKeys.permissionsTree}}](guide:window.permissions) decides which entities they reach. The ones that change something are offered only when the tree gives the key Write somewhere.
+
+Some calls still need a capability, such as locking a door, which needs {{label:caps.cap_physical_control.label}}.
+
+{{tools:none}}

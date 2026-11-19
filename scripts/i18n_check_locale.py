@@ -26,8 +26,19 @@ PACKAGE = REPO / "custom_components" / "phoenix_mcp"
 CATALOGS = PACKAGE / "catalogs"
 TRANSLATIONS = PACKAGE / "translations"
 
-# Sections the panel and HA actually read, including translated sensor states.
-SECTIONS = ("config", "entity", "issues", "panel", "notification", "voice")
+# Sections the panel and HA actually read, including translated sensor states, and the
+# Guide's tool reference text, which the panel build reads.
+SECTIONS = ("config", "entity", "issues", "panel", "notification", "voice", "guideTools")
+
+# Text only a translated Guide shows: a language carries it exactly when it has its own
+# copy of the page the section belongs to, and its readers otherwise read the English pages.
+GUIDE_SECTIONS = {"guideTools": "topic.tools.md"}
+GUIDE_TOPICS = REPO / "frontend_src" / "guide" / "topics"
+
+
+def has_own_guide_page(language: str, section: str) -> bool:
+    """Whether the language translates the Guide page a Guide-only section serves."""
+    return language == "en" or (GUIDE_TOPICS / language / GUIDE_SECTIONS[section]).is_file()
 
 # Which directory each section is stored in. To a translator, and to every check
 # in this file, there is ONE catalog per language; it is split across two
@@ -43,6 +54,7 @@ SECTION_DIRS = {
     "panel": CATALOGS,
     "notification": CATALOGS,
     "voice": CATALOGS,
+    "guideTools": CATALOGS,
 }
 
 
@@ -175,6 +187,8 @@ ALLOW_IDENTICAL = frozenset({
     "panel.accessKeys.namePlaceholder",   # "my_access_key", a literal example value
     "panel.changes.typeEsphomeYaml",  # "ESPHome YAML": a product name plus a format name
     "panel.accessKeys.tabOAuth",      # "OAuth", a protocol name used as a tab label
+    "guideTools.groups.esphome",      # "ESPHome", a product name as a Guide page title
+    "guideTools.groups.home-companion",  # "Home Companion", a Phoenix-owned name kept in English
     # Product and plan names are proper nouns rather than translatable prose.
     "panel.settings.agentcliZaiCoding",
     "panel.settings.agentcliZaiStandard",
@@ -962,6 +976,10 @@ def check(language: str) -> int:
     problems: list[str] = []
     en_flat: dict[str, str] = {}
     for section in SECTIONS + KEEP_ENGLISH_SECTIONS:
+        if section in GUIDE_SECTIONS and not has_own_guide_page(language, section):
+            if section in other:
+                problems.append(f"section '{section}' serves a Guide page {language} does not translate; remove it from {path.name}")
+            continue
         en_flat.update(flatten(english.get(section, {}), f"{section}."))
     tr_flat: dict[str, str] = {}
     for section in other:
@@ -976,7 +994,11 @@ def check(language: str) -> int:
             locale_flat.update(flatten(shipped[section], f"{section}."))
         locale_flats.append(locale_flat)
         locales_by_language[shipped_language] = locale_flat
-    problems.extend(exception_manifest_problems(en_flat, locale_flats, locales_by_language))
+    # The manifests name keys of every section, the Guide-only ones included.
+    en_all: dict[str, str] = {}
+    for section in SECTIONS + KEEP_ENGLISH_SECTIONS:
+        en_all.update(flatten(english.get(section, {}), f"{section}."))
+    problems.extend(exception_manifest_problems(en_all, locale_flats, locales_by_language))
 
     allow_identical = ALLOW_IDENTICAL | ALLOW_IDENTICAL_BY_LANGUAGE.get(language, frozenset())
 

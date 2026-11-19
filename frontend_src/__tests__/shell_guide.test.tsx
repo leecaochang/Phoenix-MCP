@@ -10,9 +10,10 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
-import { readdirSync, readFileSync } from "fs";
+import { readdirSync } from "fs";
 import { resolve } from "path";
 import { GUIDE_FORMAT, compileGuide, parseTopic, type GuideBundle } from "../guide/compile";
+import { buildGuide } from "../guide/build";
 import { GUIDE_LANGUAGES, GuideWindow, besideRect, fitGuideRect, clearGuideCache, findTopic, guideLanguages, renderTopic, topicById, useWizardGuide } from "../shell/guide";
 import { WIZARD_STEPS } from "../views/OnboardingWizard";
 import { GUIDE_CLOSED, WORKSPACE_IDS, readGuide } from "../shell/storage";
@@ -54,9 +55,9 @@ describe("compiling topics", () => {
     expect(readdirSync(TOPICS).sort()).toEqual([...GUIDE_LANGUAGES].sort());
     // A folder is shipped by being there, so its name must be a language the panel offers.
     expect(GUIDE_LANGUAGES.filter((code) => !LANGUAGES.some((l) => l.code === code))).toEqual([]);
-    const files = readdirSync(resolve(TOPICS, "en")).filter((f) => f.endsWith(".md")).map((f) => ({ file: f, source: readFileSync(resolve(TOPICS, "en", f), "utf8") }));
-    const { bundle, problems } = compileGuide("en", files, labelExists);
+    const { compiled, problems } = buildGuide(resolve(TOPICS, "../../.."));
     expect(problems).toEqual([]);
+    const bundle = compiled.find((b) => b.language === "en")!;
     for (const id of WORKSPACE_IDS) expect(bundle.topics[`workspace.${id}`], id).toBeDefined();
     for (const step of WIZARD_STEPS) expect(bundle.topics[`wizard.${step}`], step).toBeDefined();
   });

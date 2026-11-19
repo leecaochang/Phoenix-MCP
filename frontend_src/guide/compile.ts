@@ -33,6 +33,11 @@ export interface GuideTopic {
   sectionKeywords?: Record<string, string[]>;
   /** The anchors of its sections, in order. */
   anchors: string[];
+  /**
+   * A page whose body leaves part of its text to a file shared by every language,
+   * `guide/<more>.json`, loaded when the page is shown (`guide/reference.ts`).
+   */
+  more?: string;
 }
 
 export interface GuideBundle {
@@ -44,6 +49,8 @@ export interface GuideBundle {
    * another language names controls in English, as its sentences do.
    */
   labels?: Record<string, string>;
+  /** The words of the tool reference's details in this language (`guide/reference.ts`). */
+  refLabels?: Record<string, string>;
 }
 
 export const TOPIC_ID = /^(workspace|window|wizard|topic)\.[A-Za-z0-9][A-Za-z0-9_-]*$/;
@@ -212,6 +219,10 @@ export function compileGuide(
   fileExists: (path: string) => boolean = () => true,
   /** The English catalog's text for a label; given for English, whose bundle then carries its labels. */
   englishLabel?: (key: string) => string,
+  /** Generated pages, whose text the length and voice checks skip; their generator checks what it writes. */
+  generated: ReadonlySet<string> = new Set(),
+  /** English, for a translation: a page it lacks is read in English, so links and parents may lead there. */
+  fallback?: GuideBundle,
 ): { bundle: GuideBundle; problems: string[] } {
   const topics: Record<string, GuideTopic> = {};
   const problems: string[] = [];
@@ -222,8 +233,9 @@ export function compileGuide(
     if (from.has(topic.id)) { problems.push(`${file}: topic ${topic.id} is also defined in ${from.get(topic.id)}`); continue; }
     from.set(topic.id, file);
     const { anchors, problems: headings } = sectionAnchors(topic.body);
-    const voice = language === "en" ? voiceProblems(topic.body) : [];
-    for (const p of [...headings, ...lengthProblems(topic.body), ...voice]) problems.push(`${file}: ${p}`);
+    const checked = !generated.has(topic.id);
+    const voice = language === "en" && checked ? voiceProblems(topic.body) : [];
+    for (const p of [...headings, ...(checked ? lengthProblems(topic.body) : []), ...voice]) problems.push(`${file}: ${p}`);
     for (const path of topic.covers) if (!fileExists(path)) problems.push(`${file}: covers a file that does not exist: ${path}`);
     for (const anchor of Object.keys(topic.sectionKeywords ?? {})) {
       if (!anchors.includes(anchor)) problems.push(`${file}: sectionKeywords names a section that does not exist: #${anchor}`);
@@ -238,9 +250,10 @@ export function compileGuide(
   }
   for (const [id, topic] of Object.entries(topics)) {
     const file = from.get(id);
-    if (topic.parent !== undefined && !topics[topic.parent]) problems.push(`${file}: parent ${JSON.stringify(topic.parent)} is not a topic`);
+    const find = (target: string) => topics[target] ?? fallback?.topics[target];
+    if (topic.parent !== undefined && !find(topic.parent)) problems.push(`${file}: parent ${JSON.stringify(topic.parent)} is not a topic`);
     for (const [, target, anchor] of topic.body.matchAll(GUIDE_LINK)) {
-      const to = target ? topics[target] : topic;
+      const to = target ? find(target) : topic;
       if (!to) problems.push(`${file}: link to unknown topic ${JSON.stringify(target)}`);
       else if (anchor !== undefined && !to.anchors.includes(anchor)) problems.push(`${file}: link to unknown section ${JSON.stringify(`${target || id}#${anchor}`)}`);
     }
@@ -251,9 +264,10 @@ export function compileGuide(
     }
   }
   // A parent chain must end at a top-level topic.
+  const parentOf = (id: string) => (topics[id] ?? fallback?.topics[id])?.parent;
   for (const id of Object.keys(topics)) {
     const seen = new Set<string>([id]);
-    for (let at = topics[id].parent; at && topics[at]; at = topics[at].parent) {
+    for (let at = topics[id].parent; at && (topics[at] ?? fallback?.topics[at]); at = parentOf(at)) {
       if (seen.has(at)) { problems.push(`${from.get(id)}: the parent chain loops through ${at}`); break; }
       seen.add(at);
     }

@@ -1,7 +1,7 @@
 ---
-{"id": "topic.tools", "title": "What Agents Can Do", "parent": "topic.about", "order": 30, "keywords": ["tools", "tool list", "MCP tools", "what can an agent do", "tools/list"], "sectionKeywords": {"rules": ["deny", "hidden tool", "announce all tools", "result size"], "reading": ["get_state", "get_history", "get_statistics", "get_camera_image", "get_calendar_events", "get_todo_items", "GetLiveContext", "GetDateTime", "history", "statistics", "camera"], "controlling": ["HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed", "HassClimateSetTemperature", "HassSetPosition", "HassStopMoving", "HassMediaPause", "HassMediaSearchAndPlay", "HassSetVolume", "HassVacuumStart", "HassCancelAllTimers", "HassBroadcast", "native tools", "lock", "cover", "HassMediaNext", "HassMediaPrevious", "HassMediaUnpause", "HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassSetVolumeRelative", "HassVacuumCleanArea", "HassVacuumReturnToBase"], "actions": ["call_service", "dry_run_service", "service", "action", "reload", "restart", "response data", "attachments", "media-source"], "lists": ["set_todo_item", "create_calendar_event", "update_calendar_event", "delete_calendar_event", "get_calendar_write", "to-do", "calendar"], "waiting": ["watch_entity", "wait for state"], "testing": ["test_trigger", "test_condition", "test automation", "trigger", "condition"], "home-companion": ["home_request", "household request"], "automations": ["list_automations", "get_automation", "create_automation", "edit_automation", "delete_automation", "list_scripts", "get_script", "create_script", "edit_script", "delete_script", "create_blueprint", "edit_blueprint", "delete_blueprint", "blueprint", "indirect control", "package", "packages"], "scenes": ["list_scenes", "get_scene", "create_scene", "edit_scene", "delete_scene"], "helpers": ["list_helpers", "create_helper", "edit_helper", "delete_helper", "get_helper_settings", "set_helper_settings", "input_boolean", "counter", "timer", "zone", "Template helper"], "dashboards": ["list_dashboards", "create_dashboard", "edit_dashboard", "delete_dashboard", "get_dashboard_config", "set_dashboard_config", "add_dashboard_card", "edit_dashboard_card", "delete_dashboard_card", "patch_dashboard", "list_dashboard_cards", "list_dashboard_resources", "set_dashboard_resource", "Lovelace", "custom cards"], "restore": ["restore_configuration", "undo", "roll back"], "mesa": ["mesa_query_profiles", "mesa_get_profile", "mesa_explain_profile", "mesa_get_caller_context", "mesa_request_lease", "mesa_release_lease", "lease"], "configuration": ["get_config", "get_energy_config", "get_solar_forecast", "edit_energy_config", "list_blueprints", "get_blueprint", "render_template", "get_logs", "get_log_detail", "get_logbook", "get_notifications", "list_integration_log_levels", "set_integration_log_level", "template", "logbook", "debug logging"], "diagnostics": ["search_entities", "get_overview", "describe_area", "describe_entity", "find_available_actions", "get_relationships", "whatif", "compare_states", "compare_entities", "recent_activity", "recognize_intent", "list_areas", "list_floors", "list_zones", "list_devices", "get_device", "list_labels", "get_automation_traces", "check_ha_config", "validate_automation_or_script", "get_system_health", "get_repairs", "get_radio_network", "get_esphome_overview", "get_phoenix_diagnostics", "traces"], "files": ["list_files", "read_file", "get_yaml_config", "www", "themes", "custom_templates", "secrets.yaml"], "esphome": ["get_esphome_yaml", "search_esphome_yaml", "validate_esphome_yaml", "compile_esphome_firmware", "install_esphome_firmware", "get_esphome_device_logs", "analyze_esphome_memory", "Device Builder", "firmware", "list_esphome_devices", "get_esphome_board", "get_esphome_component", "get_esphome_automations", "get_esphome_history", "check_esphome_connectivity", "clean_esphome_build", "decode_esphome_backtrace", "list_esphome_jobs", "get_esphome_job", "wait_for_esphome_job", "cancel_esphome_job"], "system": ["list_integrations", "set_integration", "set_integration_enabled", "reload_integration", "remove_integration", "reconfigure_integration", "remove_device", "set_entity", "delete_entity", "set_device", "set_area_or_floor", "set_label_or_category", "list_backups", "create_backup", "restart_ha", "send_notification", "Zigbee", "ZHA", "backup", "rename", "get_radio_device", "scan_zigbee_topology", "permit_zigbee_join", "reconfigure_zigbee_device", "remove_zigbee_device", "configure_zigbee_reporting", "set_zigbee_device_options", "set_zigbee_device_property", "set_zigbee_binding", "get_zigbee_groups", "create_zigbee_group", "set_zigbee_group_members", "remove_zigbee_group", "fix_repair", "set_integration_subentry", "subentry", "repair fix"], "introspection": ["get_approval_status", "wait_for_approval", "get_capability_summary", "get_audit_summary"], "household": ["family member", "non-admin", "voice", "Assist", "AI Task", "household"]}, "covers": ["custom_components/phoenix_mcp/tool_defs.py", "custom_components/phoenix_mcp/tool_catalog.py", "custom_components/phoenix_mcp/tool_dispatch.py", "custom_components/phoenix_mcp/tool_registration.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/log_read.py", "custom_components/phoenix_mcp/template_sandbox.py", "custom_components/phoenix_mcp/home_companion.py", "custom_components/phoenix_mcp/home_companion_turn.py", "custom_components/phoenix_mcp/household_authority.py", "custom_components/phoenix_mcp/tools/", "custom_components/phoenix_mcp/mesa_tools.py", "custom_components/phoenix_mcp/authoring_validation.py", "custom_components/phoenix_mcp/card_catalog.py", "custom_components/phoenix_mcp/esphome_builder.py", "custom_components/phoenix_mcp/esphome_yaml.py", "custom_components/phoenix_mcp/history_summary.py", "custom_components/phoenix_mcp/proxy_diagnostics.py", "custom_components/phoenix_mcp/radio.py", "custom_components/phoenix_mcp/recorder_queries.py", "custom_components/phoenix_mcp/service_targets.py", "custom_components/phoenix_mcp/system_log_payload.py", "custom_components/phoenix_mcp/template_diagnostics.py", "custom_components/phoenix_mcp/template_render.py", "custom_components/phoenix_mcp/template_scope.py", "custom_components/phoenix_mcp/template_worker.py", "custom_components/phoenix_mcp/tool_contracts.py", "custom_components/phoenix_mcp/routing/tool_routing.py", "custom_components/phoenix_mcp/yaml_includes.py", "custom_components/phoenix_mcp/logger_control.py", "custom_components/phoenix_mcp/home_companion_response.py", "custom_components/phoenix_mcp/debug_capture.py", "custom_components/phoenix_mcp/fault_log.py", "frontend_src/utils/card_harvest.ts", "frontend_src/utils/dashboard_page.ts", "custom_components/phoenix_mcp/esphome_constants.py", "custom_components/phoenix_mcp/template_limits.py"]}
+{"id": "topic.tools", "title": "What Agents Can Do", "parent": "topic.about", "order": 30, "keywords": ["tools", "tool list", "MCP tools", "what can an agent do", "tools/list"], "sectionKeywords": {"rules": ["deny", "hidden tool", "announce all tools", "result size"], "reading": ["get_state", "get_history", "get_statistics", "get_camera_image", "get_calendar_events", "get_todo_items", "GetLiveContext", "GetDateTime", "history", "statistics", "camera"], "controlling": ["HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed", "HassClimateSetTemperature", "HassSetPosition", "HassStopMoving", "HassMediaPause", "HassMediaSearchAndPlay", "HassSetVolume", "HassVacuumStart", "HassCancelAllTimers", "HassBroadcast", "native tools", "lock", "cover", "HassMediaNext", "HassMediaPrevious", "HassMediaUnpause", "HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassSetVolumeRelative", "HassVacuumCleanArea", "HassVacuumReturnToBase"], "actions": ["call_service", "dry_run_service", "service", "action", "reload", "restart", "response data", "attachments", "media-source"], "lists": ["set_todo_item", "create_calendar_event", "update_calendar_event", "delete_calendar_event", "get_calendar_write", "to-do", "calendar"], "waiting": ["watch_entity", "wait for state"], "testing": ["test_trigger", "test_condition", "test automation", "trigger", "condition"], "home-companion": ["home_request", "household request"], "automations": ["list_automations", "get_automation", "create_automation", "edit_automation", "delete_automation", "list_scripts", "get_script", "create_script", "edit_script", "delete_script", "create_blueprint", "edit_blueprint", "delete_blueprint", "blueprint", "indirect control", "package", "packages"], "scenes": ["list_scenes", "get_scene", "create_scene", "edit_scene", "delete_scene"], "helpers": ["list_helpers", "create_helper", "edit_helper", "delete_helper", "get_helper_settings", "set_helper_settings", "input_boolean", "counter", "timer", "zone", "Template helper"], "dashboards": ["list_dashboards", "create_dashboard", "edit_dashboard", "delete_dashboard", "get_dashboard_config", "set_dashboard_config", "add_dashboard_card", "edit_dashboard_card", "delete_dashboard_card", "patch_dashboard", "list_dashboard_cards", "list_dashboard_resources", "set_dashboard_resource", "Lovelace", "custom cards"], "restore": ["restore_configuration", "undo", "roll back"], "mesa": ["mesa_query_profiles", "mesa_get_profile", "mesa_explain_profile", "mesa_get_caller_context", "mesa_request_lease", "mesa_release_lease", "lease"], "configuration": ["get_config", "get_energy_config", "get_solar_forecast", "edit_energy_config", "list_blueprints", "get_blueprint", "render_template", "get_logs", "get_log_detail", "get_logbook", "get_notifications", "list_integration_log_levels", "set_integration_log_level", "template", "logbook", "debug logging"], "diagnostics": ["search_entities", "get_overview", "describe_area", "describe_entity", "find_available_actions", "get_relationships", "whatif", "compare_states", "compare_entities", "recent_activity", "recognize_intent", "list_areas", "list_floors", "list_zones", "list_devices", "get_device", "list_labels", "get_automation_traces", "check_ha_config", "validate_automation_or_script", "get_system_health", "get_repairs", "get_radio_network", "get_esphome_overview", "get_phoenix_diagnostics", "traces"], "files": ["list_files", "read_file", "get_yaml_config", "www", "themes", "custom_templates", "secrets.yaml"], "esphome": ["get_esphome_yaml", "search_esphome_yaml", "validate_esphome_yaml", "compile_esphome_firmware", "install_esphome_firmware", "get_esphome_device_logs", "analyze_esphome_memory", "Device Builder", "firmware", "list_esphome_devices", "get_esphome_board", "get_esphome_component", "get_esphome_automations", "get_esphome_history", "check_esphome_connectivity", "clean_esphome_build", "decode_esphome_backtrace", "list_esphome_jobs", "get_esphome_job", "wait_for_esphome_job", "cancel_esphome_job"], "system": ["list_integrations", "set_integration", "set_integration_enabled", "reload_integration", "remove_integration", "reconfigure_integration", "remove_device", "set_entity", "delete_entity", "set_device", "set_area_or_floor", "set_label_or_category", "list_backups", "create_backup", "restart_ha", "send_notification", "Zigbee", "ZHA", "backup", "rename", "get_radio_device", "scan_zigbee_topology", "permit_zigbee_join", "reconfigure_zigbee_device", "remove_zigbee_device", "configure_zigbee_reporting", "set_zigbee_device_options", "set_zigbee_device_property", "set_zigbee_binding", "get_zigbee_groups", "create_zigbee_group", "set_zigbee_group_members", "remove_zigbee_group", "fix_repair", "set_integration_subentry", "subentry", "repair fix"], "introspection": ["get_approval_status", "wait_for_approval", "get_capability_summary", "get_audit_summary"], "household": ["family member", "non-admin", "voice", "Assist", "AI Task", "household"]}, "covers": ["custom_components/phoenix_mcp/tool_defs.py", "custom_components/phoenix_mcp/tool_catalog.py", "custom_components/phoenix_mcp/tool_dispatch.py", "custom_components/phoenix_mcp/tool_registration.py", "custom_components/phoenix_mcp/const.py", "custom_components/phoenix_mcp/log_read.py", "custom_components/phoenix_mcp/template_sandbox.py", "custom_components/phoenix_mcp/home_companion.py", "custom_components/phoenix_mcp/home_companion_turn.py", "custom_components/phoenix_mcp/household_authority.py", "custom_components/phoenix_mcp/tools/", "custom_components/phoenix_mcp/mesa_tools.py", "custom_components/phoenix_mcp/authoring_validation.py", "custom_components/phoenix_mcp/card_catalog.py", "custom_components/phoenix_mcp/esphome_builder.py", "custom_components/phoenix_mcp/esphome_yaml.py", "custom_components/phoenix_mcp/history_summary.py", "custom_components/phoenix_mcp/proxy_diagnostics.py", "custom_components/phoenix_mcp/radio.py", "custom_components/phoenix_mcp/recorder_queries.py", "custom_components/phoenix_mcp/service_targets.py", "custom_components/phoenix_mcp/system_log_payload.py", "custom_components/phoenix_mcp/template_diagnostics.py", "custom_components/phoenix_mcp/template_render.py", "custom_components/phoenix_mcp/template_scope.py", "custom_components/phoenix_mcp/template_worker.py", "custom_components/phoenix_mcp/tool_contracts.py", "custom_components/phoenix_mcp/routing/tool_routing.py", "custom_components/phoenix_mcp/yaml_includes.py", "custom_components/phoenix_mcp/logger_control.py", "custom_components/phoenix_mcp/home_companion_response.py", "custom_components/phoenix_mcp/debug_capture.py", "custom_components/phoenix_mcp/fault_log.py", "frontend_src/utils/card_harvest.ts", "frontend_src/utils/dashboard_page.ts", "custom_components/phoenix_mcp/esphome_constants.py", "custom_components/phoenix_mcp/template_limits.py", "custom_components/phoenix_mcp/tool_reference_data.py", "frontend_src/guide/reference.ts", "frontend_src/guide/tool_reference.json"]}
 ---
-An agent works through tools. This page explains them by group: what they let an agent do, which capabilities allow them, and the limits worth knowing. Clients read each tool's details from the tool itself.
+An agent works through tools. This page explains them by group: what they let an agent do, which capabilities allow them, and the limits worth knowing. The [Tool Reference](guide:topic.toolReference) lists every tool with its parameters and an example call.
 
 Two settings decide every action. [{{label:accessKeys.cardCapabilities}}](guide:window.capabilities) decide what kind of thing an agent may do. The [{{label:accessKeys.permissionsTree}}](guide:window.permissions) decides which entities it may do it to.
 
@@ -29,6 +29,8 @@ Most reads need no capability; the tree alone decides. Camera stills need one, a
 
 Allowed by: [{{label:caps.cap_camera_read.label}}](guide:window.capabilities#camera-read), [{{label:caps.cap_search.label}}](guide:window.capabilities#search)
 
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-reading)
+
 ## Controlling devices {#controlling}
 
 Agents turn things on and off, set lights, fans, climate, covers and volume, control media and vacuums, and cancel timers. These are the same commands Home Assistant's own assistant uses. Every target needs Write in the tree.
@@ -42,6 +44,8 @@ Announcing a message through Assist satellites, or starting a conversation on on
 Allowed by: [{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control), [{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
 
 Related: [How MESA decides](guide:topic.mesaRules)
+
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-controlling)
 
 ## Running any action {#actions}
 
@@ -77,6 +81,8 @@ Calendar changes, `homeassistant.reload_config_entry` and `todo.remove_completed
 
 Allowed by: [{{label:caps.cap_restart.label}}](guide:window.capabilities#restart), [{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit), [{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response), [{{label:caps.cap_notify.label}}](guide:window.capabilities#notify), [{{label:caps.cap_search.label}}](guide:window.capabilities#search) for previews
 
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-actions)
+
 ## Lists and calendars {#lists}
 
 Agents add, change and remove to-do items and clear completed ones, which needs only Write on the list. Removing an item is permanent: Phoenix keeps no copy, so you [can't restore it](guide:topic.configurationHistory#not-recorded). The result names what went. Item text that still holds a `<redacted>` mark from a read is refused.
@@ -87,11 +93,15 @@ Agents create, change and delete calendar events, which also needs Calendar writ
 
 Allowed by: [{{label:caps.cap_calendar_write.label}}](guide:window.capabilities#calendar-write)
 
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-lists)
+
 ## Waiting for a change {#waiting}
 
 An agent can wait up to 30 seconds for an entity to change or reach a state, to confirm that an action worked. The tree and authority are checked again when the wait ends.
 
 Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
+
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-waiting)
 
 ## Testing triggers and conditions {#testing}
 
@@ -107,6 +117,8 @@ Event, MQTT, webhook and conversation triggers are refused, because no key's sco
 
 Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read); template triggers also need [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) set to Allow
 
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-testing)
+
 ## Home Companion {#home-companion}
 
 A [{{label:personas.home_companion.label}}](guide:window.persona#home-companion) key offers a single tool. The app sends one plain request, such as "turn off the downstairs lights". Phoenix carries it out with its own model, checks the result and reports back.
@@ -120,6 +132,8 @@ A [{{label:personas.home_companion.label}}](guide:window.persona#home-companion)
 In Agent Chat it uses the chat's model. Everywhere else it uses the Voice Agent's provider and model.
 
 Related: [Voice Agent](guide:topic.homeAssistantFeatures#voice-agent)
+
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-home-companion)
 
 ## Automations and scripts {#automations}
 
@@ -135,6 +149,8 @@ An automation runs as Home Assistant, not as the agent. Its actions aren't limit
 
 Allowed by: [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write), [{{label:caps.cap_script_write.label}}](guide:window.capabilities#script-write), [{{label:caps.cap_blueprint_write.label}}](guide:window.capabilities#blueprint-write)
 
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-automations)
+
 ## Scenes {#scenes}
 
 Agents read, create, edit and delete scenes in Home Assistant's scene editor. Every entity in a scene needs Write in the tree, even just to read the scene. MESA doesn't check scene changes.
@@ -144,6 +160,8 @@ A group in a scene needs Write too, and it fails this check if the key is denied
 Creating or editing a scene with a lock, alarm, cover or valve in it, directly or through a group, also needs Physical control. On Deny, the change is refused. On Confirm, it waits for your approval and lists them as `physical_entities`.
 
 Allowed by: [{{label:caps.cap_scene_write.label}}](guide:window.capabilities#scene-write), [{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)
+
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-scenes)
 
 ## Helpers {#helpers}
 
@@ -160,6 +178,8 @@ Settings that name something hidden from the key show as `<redacted>`, and the a
 
 Allowed by: [{{label:caps.cap_helper_write.label}}](guide:window.capabilities#helper-write), [{{label:caps.cap_integration_write.label}}](guide:window.capabilities#integration-write)
 
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-helpers)
+
 ## Dashboards {#dashboards}
 
 Agents list, create, edit and delete dashboards, read and search their layouts, change cards and list the installed custom cards. All of it needs Manage dashboards, reads included.
@@ -173,6 +193,8 @@ Resources, the JavaScript and CSS that every dashboard loads, need Dashboard res
 
 Allowed by: [{{label:caps.cap_lovelace_write.label}}](guide:window.capabilities#lovelace-write), [{{label:caps.cap_dashboard_resources.label}}](guide:window.capabilities#dashboard-resources)
 
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-dashboards)
+
 ## Restoring a change {#restore}
 
 An agent can put back one of its own earlier changes to a Template helper, blueprint, Energy setup, dashboard or dashboard resource. It asks for a receipt first, then sends the restore, which goes through the usual approval for that capability. An agent sees only its own records.
@@ -180,6 +202,8 @@ An agent can put back one of its own earlier changes to a Template helper, bluep
 Allowed by: any of [{{label:caps.cap_helper_write.label}}](guide:window.capabilities#helper-write), [{{label:caps.cap_blueprint_write.label}}](guide:window.capabilities#blueprint-write), [{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write), [{{label:caps.cap_lovelace_write.label}}](guide:window.capabilities#lovelace-write), [{{label:caps.cap_dashboard_resources.label}}](guide:window.capabilities#dashboard-resources)
 
 Related: [What a restore can put back](guide:topic.configurationHistory#restore)
+
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-restore)
 
 ## MESA profiles {#mesa}
 
@@ -190,6 +214,8 @@ When a profile's reason or limit names an entity the key can't read, the agent s
 Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
 
 Related: [How MESA decides](guide:topic.mesaRules)
+
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-mesa)
 
 ## Configuration, templates and logs {#configuration}
 
@@ -211,6 +237,8 @@ Only templates a change adds are tried; ones already saved aren't tried again. I
 
 Allowed by: [{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read), [{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write), [{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render), [{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read), [{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)
 
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-configuration)
+
 ## Discovery and diagnostics {#diagnostics}
 
 These tools only read. They help an agent find its way before it acts.
@@ -224,6 +252,8 @@ A configuration check names the file and line only when YAML configuration isn't
 
 Allowed by: [{{label:caps.cap_search.label}}](guide:window.capabilities#search), [{{label:caps.cap_registry_read.label}}](guide:window.capabilities#registry-read), [{{label:caps.cap_traces.label}}](guide:window.capabilities#traces), [{{label:caps.cap_diagnostics.label}}](guide:window.capabilities#diagnostics)
 
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-diagnostics)
+
 ## Files and YAML {#files}
 
 Read files lets an agent read text files in the www, themes and custom_templates folders, up to 1 MiB each. Folder lists come in pages, 500 entries by default and up to 1,000. It can't write these files.
@@ -233,6 +263,8 @@ YAML configuration lets an agent read your YAML files, apart from any file with 
 Values under names that suggest a secret show as `<redacted>`, and so do comments that mention one, but a password under an ordinary name is visible. A file with a YAML mistake isn't shown; the agent gets the line to fix instead. No tool writes YAML configuration.
 
 Allowed by: [{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem), [{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
+
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-files)
 
 ## ESPHome {#esphome}
 
@@ -249,6 +281,8 @@ A file whose device Phoenix can't tell, such as a shared package or a deleted fi
 Compiling, cleaning and memory analysis need Write on the device. Installing firmware needs ESPHome firmware flashing, ESPHome device YAML and Write on the device, and MESA checks it.
 
 Allowed by: [{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#esphome-yaml), [{{label:caps.cap_esphome_flash.label}}](guide:window.capabilities#esphome-flash)
+
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-esphome)
 
 ## Integrations, devices and the system {#system}
 
@@ -267,9 +301,13 @@ A backup waits up to 45 seconds and never goes to Home Assistant Cloud. Without 
 
 Allowed by: [{{label:caps.cap_integration_write.label}}](guide:window.capabilities#integration-write), [{{label:caps.cap_integration_reconfigure.label}}](guide:window.capabilities#integration-reconfigure), [{{label:caps.cap_registry_write.label}}](guide:window.capabilities#registry-write), [{{label:caps.cap_radio_write.label}}](guide:window.capabilities#radio-write), [{{label:caps.cap_backup.label}}](guide:window.capabilities#backup), [{{label:caps.cap_restart.label}}](guide:window.capabilities#restart), [{{label:caps.cap_notify.label}}](guide:window.capabilities#notify)
 
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-system)
+
 ## The key's own state {#introspection}
 
 Every key can check its own approval requests, wait up to 30 seconds for up to 50 of them, and read its capability summary and audit entries. These need no capability. Requests from another key look like they don't exist.
+
+Every tool in this group, with its parameters: [Tool Reference](guide:topic.tools-introspection)
 
 ## On Voice, Assist and AI Task {#household}
 

@@ -10,10 +10,11 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act, screen, waitFor } from "@testing-library/react";
-import { existsSync, readFileSync, readdirSync, statSync } from "fs";
+import { readFileSync, readdirSync, statSync } from "fs";
 import { join, resolve } from "path";
-import { compileGuide, type GuideBundle } from "../guide/compile";
-import { flattenCatalog, t } from "../i18n";
+import type { GuideBundle } from "../guide/compile";
+import { buildGuide } from "../guide/build";
+import { t } from "../i18n";
 import { WORKSPACES } from "../shell/workspaces";
 import { CHAT_WINDOW } from "../shell/chatDock";
 import type { WorkspaceId } from "../shell/storage";
@@ -23,7 +24,6 @@ import { capabilityGuide, personaGuide } from "../guide/targets";
 import { parseGuideRef } from "../shell/guideTarget";
 import { findControl, settingAnchor, settingsGuideAnchor } from "../shell/settings";
 import { api } from "../api";
-import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
 import { BASE_SETTINGS, mockSettingsApi, renderSettings, toolsFor } from "./settings_harness";
 import type { GlobalSettings } from "../types";
 
@@ -34,17 +34,16 @@ vi.mock("../api", async (importOriginal) => {
 });
 
 const REPO = resolve(__dirname, "../..");
-const TOPICS = resolve(REPO, "frontend_src/guide/topics/en");
-const LABELS = flattenCatalog((en as { panel: unknown }).panel);
 
 /** Workspaces whose website pages have been turned into Guide pages; each gains this check as it is converted. */
 const CONVERTED: readonly WorkspaceId[] = ["settings", "accessKeys", "approvals", "changes", "mesa", "logs", "my"];
 /** Windows every workspace shares, documented once rather than per workspace. */
 const SHARED = new Set(["attention", "help", "notifications"]);
 
+/** The English Guide as the build compiles it, the tool reference included. */
 function shipped(): { bundle: GuideBundle; problems: string[] } {
-  const files = readdirSync(TOPICS).filter((f) => f.endsWith(".md")).map((f) => ({ file: f, source: readFileSync(join(TOPICS, f), "utf8") }));
-  return compileGuide("en", files, (key) => key in LABELS, (path) => existsSync(resolve(REPO, path)));
+  const { compiled, problems } = buildGuide(REPO);
+  return { bundle: compiled.find((b) => b.language === "en")!, problems };
 }
 
 /** Every source file of the panel, tests and topics left out. */

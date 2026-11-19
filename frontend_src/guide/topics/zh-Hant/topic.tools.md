@@ -1,7 +1,7 @@
 ---
 {"id": "topic.tools", "title": "智慧體可以做什麼", "parent": "topic.about", "order": 30, "keywords": ["工具", "工具清單", "MCP 工具", "智慧體可以做什麼", "tools/list"], "sectionKeywords": {"rules": ["拒絕存取", "隱藏工具", "宣告全部工具", "結果大小"], "reading": ["get_state", "get_history", "get_statistics", "get_camera_image", "get_calendar_events", "get_todo_items", "GetLiveContext", "GetDateTime", "歷史", "統計", "攝影機"], "controlling": ["HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed", "HassClimateSetTemperature", "HassSetPosition", "HassStopMoving", "HassMediaPause", "HassMediaSearchAndPlay", "HassSetVolume", "HassVacuumStart", "HassCancelAllTimers", "HassBroadcast", "原生工具", "門鎖", "捲簾", "HassMediaNext", "HassMediaPrevious", "HassMediaUnpause", "HassMediaPlayerMute", "HassMediaPlayerUnmute", "HassSetVolumeRelative", "HassVacuumCleanArea", "HassVacuumReturnToBase"], "actions": ["call_service", "dry_run_service", "服務", "操作", "重新載入", "重新啟動", "回應資料", "附件", "media-source"], "lists": ["set_todo_item", "create_calendar_event", "update_calendar_event", "delete_calendar_event", "get_calendar_write", "待辦", "行事曆"], "waiting": ["watch_entity", "等待狀態"], "testing": ["test_trigger", "test_condition", "測試自動化", "觸發條件", "條件"], "home-companion": ["home_request", "家庭請求"], "automations": ["list_automations", "get_automation", "create_automation", "edit_automation", "delete_automation", "list_scripts", "get_script", "create_script", "edit_script", "delete_script", "create_blueprint", "edit_blueprint", "delete_blueprint", "藍圖", "間接控制", "套件", "packages"], "scenes": ["list_scenes", "get_scene", "create_scene", "edit_scene", "delete_scene"], "helpers": ["list_helpers", "create_helper", "edit_helper", "delete_helper", "get_helper_settings", "set_helper_settings", "input_boolean", "計數器", "計時器", "區域", "模板輔助項目"], "dashboards": ["list_dashboards", "create_dashboard", "edit_dashboard", "delete_dashboard", "get_dashboard_config", "set_dashboard_config", "卡片", "儀表板"], "restore": ["還原", "回執", "回滾"], "mesa": ["MESA 策略", "租約"], "configuration": ["設定", "模板", "日誌", "能源"], "diagnostics": ["搜尋", "登錄檔", "追蹤", "診斷"], "files": ["檔案", "YAML", "www", "themes"], "esphome": ["ESPHome", "韌體"], "system": ["整合", "登錄檔", "無線電", "備份", "重新啟動", "通知", "fix_repair", "set_integration_subentry", "子項目", "修復"], "introspection": ["自己的請求", "稽核條目"], "household": ["語音", "Assist", "AI 任務", "非管理員"]}}
 ---
-智慧體透過工具工作。本頁依群組說明它們：智慧體可以用它們做什麼、哪些能力允許它們，以及值得了解的限制。用戶端會從工具本身讀取每個工具的詳細資料。
+智慧體透過工具工作。本頁依群組說明它們：智慧體可以用它們做什麼、哪些能力允許它們，以及值得了解的限制。[工具參考](guide:topic.toolReference)列出每個工具的參數和呼叫範例。
 
 兩個設定決定每個操作。[{{label:accessKeys.cardCapabilities}}](guide:window.capabilities)決定智慧體可以做哪類事情。[{{label:accessKeys.permissionsTree}}](guide:window.permissions)決定它可以對哪些實體做。
 
@@ -29,6 +29,8 @@
 
 允許它的能力：[{{label:caps.cap_camera_read.label}}](guide:window.capabilities#camera-read)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-reading)
+
 ## 控制裝置 {#controlling}
 
 智慧體可以開啟和關閉裝置，設定燈、風扇、溫控、捲簾和音量，控制媒體播放器和吸塵器，並取消計時器。這些命令與 Home Assistant 自帶助理使用的命令相同。每個目標都需要權限樹中的 W。
@@ -46,6 +48,8 @@
 允許它的能力：[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)、[{{label:caps.cap_broadcast.label}}](guide:window.capabilities#broadcast)
 
 相關：[MESA 如何決定](guide:topic.mesaRules)
+
+本群組每個工具及其參數：[工具參考](guide:topic.tools-controlling)
 
 ## 執行任意操作 {#actions}
 
@@ -82,6 +86,8 @@
 
 允許它的能力：[{{label:caps.cap_restart.label}}](guide:window.capabilities#restart)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)、[{{label:caps.cap_service_response.label}}](guide:window.capabilities#service-response)、[{{label:caps.cap_notify.label}}](guide:window.capabilities#notify)、[{{label:caps.cap_search.label}}](guide:window.capabilities#search)（用於預覽）
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-actions)
+
 ## 清單和行事曆 {#lists}
 
 智慧體可以新增、變更和移除待辦事項，也可以清除已完成的事項，這只需要清單上的 W。移除事項是永久性的：Phoenix 不保留副本，因此[無法還原](guide:topic.configurationHistory#not-recorded)。結果會列出移除了哪些事項。仍帶有讀取時留下的 `<redacted>` 標記的事項文字會被拒絕。
@@ -92,11 +98,15 @@
 
 允許它的能力：[{{label:caps.cap_calendar_write.label}}](guide:window.capabilities#calendar-write)
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-lists)
+
 ## 等待變更 {#waiting}
 
 智慧體最多可以等待 30 秒，讓實體發生變化或達到某個狀態，以確認操作生效。等待結束時，權限樹和權限會再次檢查。
 
 允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
+
+本群組每個工具及其參數：[工具參考](guide:topic.tools-waiting)
 
 ## 測試觸發條件和條件 {#testing}
 
@@ -112,6 +122,8 @@
 
 允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)；範本觸發條件還需要 [{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write) 設為允許
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-testing)
+
 ## Home Companion {#home-companion}
 
 [{{label:personas.home_companion.label}}](guide:window.persona#home-companion)金鑰只提供一個工具。應用程式傳送一個一般請求，例如「關掉樓下的燈」。Phoenix 會用自己的模型執行、檢查結果並回報。
@@ -125,6 +137,8 @@
 在 Agent Chat 中它使用聊天的模型。其他所有場合使用語音智慧體的提供者和模型。
 
 相關：[語音智慧體](guide:topic.homeAssistantFeatures#voice-agent)
+
+本群組每個工具及其參數：[工具參考](guide:topic.tools-home-companion)
 
 ## 自動化和腳本 {#automations}
 
@@ -140,6 +154,8 @@
 
 允許它的能力：[{{label:caps.cap_automation_write.label}}](guide:window.capabilities#automation-write)、[{{label:caps.cap_script_write.label}}](guide:window.capabilities#script-write)、[{{label:caps.cap_blueprint_write.label}}](guide:window.capabilities#blueprint-write)
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-automations)
+
 ## 場景 {#scenes}
 
 智慧體可以讀取、建立、編輯和刪除 Home Assistant 場景編輯器中的場景。場景中的每個實體都需要權限樹中的 W，即使只是讀取場景。MESA 不檢查場景變更。
@@ -149,6 +165,8 @@
 建立或編輯包含門鎖、警報、捲簾或閥門的場景（直接包含或透過群組包含）還需要物理控制。設為拒絕存取時，變更會被拒絕。設為確認時，它會等待你的核准，並把它們列為 `physical_entities`。
 
 允許它的能力：[{{label:caps.cap_scene_write.label}}](guide:window.capabilities#scene-write)、[{{label:caps.cap_physical_control.label}}](guide:window.capabilities#physical-control)
+
+本群組每個工具及其參數：[工具參考](guide:topic.tools-scenes)
 
 ## 輔助項目 {#helpers}
 
@@ -165,6 +183,8 @@
 
 允許它的能力：[{{label:caps.cap_helper_write.label}}](guide:window.capabilities#helper-write)、[{{label:caps.cap_integration_write.label}}](guide:window.capabilities#integration-write)
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-helpers)
+
 ## 儀表板 {#dashboards}
 
 智慧體可以列出、建立、編輯和刪除儀表板，讀取和搜尋其佈局，變更卡片並列出已安裝的自訂卡片。所有這些都需要管理儀表板，包括讀取。
@@ -178,6 +198,8 @@
 
 允許它的能力：[{{label:caps.cap_lovelace_write.label}}](guide:window.capabilities#lovelace-write)、[{{label:caps.cap_dashboard_resources.label}}](guide:window.capabilities#dashboard-resources)
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-dashboards)
+
 ## 還原變更 {#restore}
 
 智慧體可以放回自己之前對模板輔助項目、藍圖、能源設定、儀表板或儀表板資源所做的變更。它會先要求回執，然後傳送還原，還原會經過該能力一般的核准。智慧體只能看到自己的記錄。
@@ -185,6 +207,8 @@
 允許它的能力：以下任一項：[{{label:caps.cap_helper_write.label}}](guide:window.capabilities#helper-write)、[{{label:caps.cap_blueprint_write.label}}](guide:window.capabilities#blueprint-write)、[{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write)、[{{label:caps.cap_lovelace_write.label}}](guide:window.capabilities#lovelace-write)、[{{label:caps.cap_dashboard_resources.label}}](guide:window.capabilities#dashboard-resources)
 
 相關：[還原可以放回什麼](guide:topic.configurationHistory#restore)
+
+本群組每個工具及其參數：[工具參考](guide:topic.tools-restore)
 
 ## MESA 策略 {#mesa}
 
@@ -195,6 +219,8 @@
 允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)
 
 相關：[MESA 如何決定](guide:topic.mesaRules)
+
+本群組每個工具及其參數：[工具參考](guide:topic.tools-mesa)
 
 ## 設定、模板和日誌 {#configuration}
 
@@ -216,6 +242,8 @@
 
 允許它的能力：[{{label:caps.cap_config_read.label}}](guide:window.capabilities#config-read)、[{{label:caps.cap_energy_write.label}}](guide:window.capabilities#energy-write)、[{{label:caps.cap_template_render.label}}](guide:window.capabilities#template-render)、[{{label:caps.cap_log_read.label}}](guide:window.capabilities#log-read)、[{{label:caps.cap_log_control.label}}](guide:window.capabilities#log-control)
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-configuration)
+
 ## 探索和診斷 {#diagnostics}
 
 這些工具只讀取。它們幫助智慧體在行動前找到方向。
@@ -229,6 +257,8 @@
 
 允許它的能力：[{{label:caps.cap_search.label}}](guide:window.capabilities#search)、[{{label:caps.cap_registry_read.label}}](guide:window.capabilities#registry-read)、[{{label:caps.cap_traces.label}}](guide:window.capabilities#traces)、[{{label:caps.cap_diagnostics.label}}](guide:window.capabilities#diagnostics)
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-diagnostics)
+
 ## 檔案和 YAML {#files}
 
 讀取檔案讓智慧體讀取 www、themes 和 custom_templates 資料夾中的文字檔案，每個最大 1 MiB。資料夾清單分頁傳回，預設每頁 500 項，最多 1000 項。它不能寫入這些檔案。
@@ -238,6 +268,8 @@ YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔�
 名稱暗示機密的值以及提到機密的註解會顯示為 `<redacted>`，但使用普通名稱的密碼可見。有 YAML 錯誤的檔案不會顯示，智慧體只會得到需要修復的行號。沒有工具會寫入 YAML 設定。
 
 允許它的能力：[{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
+
+本群組每個工具及其參數：[工具參考](guide:topic.tools-files)
 
 ## ESPHome {#esphome}
 
@@ -257,6 +289,8 @@ Phoenix 無法確定所屬裝置的檔案（例如共用套件或已刪除的檔
 
 允許它的能力：[{{label:caps.cap_esphome_yaml.label}}](guide:window.capabilities#esphome-yaml)、[{{label:caps.cap_esphome_flash.label}}](guide:window.capabilities#esphome-flash)
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-esphome)
+
 ## 整合、裝置和系統 {#system}
 
 - 整合管理會新增、啟用、停用、重新載入和移除整合，並移除裝置。
@@ -274,9 +308,13 @@ Phoenix 無法確定所屬裝置的檔案（例如共用套件或已刪除的檔
 
 允許它的能力：[{{label:caps.cap_integration_write.label}}](guide:window.capabilities#integration-write)、[{{label:caps.cap_integration_reconfigure.label}}](guide:window.capabilities#integration-reconfigure)、[{{label:caps.cap_registry_write.label}}](guide:window.capabilities#registry-write)、[{{label:caps.cap_radio_write.label}}](guide:window.capabilities#radio-write)、[{{label:caps.cap_backup.label}}](guide:window.capabilities#backup)、[{{label:caps.cap_restart.label}}](guide:window.capabilities#restart)、[{{label:caps.cap_notify.label}}](guide:window.capabilities#notify)
 
+本群組每個工具及其參數：[工具參考](guide:topic.tools-system)
+
 ## 金鑰自身的狀態 {#introspection}
 
 每個金鑰都可以檢查自己的核准請求，最多等待 30 秒以取得其中 50 個，並讀取自己的能力摘要和稽核條目。這些不需要能力。來自其他金鑰的請求看起來就像不存在。
+
+本群組每個工具及其參數：[工具參考](guide:topic.tools-introspection)
 
 ## 在語音、Assist 和 AI 任務中 {#household}
 

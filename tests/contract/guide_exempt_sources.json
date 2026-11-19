@@ -19,6 +19,7 @@
   "frontend_src/components/ErrorBoundary.tsx": "Failure isolation for views.",
   "frontend_src/components/Modal.tsx": "Shared dialog primitive.",
   "frontend_src/components/common.tsx": "Shared presentational helpers.",
+  "frontend_src/guide/build.ts": "Guide build machinery.",
   "frontend_src/guide/compile.ts": "Guide build machinery.",
   "frontend_src/guide/targets.ts": "Guide section lookup for list rows; checked by the Guide contract.",
   "frontend_src/i18n/format.ts": "Number and date formatting from the Home Assistant profile.",
