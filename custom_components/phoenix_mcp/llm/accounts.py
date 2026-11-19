@@ -527,6 +527,11 @@ PROVIDER_DEFINITIONS["local_decision"] = ProviderDefinition(
     adapter="systemone", base_url="",
     fields=(_LOCAL_DECISION_URL_FIELD, _OPTIONAL_API_KEY_FIELD), purpose="decision",
 )
+# Microsoft Decision at the operator's Foundry resource; its models are the resource's Decision deployments.
+PROVIDER_DEFINITIONS["azure_decision"] = ProviderDefinition(
+    kind="azure_decision", label="Microsoft / Decision", adapter="systemone", base_url="",
+    fields=(_AZURE_URL_FIELD, _API_KEY_FIELD), purpose="decision",
+)
 PROVIDER_DEFINITIONS["gemini_decision"] = ProviderDefinition(
     kind="gemini_decision", label="Google / Gemini Decision", adapter="gemini_decisions",
     base_url=DECISION_GEMINI_BASE_URL, model="gemini-decision-1",
@@ -702,7 +707,7 @@ def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
     """Return the in-memory identity rejecting duplicate accounts; never stored or returned.
 
     The endpoint for a local server (with the model for a local decision server), the credential for most kinds, both for Qwen and endpoint-bound
-    keys, and the resource with the credential for Azure. OpenCode keeps its credential across Zen and Console.
+    keys, and the resource with the credential for Azure (chat or decision). OpenCode keeps its credential across Zen and Console.
     """
     if kind == "local_decision":
         # One server holds several decision models, and each account is one of them.
@@ -710,7 +715,7 @@ def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
         return kind, "\0".join((_normalized_provider_url(cfg.get("base_url")), model))
     if kind in AGENT_CHAT_LOCAL_SERVER_KINDS:
         return kind, _normalized_provider_url(cfg.get("base_url"))
-    if kind == "azure":
+    if kind in ("azure", "azure_decision"):
         # Every Azure AI host of one resource reaches the same deployments, so the resource name decides.
         host = _host_of(str(cfg.get("base_url") or "")).lower()
         resource = next((host[:-len(suffix)] for suffix in AGENT_CHAT_AZURE_HOST_SUFFIXES if host.endswith(suffix)), host)

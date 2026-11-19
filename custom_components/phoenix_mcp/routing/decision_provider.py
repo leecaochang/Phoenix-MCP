@@ -37,7 +37,10 @@ from .routing_tables import (
     DECISION_CONTEXT_EXECUTION_MODELS, DECISION_FOLLOWUP_EXECUTION_MODELS, DECISION_LOCAL_FOLLOWUP_FAMILIES,
     DECISION_REFERENCE_EXECUTION_MODELS,
     DECISION_LOCAL_PROBE_CHOICES, DECISION_LOCAL_SHOW_MAX_BYTES, DECISION_LOCAL_SHOW_MAX_MODELS, DECISION_TIMEOUT_MAX_MS,
+    DECISION_AZURE_API_PATH, DECISION_AZURE_BASE_URL, DECISION_AZURE_CONTEXT_REFUSALS, DECISION_AZURE_DEPLOYMENT,
+    DECISION_AZURE_MODEL_PREFIX,
 )
+from ..provider_constants import AGENT_CHAT_AZURE_DEPLOYMENTS_PATH, AGENT_CHAT_AZURE_HOST_SUFFIXES
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
 from ..conversation_log import routing_span
@@ -133,17 +136,25 @@ _DECISION_PROTOCOLS = frozenset({
     ("cloudflare_decision", "systemone"), ("gemini_decision", "gemini_decisions"),
     ("local_decision", "systemone"),
     ("openai_decision", "openai_decisions"),
+    ("azure_decision", "systemone"),
 })
 _CLOUDFLARE_PREFIX, _CLOUDFLARE_SUFFIX = DECISION_CLOUDFLARE_BASE_URL.split("{account_id}")
+# The address setup stores for an Azure resource: its lowercase host and the decision path.
+_AZURE_DECISION_URL = re.compile(
+    r"https://[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:"
+    + "|".join(re.escape(suffix) for suffix in AGENT_CHAT_AZURE_HOST_SUFFIXES) + ")"
+    + re.escape(DECISION_AZURE_API_PATH))
 
 
 def decision_endpoint(cfg: Any) -> str:
     """The endpoint an account's registry entries name.
 
-    Cloudflare's address carries the operator's account id; every account at that
-    fixed address shares its entries. Any other address is compared as it is.
+    Cloudflare's address carries the operator's account id and Azure's the resource; every
+    account at that fixed address shares its entries. Any other address is compared as it is.
     """
     base_url = cfg.base_url
+    if cfg.kind == "azure_decision" and _AZURE_DECISION_URL.fullmatch(base_url):
+        return DECISION_AZURE_BASE_URL
     if (cfg.kind == "cloudflare_decision" and base_url.startswith(_CLOUDFLARE_PREFIX)
             and base_url.endswith(_CLOUDFLARE_SUFFIX)
             and re.fullmatch(DECISION_CLOUDFLARE_ACCOUNT_ID,
@@ -153,8 +164,15 @@ def decision_endpoint(cfg: Any) -> str:
 
 
 def decision_key(cfg: Any) -> tuple[str, str, str]:
-    """The (kind, endpoint, model) key that execution registries are keyed by."""
-    return (cfg.kind, decision_endpoint(cfg), cfg.model)
+    """The (kind, endpoint, model) key that execution registries are keyed by.
+
+    An Azure deployment is named by the operator, so every deployment shares one key and the
+    registries list the models Azure may report as answering.
+    """
+    endpoint = decision_endpoint(cfg)
+    if cfg.kind == "azure_decision" and endpoint == DECISION_AZURE_BASE_URL:
+        return (cfg.kind, endpoint, DECISION_AZURE_DEPLOYMENT)
+    return (cfg.kind, endpoint, cfg.model)
 
 
 def _gemini_text(value: Any) -> str:
@@ -535,9 +553,10 @@ class DecisionProvider:
             return "unavailable"
         # OpenCode serves JEV and relays TypeSafe's error body; OpenAI uses its usual error object;
         # Google answers an invalid or unusable key with 400 rather than 401; a local server names
-        # a prompt longer than the context it runs the model with.
-        if response.status != 400 or self.cfg.kind not in (
-                "typesafe", "opencode_decision", "openai_decision", "gemini_decision", "local_decision"):
+        # a prompt longer than the context it runs the model with; Azure refuses one with a 422
+        # sentence naming the limit.
+        if (response.status, self.cfg.kind) != (422, "azure_decision") and (response.status != 400 or self.cfg.kind not in (
+                "typesafe", "opencode_decision", "openai_decision", "gemini_decision", "local_decision")):
             return "http_error"
         try:
             raw = bytearray()
@@ -556,6 +575,10 @@ class DecisionProvider:
                 # Ollama answers with a sentence, llama.cpp's server with a typed object.
                 too_long = (isinstance(error, str) and "context length" in error.lower()) or (
                     isinstance(error, dict) and error.get("type") == "exceed_context_size_error")
+                return "provider_context_limit" if too_long else "http_error"
+            if self.cfg.kind == "azure_decision":
+                detail = body.get("detail") if isinstance(body, dict) else None
+                too_long = isinstance(detail, str) and any(marker in detail for marker in DECISION_AZURE_CONTEXT_REFUSALS)
                 return "provider_context_limit" if too_long else "http_error"
             if self.cfg.kind == "openai_decision":
                 error = body.get("error") if isinstance(body, dict) else None
@@ -602,9 +625,14 @@ class DecisionProvider:
         headers = {"Content-Type": "application/json"}
         if self.cfg.api_key and self.cfg.kind == "gemini_decision":
             headers["x-goog-api-key"] = self.cfg.api_key
+        elif self.cfg.api_key and self.cfg.kind == "azure_decision":
+            headers["api-key"] = self.cfg.api_key
         elif self.cfg.api_key:
             headers["Authorization"] = f"Bearer {self.cfg.api_key}"
         url = f"{self.cfg.base_url}/{path}"
+        if method == "GET" and path == "models" and self.cfg.kind == "azure_decision":
+            # The decision path lists nothing; the resource's deployments are its models.
+            url = self.cfg.base_url.removesuffix(DECISION_AZURE_API_PATH) + AGENT_CHAT_AZURE_DEPLOYMENTS_PATH
         wire = payload
         if method == "POST" and payload is not None and path == self.protocol:
             if self.cfg.kind == "cloudflare_decision":
@@ -675,6 +703,8 @@ class DecisionProvider:
         entries = body.get("models", body.get("data"))
         if not isinstance(entries, list):
             raise DecisionError("malformed")
+        if self.cfg.kind == "azure_decision":
+            return self._azure_decision_deployments(entries)
         models = []
         for item in entries:
             name = item.get("name", item.get("id")) if isinstance(item, dict) else None
@@ -684,6 +714,19 @@ class DecisionProvider:
         if self.cfg.kind == "local_decision":
             models = await self._ollama_decision_models(session, models)
         return sorted(set(models))
+
+    @staticmethod
+    def _azure_decision_deployments(entries: list) -> list[str]:
+        """The deployments of a Decision model; the resource's other deployments are chat models."""
+        deployments = []
+        for item in entries:
+            name = item.get("id") if isinstance(item, dict) else None
+            model = item.get("model") if isinstance(item, dict) else None
+            if not isinstance(name, str) or not name or len(name) > 200 or not isinstance(model, str):
+                raise DecisionError("malformed")
+            if model.lower().startswith(DECISION_AZURE_MODEL_PREFIX):
+                deployments.append(name)
+        return sorted(set(deployments))
 
     async def _ollama_decision_models(self, session: ClientSession, models: list[str]) -> list[str]:
         """Keep the models an Ollama server declares as decision models; any other server's list is kept.

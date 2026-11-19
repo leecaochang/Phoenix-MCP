@@ -58,6 +58,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 | `cloudflare_decision`（Cloudflare） | 决策 | `account_id`、`api_key`、`model`：`clef-flash`、`clef` |
 | `openai_decision`（OpenAI） | 决策 | `api_key`、`model`：`gpt-6-luna` |
 | `local_decision`（本地） | 决策 | `base_url`、`api_key`（可选）、`model`：服务器列出的决策模型 |
+| `azure_decision`（Microsoft） | 决策 | `base_url`、`api_key`、`model`：Microsoft Decision 模型的部署 |
 
 ### 设置字段 {#setup-fields}
 
@@ -67,7 +68,7 @@ POST   /api/phoenix-mcp/admin/agentcli/probe
 |---|---|---|
 | `kind` | string | 必填。上面的类型之一。 |
 | `api_key` | string | 除 `ollama`、`local_openai` 和 `local_decision` 外每种类型都必填。最多 4096 个字符，不能包含控制字符。Phoenix 绝不返回它。 |
-| `base_url` | string | `ollama`、`local_openai`、`local_decision`、`qwen` 和 `azure` 必填。只有 `ollama`、`local_openai` 和 `local_decision` 可以使用私有地址。对于 `local_openai` 和 `local_decision`，地址没有路径时 Phoenix 会加上 `/v1`。对于 `azure`，Phoenix 只保留主机名，它必须是以 `.services.ai.azure.com`、`.openai.azure.com` 或 `.cognitiveservices.azure.com` 结尾的 HTTPS 地址。其他每种类型都使用固定端点，并忽略此字段。 |
+| `base_url` | string | `ollama`、`local_openai`、`local_decision`、`qwen`、`azure` 和 `azure_decision` 必填。只有 `ollama`、`local_openai` 和 `local_decision` 可以使用私有地址。对于 `local_openai` 和 `local_decision`，地址没有路径时 Phoenix 会加上 `/v1`。对于 `azure` 和 `azure_decision`，Phoenix 只保留主机名，它必须是以 `.services.ai.azure.com`、`.openai.azure.com` 或 `.cognitiveservices.azure.com` 结尾的 HTTPS 地址。其他每种类型都使用固定端点，并忽略此字段。 |
 | `endpoint_id` | string | 仅用于带端点的类型。省略它表示默认值。 |
 | `account_id` | string | `cloudflare` 和 `cloudflare_decision` 必填：32 个字符的 Cloudflare 账户 ID。Phoenix 用它构建端点。 |
 | `model` | string | 对话类型可选；留空表示自动跟随提供商。决策类型必填：最多 200 个字符，且必须在提供商当前列表中。 |

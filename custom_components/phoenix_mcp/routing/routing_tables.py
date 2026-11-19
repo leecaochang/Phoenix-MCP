@@ -333,6 +333,16 @@ DECISION_GEMINI_MODELS = ("gemini-decision-1",)
 # OpenAI's own Decisions API: the same question types in ordered arrays, with predicate for yes/no.
 DECISION_OPENAI_BASE_URL = "https://api.openai.com/v1"
 DECISION_OPENAI_MODELS = ("gpt-6-luna",)
+# Microsoft Foundry serves Decision (TypeSafe's engine) at each resource's own host, under a deployment
+# name the operator chose, so registries name both by placeholder and the model Azure reports as
+# answering decides. The resource lists its deployments; those of a Decision model are offered.
+DECISION_AZURE_API_PATH = "/providers/microsoft/v1"
+DECISION_AZURE_BASE_URL = "https://{resource}" + DECISION_AZURE_API_PATH
+DECISION_AZURE_DEPLOYMENT = "{deployment}"
+DECISION_AZURE_MODEL_PREFIX = "microsoft-decision-"
+# Its refusals (HTTP 422) of a request over the whole input limit and of one question over the model's
+# context; the limits themselves may change.
+DECISION_AZURE_CONTEXT_REFUSALS = ("the limit for the state plus all questions", "-token context limit")
 DECISION_FIXED_MODELS = MappingProxyType({
     "openai_decision": DECISION_OPENAI_MODELS,
     "opencode_decision": DECISION_OPENCODE_MODELS,
@@ -387,8 +397,14 @@ DECISION_HOSTED_EXECUTION_MODELS = MappingProxyType({
 })
 # Those that also gave no wrong answer on the inert follow-up corpus (context, reference and
 # decision follow-ups) at the default bar, which follow-up reviews never go below. Every hosted
-# model has passed it.
+# model above has passed it.
 DECISION_HOSTED_FOLLOWUP_MODELS = MappingProxyType(dict(DECISION_HOSTED_EXECUTION_MODELS))
+# Microsoft Decision on any deployment of any resource, answering as this model, acts on sequential
+# first messages only: in one joint request it also picked a collection scope beside a correct target,
+# which refuses every time, and it admitted a command after "Translate the next sentence into French".
+DECISION_AZURE_SEQUENTIAL_MODELS = MappingProxyType({
+    ("azure_decision", DECISION_AZURE_BASE_URL, DECISION_AZURE_DEPLOYMENT): frozenset({"microsoft-decision-1"}),
+})
 # Local System One servers whose model family passed the 18-case inert follow-up corpus with no wrong
 # answer at the default bar (clef did; clef-flash admitted a command after "translate the next sentence").
 # A local address differs in every home, so the family is matched, and the configured model must answer
@@ -454,6 +470,7 @@ DECISION_SEQUENTIAL_EXECUTION_MODELS = MappingProxyType({
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
     **DECISION_HOSTED_EXECUTION_MODELS,
+    **DECISION_AZURE_SEQUENTIAL_MODELS,
 })
 DECISION_ROUTE_CHOICES = MappingProxyType({
     "light_on": "One immediate, explicit request to turn on one light, without a brightness setting or adjustment.",
@@ -473,6 +490,7 @@ DECISION_EXACT_PERCENTAGE_ENDPOINTS = frozenset({
     ("cloudflare_decision", DECISION_CLOUDFLARE_BASE_URL, "systemone"),
     ("gemini_decision", DECISION_GEMINI_BASE_URL, "gemini_decisions"),
     ("openai_decision", DECISION_OPENAI_BASE_URL, "openai_decisions"),
+    ("azure_decision", DECISION_AZURE_BASE_URL, "systemone"),
 })
 # TypeSafe's direct API rounds probabilities to two decimal places.
 DECISION_PROBABILITY_ROUNDING = MappingProxyType({("typesafe", DECISION_TYPESAFE_BASE_URL, "systemone"): 0.005})
@@ -484,7 +502,7 @@ DECISION_PERCENTAGE_CHOICES = MappingProxyType({
 })
 
 DECISION_PROVIDERS = frozenset({"typesafe", "opencode_decision", "cloudflare_decision", "gemini_decision", "openai_decision",
-                                "local_decision"})
+                                "local_decision", "azure_decision"})
 _DECISION_TARGET_INTENTS = {
     "light_on": "HassTurnOn", "light_off": "HassTurnOff",
     "light_brightness": "HassLightSet", "state_query": "HassGetState",

@@ -132,9 +132,10 @@ def test_the_kind_is_a_decision_account_with_an_address_and_an_optional_key():
     fields = {field.id: field for field in definition.fields}
     assert set(fields) == {"base_url", "api_key"}
     assert fields["api_key"].required is False
-    # The only decision kind that takes an address from the operator.
+    # The decision kinds that take an address from the operator; Azure's must be a Foundry resource host.
     assert [kind for kind, item in llm_accounts.PROVIDER_DEFINITIONS.items()
-            if item.purpose == "decision" and any(field.id == "base_url" for field in item.fields)] == ["local_decision"]
+            if item.purpose == "decision" and any(field.id == "base_url" for field in item.fields)] == [
+                "local_decision", "azure_decision"]
 
 
 @pytest.mark.parametrize("entered,stored", [

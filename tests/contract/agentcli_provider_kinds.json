@@ -1,6 +1,7 @@
 {
   "agentcli_provider_kinds": [
     "azure",
+    "azure_decision",
     "cerebras",
     "chatgpt",
     "claude",

@@ -113,7 +113,8 @@ Phoenix 会按计划重新检查提供商的模型列表：6 到 720 小时（�
 
 - Cloudflare / Clef：Workers AI 上的 Clef 或 Clef Flash，使用你的 Cloudflare 账户 ID 和 API 令牌。
 - Google / Gemini Decision：Google 的 Gemini Decision 模型，使用 Gemini API 密钥。
-- 本地 / System One：你自己服务器上的决策模型，例如 Ollama 或 llama.cpp，使用服务器地址。API 密钥可选。
+- 本地 / System One：你自己服务器上的决策模型，例如 Ollama 或 llama.cpp。使用 Ollama 时，请设置 `OLLAMA_KEEP_ALIVE` 让模型保持加载，并把 `num_ctx`（d3 还有 `num_batch`）调到 16384。
+- Microsoft / Decision：Azure AI Foundry 中的 Microsoft-Decision-1，使用资源的终结点和密钥。
 - OpenAI / Decisions：OpenAI 的 gpt-6-luna 决策模型，使用 OpenAI API 密钥。
 - OpenCode / System One：JEV、Gemini Decision 或 GPT Luna Decision，使用 OpenCode Console API 密钥。
 - TypeSafe / JEV：TypeSafe 的 JEV 模型，使用 TypeSafe API 密钥。其 jev-preview 模型只观察，从不执行命令。
@@ -122,17 +123,11 @@ Phoenix 会按计划重新检查提供商的模型列表：6 到 720 小时（�
 
 决策账户与同一家公司的任何 AI 提供商账户相互独立。如果你已经在 AI 提供商中使用该密钥，也必须在此再次添加。
 
-所有决策提供商也会处理依赖对话内容的后续消息；使用本地 / System One 时，只有 clef 模型会处理。参见[后续消息](guide:topic.commandRouting#follow-ups)。本地 / System One 还会把带数值的命令（例如亮度）交给你的 AI 模型。
+除 Microsoft / Decision 外，所有决策提供商也会处理依赖对话内容的后续消息。使用本地 / System One 时，只有 clef 模型会处理。参见[后续消息](guide:topic.commandRouting#follow-ups)。本地 / System One 和 Microsoft / Decision 还会把带数值的命令（例如亮度）交给你的 AI 模型。
 
 要使用它，请选择其账户。选择 **{{label:routing.noProvider}}** 可停止使用它；命令随后只依赖句子匹配。
 
 它还可以为自动化和脚本回答 Home Assistant 的“评估”操作，请参阅[决策](guide:window.settingsHome#ai-decisions)。
-
-Ollama 会在模型空闲 5 分钟后将其卸载。重新加载可能超过[决策超时](#decision-timeout)，因此停顿后的第一条命令会交给你的 AI 模型。要让模型保持加载，请在 Ollama 服务器上设置 `OLLAMA_KEEP_ALIVE`。
-
-选择设备时，会把你的设备列表发送给模型。如果模型运行时的上下文太小，Ollama 会拒绝这个列表，命令会交给你的 AI 模型。大约 100 盏灯时，4,096 个 token 就太小了。
-
-请在模型 Modelfile 的副本中调高 `num_ctx`，例如调到 16384。一次读取整个提示的模型（例如 d3）还需要把 `num_batch` 调到相同的值。
 
 相关：[命令如何路由](guide:topic.commandRouting)
 

@@ -111,7 +111,8 @@ Choose from these decision providers:
 
 - Cloudflare / Clef: Clef or Clef Flash on Workers AI, with your Cloudflare account ID and an API token.
 - Google / Gemini Decision: Google's Gemini Decision model, with a Gemini API key.
-- Local / System One: a decision model on your own server, such as Ollama or llama.cpp, at the server's address. An API key is optional.
+- Local / System One: a decision model on your own server, such as Ollama or llama.cpp. For Ollama, set `OLLAMA_KEEP_ALIVE` to keep it loaded, and raise `num_ctx` (plus `num_batch` for d3) to 16384.
+- Microsoft / Decision: Microsoft-Decision-1 in Azure AI Foundry, with your resource's endpoint and key.
 - OpenAI / Decisions: OpenAI's gpt-6-luna decision model, with an OpenAI API key.
 - OpenCode / System One: JEV, Gemini Decision or GPT Luna Decision, with an OpenCode Console API key.
 - TypeSafe / JEV: TypeSafe's JEV model, with a TypeSafe API key. Its jev-preview model only observes and never carries out commands.
@@ -120,17 +121,11 @@ Add an account and select its model. Only one decision provider can be in use at
 
 A decision account is separate from any AI provider account from the same company. You must add its key here again if you already use that key for AI Provider.
 
-Every decision provider also handles follow-up messages that depend on the conversation; with Local / System One, only the clef model does. See [Follow-up messages](guide:topic.commandRouting#follow-ups). Local / System One also sends commands with a number, such as a brightness, to your AI model.
+Every decision provider except Microsoft / Decision also handles follow-up messages that depend on the conversation. With Local / System One, only the clef model does. See [Follow-up messages](guide:topic.commandRouting#follow-ups). Local / System One and Microsoft / Decision also send commands with a number, such as a brightness, to your AI model.
 
 To use it, choose its account. Choose **{{label:routing.noProvider}}** to stop using it; commands then rely on sentence matching alone.
 
 It can also answer Home Assistant's Evaluate action for automations and scripts: see [Decisions](guide:window.settingsHome#ai-decisions).
-
-Ollama unloads a model after 5 idle minutes. Loading it again can take longer than the [decision timeout](#decision-timeout), so the first command after a pause goes to your AI model. To keep the model loaded, set `OLLAMA_KEEP_ALIVE` on the Ollama server.
-
-Choosing a device sends the model the list of your devices. If the model runs with a small context, Ollama refuses that list and the command goes to your AI model. With about 100 lights, 4,096 tokens is too small.
-
-In a copy of its Modelfile, raise `num_ctx`, for example to 16384. A model that reads the whole prompt at once, such as d3, also needs `num_batch` raised to the same value.
 
 Related: [How a command is routed](guide:topic.commandRouting)
 

@@ -30,7 +30,9 @@ from .helpers import get_client_ip
 from .catalog_text import LocalizedReason
 from .home_companion import is_companion
 from .net_guard import ip_is_blocked
-from .routing.routing_tables import DECISION_CLOUDFLARE_ACCOUNT_ID, DECISION_THRESHOLD_MAX, DECISION_THRESHOLD_MIN
+from .routing.routing_tables import (
+    DECISION_AZURE_API_PATH, DECISION_CLOUDFLARE_ACCOUNT_ID, DECISION_THRESHOLD_MAX, DECISION_THRESHOLD_MIN,
+)
 from .llm.accounts import (
     _catalog_of, _default_base_url, _default_model, _get_secret_store, _provider_catalog,
     DuplicateProviderError, PROVIDER_DEFINITIONS, provider_purpose, ProviderConfig,
@@ -373,8 +375,8 @@ async def _validate_base_url(
     return None
 
 
-def _azure_api_url(url: str) -> str:
-    """The v1 API address of the Azure resource `url` names, or "" when it names none.
+def _azure_api_url(url: str, path: str = AGENT_CHAT_AZURE_API_PATH) -> str:
+    """The API address at `path` of the Azure resource `url` names, or "" when it names none.
 
     Any address of the resource is accepted, including the Foundry project address and the v1 API
     itself; only an HTTPS Azure AI host is, so the key never reaches another host.
@@ -391,7 +393,7 @@ def _azure_api_url(url: str) -> str:
     resource = host[:-len(suffix)] if suffix else ""
     if not resource or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?", resource):
         return ""
-    return f"https://{host}{AGENT_CHAT_AZURE_API_PATH}"
+    return f"https://{host}{path}"
 
 
 async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigError:
@@ -436,8 +438,8 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
             return ProbeConfigError(
                 "Enter the provider base URL.", "providerBaseUrlRequired",
             )
-        if kind == "azure":
-            base_url = _azure_api_url(base_url)
+        if kind in ("azure", "azure_decision"):
+            base_url = _azure_api_url(base_url, DECISION_AZURE_API_PATH if kind == "azure_decision" else AGENT_CHAT_AZURE_API_PATH)
             if not base_url:
                 return ProbeConfigError(
                     "Enter your Azure endpoint: an https address ending in .services.ai.azure.com, "

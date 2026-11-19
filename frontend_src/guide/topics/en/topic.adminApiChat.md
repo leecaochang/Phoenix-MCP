@@ -58,6 +58,7 @@ Every account has a `kind`. Kinds with endpoints take an `endpoint_id`; the firs
 | `cloudflare_decision` (Cloudflare) | decision | `account_id`, `api_key`, `model`: `clef-flash`, `clef` |
 | `openai_decision` (OpenAI) | decision | `api_key`, `model`: `gpt-6-luna` |
 | `local_decision` (Local) | decision | `base_url`, `api_key` (optional), `model`: a decision model the server lists |
+| `azure_decision` (Microsoft) | decision | `base_url`, `api_key`, `model`: a deployment of a Microsoft Decision model |
 
 ### Setup fields {#setup-fields}
 
@@ -67,7 +68,7 @@ Adding an account and checking a setup take the same body.
 |---|---|---|
 | `kind` | string | Required. One of the kinds above. |
 | `api_key` | string | Required for every kind except `ollama`, `local_openai` and `local_decision`. At most 4096 characters, with no control characters. Phoenix never returns it. |
-| `base_url` | string | Required for `ollama`, `local_openai`, `local_decision`, `qwen` and `azure`. Only `ollama`, `local_openai` and `local_decision` may use a private address. For `local_openai` and `local_decision`, Phoenix adds `/v1` to an address without a path. For `azure`, Phoenix keeps only the host, which must be an HTTPS address ending in `.services.ai.azure.com`, `.openai.azure.com` or `.cognitiveservices.azure.com`. Every other kind uses a fixed endpoint and ignores this field. |
+| `base_url` | string | Required for `ollama`, `local_openai`, `local_decision`, `qwen`, `azure` and `azure_decision`. Only `ollama`, `local_openai` and `local_decision` may use a private address. For `local_openai` and `local_decision`, Phoenix adds `/v1` to an address without a path. For `azure` and `azure_decision`, Phoenix keeps only the host, which must be an HTTPS address ending in `.services.ai.azure.com`, `.openai.azure.com` or `.cognitiveservices.azure.com`. Every other kind uses a fixed endpoint and ignores this field. |
 | `endpoint_id` | string | Only for kinds with endpoints. Leave it out for the default. |
 | `account_id` | string | Required for `cloudflare` and `cloudflare_decision`: the 32-character Cloudflare account ID. Phoenix builds the endpoint from it. |
 | `model` | string | Optional for conversation kinds; leave it empty to follow the provider automatically. Required for decision kinds: at most 200 characters, and in the provider's current list. |

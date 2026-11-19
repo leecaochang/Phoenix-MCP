@@ -10,12 +10,14 @@ from custom_components.phoenix_mcp.routing.decision_provider import (
     DecisionProvider, decision_endpoint, decision_key, gemini_request, revision_admitted,
     sequential_revision_admitted,
 )
+from custom_components.phoenix_mcp.routing.decision_batch import batch_execution_eligible
 from custom_components.phoenix_mcp.routing.decision_types import DecisionError
 from custom_components.phoenix_mcp.routing.routing_tables import (
     DECISION_CLOUDFLARE_BASE_URL, DECISION_GEMINI_BASE_URL, DECISION_OPENCODE_BASE_URL,
     DECISION_ROUTE_CHOICES, DECISION_SEQUENTIAL_EXECUTION_MODELS, DECISION_TYPESAFE_BASE_URL,
     DECISION_BATCH_EXECUTION_MODELS, DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_MODELS,
     DECISION_REFERENCE_EXECUTION_MODELS, DECISION_FOLLOWUP_EXECUTION_MODELS,
+    DECISION_AZURE_BASE_URL, DECISION_AZURE_DEPLOYMENT,
 )
 
 ACCOUNT = "0123456789abcdef0123456789abcdef"
@@ -161,6 +163,7 @@ def test_every_cloudflare_account_shares_the_registry_endpoint():
                                 "https://api.cloudflare.com/client/v4/accounts/not-an-id/ai/run/@cf/cloudflare"),
     llm_accounts.ProviderConfig("opencode_decision", "jev-1.13", "https://self-hosted.example/v1"),
     llm_accounts.ProviderConfig("gemini_decision", "gemini-decision-1", "https://self-hosted.example/v1beta"),
+    llm_accounts.ProviderConfig("azure_decision", "Decision-1", "https://forged.example/providers/microsoft/v1"),
 ])
 def test_hosted_providers_cannot_act_sequentially_without_a_registry_entry(cfg):
     """Only a custom TypeSafe address is the operator's own choice; every other endpoint needs qualification."""
@@ -487,3 +490,137 @@ async def test_follow_up_reviews_never_go_below_the_default_bar(socket_enabled, 
             result = await getattr(DecisionProvider(cfg, "systemone"), review)(session, {}, 1000)
         for answer in result["checks"].values():
             assert answer["min_probability"] == bar and confident_choice(answer) is False
+
+
+AZURE_HOST = "https://res-1.services.ai.azure.com"
+
+
+async def test_azure_posts_system_one_with_its_key_header_and_lists_decision_deployments(socket_enabled):
+    seen: list[dict] = []
+
+    async def decide(request):
+        seen.append({"path": request.path, "headers": dict(request.headers), "body": await request.json()})
+        return web.json_response(_answer("microsoft-decision-1"))
+
+    async def deployments(request):
+        seen.append({"path": request.path, "query": dict(request.query), "headers": dict(request.headers)})
+        return web.json_response({"data": [
+            {"id": "Decision-1", "model": "Microsoft-Decision-1", "status": "succeeded"},
+            {"id": "chat", "model": "Kimi-K3.1-Pro", "status": "succeeded"},
+            {"id": "next", "model": "Microsoft-Decision-1.1", "status": "succeeded"}]})
+
+    app = web.Application()
+    app.router.add_post("/providers/microsoft/v1/systemone", decide)
+    app.router.add_get("/openai/deployments", deployments)
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = llm_accounts.ProviderConfig("azure_decision", "Decision-1",
+                                          str(server.make_url("/providers/microsoft/v1")), "secret")
+        provider = DecisionProvider(cfg, "systemone")
+        # Only the deployments of a Decision model are offered, by deployment name.
+        assert await provider.list_models(session) == ["Decision-1", "next"]
+        result = await provider.classify(session, "Turn on the lamp", 1000)
+    assert result["choice"] == "light_on" and result["model"] == "microsoft-decision-1"
+    listing, decision = seen
+    assert listing["path"] == "/openai/deployments" and listing["query"] == {"api-version": "2023-03-15-preview"}
+    for request in seen:
+        assert request["headers"]["api-key"] == "secret" and "Authorization" not in request["headers"]
+    assert decision["path"] == "/providers/microsoft/v1/systemone" and decision["body"]["model"] == "Decision-1"
+
+
+async def test_azure_deployment_rows_without_names_are_unreadable(socket_enabled):
+    async def deployments(request):
+        return web.json_response({"data": [{"model": "Microsoft-Decision-1"}]})
+    app = web.Application()
+    app.router.add_get("/openai/deployments", deployments)
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = llm_accounts.ProviderConfig("azure_decision", "", str(server.make_url("/providers/microsoft/v1")), "k")
+        with pytest.raises(DecisionError, match="^malformed$"):
+            await DecisionProvider(cfg, "systemone").list_models(session)
+
+
+def test_every_azure_resource_and_deployment_shares_one_registry_key():
+    for host, model in ((AZURE_HOST, "Decision-1"), ("https://other.cognitiveservices.azure.com", "mine")):
+        cfg = llm_accounts.ProviderConfig("azure_decision", model, host + "/providers/microsoft/v1")
+        assert decision_endpoint(cfg) == DECISION_AZURE_BASE_URL
+        assert decision_key(cfg) == ("azure_decision", DECISION_AZURE_BASE_URL, DECISION_AZURE_DEPLOYMENT)
+    for forged in ("https://res-1.services.ai.azure.com.evil.example/providers/microsoft/v1",
+                   "http://res-1.services.ai.azure.com/providers/microsoft/v1",
+                   "https://res-1.services.ai.azure.com:8443/providers/microsoft/v1",
+                   "https://res-1.services.ai.azure.com/providers/microsoft/v1/x",
+                   "https://evil.example/providers/microsoft/v1"):
+        cfg = llm_accounts.ProviderConfig("azure_decision", "Decision-1", forged)
+        assert decision_endpoint(cfg) == forged and decision_key(cfg)[2] == "Decision-1"
+    # The same address under another kind is not Azure's.
+    other = llm_accounts.ProviderConfig("typesafe", "Decision-1", AZURE_HOST + "/providers/microsoft/v1")
+    assert decision_endpoint(other) == other.base_url
+
+
+@pytest.mark.parametrize("entered,stored", [
+    (AZURE_HOST, AZURE_HOST + "/providers/microsoft/v1"),
+    ("https://RES-1.services.ai.azure.com/api/projects/home", AZURE_HOST + "/providers/microsoft/v1"),
+    ("https://res-1.openai.azure.com/openai/v1/", "https://res-1.openai.azure.com/providers/microsoft/v1"),
+    ("https://test-gateway.azure-api.net/res-1/providers/microsoft/v1/systemone", None),
+    ("http://res-1.services.ai.azure.com", None),
+    ("https://evil.example", None),
+])
+async def test_azure_setup_keeps_only_the_resource_host(entered, stored, monkeypatch):
+    async def _no_problem(*_args, **_kwargs):
+        return None
+
+    # The address check resolves the host; the resource rule is what is under test here.
+    monkeypatch.setattr(agent_chat_views, "_validate_base_url", _no_problem)
+    probe = await agent_chat_views._probe_config("azure_decision", {
+        "base_url": entered, "api_key": "k", "model": "Decision-1"})
+    if stored is None:
+        assert isinstance(probe, ProbeConfigError) and probe.key == "providerAzureEndpointInvalid"
+        return
+    assert probe.base_url == stored
+    assert agent_chat_views._stored_setup_config(probe, "Decision-1") == {
+        "api_key": "k", "base_url": stored, "model": "Decision-1"}
+
+
+@pytest.mark.parametrize("status,body,expected", [
+    (422, {"detail": "invalid TypeSafe request: request is about 75014 tokens; "
+                     "the limit for the state plus all questions is 64000"}, "provider_context_limit"),
+    (422, {"detail": "invalid model request: Question prompt exceeds the 32768-token context limit "
+                     "including the decision token"}, "provider_context_limit"),
+    (422, {"detail": "invalid TypeSafe request: choice question \"route\" must have between 2 and 255 options"},
+     "http_error"),
+    (400, {"detail": "the limit for the state plus all questions"}, "http_error"),
+    (404, {"error": {"code": "DeploymentNotFound"}}, "http_error"),
+])
+async def test_azure_input_limit_refusal_is_recognized(status, body, expected, socket_enabled):
+    async def handler(request):
+        return web.json_response(body, status=status)
+    app = web.Application()
+    app.router.add_post("/providers/microsoft/v1/systemone", handler)
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = llm_accounts.ProviderConfig("azure_decision", "Decision-1",
+                                          str(server.make_url("/providers/microsoft/v1")), "k")
+        with pytest.raises(DecisionError, match="^" + expected + "$"):
+            await DecisionProvider(cfg, "systemone").classify(session, "command", 1000)
+
+
+def test_azure_accounts_are_one_per_resource_key():
+    first = llm_accounts._provider_identity("azure_decision", {"base_url": AZURE_HOST + "/providers/microsoft/v1",
+                                                               "api_key": "k", "model": "Decision-1"})
+    second = llm_accounts._provider_identity("azure_decision", {
+        "base_url": "https://res-1.cognitiveservices.azure.com/providers/microsoft/v1", "api_key": "k", "model": "next"})
+    assert first == second
+    assert first != llm_accounts._provider_identity("azure", {"base_url": AZURE_HOST + "/openai/v1", "api_key": "k"})
+
+
+def test_microsoft_decision_acts_on_sequential_first_messages_only_and_only_as_decision_1():
+    cfg = llm_accounts.ProviderConfig("azure_decision", "my-deployment", AZURE_HOST + "/providers/microsoft/v1")
+    assert revision_admitted(DECISION_SEQUENTIAL_EXECUTION_MODELS, cfg, "microsoft-decision-1")
+    # The deployment name is the operator's; a later model must qualify on its own.
+    assert not revision_admitted(DECISION_SEQUENTIAL_EXECUTION_MODELS, cfg, "my-deployment")
+    assert not revision_admitted(DECISION_SEQUENTIAL_EXECUTION_MODELS, cfg, "microsoft-decision-1.1")
+    assert sequential_revision_admitted(cfg, "microsoft-decision-1", "microsoft-decision-1")
+    assert not sequential_revision_admitted(cfg, "microsoft-decision-1", "microsoft-decision-1.1")
+    assert not batch_execution_eligible(cfg, "en")
+    for registry in (DECISION_BATCH_EXECUTION_MODELS, DECISION_PERCENTAGE_EXECUTION_MODELS,
+                     DECISION_CONTEXT_EXECUTION_MODELS, DECISION_REFERENCE_EXECUTION_MODELS,
+                     DECISION_FOLLOWUP_EXECUTION_MODELS):
+        assert decision_key(cfg) not in registry
+        assert not revision_admitted(registry, cfg, "microsoft-decision-1")

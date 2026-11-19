@@ -159,6 +159,7 @@ const PROVIDER_KINDS = {
   cloudflare: true,
   local_openai: true,
   local_decision: true,
+  azure_decision: true,
 } satisfies Record<AgentCliProviderKind, true>;
 
 describe("frontend/backend agentCLI provider contract", () => {
