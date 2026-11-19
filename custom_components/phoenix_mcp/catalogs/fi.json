@@ -44,7 +44,7 @@
       "createAccessKey": "Luo käyttöavain",
       "createFailed": "Käyttöavaimen luonti epäonnistui.",
       "createPtUnderstand": "Ymmärrän, että tällä käyttöavaimella on laajat oikeudet Home Assistant -järjestelmään",
-      "createPtWarning": "<strong>Tämä käyttöavain voi lukea ja ohjata kaikkia Home Assistant -entiteettejä.</strong> Läpivienti ottaa käyttöön myös seuraavat: Kokoonpanon luku, Mallin renderöinti, Haku ja löytäminen, Rekisterin luku, Automaatioiden jäljitykset, Diagnostiikka, Kuulutus ja Palvelun vastaustiedot. Diagnostiikka ja Palvelun vastaustiedot voivat paljastaa arkaluontoisia tietoja. Kaikki muut ominaisuudet säilyttävät oman asetuksensa, ja MESA-säännöt, Phoenix MCP -estolista, arkaluontoisten attribuuttien poisto, pyyntörajat, mitätöinti ja vanheneminen ovat edelleen voimassa. Käytä sitä vain MCP-asiakkaiden kanssa, joihin luotat koko kotisi osalta.",
+      "createPtWarning": "<strong>Tämä käyttöavain voi lukea ja ohjata kaikkia Home Assistant -entiteettejä.</strong> Läpivienti ottaa käyttöön myös seuraavat: Kokoonpanon luku, Mallin renderöinti, Haku ja löytäminen, Rekisterin luku, Automaatioiden jäljitykset, Diagnostiikka, Kuulutus ja Toimintojen vastaustiedot. Diagnostiikka ja Toimintojen vastaustiedot voivat paljastaa arkaluontoisia tietoja. Kaikki muut ominaisuudet säilyttävät oman asetuksensa, ja MESA-säännöt, Phoenix MCP -estolista, arkaluontoisten attribuuttien poisto, pyyntörajat, mitätöinti ja vanheneminen ovat edelleen voimassa. Käytä sitä vain MCP-asiakkaiden kanssa, joihin luotat koko kotisi osalta.",
       "daysAgo": "{d} pv sitten",
       "delete": "Poista",
       "deletePermanently": "Poista pysyvästi",
@@ -122,7 +122,7 @@
       "presetNewName": "Uuden esiasetuksen nimi",
       "presetNoChange": "Tämä esiasetus vastaa nykyisiä asetuksia, joten mikään asetus ei muutu. Käyttöönotto lasketaan silti asetusten muutokseksi: yhdistetyt agentit saavat siitä tiedon seuraavassa kutsussaan, ja nopeusrajoituksen laskenta alkaa alusta.",
       "presetPtUnderstand": "Ymmärrän, että tämä esiasetus ottaa läpiviennin käyttöön",
-      "presetPtWarning": "<strong>Tämä esiasetus ottaa läpiviennin käyttöön.</strong> Käyttöavain voi silloin lukea ja ohjata kaikkia entiteettejä, ja kahdeksan muuta ominaisuutta otetaan käyttöön, muun muassa Diagnostiikka ja Palvelun vastaustiedot. Muut ominaisuudet, MESA-säännöt, Phoenix MCP -estolista ja arkaluontoisten attribuuttien poisto ovat edelleen voimassa.",
+      "presetPtWarning": "<strong>Tämä esiasetus ottaa läpiviennin käyttöön.</strong> Käyttöavain voi silloin lukea ja ohjata kaikkia entiteettejä, ja kahdeksan muuta ominaisuutta otetaan käyttöön, muun muassa Diagnostiikka ja Toimintojen vastaustiedot. Muut ominaisuudet, MESA-säännöt, Phoenix MCP -estolista ja arkaluontoisten attribuuttien poisto ovat edelleen voimassa.",
       "presetRenameTitle": "Nimeä tämä esiasetus uudelleen; tallennetaan, kun napsautat muualle",
       "presetRevert": "Palauta",
       "presetRevertBody": "Tämä kumoaa esiasetuksen <strong>{name}</strong> tallentamattomat muutokset:",
@@ -1255,7 +1255,7 @@
       },
       "cap_service_response": {
         "description": "Palauta tiedot, joilla toiminto vastaa, kuten sääennuste.",
-        "label": "Palvelun vastaustiedot"
+        "label": "Toimintojen vastaustiedot"
       },
       "cap_template_render": {
         "description": "Renderöi Jinja-malleja käyttäen entiteettejä, joihin tällä käyttöavaimella on pääsy.",
@@ -1279,7 +1279,7 @@
       "modeDescDeny": "Estä tämä ominaisuus. Sen työkalut ovat piilossa tämän avaimen agenteilta, ellei Ilmoita aina kaikki työkalut ole käytössä.",
       "noBuilder": "Device Builder -lisäosaa ei havaittu",
       "noEsphome": "ESPHomea ei havaittu",
-      "passThroughNotice": "<strong>Läpivienti on käytössä.</strong> Seuraavia kohdellaan kuin tilaa Salli: Kokoonpanon luku, Mallin renderöinti, Haku ja löytäminen, Rekisterin luku, Automaatioiden jäljitykset, Diagnostiikka, Kuulutus ja Palvelun vastaustiedot. Kaikki muut ominaisuudet käyttävät alla olevaa asetustaan.",
+      "passThroughNotice": "<strong>Läpivienti on käytössä.</strong> Seuraavia kohdellaan kuin tilaa Salli: Kokoonpanon luku, Mallin renderöinti, Haku ja löytäminen, Rekisterin luku, Automaatioiden jäljitykset, Diagnostiikka, Kuulutus ja Toimintojen vastaustiedot. Kaikki muut ominaisuudet käyttävät alla olevaa asetustaan.",
       "tierConfigWrite": "Kokoonpanomuutokset",
       "tierEveryday": "Arjen toiminnot",
       "tierIrreversible": "Korkea riski",
@@ -2425,7 +2425,7 @@
       "infoMinHaLabel": "HA:n vähimmäisversio:",
       "infoStorageNote": "Phoenix MCP:n tiedot, palveluntarjoajien API-avaimet mukaan lukien, ovat Home Assistant -varmuuskopioissa.",
       "infoVersionLabel": "Phoenix MCP -versio:",
-      "injectHelp": "Lisää MESA-profiilipainikkeet Home Assistantin omille entiteetti-, laite- ja huonesivuille. Oletuksena pois päältä.",
+      "injectHelp": "Lisää MESA-profiilipainikkeet Home Assistantin omille entiteetti-, laite-, huone- ja integraatiosivuille. Oletuksena pois päältä.",
       "injectLabel": "Profiilipainikkeet kontekstissa",
       "injectUnavailable": "Poissa käytöstä, kunnes lataat sivun uudelleen, koska profiilipainikkeet epäonnistuivat Home Assistant -sivulla. Jos tämä toistuu, Phoenix MCP -päivitys voi olla tarpeen.",
       "killSwitchActiveAria": "Hätäkatkaisu on aktiivinen. Agenttiyhteydet torjutaan",
@@ -2753,7 +2753,7 @@
       "choiceAppBody": "Käytä Claude Codea, IDE:tä, ChatGPT- tai Claude-sovellusta tai muuta MCP-sovellusta. Kopioi luotu yhteyskomento tai ota OAuth-kirjautuminen käyttöön sovelluksille, jotka ottavat vain osoitteen.",
       "choiceAppTitle": "Yhdistä ulkoinen sovellus",
       "choiceChatBody": "Keskustele ikkunassa täällä Home Assistantissa. Hanki API-avain mallipalveluntarjoajalta tai käytä paikallista Ollama-palvelinta. Mitään ei tarvitse asentaa.",
-      "choiceChatTitle": "Agent Chat HA:n kautta (suositus)",
+      "choiceChatTitle": "Agent Chat Home Assistantin kautta (suositus)",
       "chooseAgent": "Valitse agenttisi",
       "chooseSub": "Voit keskustella agenttisi kanssa kokonaan Home Assistantin sisällä käyttämällä mallipalveluntarjoajasi API-avainta tai paikallista isäntänimeä. Voit myös yhdistää Phoenix MCP:hen ulkoisella sovelluksella. Valitse haluamasi vaihtoehto:",
       "chooseTitle": "Valitse yhteystapa",

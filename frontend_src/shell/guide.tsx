@@ -350,6 +350,9 @@ const noVersion = () => 0;
 /** The topics and the chosen page and section, shared by the floating Guide and the phone one. */
 function useGuideTopic(workspace: string, windowId: string | null, language: string, topicId: string | null = null) {
   const [bundles, setBundles] = useState<Array<GuideBundle | null> | null>(null);
+  // The catalog the labels come from. A language switch shows the new pages before that
+  // language's catalog arrives, so the pages, Contents and Search are built again when it does.
+  const catalog = displayedLanguage();
   useEffect(() => {
     let live = true;
     void Promise.all(guideLanguages(language).map(loadGuide)).then((b) => {
@@ -357,7 +360,7 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
       setBundles(language === "en" ? b : b.map((bundle) => (bundle?.language === "en" ? readAsEnglish(bundle, labelText) : bundle)));
     });
     return () => { live = false; };
-  }, [language]);
+  }, [language, catalog]);
   const tracker = useContext(GuideTargetContext);
   const selectionVersion = useSyncExternalStore(tracker?.subscribe ?? noSubscribe, tracker?.getVersion ?? noVersion);
   // The page follows whichever moved last: the reader's selection, or the workspace's active window
@@ -450,6 +453,8 @@ function useGuideTopic(workspace: string, windowId: string | null, language: str
     loading: bundles === null,
     failed: !!bundles && bundles.every((b) => !b),
     bundles,
+    /** The language of the catalog the page's labels are read from. */
+    catalog,
     view,
     topic,
     anchor,
@@ -644,7 +649,8 @@ function useTopicBody(topic: FoundTopic | null, bundles: ReadonlyArray<GuideBund
 
 function GuideBody({ guide }: { guide: Guide }) {
   const text = useTopicBody(guide.topic, guide.bundles);
-  const html = useMemo(() => (text ? renderTopic(text) : ""), [text]);
+  // Labels are read from the catalog, so a newly arrived catalog renders the page again.
+  const html = useMemo(() => (text ? renderTopic(text) : ""), [text, guide.catalog]); // eslint-disable-line react-hooks/exhaustive-deps
   const body = useRef<HTMLDivElement | null>(null);
   const frame = useRef<HTMLDivElement | null>(null);
   useFocusAfterMove(guide, frame);

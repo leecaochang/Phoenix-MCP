@@ -163,7 +163,7 @@
         "description": "在此访问密钥的范围内查找并描述实体、区域及其关联关系。"
       },
       "cap_service_response": {
-        "label": "服务响应数据",
+        "label": "动作响应数据",
         "description": "返回动作响应的数据，例如天气预报。"
       },
       "cap_template_render": {
@@ -188,7 +188,7 @@
       "modeDescDeny": "阻止此能力。除非开启“始终声明全部工具”，否则此密钥的智能体看不到它的工具。",
       "noBuilder": "未检测到 Device Builder 加载项",
       "noEsphome": "未检测到 ESPHome",
-      "passThroughNotice": "<strong>直通模式已启用。</strong>“读取配置”、“模板渲染”、“搜索与发现”、“读取注册表”、“自动化跟踪”、“诊断”、“广播”、“服务响应数据”都视为“允许”。其他所有能力按下方的设置执行。",
+      "passThroughNotice": "<strong>直通模式已启用。</strong>“读取配置”、“模板渲染”、“搜索与发现”、“读取注册表”、“自动化跟踪”、“诊断”、“广播”、“动作响应数据”都视为“允许”。其他所有能力按下方的设置执行。",
       "tierConfigWrite": "配置变更",
       "tierEveryday": "日常操作",
       "tierIrreversible": "高风险",
@@ -1391,7 +1391,7 @@
       "create": "创建",
       "createFailed": "创建访问密钥失败。",
       "createPtUnderstand": "我了解此访问密钥拥有广泛的 Home Assistant 访问权限",
-      "createPtWarning": "<strong>此访问密钥可以读取和控制所有 Home Assistant 实体。</strong>直通模式还会开启“读取配置”、“模板渲染”、“搜索与发现”、“读取注册表”、“自动化跟踪”、“诊断”、“广播”、“服务响应数据”。“诊断”和“服务响应数据”可能泄露敏感信息。其他所有能力保持各自的设置，MESA 规则、Phoenix MCP 屏蔽列表、敏感属性移除、速率限制、吊销和过期同样继续生效。请仅在可以放心托付整个家的 MCP 客户端上使用。",
+      "createPtWarning": "<strong>此访问密钥可以读取和控制所有 Home Assistant 实体。</strong>直通模式还会开启“读取配置”、“模板渲染”、“搜索与发现”、“读取注册表”、“自动化跟踪”、“诊断”、“广播”、“动作响应数据”。“诊断”和“动作响应数据”可能泄露敏感信息。其他所有能力保持各自的设置，MESA 规则、Phoenix MCP 屏蔽列表、敏感属性移除、速率限制、吊销和过期同样继续生效。请仅在可以放心托付整个家的 MCP 客户端上使用。",
       "createAccessKey": "创建访问密钥",
       "daysAgo": "{d} 天前",
       "delete": "删除",
@@ -1469,7 +1469,7 @@
       "presetNewName": "新预设名称",
       "presetNoChange": "此预设与当前设置一致，因此不会更改任何设置。但应用它仍算作一次设置变更：已连接的智能体会在下次调用时收到通知，速率限制计数也会重新开始。",
       "presetPtUnderstand": "我了解此预设会启用直通模式",
-      "presetPtWarning": "<strong>此预设会开启直通模式。</strong>访问密钥随后可以读取和控制所有实体，并且还会开启另外八项能力，包括“诊断”和“服务响应数据”。其他能力、MESA 规则、Phoenix MCP 屏蔽列表以及敏感属性移除仍然适用。",
+      "presetPtWarning": "<strong>此预设会开启直通模式。</strong>访问密钥随后可以读取和控制所有实体，并且还会开启另外八项能力，包括“诊断”和“动作响应数据”。其他能力、MESA 规则、Phoenix MCP 屏蔽列表以及敏感属性移除仍然适用。",
       "presetRenameTitle": "重命名此预设；点击其他位置即可保存",
       "presetRevert": "还原",
       "presetRevertBody": "这将放弃 <strong>{name}</strong> 上未保存的更改：",
@@ -1656,7 +1656,7 @@
       "infoMinHaLabel": "最低 HA 版本：",
       "infoStorageNote": "Phoenix MCP 的数据（包括提供商 API 密钥）包含在 Home Assistant 的备份中。",
       "infoVersionLabel": "Phoenix MCP 版本：",
-      "injectHelp": "在 Home Assistant 自己的实体、设备和区域页面上添加 MESA 策略按钮。默认关闭。",
+      "injectHelp": "在 Home Assistant 自己的实体、设备、区域和集成页面上添加 MESA 策略按钮。默认关闭。",
       "injectLabel": "页面内策略按钮",
       "injectUnavailable": "由于策略按钮在某个 Home Assistant 页面上出错，此功能已关闭，直到重新加载页面。如果反复出现，可能需要更新 Phoenix MCP。",
       "killSwitchActiveAria": "紧急停止开关已启用。智能体连接会被拒绝",
@@ -2125,7 +2125,7 @@
       "choiceAppBody": "使用 Claude Code、IDE、ChatGPT 或 Claude 应用，或其他 MCP 应用。复制生成的连接命令，或为仅接受地址的应用开启 OAuth 登录。",
       "choiceAppTitle": "连接外部应用",
       "choiceChatBody": "直接在 Home Assistant 的窗口中对话。只需提供模型提供商的 API 密钥，或本地 Ollama 服务器地址，无需安装任何东西。",
-      "choiceChatTitle": "在 HA 中使用 Agent Chat（推荐）",
+      "choiceChatTitle": "在 Home Assistant 中使用 Agent Chat（推荐）",
       "chooseAgent": "选择您的智能体",
       "chooseSub": "您可以使用模型提供商的 API 密钥或本地主机地址，完全在 Home Assistant 内部与智能体对话。也可以选择使用外部应用连接 Phoenix MCP。请选择您偏好的方式：",
       "chooseTitle": "选择连接方式",

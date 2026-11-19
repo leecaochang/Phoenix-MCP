@@ -228,7 +228,7 @@
         "description": "Envoyer des notifications aux téléphones et à la liste de notifications de Home Assistant."
       },
       "cap_service_response": {
-        "label": "Données de réponse de service",
+        "label": "Données de réponse d'action",
         "description": "Renvoyer les données qu'une action fournit en réponse, comme une prévision météo."
       },
       "cap_automation_write": {
@@ -317,7 +317,7 @@
       "modeDescAllow": "Laissez les agents de cette clé utiliser cette capacité sans vous demander.",
       "modeDescConfirm": "Chaque modification vous attend dans Approbations avant de s’exécuter. Les lectures s’exécutent sans demander.",
       "updateFailed": "Échec de la mise à jour de la capacité.",
-      "passThroughNotice": "<strong>La transmission directe est activée.</strong> Lecture de la configuration, Rendu de modèles, Recherche et découverte, Lecture du registre, Traces d'automatisation, Diagnostic, Diffusion et Données de réponse de service sont traités comme Autoriser. Toutes les autres capacités utilisent leur réglage ci-dessous.",
+      "passThroughNotice": "<strong>La transmission directe est activée.</strong> Lecture de la configuration, Rendu de modèles, Recherche et découverte, Lecture du registre, Traces d'automatisation, Diagnostic, Diffusion et Données de réponse d'action sont traités comme Autoriser. Toutes les autres capacités utilisent leur réglage ci-dessous.",
       "esphomeBadgeTitle": "Sans le module complémentaire Device Builder, les outils ESPHome qui valident, compilent, flashent ou inspectent les appareils restent masqués pour cette clé d’accès. Avec l'intégration ESPHome, la lecture et la recherche dans le YAML des appareils fonctionnent toujours. La capacité peut néanmoins être définie dès maintenant.",
       "confirmUnavailable": "Cette capacité ne peut pas nécessiter d'approbation.",
       "cap_calendar_write": {
@@ -411,7 +411,7 @@
       "create": "Créer",
       "createFailed": "Échec de la création de la clé d’accès.",
       "createPtUnderstand": "Je comprends que cette clé d’accès dispose d'un large accès à Home Assistant",
-      "createPtWarning": "<strong>Cette clé d’accès peut lire et contrôler toutes les entités de Home Assistant.</strong> La transmission directe active aussi Lecture de la configuration, Rendu de modèles, Recherche et découverte, Lecture du registre, Traces d'automatisation, Diagnostic, Diffusion et Données de réponse de service. Diagnostic et Données de réponse de service peuvent révéler des détails sensibles. Toutes les autres capacités gardent leur propre réglage, et les règles MESA, la liste de blocage Phoenix MCP, la suppression des attributs sensibles, les limites de débit, la révocation et l'expiration s'appliquent toujours. Utilisez-la uniquement avec des clients MCP à qui vous confieriez toute votre maison.",
+      "createPtWarning": "<strong>Cette clé d’accès peut lire et contrôler toutes les entités de Home Assistant.</strong> La transmission directe active aussi Lecture de la configuration, Rendu de modèles, Recherche et découverte, Lecture du registre, Traces d'automatisation, Diagnostic, Diffusion et Données de réponse d'action. Diagnostic et Données de réponse d'action peuvent révéler des détails sensibles. Toutes les autres capacités gardent leur propre réglage, et les règles MESA, la liste de blocage Phoenix MCP, la suppression des attributs sensibles, les limites de débit, la révocation et l'expiration s'appliquent toujours. Utilisez-la uniquement avec des clients MCP à qui vous confieriez toute votre maison.",
       "createAccessKey": "Créer une clé d’accès",
       "daysAgo": "il y a {d} j",
       "delete": "Supprimer",
@@ -490,7 +490,7 @@
       "presetNewName": "Nouveau nom de préréglage",
       "presetNoChange": "Ce préréglage correspond aux paramètres actuels, aucun paramètre ne change donc. L'appliquer compte quand même comme une modification des paramètres : les agents connectés en sont informés à leur prochain appel, et le décompte de la limite de débit repart de zéro.",
       "presetPtUnderstand": "Je comprends que ce préréglage active la transmission directe",
-      "presetPtWarning": "<strong>Ce préréglage active la transmission directe.</strong> La clé d’accès peut alors lire et contrôler toutes les entités, et huit autres capacités sont activées, dont Diagnostic et Données de réponse de service. Les autres capacités, les règles MESA, la liste de blocage Phoenix MCP et la suppression des attributs sensibles s'appliquent toujours.",
+      "presetPtWarning": "<strong>Ce préréglage active la transmission directe.</strong> La clé d’accès peut alors lire et contrôler toutes les entités, et huit autres capacités sont activées, dont Diagnostic et Données de réponse d'action. Les autres capacités, les règles MESA, la liste de blocage Phoenix MCP et la suppression des attributs sensibles s'appliquent toujours.",
       "presetRenameTitle": "Renommer ce préréglage ; enregistré lorsque vous cliquez ailleurs",
       "presetRevert": "Rétablir",
       "presetRevertBody": "Cela ignore les modifications non enregistrées sur <strong>{name}</strong> :",
@@ -829,7 +829,7 @@
       "choiceAppBody": "Utilisez Claude Code, un IDE, l’application ChatGPT ou Claude, ou une autre application MCP. Copiez la commande de connexion générée, ou activez la connexion OAuth pour les applications qui n’acceptent qu’une adresse.",
       "choiceAppTitle": "Connecter une application externe",
       "choiceChatBody": "Discutez dans une fenêtre directement dans Home Assistant. Apportez une clé API d'un fournisseur de modèle ou un serveur Ollama local. Rien à installer.",
-      "choiceChatTitle": "Agent Chat via HA (recommandé)",
+      "choiceChatTitle": "Agent Chat via Home Assistant (recommandé)",
       "chooseAgent": "Choisissez votre agent",
       "chooseSub": "Vous pouvez discuter avec votre agent entièrement dans Home Assistant à l'aide de la clé API ou du nom d'hôte local de votre fournisseur de modèle. Vous pouvez aussi utiliser une application externe pour vous connecter à Phoenix MCP. Sélectionnez votre option préférée :",
       "chooseTitle": "Choisissez comment vous connecter",
@@ -1411,7 +1411,7 @@
       "infoMinHaLabel": "Version HA minimale :",
       "infoStorageNote": "Les données de Phoenix MCP, clés d’API des fournisseurs comprises, figurent dans les sauvegardes de Home Assistant.",
       "infoVersionLabel": "Version de Phoenix MCP :",
-      "injectHelp": "Ajoutez des boutons de profil MESA aux pages d’entité, d’appareil et de pièce de Home Assistant. Désactivé par défaut.",
+      "injectHelp": "Ajoutez des boutons de profil MESA aux pages d’entité, d’appareil, de pièce et d’intégration de Home Assistant. Désactivé par défaut.",
       "injectLabel": "Boutons de profil contextuels",
       "injectUnavailable": "Désactivé jusqu'au rechargement de la page, car les boutons de profil ont échoué sur une page Home Assistant. Si cela se reproduit, une mise à jour de Phoenix MCP peut être nécessaire.",
       "killSwitchActiveAria": "Coupe-circuit actif. Les connexions des agents sont refusées",

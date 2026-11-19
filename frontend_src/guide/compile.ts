@@ -179,6 +179,7 @@ export const VOICE_PATTERNS: ReadonlyArray<{ pattern: RegExp; rule: string }> = 
   },
   { pattern: /\b(?:Phoenix|which|that|it) then\b/i, rule: "no chains: split the step into its own sentence" },
   { pattern: /\bruns? out\b/i, rule: "use the everyday word: \"times out\", \"is used up\"" },
+  { pattern: /\bmay\b/i, rule: "say \"might\" for what is possible and \"can\" for what is allowed, never \"may\"" },
 ];
 
 /** Problems with the voice of an English topic: phrasings the Writing rules ban. */

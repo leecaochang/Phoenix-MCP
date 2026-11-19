@@ -44,7 +44,7 @@
       "createAccessKey": "Opret adgangsnøgle",
       "createFailed": "Kunne ikke oprette adgangsnøgle.",
       "createPtUnderstand": "Jeg forstår, at denne adgangsnøgle har bred adgang til Home Assistant",
-      "createPtWarning": "<strong>Denne adgangsnøgle kan læse og styre alle Home Assistant-entiteter.</strong> Pass-through slår også Læs konfiguration, Gengiv skabelon, Søgning og opdagelse, Læs register, Automatiseringsspor, Diagnostik, Udsendelse og Svardata fra tjeneste til. Diagnostik og Svardata fra tjeneste kan afsløre følsomme oplysninger. Alle andre funktioner beholder deres egen indstilling, og MESA-regler, bloklisten i Phoenix MCP, fjernelse af følsomme attributter, hastighedsgrænser, tilbagekaldelse og udløb gælder stadig. Brug den kun med MCP-klienter, du stoler på med hele dit hjem.",
+      "createPtWarning": "<strong>Denne adgangsnøgle kan læse og styre alle Home Assistant-entiteter.</strong> Pass-through slår også Læs konfiguration, Gengiv skabelon, Søgning og opdagelse, Læs register, Automatiseringsspor, Diagnostik, Udsendelse og Svardata fra handlinger til. Diagnostik og Svardata fra handlinger kan afsløre følsomme oplysninger. Alle andre funktioner beholder deres egen indstilling, og MESA-regler, bloklisten i Phoenix MCP, fjernelse af følsomme attributter, hastighedsgrænser, tilbagekaldelse og udløb gælder stadig. Brug den kun med MCP-klienter, du stoler på med hele dit hjem.",
       "daysAgo": "{d} d siden",
       "delete": "Slet",
       "deletePermanently": "Slet permanent",
@@ -122,7 +122,7 @@
       "presetNewName": "Navn på ny forudindstilling",
       "presetNoChange": "Denne forudindstilling svarer til de aktuelle indstillinger, så ingen indstilling ændres. Anvendelsen tæller stadig som en ændring af indstillingerne: forbundne agenter får besked ved deres næste kald, og optællingen til hastighedsbegrænsningen starter forfra.",
       "presetPtUnderstand": "Jeg forstår, at denne forudindstilling aktiverer pass-through",
-      "presetPtWarning": "<strong>Denne forudindstilling slår pass-through til.</strong> Adgangsnøglen kan så læse og styre alle entiteter, og otte andre funktioner slås til, blandt andet Diagnostik og Svardata fra tjeneste. Andre funktioner, MESA-regler, Phoenix MCP-bloklisten og fjernelse af følsomme attributter gælder stadig.",
+      "presetPtWarning": "<strong>Denne forudindstilling slår pass-through til.</strong> Adgangsnøglen kan så læse og styre alle entiteter, og otte andre funktioner slås til, blandt andet Diagnostik og Svardata fra handlinger. Andre funktioner, MESA-regler, Phoenix MCP-bloklisten og fjernelse af følsomme attributter gælder stadig.",
       "presetRenameTitle": "Omdøb denne forudindstilling; gemmes, når du klikker væk",
       "presetRevert": "Rul tilbage",
       "presetRevertBody": "Dette kasserer de ikke-gemte ændringer i <strong>{name}</strong>:",
@@ -1255,7 +1255,7 @@
       },
       "cap_service_response": {
         "description": "Returnér de data, som en handling svarer med, såsom en vejrudsigt.",
-        "label": "Svardata fra tjeneste"
+        "label": "Svardata fra handlinger"
       },
       "cap_template_render": {
         "description": "Gengiv Jinja-skabeloner ved hjælp af entiteter, som denne adgangsnøgle har adgang til.",
@@ -1279,7 +1279,7 @@
       "modeDescDeny": "Bloker denne funktion. Dens værktøjer er skjult for nøglens agenter, medmindre Annoncér altid alle værktøjer er slået til.",
       "noBuilder": "Device Builder-tilføjelsesprogrammet blev ikke fundet",
       "noEsphome": "ESPHome blev ikke fundet",
-      "passThroughNotice": "<strong>Pass-through er slået til.</strong> Læs konfiguration, Gengiv skabelon, Søgning og opdagelse, Læs register, Automatiseringsspor, Diagnostik, Udsendelse og Svardata fra tjeneste behandles som Tillad. Alle andre funktioner bruger deres indstilling nedenfor.",
+      "passThroughNotice": "<strong>Pass-through er slået til.</strong> Læs konfiguration, Gengiv skabelon, Søgning og opdagelse, Læs register, Automatiseringsspor, Diagnostik, Udsendelse og Svardata fra handlinger behandles som Tillad. Alle andre funktioner bruger deres indstilling nedenfor.",
       "tierConfigWrite": "Konfigurationsændringer",
       "tierEveryday": "Hverdagslige handlinger",
       "tierIrreversible": "Høj risiko",
@@ -2425,7 +2425,7 @@
       "infoMinHaLabel": "Minimum HA-version:",
       "infoStorageNote": "Phoenix MCP's data, inklusive udbydernes API-nøgler, ligger i Home Assistants sikkerhedskopier.",
       "infoVersionLabel": "Phoenix MCP-version:",
-      "injectHelp": "Tilføj MESA-profilknapper til Home Assistants egne entitets-, enheds- og områdesider. Slået fra som standard.",
+      "injectHelp": "Tilføj MESA-profilknapper til Home Assistants egne entitets-, enheds-, område- og integrationssider. Slået fra som standard.",
       "injectLabel": "Profilknapper i kontekst",
       "injectUnavailable": "Slået fra, indtil du genindlæser siden, fordi profilknapperne fejlede på en Home Assistant-side. Hvis det bliver ved med at ske, kan der være brug for en Phoenix MCP-opdatering.",
       "killSwitchActiveAria": "Nødstop aktiv. Agentforbindelser afvises",
@@ -2753,7 +2753,7 @@
       "choiceAppBody": "Brug Claude Code, et IDE, ChatGPT- eller Claude-appen eller en anden MCP-app. Kopiér den genererede forbindelseskommando, eller slå OAuth-login til for apps, der kun tager en adresse.",
       "choiceAppTitle": "Forbind en ekstern app",
       "choiceChatBody": "Chat i et vindue lige her i Home Assistant. Medbring en API-nøgle fra en modeludbyder eller en lokal Ollama-server. Intet at installere.",
-      "choiceChatTitle": "Agent Chat via HA (anbefales)",
+      "choiceChatTitle": "Agent Chat via Home Assistant (anbefales)",
       "chooseAgent": "Vælg din agent",
       "chooseSub": "Du kan chatte med din agent helt inden for Home Assistant ved hjælp af API-nøglen eller det lokale værtsnavn for din modeludbyder. Du kan også vælge at bruge en ekstern app til at oprette forbindelse til Phoenix MCP. Vælg din foretrukne mulighed:",
       "chooseTitle": "Vælg, hvordan du vil oprette forbindelse",

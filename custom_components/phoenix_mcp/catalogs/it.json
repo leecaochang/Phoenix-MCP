@@ -1044,7 +1044,7 @@
       },
       "cap_service_response": {
         "description": "Restituisce i dati con cui risponde un'azione, come una previsione meteo.",
-        "label": "Dati di risposta dei servizi"
+        "label": "Dati di risposta delle azioni"
       },
       "cap_template_render": {
         "description": "Esegue il rendering di modelli Jinja usando le entità a cui questa chiave di accesso può accedere.",
@@ -1068,7 +1068,7 @@
       "modeDescDeny": "Blocca questa capacità. I suoi strumenti restano nascosti agli agenti di questa chiave, a meno che Annuncia sempre tutti gli strumenti non sia attivo.",
       "noBuilder": "Add-on Device Builder non rilevato",
       "noEsphome": "ESPHome non rilevato",
-      "passThroughNotice": "<strong>Il pass-through è abilitato.</strong> Lettura configurazione, Rendering dei modelli, Ricerca e scoperta, Lettura registro, Tracce delle automazioni, Diagnostica, Annuncio e Dati di risposta dei servizi sono trattate come Consenti. Tutte le altre capacità usano la propria impostazione qui sotto.",
+      "passThroughNotice": "<strong>Il pass-through è abilitato.</strong> Lettura configurazione, Rendering dei modelli, Ricerca e scoperta, Lettura registro, Tracce delle automazioni, Diagnostica, Annuncio e Dati di risposta delle azioni sono trattate come Consenti. Tutte le altre capacità usano la propria impostazione qui sotto.",
       "tierConfigWrite": "Modifiche di configurazione",
       "tierEveryday": "Azioni quotidiane",
       "tierIrreversible": "Alto rischio",
@@ -1653,7 +1653,7 @@
       "infoMinHaLabel": "Versione minima di HA:",
       "infoStorageNote": "I dati di Phoenix MCP, comprese le chiavi API dei provider, sono nei backup di Home Assistant.",
       "infoVersionLabel": "Versione di Phoenix MCP:",
-      "injectHelp": "Aggiungi i pulsanti dei profili MESA alle pagine di entità, dispositivi e aree di Home Assistant. Disattivato per impostazione predefinita.",
+      "injectHelp": "Aggiungi i pulsanti dei profili MESA alle pagine di entità, dispositivi, aree e integrazioni di Home Assistant. Disattivato per impostazione predefinita.",
       "injectLabel": "Pulsanti dei profili nel contesto",
       "injectUnavailable": "Disattivato finché non ricarichi la pagina, perché i pulsanti del profilo non hanno funzionato in una pagina di Home Assistant. Se continua a succedere, potrebbe servire un aggiornamento di Phoenix MCP.",
       "killSwitchActiveAria": "Kill switch attivo. Le connessioni degli agenti vengono rifiutate",
@@ -2105,7 +2105,7 @@
       "create": "Crea",
       "createFailed": "Impossibile creare la chiave di accesso.",
       "createPtUnderstand": "Comprendo che questa chiave di accesso ha un accesso esteso a Home Assistant",
-      "createPtWarning": "<strong>Questa chiave di accesso può leggere e controllare tutte le entità di Home Assistant.</strong> Il pass-through attiva anche Lettura configurazione, Rendering dei modelli, Ricerca e scoperta, Lettura registro, Tracce delle automazioni, Diagnostica, Annuncio e Dati di risposta dei servizi. Diagnostica e Dati di risposta dei servizi possono rivelare dettagli sensibili. Tutte le altre capacità mantengono la propria impostazione, e le regole MESA, la blocklist di Phoenix MCP, la rimozione degli attributi sensibili, i limiti di frequenza, la revoca e la scadenza restano attivi. Usala solo con client MCP a cui affideresti tutta la casa.",
+      "createPtWarning": "<strong>Questa chiave di accesso può leggere e controllare tutte le entità di Home Assistant.</strong> Il pass-through attiva anche Lettura configurazione, Rendering dei modelli, Ricerca e scoperta, Lettura registro, Tracce delle automazioni, Diagnostica, Annuncio e Dati di risposta delle azioni. Diagnostica e Dati di risposta delle azioni possono rivelare dettagli sensibili. Tutte le altre capacità mantengono la propria impostazione, e le regole MESA, la blocklist di Phoenix MCP, la rimozione degli attributi sensibili, i limiti di frequenza, la revoca e la scadenza restano attivi. Usala solo con client MCP a cui affideresti tutta la casa.",
       "createAccessKey": "Crea chiave di accesso",
       "daysAgo": "{d} g fa",
       "delete": "Elimina",
@@ -2184,7 +2184,7 @@
       "presetNewName": "Nome del nuovo preset",
       "presetNoChange": "Questo preset corrisponde alle impostazioni attuali, quindi nessuna impostazione cambia. Applicarlo conta comunque come una modifica delle impostazioni: gli agenti connessi lo sapranno alla loro prossima chiamata e il conteggio del limite di frequenza ricomincia.",
       "presetPtUnderstand": "Comprendo che questo preset abilita il pass-through",
-      "presetPtWarning": "<strong>Questo preset attiva il pass-through.</strong> La chiave di accesso può quindi leggere e controllare tutte le entità e si attivano altre otto capacità, tra cui Diagnostica e Dati di risposta dei servizi. Le altre capacità, le regole MESA, la blocklist di Phoenix MCP e la rimozione degli attributi sensibili si applicano comunque.",
+      "presetPtWarning": "<strong>Questo preset attiva il pass-through.</strong> La chiave di accesso può quindi leggere e controllare tutte le entità e si attivano altre otto capacità, tra cui Diagnostica e Dati di risposta delle azioni. Le altre capacità, le regole MESA, la blocklist di Phoenix MCP e la rimozione degli attributi sensibili si applicano comunque.",
       "presetRenameTitle": "Rinomina questo preset; viene salvato quando clicchi altrove",
       "presetRevert": "Ripristina",
       "presetRevertBody": "Questo scarta le modifiche non salvate su <strong>{name}</strong>:",
@@ -2438,7 +2438,7 @@
       "choiceAppBody": "Usa Claude Code, un IDE, l'app ChatGPT o Claude o un'altra app MCP. Copia il comando di connessione generato oppure attiva l'accesso OAuth per le app che accettano solo un indirizzo.",
       "choiceAppTitle": "Connetti un'app esterna",
       "choiceChatBody": "Chatta in una finestra direttamente in Home Assistant. Porta una chiave API di un provider di modelli, oppure un server Ollama locale. Niente da installare.",
-      "choiceChatTitle": "Agent Chat tramite HA (consigliata)",
+      "choiceChatTitle": "Agent Chat tramite Home Assistant (consigliata)",
       "chooseAgent": "Scegli il tuo agente",
       "chooseSub": "Puoi chattare con il tuo agente interamente in Home Assistant usando la chiave API o il nome host locale del tuo provider di modelli. Facoltativamente, puoi usare un'app esterna per connetterti a Phoenix MCP. Seleziona l'opzione che preferisci:",
       "chooseTitle": "Scegli come connetterti",

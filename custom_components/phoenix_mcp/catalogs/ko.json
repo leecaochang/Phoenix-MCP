@@ -217,7 +217,7 @@
         "description": "휴대폰과 Home Assistant 알림 목록으로 알림을 보냅니다."
       },
       "cap_service_response": {
-        "label": "서비스 응답 데이터",
+        "label": "액션 응답 데이터",
         "description": "날씨 예보처럼 액션이 응답으로 반환하는 데이터를 반환합니다."
       },
       "cap_automation_write": {
@@ -306,7 +306,7 @@
       "modeDescAllow": "이 키의 에이전트가 묻지 않고 이 기능을 사용하게 합니다.",
       "modeDescConfirm": "각 변경은 실행되기 전에 승인에서 사용자의 결정을 기다립니다. 읽기는 묻지 않고 실행됩니다.",
       "updateFailed": "기능을 업데이트하지 못했습니다.",
-      "passThroughNotice": "<strong>패스스루가 활성화되었습니다.</strong> '구성 읽기', '템플릿 렌더링', '검색 및 탐색', '레지스트리 읽기', '자동화 추적', '진단', '방송', '서비스 응답 데이터'는 '허용'으로 처리됩니다. 다른 모든 기능은 아래 설정을 사용합니다.",
+      "passThroughNotice": "<strong>패스스루가 활성화되었습니다.</strong> '구성 읽기', '템플릿 렌더링', '검색 및 탐색', '레지스트리 읽기', '자동화 추적', '진단', '방송', '액션 응답 데이터'는 '허용'으로 처리됩니다. 다른 모든 기능은 아래 설정을 사용합니다.",
       "esphomeBadgeTitle": "Device Builder 애드온이 없으면 기기를 검증, 컴파일, 플래시 또는 검사하는 ESPHome 도구는 이 액세스 키에 숨겨진 상태로 유지됩니다. ESPHome 통합 구성 요소가 있으면 기기 YAML 읽기와 검색은 계속 작동합니다. 기능은 지금도 설정할 수 있습니다.",
       "confirmUnavailable": "이 기능은 승인을 요구할 수 없습니다.",
       "cap_calendar_write": {
@@ -1522,7 +1522,7 @@
       "infoMinHaLabel": "최소 HA 버전:",
       "infoStorageNote": "제공업체 API 키를 포함한 Phoenix MCP 데이터는 Home Assistant 백업에 포함됩니다.",
       "infoVersionLabel": "Phoenix MCP 버전:",
-      "injectHelp": "Home Assistant 자체의 엔티티, 기기, 영역 페이지에 MESA 프로필 버튼을 추가합니다. 기본적으로 꺼져 있습니다.",
+      "injectHelp": "Home Assistant 자체의 엔티티, 기기, 영역, 통합구성요소 페이지에 MESA 프로필 버튼을 추가합니다. 기본적으로 꺼져 있습니다.",
       "injectLabel": "문맥 내 프로필 버튼",
       "injectUnavailable": "Home Assistant 페이지에서 프로필 버튼에 오류가 발생해 페이지를 다시 불러올 때까지 꺼져 있습니다. 계속 발생하면 Phoenix MCP 업데이트가 필요할 수 있습니다.",
       "killSwitchActiveAria": "킬 스위치가 활성화되어 있습니다. 에이전트 연결이 거부됩니다",
@@ -2248,7 +2248,7 @@
       "choiceAppBody": "Claude Code, IDE, ChatGPT 또는 Claude 앱, 기타 MCP 앱을 사용하십시오. 생성된 연결 명령을 복사하거나, 주소만 받는 앱에는 OAuth 로그인을 켭니다.",
       "choiceAppTitle": "외부 앱 연결",
       "choiceChatBody": "Home Assistant 안의 창에서 바로 채팅합니다. 모델 제공업체의 API 키 또는 로컬 Ollama 서버를 사용하십시오. 설치할 것은 없습니다.",
-      "choiceChatTitle": "HA 내 Agent Chat(권장)",
+      "choiceChatTitle": "Home Assistant 내 Agent Chat(권장)",
       "chooseAgent": "에이전트 선택",
       "chooseSub": "모델 제공업체의 API 키 또는 로컬 호스트 이름을 사용하여 Home Assistant 내에서만 에이전트와 채팅할 수 있습니다. 원한다면 외부 앱을 사용하여 Phoenix MCP에 연결할 수도 있습니다. 선호하는 방법을 선택하십시오:",
       "chooseTitle": "연결 방법 선택",
@@ -2406,7 +2406,7 @@
       "create": "생성",
       "createFailed": "액세스 키를 생성하지 못했습니다.",
       "createPtUnderstand": "이 액세스 키가 Home Assistant에 광범위하게 접근할 수 있음을 이해합니다",
-      "createPtWarning": "<strong>이 액세스 키는 모든 Home Assistant 엔티티를 읽고 제어할 수 있습니다.</strong> 패스스루는 '구성 읽기', '템플릿 렌더링', '검색 및 탐색', '레지스트리 읽기', '자동화 추적', '진단', '방송', '서비스 응답 데이터'도 켭니다. '진단'과 '서비스 응답 데이터'는 민감한 정보를 드러낼 수 있습니다. 다른 모든 기능은 각자의 설정을 유지하며, MESA 규칙, Phoenix MCP 차단 목록, 민감 속성 제거, 속도 제한, 철회 및 만료도 계속 적용됩니다. 집 전체를 맡길 수 있는 MCP 클라이언트에서만 사용하십시오.",
+      "createPtWarning": "<strong>이 액세스 키는 모든 Home Assistant 엔티티를 읽고 제어할 수 있습니다.</strong> 패스스루는 '구성 읽기', '템플릿 렌더링', '검색 및 탐색', '레지스트리 읽기', '자동화 추적', '진단', '방송', '액션 응답 데이터'도 켭니다. '진단'과 '액션 응답 데이터'는 민감한 정보를 드러낼 수 있습니다. 다른 모든 기능은 각자의 설정을 유지하며, MESA 규칙, Phoenix MCP 차단 목록, 민감 속성 제거, 속도 제한, 철회 및 만료도 계속 적용됩니다. 집 전체를 맡길 수 있는 MCP 클라이언트에서만 사용하십시오.",
       "createAccessKey": "액세스 키 생성",
       "daysAgo": "{d}일 전",
       "delete": "삭제",
@@ -2485,7 +2485,7 @@
       "presetNewName": "새 프리셋 이름",
       "presetNoChange": "이 프리셋은 현재 설정과 일치하므로 설정은 바뀌지 않습니다. 그래도 적용은 설정 변경으로 처리되어, 연결된 에이전트는 다음 호출 때 이를 알게 되고 속도 제한 집계가 처음부터 다시 시작됩니다.",
       "presetPtUnderstand": "이 프리셋이 패스스루를 활성화함을 이해합니다",
-      "presetPtWarning": "<strong>이 프리셋은 패스스루를 켭니다.</strong> 그러면 액세스 키가 모든 엔티티를 읽고 제어할 수 있으며, '진단'과 '서비스 응답 데이터'를 포함한 여덟 개 기능도 켜집니다. 다른 기능, MESA 규칙, Phoenix MCP 차단 목록 및 민감 속성 제거는 여전히 적용됩니다.",
+      "presetPtWarning": "<strong>이 프리셋은 패스스루를 켭니다.</strong> 그러면 액세스 키가 모든 엔티티를 읽고 제어할 수 있으며, '진단'과 '액션 응답 데이터'를 포함한 여덟 개 기능도 켜집니다. 다른 기능, MESA 규칙, Phoenix MCP 차단 목록 및 민감 속성 제거는 여전히 적용됩니다.",
       "presetRenameTitle": "이 프리셋 이름 변경, 다른 곳을 클릭하면 저장됩니다",
       "presetRevert": "되돌리기",
       "presetRevertBody": "이 작업은 <strong>{name}</strong>에 저장되지 않은 변경 사항을 버립니다:",

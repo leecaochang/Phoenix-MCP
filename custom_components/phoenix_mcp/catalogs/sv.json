@@ -44,7 +44,7 @@
       "createAccessKey": "Skapa åtkomstnyckel",
       "createFailed": "Det gick inte att skapa åtkomstnyckeln.",
       "createPtUnderstand": "Jag förstår att denna åtkomstnyckel har bred åtkomst till Home Assistant",
-      "createPtWarning": "<strong>Den här åtkomstnyckeln kan läsa och styra alla Home Assistant-entiteter.</strong> Pass-through slår också på Läsning av konfiguration, Mallrendering, Sökning och upptäckt, Läsning av register, Automatiseringsspår, Diagnostik, Utrop och Data i tjänstesvar. Diagnostik och Data i tjänstesvar kan avslöja känsliga detaljer. Alla andra funktioner behåller sin egen inställning, och MESA-regler, Phoenix MCP-blocklistan, borttagning av känsliga attribut, hastighetsbegränsningar, återkallande och utgång gäller fortfarande. Använd den endast med MCP-klienter som du anförtror hela ditt hem.",
+      "createPtWarning": "<strong>Den här åtkomstnyckeln kan läsa och styra alla Home Assistant-entiteter.</strong> Pass-through slår också på Läsning av konfiguration, Mallrendering, Sökning och upptäckt, Läsning av register, Automatiseringsspår, Diagnostik, Utrop och Data i åtgärdssvar. Diagnostik och Data i åtgärdssvar kan avslöja känsliga detaljer. Alla andra funktioner behåller sin egen inställning, och MESA-regler, Phoenix MCP-blocklistan, borttagning av känsliga attribut, hastighetsbegränsningar, återkallande och utgång gäller fortfarande. Använd den endast med MCP-klienter som du anförtror hela ditt hem.",
       "daysAgo": "{d} d sedan",
       "delete": "Radera",
       "deletePermanently": "Radera permanent",
@@ -122,7 +122,7 @@
       "presetNewName": "Namn på ny förinställning",
       "presetNoChange": "Den här förinställningen matchar de aktuella inställningarna, så ingen inställning ändras. Att tillämpa den räknas ändå som en inställningsändring: anslutna agenter får veta det vid nästa anrop, och räkningen för hastighetsgränsen börjar om.",
       "presetPtUnderstand": "Jag förstår att den här förinställningen aktiverar pass-through",
-      "presetPtWarning": "<strong>Den här förinställningen slår på pass-through.</strong> Åtkomstnyckeln kan då läsa och styra alla entiteter, och åtta andra funktioner slås på, bland annat Diagnostik och Data i tjänstesvar. Andra funktioner, MESA-regler, Phoenix MCP-blocklistan och borttagning av känsliga attribut gäller fortfarande.",
+      "presetPtWarning": "<strong>Den här förinställningen slår på pass-through.</strong> Åtkomstnyckeln kan då läsa och styra alla entiteter, och åtta andra funktioner slås på, bland annat Diagnostik och Data i åtgärdssvar. Andra funktioner, MESA-regler, Phoenix MCP-blocklistan och borttagning av känsliga attribut gäller fortfarande.",
       "presetRenameTitle": "Byt namn på förinställningen. Sparas när du klickar någon annanstans",
       "presetRevert": "Återställ",
       "presetRevertBody": "Detta tar bort de osparade ändringarna i <strong>{name}</strong>:",
@@ -1255,7 +1255,7 @@
       },
       "cap_service_response": {
         "description": "Returnera de data som en åtgärd svarar med, till exempel en väderprognos.",
-        "label": "Data i tjänstesvar"
+        "label": "Data i åtgärdssvar"
       },
       "cap_template_render": {
         "description": "Rendera Jinja-mallar med entiteter som den här åtkomstnyckeln har åtkomst till.",
@@ -1279,7 +1279,7 @@
       "modeDescDeny": "Blockera den här funktionen. Dess verktyg döljs för nyckelns agenter om inte Annonsera alltid alla verktyg är på.",
       "noBuilder": "Tillägget Device Builder hittades inte",
       "noEsphome": "ESPHome hittades inte",
-      "passThroughNotice": "<strong>Pass-through är aktiverat.</strong> Läsning av konfiguration, Mallrendering, Sökning och upptäckt, Läsning av register, Automatiseringsspår, Diagnostik, Utrop och Data i tjänstesvar behandlas som Tillåt. Alla andra funktioner använder sin inställning nedan.",
+      "passThroughNotice": "<strong>Pass-through är aktiverat.</strong> Läsning av konfiguration, Mallrendering, Sökning och upptäckt, Läsning av register, Automatiseringsspår, Diagnostik, Utrop och Data i åtgärdssvar behandlas som Tillåt. Alla andra funktioner använder sin inställning nedan.",
       "tierConfigWrite": "Konfigurationsändringar",
       "tierEveryday": "Vardagliga åtgärder",
       "tierIrreversible": "Hög risk",
@@ -2425,7 +2425,7 @@
       "infoMinHaLabel": "Lägsta HA-version:",
       "infoStorageNote": "Phoenix MCP:s data, inklusive leverantörernas API-nycklar, ingår i Home Assistants säkerhetskopior.",
       "infoVersionLabel": "Phoenix MCP-version:",
-      "injectHelp": "Lägg till MESA-profilknappar på Home Assistants egna entitets-, enhets- och områdessidor. Av som standard.",
+      "injectHelp": "Lägg till MESA-profilknappar på Home Assistants egna entitets-, enhets-, områdes- och integrationssidor. Av som standard.",
       "injectLabel": "Profilknappar i kontexten",
       "injectUnavailable": "Avstängd tills du läser in sidan igen, eftersom profilknapparna misslyckades på en Home Assistant-sida. Om det fortsätter att hända kan en Phoenix MCP-uppdatering behövas.",
       "killSwitchActiveAria": "Nödstoppet är aktivt. Agentanslutningar avvisas",
@@ -2753,7 +2753,7 @@
       "choiceAppBody": "Använd Claude Code, en IDE, ChatGPT- eller Claude-appen eller en annan MCP-app. Kopiera det genererade anslutningskommandot, eller slå på OAuth-inloggning för appar som bara tar en adress.",
       "choiceAppTitle": "Anslut en extern app",
       "choiceChatBody": "Chatta i ett fönster direkt här i Home Assistant. Ta med en API-nyckel från en modellleverantör eller en lokal Ollama-server. Inget att installera.",
-      "choiceChatTitle": "Agent Chat i HA (rekommenderas)",
+      "choiceChatTitle": "Agent Chat i Home Assistant (rekommenderas)",
       "chooseAgent": "Välj din agent",
       "chooseSub": "Du kan chatta med din agent helt och hållet i Home Assistant med API-nyckeln eller det lokala värdnamnet för din modellleverantör. Du kan dessutom använda en extern app för att ansluta till Phoenix MCP. Välj ditt föredragna alternativ:",
       "chooseTitle": "Välj hur du vill ansluta",

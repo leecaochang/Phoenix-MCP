@@ -386,7 +386,7 @@
         "description": "Benachrichtigungen an Telefone und an die Benachrichtigungsliste von Home Assistant senden."
       },
       "cap_service_response": {
-        "label": "Dienst-Antwortdaten",
+        "label": "Aktions-Antwortdaten",
         "description": "Die Daten zurückgeben, mit denen eine Aktion antwortet, etwa eine Wettervorhersage."
       },
       "cap_automation_write": {
@@ -475,7 +475,7 @@
       "modeDescAllow": "Die Agenten dieses Schlüssels diese Fähigkeit ohne Rückfrage nutzen lassen.",
       "modeDescConfirm": "Jede Änderung wartet in Genehmigungen auf Sie, bevor sie ausgeführt wird. Lesezugriffe laufen ohne Rückfrage.",
       "updateFailed": "Fähigkeit konnte nicht aktualisiert werden.",
-      "passThroughNotice": "<strong>Durchreichen ist aktiviert.</strong> Konfiguration lesen, Template rendern, Suche & Entdeckung, Register lesen, Automatisierungs-Ablaufverfolgung, Diagnose, Durchsage und Dienst-Antwortdaten gelten als Erlauben. Alle anderen Fähigkeiten verwenden ihre Einstellung unten.",
+      "passThroughNotice": "<strong>Durchreichen ist aktiviert.</strong> Konfiguration lesen, Template rendern, Suche & Entdeckung, Register lesen, Automatisierungs-Ablaufverfolgung, Diagnose, Durchsage und Aktions-Antwortdaten gelten als Erlauben. Alle anderen Fähigkeiten verwenden ihre Einstellung unten.",
       "esphomeBadgeTitle": "Ohne das Add-on Device Builder bleiben die ESPHome-Werkzeuge, die Geräte validieren, kompilieren, flashen oder untersuchen, für diesen Zugriffsschlüssel ausgeblendet. Mit der ESPHome-Integration funktionieren Lesen und Durchsuchen von Geräte-YAML weiterhin. Die Fähigkeit kann trotzdem schon jetzt festgelegt werden.",
       "confirmUnavailable": "Diese Fähigkeit kann keine Genehmigung erfordern.",
       "cap_calendar_write": {
@@ -553,7 +553,7 @@
       "choiceAppBody": "Verwenden Sie Claude Code, eine IDE, die ChatGPT- oder Claude-App oder eine andere MCP-App. Kopieren Sie den erzeugten Verbindungsbefehl oder schalten Sie für Apps, die nur eine Adresse annehmen, die OAuth-Anmeldung ein.",
       "choiceAppTitle": "Externe App verbinden",
       "choiceChatBody": "Chatten Sie in einem Fenster direkt hier in Home Assistant. Bringen Sie einen API-Schlüssel eines Modellanbieters oder einen lokalen Ollama-Server mit. Nichts zu installieren.",
-      "choiceChatTitle": "Agent Chat über HA (empfohlen)",
+      "choiceChatTitle": "Agent Chat über Home Assistant (empfohlen)",
       "chooseAgent": "Wählen Sie Ihren Agenten",
       "chooseSub": "Sie können mit Ihrem Agenten vollständig innerhalb von Home Assistant chatten, indem Sie den API-Schlüssel oder den lokalen Hostnamen Ihres Modellanbieters verwenden. Optional können Sie eine externe App verwenden, um eine Verbindung zu Phoenix MCP herzustellen. Wählen Sie Ihre bevorzugte Option:",
       "chooseTitle": "Wählen Sie, wie Sie sich verbinden möchten",
@@ -711,7 +711,7 @@
       "create": "Erstellen",
       "createFailed": "Zugriffsschlüssel konnte nicht erstellt werden.",
       "createPtUnderstand": "Ich verstehe, dass dieser Zugriffsschlüssel umfassenden Zugriff auf Home Assistant hat",
-      "createPtWarning": "<strong>Dieser Zugriffsschlüssel kann alle Entitäten von Home Assistant lesen und steuern.</strong> Die Durchreichung schaltet außerdem Konfiguration lesen, Template rendern, Suche & Entdeckung, Register lesen, Automatisierungs-Ablaufverfolgung, Diagnose, Durchsage und Dienst-Antwortdaten ein. Diagnose und Dienst-Antwortdaten können sensible Details preisgeben. Alle anderen Fähigkeiten behalten ihre eigene Einstellung, und MESA-Regeln, die Phoenix MCP-Blockliste, das Entfernen sensibler Attribute, Ratenlimits, der Widerruf und der Ablauf gelten weiterhin. Verwenden Sie ihn nur mit MCP-Clients, denen Sie Ihr ganzes Zuhause anvertrauen.",
+      "createPtWarning": "<strong>Dieser Zugriffsschlüssel kann alle Entitäten von Home Assistant lesen und steuern.</strong> Die Durchreichung schaltet außerdem Konfiguration lesen, Template rendern, Suche & Entdeckung, Register lesen, Automatisierungs-Ablaufverfolgung, Diagnose, Durchsage und Aktions-Antwortdaten ein. Diagnose und Aktions-Antwortdaten können sensible Details preisgeben. Alle anderen Fähigkeiten behalten ihre eigene Einstellung, und MESA-Regeln, die Phoenix MCP-Blockliste, das Entfernen sensibler Attribute, Ratenlimits, der Widerruf und der Ablauf gelten weiterhin. Verwenden Sie ihn nur mit MCP-Clients, denen Sie Ihr ganzes Zuhause anvertrauen.",
       "createAccessKey": "Zugriffsschlüssel erstellen",
       "daysAgo": "vor {d} Tagen",
       "delete": "Löschen",
@@ -790,7 +790,7 @@
       "presetNewName": "Neuer Name der Voreinstellung",
       "presetNoChange": "Diese Voreinstellung entspricht den aktuellen Einstellungen, daher ändert sich keine Einstellung. Das Anwenden gilt trotzdem als Einstellungsänderung: Verbundene Agenten erfahren es bei ihrem nächsten Aufruf, und die Zählung für das Ratenlimit beginnt von vorn.",
       "presetPtUnderstand": "Ich verstehe, dass diese Voreinstellung die Durchreichung aktiviert",
-      "presetPtWarning": "<strong>Diese Voreinstellung schaltet die Durchreichung ein.</strong> Der Zugriffsschlüssel kann dann alle Entitäten lesen und steuern, und acht weitere Fähigkeiten werden eingeschaltet, darunter Diagnose und Dienst-Antwortdaten. Andere Fähigkeiten, MESA-Regeln, die Phoenix MCP-Blockliste und das Entfernen sensibler Attribute gelten weiterhin.",
+      "presetPtWarning": "<strong>Diese Voreinstellung schaltet die Durchreichung ein.</strong> Der Zugriffsschlüssel kann dann alle Entitäten lesen und steuern, und acht weitere Fähigkeiten werden eingeschaltet, darunter Diagnose und Aktions-Antwortdaten. Andere Fähigkeiten, MESA-Regeln, die Phoenix MCP-Blockliste und das Entfernen sensibler Attribute gelten weiterhin.",
       "presetRenameTitle": "Diese Voreinstellung umbenennen; wird beim Wegklicken gespeichert",
       "presetRevert": "Zurücksetzen",
       "presetRevertBody": "Dadurch werden die ungespeicherten Änderungen an <strong>{name}</strong> verworfen:",
@@ -1301,7 +1301,7 @@
       "infoMinHaLabel": "Minimale HA-Version:",
       "infoStorageNote": "Die Daten von Phoenix MCP, einschließlich der API-Schlüssel der Anbieter, sind in den Backups von Home Assistant enthalten.",
       "infoVersionLabel": "Phoenix-MCP-Version:",
-      "injectHelp": "MESA-Profil-Schaltflächen auf den Entitäts-, Geräte- und Bereichsseiten von Home Assistant hinzufügen. Standardmäßig aus.",
+      "injectHelp": "MESA-Profil-Schaltflächen auf den Entitäts-, Geräte-, Bereichs- und Integrationsseiten von Home Assistant hinzufügen. Standardmäßig aus.",
       "injectLabel": "Kontextbezogene Profil-Schaltflächen",
       "injectUnavailable": "Ausgeschaltet, bis Sie die Seite neu laden, da die Profilschaltflächen auf einer Home-Assistant-Seite fehlgeschlagen sind. Wenn das wiederholt passiert, ist möglicherweise ein Phoenix-MCP-Update nötig.",
       "killSwitchActiveAria": "Not-Aus-Schalter aktiv. Agentenverbindungen werden abgelehnt",

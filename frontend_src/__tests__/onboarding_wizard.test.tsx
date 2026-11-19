@@ -59,7 +59,7 @@ const heading = () => screen.getByRole("heading", { level: 3 }).textContent;
 const press = (name: string | RegExp) => fireEvent.click(screen.getByRole("button", { name }));
 
 /** From the choice to the Access step, creating the key on the way. */
-async function toAccess(path: "Agent Chat Using HA (Recommended)" | "Connect an External App") {
+async function toAccess(path: "Agent Chat in Home Assistant (Recommended)" | "Connect an External App") {
   press(new RegExp(`^${path.replace(/[()]/g, "\\$&")}`));
   press("Next");
   press("Create Access Key");
@@ -142,7 +142,7 @@ describe("the setup wizard", () => {
 
   it("takes the Agent Chat path from Access to the provider, whose Back returns to Access", async () => {
     render(<OnboardingWizard onCancel={vi.fn()} onFinish={vi.fn()} />);
-    await toAccess("Agent Chat Using HA (Recommended)");
+    await toAccess("Agent Chat in Home Assistant (Recommended)");
     expect(stepLabels()).toEqual(["Install Phoenix", "Choose", "Persona", "Access Key", "Access", "Provider", "Try"]);
     press("Grant desk");
     press("Next");
@@ -162,7 +162,7 @@ describe("the setup wizard", () => {
       }
     };
     allLabelled();
-    await toAccess("Agent Chat Using HA (Recommended)");
+    await toAccess("Agent Chat in Home Assistant (Recommended)");
     allLabelled();
     press("Grant desk");
     press("Next");
@@ -178,7 +178,7 @@ describe("the setup wizard", () => {
     window.addEventListener("phx-open-agentcli", opened);
     try {
       render(<OnboardingWizard onCancel={vi.fn()} onFinish={vi.fn()} />);
-      await toAccess("Agent Chat Using HA (Recommended)");
+      await toAccess("Agent Chat in Home Assistant (Recommended)");
       press("Grant desk");
       press("Next");
       fireEvent.click(await screen.findByRole("button", { name: "Try Now" }));

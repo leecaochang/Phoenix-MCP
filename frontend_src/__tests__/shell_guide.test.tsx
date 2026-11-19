@@ -20,6 +20,8 @@ import { GUIDE_CLOSED, WORKSPACE_IDS, readGuide } from "../shell/storage";
 import { WorkspaceController } from "../shell/dock/controller";
 import { LANGUAGES, flattenCatalog, primeTranslations } from "../i18n";
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
+import nl from "../../custom_components/phoenix_mcp/catalogs/nl.json";
+import zh from "../../custom_components/phoenix_mcp/catalogs/zh-Hans.json";
 
 const TOPICS = resolve(__dirname, "../guide/topics");
 const LABELS = flattenCatalog((en as { panel: unknown }).panel);
@@ -112,6 +114,30 @@ describe("the Guide window", () => {
     await waitFor(() => expect(page.documentElement.lang).toBe("fr"));
     document.documentElement.lang = "";
     primeTranslations(en.panel);
+  });
+
+  it("reads its labels again when the new language's catalog arrives after the pages", async () => {
+    // A language switch shows the new pages first; the catalog for that language lands a moment later.
+    const page = (language: string, body: string) => ({ format: GUIDE_FORMAT, language, topics: { "workspace.logs": { title: "{{label:workspace.logs}}", body, anchors: ["logs"] } } });
+    const served: Record<string, unknown> = {
+      en: page("en", "## {{label:workspace.logs}} {#logs}\n\nEnglish."),
+      "zh-Hans": page("zh-Hans", "## {{label:workspace.logs}} {#logs}\n\n中文。"),
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => served[/\/([^/]+)\.json/.exec(url)![1]] })));
+    primeTranslations(nl.panel, "nl");
+    const rect = { x: 10, y: 10, w: 360, h: 400 };
+    const view = render(<GuideWindow workspace="logs" controller={null} language="zh-Hans" rect={rect} onRect={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText("中文。")).toBeTruthy());
+    expect(screen.getByRole("heading", { level: 4 }).textContent).toBe(nl.panel.workspace.logs);
+    act(() => primeTranslations(zh.panel, "zh-Hans"));
+    view.rerender(<GuideWindow workspace="logs" controller={null} language="zh-Hans" rect={rect} onRect={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByRole("heading", { level: 4 }).textContent).toBe(zh.panel.workspace.logs));
+    // Back to English: the English catalog arrives after the English pages, and the labels follow it.
+    view.rerender(<GuideWindow workspace="logs" controller={null} language="en" rect={rect} onRect={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByText("English.")).toBeTruthy());
+    act(() => primeTranslations(en.panel));
+    view.rerender(<GuideWindow workspace="logs" controller={null} language="en" rect={rect} onRect={() => {}} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByRole("heading", { level: 4 }).textContent).toBe(en.panel.workspace.logs));
   });
 
   it("shows the workspace overview, follows a topic link and goes back, and moves on with the focused window", async () => {

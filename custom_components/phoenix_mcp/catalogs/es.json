@@ -46,7 +46,7 @@
         "description": "Envía notificaciones a teléfonos y a la lista de notificaciones de Home Assistant."
       },
       "cap_service_response": {
-        "label": "Datos de respuesta de servicios",
+        "label": "Datos de respuesta de acciones",
         "description": "Devuelve los datos con los que responde una acción, como una previsión meteorológica."
       },
       "cap_automation_write": {
@@ -135,7 +135,7 @@
       "modeDescAllow": "Permite que los agentes de esta clave usen esta capacidad sin preguntarle.",
       "modeDescConfirm": "Cada cambio le espera en Aprobaciones antes de ejecutarse. Las lecturas se ejecutan sin preguntar.",
       "updateFailed": "No se pudo actualizar la capacidad.",
-      "passThroughNotice": "<strong>El paso directo está habilitado.</strong> Lectura de configuración, Representación de plantillas, Búsqueda y descubrimiento, Lectura del registro, Trazas de automatizaciones, Diagnóstico, Difusión y Datos de respuesta de servicios se tratan como Permitir. Las demás capacidades usan su configuración de abajo.",
+      "passThroughNotice": "<strong>El paso directo está habilitado.</strong> Lectura de configuración, Representación de plantillas, Búsqueda y descubrimiento, Lectura del registro, Trazas de automatizaciones, Diagnóstico, Difusión y Datos de respuesta de acciones se tratan como Permitir. Las demás capacidades usan su configuración de abajo.",
       "esphomeBadgeTitle": "Sin el complemento Device Builder, las herramientas de ESPHome que validan, compilan, flashean o inspeccionan dispositivos permanecen ocultas para esta clave de acceso. Con la integración ESPHome, leer y buscar en el YAML de los dispositivos sigue funcionando. La capacidad puede configurarse ahora.",
       "confirmUnavailable": "Esta capacidad no puede requerir aprobación.",
       "cap_calendar_write": {
@@ -611,7 +611,7 @@
       "choiceAppBody": "Use Claude Code, un IDE, la aplicación ChatGPT o Claude u otra aplicación MCP. Copie el comando de conexión generado o active el inicio de sesión con OAuth para las aplicaciones que solo aceptan una dirección.",
       "choiceAppTitle": "Conectar una aplicación externa",
       "choiceChatBody": "Chatee en una ventana directamente en Home Assistant. Aporte una clave API de un proveedor de modelos o un servidor Ollama local. No hay nada que instalar.",
-      "choiceChatTitle": "Agent Chat mediante HA (recomendado)",
+      "choiceChatTitle": "Agent Chat mediante Home Assistant (recomendado)",
       "chooseAgent": "Elija su agente",
       "chooseSub": "Puede chatear con su agente íntegramente dentro de Home Assistant usando la clave API o el nombre de host local de su proveedor de modelos. Opcionalmente, puede usar una aplicación externa para conectarse a Phoenix MCP. Seleccione su opción preferida:",
       "chooseTitle": "Elija cómo conectarse",
@@ -1307,7 +1307,7 @@
       "create": "Crear",
       "createFailed": "No se pudo crear la clave de acceso.",
       "createPtUnderstand": "Entiendo que esta clave de acceso tiene un acceso amplio a Home Assistant",
-      "createPtWarning": "<strong>Esta clave de acceso puede leer y controlar todas las entidades de Home Assistant.</strong> El paso directo también activa Lectura de configuración, Representación de plantillas, Búsqueda y descubrimiento, Lectura del registro, Trazas de automatizaciones, Diagnóstico, Difusión y Datos de respuesta de servicios. Diagnóstico y Datos de respuesta de servicios pueden revelar detalles sensibles. Las demás capacidades conservan su propia configuración, y las reglas de MESA, la lista de bloqueo de Phoenix MCP, la eliminación de atributos sensibles, los límites de velocidad, la revocación y la expiración siguen aplicándose. Úsela solo con clientes MCP a los que confiaría toda su casa.",
+      "createPtWarning": "<strong>Esta clave de acceso puede leer y controlar todas las entidades de Home Assistant.</strong> El paso directo también activa Lectura de configuración, Representación de plantillas, Búsqueda y descubrimiento, Lectura del registro, Trazas de automatizaciones, Diagnóstico, Difusión y Datos de respuesta de acciones. Diagnóstico y Datos de respuesta de acciones pueden revelar detalles sensibles. Las demás capacidades conservan su propia configuración, y las reglas de MESA, la lista de bloqueo de Phoenix MCP, la eliminación de atributos sensibles, los límites de velocidad, la revocación y la expiración siguen aplicándose. Úsela solo con clientes MCP a los que confiaría toda su casa.",
       "createAccessKey": "Crear clave de acceso",
       "daysAgo": "hace {d} d",
       "delete": "Eliminar",
@@ -1386,7 +1386,7 @@
       "presetNewName": "Nuevo nombre del preajuste",
       "presetNoChange": "Este preajuste coincide con los ajustes actuales, así que ningún ajuste cambia. Aplicarlo cuenta igualmente como un cambio de ajustes: los agentes conectados lo sabrán en su siguiente llamada y el recuento del límite de frecuencia vuelve a empezar.",
       "presetPtUnderstand": "Entiendo que este preajuste activa el paso directo",
-      "presetPtWarning": "<strong>Este preajuste activa el paso directo.</strong> La clave de acceso podrá leer y controlar todas las entidades, y se activan ocho capacidades más, entre ellas Diagnóstico y Datos de respuesta de servicios. Las demás capacidades, las reglas de MESA, la lista de bloqueo de Phoenix MCP y la eliminación de atributos sensibles siguen aplicándose.",
+      "presetPtWarning": "<strong>Este preajuste activa el paso directo.</strong> La clave de acceso podrá leer y controlar todas las entidades, y se activan ocho capacidades más, entre ellas Diagnóstico y Datos de respuesta de acciones. Las demás capacidades, las reglas de MESA, la lista de bloqueo de Phoenix MCP y la eliminación de atributos sensibles siguen aplicándose.",
       "presetRenameTitle": "Renombre este preajuste; se guarda al hacer clic fuera",
       "presetRevert": "Revertir",
       "presetRevertBody": "Esto descarta los cambios sin guardar de <strong>{name}</strong>:",
@@ -1897,7 +1897,7 @@
       "infoMinHaLabel": "Versión mínima de HA:",
       "infoStorageNote": "Los datos de Phoenix MCP, incluidas las claves de API de los proveedores, están en las copias de seguridad de Home Assistant.",
       "infoVersionLabel": "Versión de Phoenix MCP:",
-      "injectHelp": "Añada botones de perfil de MESA a las páginas de entidad, dispositivo y área de Home Assistant. Desactivado por defecto.",
+      "injectHelp": "Añada botones de perfil de MESA a las páginas de entidad, dispositivo, área e integración de Home Assistant. Desactivado por defecto.",
       "injectLabel": "Botones de perfil en contexto",
       "injectUnavailable": "Desactivado hasta que vuelva a cargar la página, porque los botones de perfil fallaron en una página de Home Assistant. Si sigue ocurriendo, puede que se necesite una actualización de Phoenix MCP.",
       "killSwitchActiveAria": "Interruptor de emergencia activo. Se rechazan las conexiones de agentes",

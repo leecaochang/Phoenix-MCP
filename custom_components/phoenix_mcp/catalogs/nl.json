@@ -534,7 +534,7 @@
       },
       "cap_service_response": {
         "description": "De gegevens retourneren waarmee een actie antwoordt, zoals een weersverwachting.",
-        "label": "Service-antwoordgegevens"
+        "label": "Actie-antwoordgegevens"
       },
       "cap_template_render": {
         "description": "Jinja-sjablonen renderen met entiteiten waartoe deze toegangssleutel toegang heeft.",
@@ -558,7 +558,7 @@
       "modeDescDeny": "Blokkeer deze mogelijkheid. De tools zijn verborgen voor de agents van deze sleutel, tenzij Altijd alle tools aankondigen aan staat.",
       "noBuilder": "Device Builder-add-on niet gedetecteerd",
       "noEsphome": "ESPHome niet gedetecteerd",
-      "passThroughNotice": "<strong>Pass-through is ingeschakeld.</strong> Configuratie lezen, Sjablonen renderen, Zoeken en ontdekken, Register lezen, Automatiseringstraces, Diagnostiek, Omroepen en Service-antwoordgegevens worden behandeld als Toestaan. Alle andere mogelijkheden gebruiken hun instelling hieronder.",
+      "passThroughNotice": "<strong>Pass-through is ingeschakeld.</strong> Configuratie lezen, Sjablonen renderen, Zoeken en ontdekken, Register lezen, Automatiseringstraces, Diagnostiek, Omroepen en Actie-antwoordgegevens worden behandeld als Toestaan. Alle andere mogelijkheden gebruiken hun instelling hieronder.",
       "tierConfigWrite": "Configuratiewijzigingen",
       "tierEveryday": "Dagelijkse acties",
       "tierIrreversible": "Hoog risico",
@@ -1341,7 +1341,7 @@
       "choiceAppBody": "Gebruik Claude Code, een IDE, de ChatGPT- of Claude-app of een andere MCP-app. Kopieer de gegenereerde verbindingsopdracht, of schakel OAuth-aanmelding in voor apps die alleen een adres aannemen.",
       "choiceAppTitle": "Een externe app verbinden",
       "choiceChatBody": "Chat in een venster hier in Home Assistant. Neem een API-sleutel van een modelprovider mee, of een lokale Ollama-server. Niets te installeren.",
-      "choiceChatTitle": "Agent Chat via HA (aanbevolen)",
+      "choiceChatTitle": "Agent Chat via Home Assistant (aanbevolen)",
       "chooseAgent": "Kies je agent",
       "chooseSub": "Je kunt volledig binnen Home Assistant met je agent chatten met de API-sleutel of lokale hostnaam van je modelprovider. Optioneel kun je een externe app gebruiken om verbinding te maken met Phoenix MCP. Selecteer je voorkeursoptie:",
       "chooseTitle": "Kies hoe je verbinding wilt maken",
@@ -1499,7 +1499,7 @@
       "create": "Maken",
       "createFailed": "Toegangssleutel aanmaken is mislukt.",
       "createPtUnderstand": "Ik begrijp dat deze toegangssleutel brede toegang tot Home Assistant heeft",
-      "createPtWarning": "<strong>Deze toegangssleutel kan alle Home Assistant-entiteiten lezen en bedienen.</strong> Pass-through schakelt ook Configuratie lezen, Sjablonen renderen, Zoeken en ontdekken, Register lezen, Automatiseringstraces, Diagnostiek, Omroepen en Service-antwoordgegevens in. Diagnostiek en Service-antwoordgegevens kunnen gevoelige details prijsgeven. Alle andere mogelijkheden houden hun eigen instelling, en MESA-regels, de Phoenix MCP-blokkeerlijst, het verwijderen van gevoelige attributen, snelheidslimieten, intrekking en verloop blijven van toepassing. Gebruik deze alleen met MCP-clients aan wie je je hele huis toevertrouwt.",
+      "createPtWarning": "<strong>Deze toegangssleutel kan alle Home Assistant-entiteiten lezen en bedienen.</strong> Pass-through schakelt ook Configuratie lezen, Sjablonen renderen, Zoeken en ontdekken, Register lezen, Automatiseringstraces, Diagnostiek, Omroepen en Actie-antwoordgegevens in. Diagnostiek en Actie-antwoordgegevens kunnen gevoelige details prijsgeven. Alle andere mogelijkheden houden hun eigen instelling, en MESA-regels, de Phoenix MCP-blokkeerlijst, het verwijderen van gevoelige attributen, snelheidslimieten, intrekking en verloop blijven van toepassing. Gebruik deze alleen met MCP-clients aan wie je je hele huis toevertrouwt.",
       "createAccessKey": "Toegangssleutel maken",
       "daysAgo": "{d} d geleden",
       "delete": "Verwijderen",
@@ -1578,7 +1578,7 @@
       "presetNewName": "Nieuwe voorinstellingsnaam",
       "presetNoChange": "Deze voorinstelling komt overeen met de huidige instellingen, dus er verandert geen instelling. Toepassen telt toch als een wijziging van de instellingen: verbonden agents horen dat bij hun volgende aanroep en de telling voor de snelheidslimiet begint opnieuw.",
       "presetPtUnderstand": "Ik begrijp dat deze voorinstelling pass-through inschakelt",
-      "presetPtWarning": "<strong>Deze voorinstelling schakelt pass-through in.</strong> De toegangssleutel kan dan alle entiteiten lezen en bedienen, en acht andere mogelijkheden worden ingeschakeld, waaronder Diagnostiek en Service-antwoordgegevens. Andere mogelijkheden, MESA-regels, de Phoenix MCP-blokkeerlijst en het verwijderen van gevoelige attributen blijven van toepassing.",
+      "presetPtWarning": "<strong>Deze voorinstelling schakelt pass-through in.</strong> De toegangssleutel kan dan alle entiteiten lezen en bedienen, en acht andere mogelijkheden worden ingeschakeld, waaronder Diagnostiek en Actie-antwoordgegevens. Andere mogelijkheden, MESA-regels, de Phoenix MCP-blokkeerlijst en het verwijderen van gevoelige attributen blijven van toepassing.",
       "presetRenameTitle": "Deze voorinstelling hernoemen; wordt opgeslagen wanneer je wegklikt",
       "presetRevert": "Terugdraaien",
       "presetRevertBody": "Hiermee worden de niet-opgeslagen wijzigingen op <strong>{name}</strong> verwijderd:",
@@ -2089,7 +2089,7 @@
       "infoMinHaLabel": "Minimale HA-versie:",
       "infoStorageNote": "De gegevens van Phoenix MCP, inclusief API-sleutels van providers, staan in de back-ups van Home Assistant.",
       "infoVersionLabel": "Phoenix MCP-versie:",
-      "injectHelp": "Voeg MESA-profielknoppen toe aan de eigen entiteit-, apparaat- en ruimtepagina's van Home Assistant. Standaard uit.",
+      "injectHelp": "Voeg MESA-profielknoppen toe aan de eigen entiteit-, apparaat-, ruimte- en integratiepagina's van Home Assistant. Standaard uit.",
       "injectLabel": "Profielknoppen in context",
       "injectUnavailable": "Uitgeschakeld tot je de pagina opnieuw laadt, omdat de profielknoppen op een Home Assistant-pagina zijn mislukt. Als dit blijft gebeuren, is mogelijk een update van Phoenix MCP nodig.",
       "killSwitchActiveAria": "Noodstop actief. Agentverbindingen worden geweigerd",
