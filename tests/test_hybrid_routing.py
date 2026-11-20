@@ -25,7 +25,9 @@ from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
-from tests.runtime_fixtures import decision_write_reply, patch_readers, qualify_test_decision_model
+from tests.runtime_fixtures import (
+    allow_cold_intent_loading, decision_write_reply, patch_readers, qualify_test_decision_model,
+)
 
 
 @pytest.fixture
@@ -44,8 +46,7 @@ async def hybrid_home(hass, access_key_store, immediate_command_observation, mon
     await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id=chat, voice_agent_model="chat", voice_agent_routing_mode="hybrid",
         decision_provider_id=decision, mesa_mode="off")
-    # Cold intent loading on a busy runner can outlast the 5 s the setting allows, so set it directly.
-    access_key_store.get_settings().command_routing_timeout_ms = 60000
+    await allow_cold_intent_loading(monkeypatch, access_key_store)
     assert await async_setup_component(hass, "homeassistant", {})
     assert await async_setup_component(hass, "conversation", {})
     registry = er.async_get(hass)

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.runtime_fixtures import patch_readers
+from tests.runtime_fixtures import allow_cold_intent_loading, patch_readers
 from hassil.models import MatchEntity
 from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.setup import async_setup_component
@@ -18,13 +18,12 @@ from custom_components.phoenix_mcp.access_key_store import PermissionNode, Permi
 
 
 @pytest.fixture
-async def routing(hass, access_key_store):
+async def routing(hass, access_key_store, monkeypatch):
     access_key, _ = await access_key_store.async_create_access_key("routing", "test")
     access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    # Cold intent loading on a busy runner can outlast the 5 s the setting allows, so set it directly.
-    access_key_store.get_settings().command_routing_timeout_ms = 60000
+    await allow_cold_intent_loading(monkeypatch, access_key_store)
     return data, access_key
 
 

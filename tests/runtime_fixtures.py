@@ -837,6 +837,19 @@ def schema_baseline(tool_def: dict) -> dict:
     return schema_placeholder("arguments", tool_def.get("inputSchema", {}) or {})
 
 
+async def allow_cold_intent_loading(monkeypatch, store) -> None:
+    """Give command recognition a minute, kept through later settings patches.
+
+    A cold intent load on a slow CI runner can outlast the 5 s the setting allows. Every settings
+    patch reads all fields back through from_dict, which would clamp a value set directly, so the
+    bound is raised for the test and the value is set through a patch.
+    """
+    timeout_ms = 60000
+    monkeypatch.setattr(
+        "custom_components.phoenix_mcp.access_key_store.COMMAND_ROUTING_TIMEOUT_MAX_MS", timeout_ms)
+    await store.async_patch_settings(command_routing_timeout_ms=timeout_ms)
+
+
 def qualify_test_decision_model(monkeypatch) -> None:
     """Treat the fixtures' `test-model` at TypeSafe's endpoint as a revision qualified for sequential execution.
 
