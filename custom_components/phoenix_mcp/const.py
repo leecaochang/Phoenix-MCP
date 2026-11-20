@@ -288,6 +288,9 @@ AUDIT_STORAGE_VERSION = 1
 VERSION_STORAGE_KEY = "phoenix_mcp_versions"
 VERSION_STORAGE_VERSION = 1
 CONFIG_RECOVERY_STORAGE_KEY = "phoenix_mcp_config_recovery"
+# The secret every content hash Phoenix hands out is keyed with, saved so hashes survive a restart.
+CONTENT_HASH_KEY_STORAGE_KEY = "phoenix_mcp_hash_key"
+CONTENT_HASH_KEY_STORAGE_VERSION = 1
 CONFIG_RECOVERY_SNAPSHOT_PREFIX = CONFIG_RECOVERY_STORAGE_KEY + ".snapshot."
 CONFIG_RECOVERY_MAX_RECORDS = 256
 CONFIG_RECOVERY_MAX_BYTES = 1_048_576

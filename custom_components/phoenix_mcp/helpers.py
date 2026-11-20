@@ -6,8 +6,10 @@ import asyncio
 from datetime import datetime
 from functools import partial
 import hashlib
+import hmac
 import json
 import logging
+import secrets
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -181,11 +183,30 @@ def fire_rate_limit_events(hass: HomeAssistant, data: PhoenixData, access_key: A
         )
 
 
+# Until setup loads the saved key (content_hash_key.py), a key of this process only.
+_content_hash_key = secrets.token_bytes(32)
+
+
+def set_content_hash_key(key: bytes) -> None:
+    """Use `key` for every content hash from now on."""
+    global _content_hash_key
+    _content_hash_key = key
+
+
+def keyed_hash(raw: bytes) -> str:
+    """An HMAC-SHA256 of `raw` under the content hash key.
+
+    Content can hold what a read redacts, and a plain hash would let a caller confirm a
+    guessed hidden value offline. Only Phoenix can compute this one.
+    """
+    return hmac.new(_content_hash_key, raw, hashlib.sha256).hexdigest()
+
+
 def content_hash(content: str | bytes | dict | list) -> str:
     """Hash content for compare-and-swap checks on Confirm-gated whole-blob writes.
 
     JSON-able content hashes over a canonical serialization, text and bytes as raw UTF-8. The
-    value is opaque: agents echo it, never recompute it.
+    value is opaque and keyed (keyed_hash): agents echo it, and cannot recompute it.
     """
     if isinstance(content, (dict, list)):
         raw = json.dumps(content, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
@@ -193,7 +214,7 @@ def content_hash(content: str | bytes | dict | list) -> str:
         raw = content
     else:
         raw = str(content).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
+    return keyed_hash(raw)
 
 
 TIME_INPUT_FORMS = (

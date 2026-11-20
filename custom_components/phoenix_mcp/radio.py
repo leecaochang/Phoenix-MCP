@@ -11,7 +11,6 @@ key material, and a field added upstream must not leak.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import math
@@ -37,6 +36,7 @@ from .const import (
     ZIGBEE_TOPOLOGY_SCAN_TIMEOUT_SECONDS,
 )
 from .device_semantics import device_entry_value, device_registry_snapshot
+from .helpers import keyed_hash
 from .ws_dispatch import (
     WsDispatchError,
     async_ws_command,
@@ -736,7 +736,7 @@ def z2m_property_hash(property_name: str, value: Any) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
-    return hashlib.sha256(canonical.encode()).hexdigest()
+    return keyed_hash(canonical.encode())
 
 
 def validate_z2m_exposed_value(
@@ -798,7 +798,7 @@ def z2m_options_hash(options: dict[str, Any]) -> str:
     canonical = json.dumps(
         options, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
-    return hashlib.sha256(canonical.encode()).hexdigest()
+    return keyed_hash(canonical.encode())
 
 
 def z2m_effective_device_options(
@@ -1231,7 +1231,7 @@ def z2m_radio_configuration_hash(configuration: dict[str, Any]) -> str:
     canonical = json.dumps(
         configuration, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     )
-    return hashlib.sha256(canonical.encode()).hexdigest()
+    return keyed_hash(canonical.encode())
 
 
 def validate_zigbee_group_name(value: Any) -> str:
@@ -1368,7 +1368,7 @@ def zigbee_group_hash(backend: str, configuration: dict[str, Any]) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
-    return hashlib.sha256(canonical.encode()).hexdigest()
+    return keyed_hash(canonical.encode())
 
 
 def normalize_zigbee_groups(backend: str, raw: Any) -> list[dict[str, Any]]:

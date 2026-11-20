@@ -8,6 +8,7 @@ helpers, which use the lovelace integration's LovelaceConfig objects directly.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -97,6 +98,26 @@ class TestGetDashboardConfig:
         ents = _json(content)["config"]["views"][0]["cards"][0]["entities"]
         assert light in ents  # in scope, kept
         assert "sensor.secret" not in ents and "<redacted>" in ents  # out of scope, redacted
+
+    async def test_a_redacted_read_cannot_confirm_a_guessed_entity(self, hass, lovelace_env):
+        """The hash is keyed: rebuilding the layout with a guess and hashing it matches nothing."""
+        h, light = lovelace_env
+        access_key = _access_key(tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
+        data, _versions = _data()
+        stored = {"views": [{"cards": [{"type": "entities", "entities": [light, "sensor.secret"]}]}]}
+        await _call("set_dashboard_config", {"config": stored}, access_key, h, data)
+        read = _json((await _call("get_dashboard_config", {}, access_key, h))[0])
+        assert "sensor.secret" not in json.dumps(read["config"])
+        # Rebuilding the layout with each candidate and hashing it matches none of them, the right one included.
+        for guess in ("sensor.other", "sensor.secret"):
+            candidate = json.loads(json.dumps(read["config"]).replace('"<redacted>"', json.dumps(guess)))
+            assert hashlib.sha256(json.dumps(candidate, sort_keys=True, separators=(",", ":")).encode()).hexdigest() != read["content_hash"]
+        assert read["content_hash"] == content_hash(stored)
+        # The hash still guards the write: an unchanged dashboard accepts it.
+        written, outcome, _ = await _call("set_dashboard_config",
+                                          {"config": {"views": [{"title": "Home"}]}, "expected_hash": read["content_hash"]},
+                                          access_key, h, data)
+        assert outcome == "allowed", written
 
 
 class TestSetDashboardConfig:

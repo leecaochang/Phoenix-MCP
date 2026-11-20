@@ -87,7 +87,7 @@ PLATFORMS = ["sensor"]
 # old for them still reaches the refusal in async_setup_entry.
 _SETUP_MODULES = (
     "access_key_auth", "admin.registry", "agent_chat", "agent_chat_views", "ai_task", "approvals",
-    "assist_api", "config_reconciliation", "config_recovery", "conversation_log",
+    "assist_api", "config_reconciliation", "config_recovery", "content_hash_key", "conversation_log",
     "dashboard_resource_ownership", "debug_capture", "durable_storage", "llm.accounts",
     "log_read", "logger_control", "mcp_transport", "mesa", "mesa_audit", "mesa_core", "oauth_views",
     "mesa_suggestions", "oauth_grants", "panel", "recovery_storage", "redaction", "routing.decision_budget",
@@ -361,6 +361,9 @@ async def _async_durable_state(hass: HomeAssistant) -> DurableState:
         await state.decision_budget.async_retry_load()
         return state
 
+    # Before anything computes a content hash, so stored hashes keep matching across restarts.
+    from .content_hash_key import async_load_content_hash_key
+    await async_load_content_hash_key(hass)
     store = await AccessKeyStore.async_create(hass)
     # Private like the Conversation Log's: tool arguments can name people and places.
     from .durable_storage import DurableStore, ReportingStore
@@ -1268,6 +1271,12 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         await async_remove_logger_overrides(hass)
     except Exception:  # removal retires credentials regardless
         _LOGGER.exception("Phoenix MCP: could not end timed logger overrides during removal")
+    try:
+        from .content_hash_key import async_remove_content_hash_key
+
+        await async_remove_content_hash_key(hass)
+    except Exception:  # removal retires credentials regardless
+        _LOGGER.exception("Phoenix MCP: could not remove the content hash key during removal")
     await async_wipe_agentcli_secrets(hass)
 
 
