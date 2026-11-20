@@ -43,8 +43,13 @@ def _sha256(value: str) -> str:
 
 
 def _saved(mock_store) -> dict:
-    """What the last save handed to storage, so a test can say what became durable."""
-    return mock_store.async_save.call_args.args[0]
+    """What the last save handed to storage, so a test can say what became durable.
+
+    The store hands over already-serialized JSON (an orjson fragment), so it is decoded here.
+    """
+    import orjson
+
+    return orjson.loads(orjson.dumps(mock_store.async_save.call_args.args[0]))
 
 
 class TestPermissionNode:
@@ -1150,7 +1155,7 @@ class TestSettings:
     async def test_deliberate_review_opt_in_survives_reload(self, access_key_store, mock_store):
         updates = {key: "observe" for key in TOOL_ROUTING_SETTINGS.values()}
         await access_key_store.async_patch_settings(**updates)
-        persisted = mock_store.async_save.call_args.args[0]
+        persisted = _saved(mock_store)
         mock_store.async_load.return_value = persisted
         mock_store.async_save.reset_mock()
         await access_key_store.async_load()

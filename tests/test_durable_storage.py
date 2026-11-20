@@ -276,3 +276,23 @@ async def test_a_real_budget_store_refuses_a_reservation_it_could_not_save(hass,
             await budget.reserve(5)
     with pytest.raises(DecisionBudgetError):
         await budget.reserve(5)
+
+
+async def test_a_queued_save_writes_the_state_it_was_asked_for(hass):
+    """A save waiting behind another keeps its moment's state, though memory changes before it lands."""
+    import asyncio
+
+    store = await AccessKeyStore.async_create(hass)
+    writer = _HeldWriter(asyncio.get_running_loop())
+    with patch.object(WRITER, WRITE, lambda owner, mode, data: writer(owner, mode, data)):
+        first = asyncio.create_task(store.async_patch_settings(agentcli_memory_chars=321))
+        await asyncio.wait_for(writer.entered.wait(), 2)
+        second = asyncio.create_task(store.async_patch_settings(agentcli_memory_chars=654))
+        await asyncio.sleep(0)
+        # Changed in memory after the second save was submitted, and never saved.
+        store.get_settings().agentcli_memory_chars = 999
+        writer.release.set()
+        await first
+        await second
+    reloaded = await AccessKeyStore.async_create(hass)
+    assert reloaded.get_settings().agentcli_memory_chars == 654

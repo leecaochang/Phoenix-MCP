@@ -64,14 +64,12 @@ def inprocess_template_worker(request, monkeypatch):
     """
     if getattr(request.module, "REAL_TEMPLATE_WORKER", False):
         return
-    import json
-
     from custom_components.phoenix_mcp import template_limits, template_render, template_worker
 
     limits = {name: value for name, value in vars(template_limits).items() if name.isupper()}
 
     async def run(payload: dict, hass, data) -> tuple[int, bytes]:
-        code, output = template_worker.run_payload(json.dumps(payload, default=str).encode(), limits)
+        code, output = template_worker.run_payload(template_render.encoded_payload(payload), limits)
         return code, output.encode()
 
     monkeypatch.setattr(template_render, "_run_worker", run)

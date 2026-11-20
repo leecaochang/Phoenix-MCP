@@ -327,8 +327,7 @@ class _Worker:
         self.cancelled = 0
 
     async def run(self, payload, data):
-        import json as _json
-        from custom_components.phoenix_mcp import template_limits, template_worker
+        from custom_components.phoenix_mcp import template_limits, template_render, template_worker
 
         mode = payload.get("mode", "render")
         self.modes.append((mode, len(payload.get("templates", [None]))))
@@ -345,7 +344,7 @@ class _Worker:
         if mode == "renders" and self.fail_batches is not None:
             raise self.fail_batches
         limits = {name: value for name, value in vars(template_limits).items() if name.isupper()}
-        code, output = template_worker.run_payload(_json.dumps(payload, default=str).encode(), limits)
+        code, output = template_worker.run_payload(template_render.encoded_payload(payload), limits)
         return code, output.encode()
 
 

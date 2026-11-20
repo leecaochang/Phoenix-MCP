@@ -232,6 +232,9 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "async_track_time_interval": "0.0.0",
     },
     "homeassistant.helpers.importlib": {"async_import_module": "2024.4.0"},
+    # The access key store hands Store pre-serialized JSON; both verified in the 2026.7.0
+    # wheel, helpers/json.py, whose prepare_save_json embeds an orjson Fragment.
+    "homeassistant.helpers.json": {"json_bytes": "2026.7.0", "json_fragment": "2026.7.0"},
     "homeassistant.helpers.network": {
         "get_url": "0.0.0",
     },
@@ -292,7 +295,9 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "write_utf8_file_atomic": "0.0.0",
     },
     # Export and Store's error-catching seam verified at the supported floor.
-    "homeassistant.util.json": {"SerializationError": "2026.7.0", "json_loads": "2023.3.0"},
+    "homeassistant.util.json": {"SerializationError": "2026.7.0", "json_loads": "2023.3.0",
+        # Verified in the 2026.7.0 wheel, util/json.py.
+        "json_loads_object": "2026.7.0"},
     "homeassistant.util.ulid": {
         # Re-exported from ulid_transform. Verified absent in 2024.7.0 and
         # present in 2024.8.0.

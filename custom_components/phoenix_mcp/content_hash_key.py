@@ -2,8 +2,8 @@
 
 Read tools return a hash of the stored content so a later write can refuse when it changed.
 That content can hold what the read redacted, so the hash is keyed (helpers.keyed_hash): a
-caller cannot test a guessed hidden value against it. The key is saved, so hashes held in
-approvals and recovery records still match after a restart. Removal deletes it.
+caller cannot test a guessed hidden value against it. The key is saved, so a hash an agent
+holds and those in recovery receipts still match after a restart. Removal deletes it.
 """
 
 from __future__ import annotations

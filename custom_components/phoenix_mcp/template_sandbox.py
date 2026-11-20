@@ -21,23 +21,29 @@ if TYPE_CHECKING:
     from .access_key_store import AccessKeyRecord
 
 
-def build_permitted_states(
+def iter_permitted_states(
     access_key: AccessKeyRecord, hass: HomeAssistant, only: Collection[str] | None = None,
-) -> dict:
-    """Return {entity_id: ScrubbedState} for the entities an access key may read.
+) -> Iterator[ScrubbedState]:
+    """Yield a ScrubbedState for each entity an access key may read, one at a time.
 
     The one source for template sandboxes, filtered by resolve() and assist_expose_check;
-    ``only`` limits it to those entity IDs.
+    ``only`` limits it to those entity IDs. A caller can stop early, so a snapshot over its
+    size limit costs only the states read before the limit. Event loop only.
     """
     expose = assist_expose_check(access_key, hass)
     states = hass.states.async_all() if only is None else [
         state for entity_id in only if (state := hass.states.get(entity_id)) is not None]
-    return {
-        s.entity_id: ScrubbedState(s, scrub_attributes(s.attributes, access_key, hass))
-        for s in states
-        if resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
-        and (expose is None or expose(s.entity_id))
-    }
+    for s in states:
+        if (resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+                and (expose is None or expose(s.entity_id))):
+            yield ScrubbedState(s, scrub_attributes(s.attributes, access_key, hass))
+
+
+def build_permitted_states(
+    access_key: AccessKeyRecord, hass: HomeAssistant, only: Collection[str] | None = None,
+) -> dict:
+    """Return {entity_id: ScrubbedState} for the entities an access key may read."""
+    return {state.entity_id: state for state in iter_permitted_states(access_key, hass, only)}
 
 
 class _ContextProxy(dict):

@@ -6,7 +6,6 @@ Access keys are stored only as SHA-256 hashes and compared in constant time.
 from __future__ import annotations
 
 import asyncio
-import copy
 import hashlib
 import hmac
 import logging
@@ -14,10 +13,12 @@ import secrets
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.helpers.json import json_bytes, json_fragment
 from homeassistant.helpers.storage import Store
+from homeassistant.util.json import json_loads_object
 from homeassistant.util.dt import utcnow
 
 from .access_key_schema import normalize_access_key_root
@@ -959,8 +960,8 @@ class AccessKeyStore:
         # Global per-entity hints (entity_id to hint text), surfaced to every access key
         # in the context endpoint. Distinct from per-access-key permission-node hints.
         self._entity_hints: dict[str, str] = {}
-        # What storage is known to hold, for undoing a change whose save failed.
-        self._durable: dict | None = None
+        # What storage is known to hold, serialized, for undoing a change whose save failed.
+        self._durable: bytes | None = None
         self._durable_records: dict[str, AccessKeyRecord] = {}
         # Writes land one at a time in submission order; the sequence number
         # tells a failed write whether a newer one is queued behind it.
@@ -1016,7 +1017,7 @@ class AccessKeyStore:
             str(k): str(v) for k, v in (raw.get("entity_hints") or {}).items()
         }
 
-        self._durable = copy.deepcopy(self._payload())
+        self._durable = json_bytes(self._payload())
         self._durable_records = dict(self._access_keys)
         if normalized or approvals_cleaned:
             # Persist the cleaned form so a one-time corruption does not have to
@@ -1040,8 +1041,11 @@ class AccessKeyStore:
         write to settle, so its lock keeps covering the write.
         """
         self._save_seq += 1
+        # Serialized now, so the write holds this moment's state whatever changes before it
+        # lands. Store serializes on the loop anyway, and one orjson pass costs a fraction
+        # of a deep copy of every queued approval's arguments.
         write = asyncio.get_running_loop().create_task(self._async_write(
-            copy.deepcopy(self._payload()), self._save_seq, self._usage_version,
+            json_bytes(self._payload()), self._save_seq, self._usage_version,
         ))
         cancelled = False
         while not write.done():
@@ -1055,7 +1059,7 @@ class AccessKeyStore:
             raise asyncio.CancelledError
         await write
 
-    async def _async_write(self, payload: dict, seq: int, usage_version: int) -> None:
+    async def _async_write(self, payload: bytes, seq: int, usage_version: int) -> None:
         """Write one submitted state and apply its outcome to memory.
         When the newest write fails, memory returns to the last durable state before raising,
         so a refused change is not left in force. An older failure defers to the queued newer
@@ -1063,7 +1067,7 @@ class AccessKeyStore:
         """
         async with self._write_lock:
             try:
-                await self._store.async_save(payload)
+                await self._store.async_save(cast(dict, json_fragment(payload)))
             except DurableStorageError:
                 if seq == self._save_seq and self._durable is not None:
                     self._restore(self._durable)
@@ -1072,13 +1076,13 @@ class AccessKeyStore:
             self._durable_records = dict(self._access_keys)
             self._saved_usage_version = usage_version
 
-    def _restore(self, payload: dict) -> None:
+    def _restore(self, durable: bytes) -> None:
         """Return memory to a durable payload, keeping live record objects.
 
         Request authority holds record references, so a record regains its last object,
         updated in place.
         """
-        payload = copy.deepcopy(payload)  # records must not share the durable copy's containers
+        payload = cast(dict[str, Any], json_loads_object(durable))  # fresh containers, shared with nothing
         saved = {r["id"]: AccessKeyRecord.from_dict(r) for r in payload["access_keys"]}
         restored: dict[str, AccessKeyRecord] = {}
         for access_key_id, record in saved.items():
@@ -1453,7 +1457,7 @@ class AccessKeyStore:
             if self._usage_version == self._saved_usage_version:
                 return
             if self._hass.state is CoreState.stopping:
-                await Store.async_save(self._store, copy.deepcopy(self._payload()))
+                await Store.async_save(self._store, cast(dict, json_fragment(json_bytes(self._payload()))))
                 self._saved_usage_version = self._usage_version
                 return
             await self.async_save()

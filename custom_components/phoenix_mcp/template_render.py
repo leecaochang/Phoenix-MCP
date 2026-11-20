@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Collection
 from contextvars import ContextVar
+from dataclasses import dataclass
 import json
 import logging
 import os
@@ -22,7 +23,7 @@ from .template_limits import (
     TEMPLATE_BATCH_GATHER_SECONDS, TEMPLATE_CHECK_COMPILE_SECONDS, TEMPLATE_CHECK_SLOT_WAIT_SECONDS, TEMPLATE_WORKER_DIAGNOSTIC_EXIT,
     TEMPLATE_WORKER_INPUT_BYTES, TEMPLATE_WORKER_MAX_TEMPLATES, TEMPLATE_WORKER_TIMEOUT_SECONDS,
 )
-from .template_sandbox import build_permitted_states
+from .template_sandbox import iter_permitted_states
 from .template_scope import LONE_SURROGATE_REFUSAL, has_lone_surrogate
 from .request_authority import AuthorityChangedError, check_request_authority
 from .template_diagnostics import format_template_failure
@@ -183,9 +184,7 @@ async def _run_in_free_slot(payload: dict, data: PhoenixData) -> tuple[int, byte
 async def _run_in_slot(payload: dict, data: PhoenixData) -> tuple[int, bytes]:
     """The body of _run_worker, holding one slot."""
     check_request_authority()
-    encoded = json.dumps(payload, default=str).encode()
-    if len(encoded) > TEMPLATE_WORKER_INPUT_BYTES:
-        raise TemplateRenderError("Template state snapshot is too large.")
+    encoded = encoded_payload(payload)
     try:
         process = await asyncio.create_subprocess_exec(
             sys.executable, str(_WORKER_SCRIPT),
@@ -231,11 +230,47 @@ async def _run_in_slot(payload: dict, data: PhoenixData) -> tuple[int, bytes]:
             check_request_authority()
 
 
+_SNAPSHOT_TOO_LARGE = "Template state snapshot is too large."
+
+
+@dataclass(frozen=True, slots=True)
+class _PermittedStates:
+    """A key's permitted states, read only once a worker slot is held (encoded_payload)."""
+
+    access_key: AccessKeyRecord
+    hass: HomeAssistant
+    only: Collection[str] | None = None
+
+
 def _snapshot(access_key: AccessKeyRecord, hass: HomeAssistant, only: Collection[str] | None = None) -> dict:
-    return {
-        "time_zone": hass.config.time_zone,
-        "states": [state.as_dict() for state in build_permitted_states(access_key, hass, only).values()],
-    }
+    return {"time_zone": hass.config.time_zone, "states": _PermittedStates(access_key, hass, only)}
+
+
+def encoded_payload(payload: dict) -> bytes:
+    """Serialize one worker request within TEMPLATE_WORKER_INPUT_BYTES.
+
+    Permitted states are read and serialized one at a time and the build stops at the limit,
+    so a refused or oversized call does not first copy every state on the event loop. The
+    bytes equal json.dumps of the whole request with the states in place.
+    """
+    states = payload.get("states")
+    if not isinstance(states, _PermittedStates):
+        encoded = json.dumps(payload, default=str).encode()
+        if len(encoded) > TEMPLATE_WORKER_INPUT_BYTES:
+            raise TemplateRenderError(_SNAPSHOT_TOO_LARGE)
+        return encoded
+    head = json.dumps({key: value for key, value in payload.items() if key != "states"}, default=str)
+    opening = head[:-1] + (", " if len(head) > 2 else "") + '"states": ['
+    # ASCII output (json.dumps escapes the rest), so characters are bytes.
+    size = len(opening) + len("]}")
+    parts: list[str] = []
+    for state in iter_permitted_states(states.access_key, states.hass, states.only):
+        text = json.dumps(state.as_dict(), default=str)
+        size += len(text) + (2 if parts else 0)
+        if size > TEMPLATE_WORKER_INPUT_BYTES:
+            raise TemplateRenderError(_SNAPSHOT_TOO_LARGE)
+        parts.append(text)
+    return (opening + ", ".join(parts) + "]}").encode()
 
 
 async def async_render_template_for_access_key(
