@@ -52,6 +52,7 @@ Phoenix 只给每个 AI 智能体你允许的内容，并隐藏它能识别出�
 
 - 请求体最大 1 MiB，批处理最多 50 个请求。批处理中的每个请求都计入速率限制。
 - 外部应用按密钥应用速率限制，默认每分钟 60 个请求、每秒 10 个。Agent Chat、语音智能体、Assist 和 AI 任务不受限制。
+- 通过语音智能体、Assist 或 AI 任务，一位 Home Assistant 用户在每个密钥上最多可有 10 个等待审批的请求。
 - 超过限制的密钥会被告知何时重试。
 
 相关：[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)

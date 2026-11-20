@@ -737,9 +737,13 @@ async def _dispatch_tools_call(
                  payload={"name": tool_name, "arguments": arguments, "result_withheld": True},
                  uncertain=True)
         raise
-    except PendingApprovalCapacityError:
-        # Not an internal error: the key's approval queue is full.
+    except PendingApprovalCapacityError as full:
+        # Not an internal error: the key's approval queue, or this person's share of it, is full.
         tool_result = _tool_error(
+            f"This person already has {full.limit} actions waiting for approval on this access key, "
+            "so this one was not queued. An administrator can approve or reject them in "
+            "Phoenix MCP's Approvals; then try again."
+            if full.household else
             f"This access key already has {MAX_PENDING_APPROVALS_PER_ACCESS_KEY} actions waiting for approval, "
             "so this one was not queued. Ask the user to approve or reject the waiting requests in "
             "Phoenix MCP's Approvals, then try again."

@@ -20,7 +20,9 @@ MESA 的{{label:mesa.modeConfirm}}只在 MESA 處於{{label:settings.mesaModeEnf
 
 ## 請求等待多久 {#expiry}
 
-待處理的請求會在一小時後過期。過期後，{{label:workspace.review}}只提供**{{label:approvals.reject}}**。拒絕會將它記錄為已過期。每個存取金鑰最多可同時有 100 個待處理請求。
+待處理的請求會在一小時後過期。過期後，{{label:workspace.review}}只提供**{{label:approvals.reject}}**。拒絕會將它記錄為已過期。
+
+每個存取金鑰最多可同時有 100 個待處理請求。其中，一位 Home Assistant 使用者透過語音智慧體、Assist 或 AI 任務最多可有 10 個。再次提出已在等待的相同請求不會新增請求。
 
 ## 你核准後會發生什麼 {#approve}
 

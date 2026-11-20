@@ -52,6 +52,7 @@ Related: [{{label:caps.modeConfirm}}](guide:window.capabilities#modes)
 
 - A request body can be up to 1 MiB, and a batch up to 50 requests. Each request in a batch counts toward the rate limit.
 - External apps are rate limited per key, by default 60 requests a minute and 10 a second. Agent Chat, the Voice Agent, Assist, and AI Task aren't.
+- Through the Voice Agent, Assist, or AI Task, one Home Assistant user can have up to 10 requests waiting for approval on a key.
 - A key over its limit is told when to try again.
 
 Related: [{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)

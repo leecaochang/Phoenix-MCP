@@ -52,6 +52,7 @@ Phoenix 只給每個 AI 智慧體你允許的內容，並隱藏它能辨識出�
 
 - 請求體最大 1 MiB，批次最多 50 個請求。批次中的每個請求都計入速率限制。
 - 外部應用程式依金鑰套用速率限制，預設每分鐘 60 個請求、每秒 10 個。Agent Chat、語音智慧體、Assist 和 AI 任務不受限制。
+- 透過語音智慧體、Assist 或 AI 任務，一位 Home Assistant 使用者在每個金鑰上最多可有 10 個等待核准的請求。
 - 超過限制的金鑰會被告知何時重試。
 
 相關：[{{label:accessKeys.cardRateLimiting}}](guide:window.keySettings#rate-limiting)

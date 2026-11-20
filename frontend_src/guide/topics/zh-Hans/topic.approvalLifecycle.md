@@ -20,7 +20,9 @@ MESA 的{{label:mesa.modeConfirm}}只在 MESA 处于{{label:settings.mesaModeEnf
 
 ## 请求等待多久 {#expiry}
 
-待处理的请求会在一小时后过期。过期后，{{label:workspace.review}}只提供**{{label:approvals.reject}}**。拒绝会将其记录为已过期。每个访问密钥最多可同时有 100 个待处理请求。
+待处理的请求会在一小时后过期。过期后，{{label:workspace.review}}只提供**{{label:approvals.reject}}**。拒绝会将其记录为已过期。
+
+每个访问密钥最多可同时有 100 个待处理请求。其中，一位 Home Assistant 用户通过语音智能体、Assist 或 AI 任务最多可有 10 个。再次提出已在等待的同一请求不会新增请求。
 
 ## 你批准后会发生什么 {#approve}
 

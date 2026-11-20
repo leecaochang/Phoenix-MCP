@@ -20,7 +20,9 @@ Related: [Deny, Allow, and Confirm](guide:window.capabilities#modes)
 
 ## How long a request waits {#expiry}
 
-A pending request expires after one hour. Once it has, {{label:workspace.review}} offers only **{{label:approvals.reject}}**. Rejecting it records it as expired. Each access key can have up to 100 pending requests at once.
+A pending request expires after one hour. Once it has, {{label:workspace.review}} offers only **{{label:approvals.reject}}**. Rejecting it records it as expired.
+
+Each access key can have up to 100 pending requests at once. One Home Assistant user can have up to 10 of them through the Voice Agent, Assist, or AI Task. Asking again for a request that's already waiting doesn't add another.
 
 ## What happens when you approve {#approve}
 

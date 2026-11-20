@@ -954,6 +954,9 @@ Z2M_DEVICE_OPTIONS_RESPONSE_TIMEOUT_SECONDS = 5.0
 
 # Pending-approval queue limits.
 MAX_PENDING_APPROVALS_PER_ACCESS_KEY = 100
+# Of those, what one Home Assistant user may queue through Voice, Assist or AI Task, so a household
+# member cannot take every slot of a shared key.
+MAX_PENDING_APPROVALS_PER_HOUSEHOLD_USER = 10
 APPROVAL_DEFAULT_TTL_SECONDS = 3600
 APPROVAL_SWEEP_INTERVAL = datetime.timedelta(minutes=5)
 

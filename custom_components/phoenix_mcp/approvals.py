@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -18,7 +19,8 @@ from .capability import effective_cap
 from .redaction import redact_structure
 from .const import (
     APPROVAL_DEFAULT_TTL_SECONDS, CONFIG_RECOVERY_APPROVAL_ACCESS_KEY, DOMAIN,
-    MAX_PENDING_APPROVALS_PER_ACCESS_KEY, APPROVAL_HISTORY_LIMIT, APPROVAL_HISTORY_DAYS,
+    MAX_PENDING_APPROVALS_PER_ACCESS_KEY, MAX_PENDING_APPROVALS_PER_HOUSEHOLD_USER, APPROVAL_HISTORY_LIMIT,
+    APPROVAL_HISTORY_DAYS,
     APPROVAL_PAYLOAD_RETENTION_SECONDS, CAP_ALLOW, CAP_CONFIRM, CAP_DENY,
 )
 from .request_authority import acting_model, household_authority, check_request_authority, request_authority
@@ -90,7 +92,16 @@ REASON_OAUTH_SIGN_IN_ENDED = "oauth_sign_in_ended"
 
 
 class PendingApprovalCapacityError(Exception):
-    """Raised when an access key already holds MAX_PENDING_APPROVALS_PER_ACCESS_KEY entries."""
+    """Raised when an access key, or one household user of it, holds the most pending approvals it may.
+
+    ``household`` tells the two apart, and ``limit`` is the cap that was reached.
+    """
+
+    def __init__(self, message: str, *, limit: int = MAX_PENDING_APPROVALS_PER_ACCESS_KEY,
+                 household: bool = False) -> None:
+        super().__init__(message)
+        self.limit = limit
+        self.household = household
 
 
 @dataclass
@@ -131,6 +142,9 @@ class PendingApproval:
     provider_model: tuple[str, str] | None = None
     # credential_generation() of the key when queued; None matches any generation.
     credential_generation: str | None = None
+    # Set on the record async_create_pending_approval returns for a repeat of a pending request,
+    # so nothing announces it twice. Never stored.
+    reused: bool = field(default=False, compare=False)
 
     def to_dict(self, redact_args: bool = True) -> dict:
         """Serialize the approval, redacting args unless ``redact_args`` is False.
@@ -259,6 +273,11 @@ def _queuing_sign_in(access_key_id: str) -> tuple[str | None, dict[str, str] | N
     return authority.oauth_grant_id, (None if grant is None else grant.audit_label())
 
 
+def _request_fingerprint(tool_name: Any, args: Any) -> str:
+    """The action a pending approval would run: its tool and exact arguments, bindings included."""
+    return hashlib.sha256(json.dumps([tool_name, args], sort_keys=True, default=str).encode()).hexdigest()
+
+
 def _new_approval_id() -> str:
     return f"appr_{uuid.uuid4().hex[:16]}"
 
@@ -281,21 +300,41 @@ async def async_create_pending_approval(
 
     A key's request passes ``access_key``, whose secret the approval is bound to; the OAuth
     sign-in comes from the request's authority. Caller must hold store.async_lock if creating
-    from a multi-step path. Raises PendingApprovalCapacityError at the per-access-key cap.
+    from a multi-step path. A household user's repeat of an action still pending returns that
+    approval with ``reused`` set. Raises PendingApprovalCapacityError at the per-access-key
+    cap, or a household user's MAX_PENDING_APPROVALS_PER_HOUSEHOLD_USER.
     """
     raw = store.get_pending_approvals()
-    pending_for_access_key = sum(
-        1 for entry in raw
-        if entry.get("access_key_id") == access_key_id and entry.get("status") == STATUS_PENDING
-    )
-    if pending_for_access_key >= MAX_PENDING_APPROVALS_PER_ACCESS_KEY:
-        raise PendingApprovalCapacityError(
-            f"access key {access_key_id} already has {pending_for_access_key} pending approvals"
-        )
-
     household = household_authority.get()
     sign_in_id, oauth_app = _queuing_sign_in(access_key_id)
+    generation = None if access_key is None or household is not None else credential_generation(access_key)
+    household_user = household.user_id if household is not None else None
     now = utcnow()
+    pending = [entry for entry in raw
+               if entry.get("access_key_id") == access_key_id and entry.get("status") == STATUS_PENDING]
+    # A person repeating a spoken or typed request while it waits gets that approval back. An agent
+    # sending the same call twice means it twice (an increment, a toggle), so its calls stay apart.
+    fingerprint = _request_fingerprint(tool_name, args)
+    for entry in pending if household is not None else ():
+        expires = parse_datetime(entry.get("expires_at") or "")
+        if (_request_fingerprint(entry.get("tool_name"), entry.get("args")) == fingerprint
+                and entry.get("household_request") and entry.get("ha_user_id") == household_user
+                and expires is not None and expires > now):
+            existing = PendingApproval.from_dict(entry)
+            existing.reused = True
+            return existing
+    if len(pending) >= MAX_PENDING_APPROVALS_PER_ACCESS_KEY:
+        raise PendingApprovalCapacityError(
+            f"access key {access_key_id} already has {len(pending)} pending approvals"
+        )
+    if household is not None:
+        mine = sum(1 for entry in pending
+                   if entry.get("household_request") and entry.get("ha_user_id") == household.user_id)
+        if mine >= MAX_PENDING_APPROVALS_PER_HOUSEHOLD_USER:
+            raise PendingApprovalCapacityError(
+                f"this household user already has {mine} pending approvals on access key {access_key_id}",
+                limit=MAX_PENDING_APPROVALS_PER_HOUSEHOLD_USER, household=True)
+
     approval = PendingApproval(
         id=_new_approval_id(),
         access_key_id=access_key_id,
@@ -317,7 +356,7 @@ async def async_create_pending_approval(
         oauth_app=oauth_app,
         provider_model=acting_model.get(),
         # A household request was made by a Home Assistant user, not with the key's secret.
-        credential_generation=None if access_key is None or household is not None else credential_generation(access_key),
+        credential_generation=generation,
     )
     raw.append(approval.to_dict(redact_args=False))
     store.set_pending_approvals(raw)
@@ -692,6 +731,8 @@ def audit_closed_approvals(
 
 def fire_approval_requested_event(hass: HomeAssistant, approval: PendingApproval) -> None:
     """Fire an HA event when a new approval is queued."""
+    if approval.reused:
+        return  # announced when it was queued
     approval_event(hass, approval)
     hass.bus.async_fire(
         f"{DOMAIN}_approval_requested",
@@ -751,6 +792,8 @@ def create_approval_notification(hass: HomeAssistant, approval: PendingApproval)
     Suppressed when the admin has turned off approval notifications
     (settings.notify_on_approval). The in-panel Approvals badge still updates.
     """
+    if approval.reused:
+        return  # announced when it was queued
     data = hass.data.get(DOMAIN)
     if data is not None and not data.store.get_settings().notify_on_approval:
         return
