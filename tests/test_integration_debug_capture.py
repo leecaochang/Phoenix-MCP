@@ -188,3 +188,96 @@ async def test_archiving_the_raising_key_ends_its_capture(hass, capture):
     capture.forget(shared)
     assert capture.domains == set() and not capture.records
     assert capture not in logging.getLogger("homeassistant.components.hue").handlers
+
+
+async def _raised_by_phoenix(hass, domain: str = "demo"):
+    """Raise `domain` to DEBUG through Phoenix's manager on the real logger and capture it for OWNER."""
+    from homeassistant.setup import async_setup_component
+
+    from custom_components.phoenix_mcp.logger_control import IntegrationOverride, async_get_logger_override_manager
+
+    assert await async_setup_component(hass, "logger", {})
+    manager = await async_get_logger_override_manager(hass)
+    await manager.async_set(domain=domain, desired=IntegrationOverride("DEBUG", "none"),
+                            prior=manager.adapter.get_override(domain),
+                            loggers=await manager.adapter.declared_loggers(domain), owner_access_key_id=OWNER,
+                            duration_minutes=None)
+    handler = async_attach_debug_capture(hass)
+    async_update_debug_capture(hass, domain, "DEBUG", OWNER, manager.adapter.setting_witness(domain))
+    return handler, manager
+
+
+async def _set_outside_phoenix(hass, domain: str, level: str) -> None:
+    """Change the level the way the Logger settings page does."""
+    from homeassistant.components.logger.helpers import DATA_LOGGER, LoggerSetting
+
+    await hass.data[DATA_LOGGER].settings.async_update(hass, domain, LoggerSetting(level, "none", "integration"))
+
+
+@pytest.mark.parametrize("outside", [["WARNING", "DEBUG"], ["DEBUG"]])
+async def test_someone_elses_raise_never_feeds_an_old_capture(hass, hass_admin_user, outside):
+    """Lowered and raised again (or raised again at the same level) in Home Assistant: the old owner reads none of it."""
+    handler, _ = await _raised_by_phoenix(hass)
+    demo = logging.getLogger("homeassistant.components.demo")
+    try:
+        demo.debug("written while Phoenix held the raise")
+        assert handler.newest({"demo"}, None, OWNER)
+        for level in outside:
+            await _set_outside_phoenix(hass, "demo", level)
+        demo.debug("an administrator troubleshooting: lock.front_door unlocked by keypad user 3")
+        assert not any("keypad" in row[4] for row in handler.records)
+        _, body = await _read(hass, _key(), integration="demo")
+        assert body["entries"] == [] and body["source"]["capturing"] == []
+        assert handler.domains == set() and capture_not_attached(handler, demo)
+    finally:
+        async_detach_debug_capture(hass)
+
+
+def capture_not_attached(handler, logger) -> bool:
+    return handler not in logger.handlers
+
+
+async def test_a_level_changed_by_the_logger_action_ends_the_capture_at_the_next_check(hass, hass_admin_user):
+    """logger.set_level changes levels without touching the stored setting, so the periodic check catches it."""
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant.common import async_fire_time_changed
+
+    from custom_components.phoenix_mcp.const import DEBUG_CAPTURE_RECHECK_SECONDS
+
+    handler, _ = await _raised_by_phoenix(hass)
+    demo = logging.getLogger("homeassistant.components.demo")
+    try:
+        assert handler.unsubscribe_recheck is not None
+        await hass.services.async_call("logger", "set_level", {"homeassistant.components.demo": "warning"},
+                                       blocking=True)
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=DEBUG_CAPTURE_RECHECK_SECONDS + 1))
+        await hass.async_block_till_done()
+        assert handler.domains == set()
+        assert handler.unsubscribe_recheck is None
+        await hass.services.async_call("logger", "set_level", {"homeassistant.components.demo": "debug"},
+                                       blocking=True)
+        demo.debug("someone else's session")
+        assert handler.records == deque()
+    finally:
+        async_detach_debug_capture(hass)
+
+
+async def test_another_key_raising_through_phoenix_keeps_the_first_capture(hass, hass_admin_user):
+    """Phoenix's own raise is not an outside change: both keys keep capturing."""
+    handler, manager = await _raised_by_phoenix(hass)
+    other = str(uuid.uuid4())
+    try:
+        from custom_components.phoenix_mcp.logger_control import IntegrationOverride
+
+        await manager.async_set(domain="demo", desired=IntegrationOverride("DEBUG", "none"),
+                                prior=manager.adapter.get_override("demo"),
+                                loggers=await manager.adapter.declared_loggers("demo"), owner_access_key_id=other,
+                                duration_minutes=None)
+        async_update_debug_capture(hass, "demo", "DEBUG", other, manager.adapter.setting_witness("demo"))
+        logging.getLogger("homeassistant.components.demo").debug("both keys raised this")
+        assert handler.reconcile() == set()
+        assert handler.newest({"demo"}, None, OWNER) and handler.newest({"demo"}, None, other)
+    finally:
+        async_detach_debug_capture(hass)

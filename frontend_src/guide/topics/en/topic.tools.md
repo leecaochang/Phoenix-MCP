@@ -225,7 +225,9 @@ Every tool in this group, with its parameters: [Tool Reference](guide:topic.tool
 - System log read covers warnings and errors, the logbook, and notifications. The fault log and captured debug records also need Diagnostics.
 - Integration log levels changes how much an integration logs, such as turning on debug logging. A change can end after 5 to 120 minutes, last until the next restart, or stay until cleared.
 
-Only the key that turned an integration up reads its debug records, and only those written since. Capture stops when the level goes back down, Home Assistant restarts, or you revoke the key. Debug logging you turned on yourself stays out of their reach.
+Only the key that turned an integration up reads its debug records, and only those written since. Capture stops when the level goes back down, Home Assistant restarts, or you revoke the key.
+
+Capture also stops when the integration's level is changed outside Phoenix, even to the same level. Debug logging you turned on yourself stays out of their reach.
 
 Entity IDs the key can't read show as `<redacted-entity>` in log and logbook text, such as what triggered an automation.
 

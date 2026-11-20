@@ -25,7 +25,9 @@ from ..const import (
     MAX_SEARCH_QUERY_LEN,
 )
 from ..data import PhoenixData
-from ..debug_capture import DEBUG_CAPTURE_RUNTIME_KEY, async_update_debug_capture, integration_domain
+from ..debug_capture import (
+    DEBUG_CAPTURE_RUNTIME_KEY, async_reconcile_debug_capture, async_update_debug_capture, integration_domain,
+)
 from ..fault_log import async_fault_log_query
 from ..helpers import parse_time_param as _parse_time_param
 from ..tool_input import str_arg
@@ -264,6 +266,8 @@ def _integration_debug_query(args: dict, access_key: AccessKeyRecord, hass: Home
     domains = _visible_logger_domains(access_key, hass)
     if integration := (args.get("integration") or "").strip():
         domains = domains & {integration}
+    # A level changed outside Phoenix ends its capture before anything is read.
+    async_reconcile_debug_capture(hass)
     capture = hass.data.get(DEBUG_CAPTURE_RUNTIME_KEY)
     source: dict[str, Any] = {"kind": "integration_debug_capture",
                               "levels": ["INFO", "DEBUG"], "capacity": DEBUG_CAPTURE_CAPACITY}
@@ -290,8 +294,9 @@ def _integration_debug_query(args: dict, access_key: AccessKeyRecord, hass: Home
                    "capturing": sorted(capture.domains_for(access_key.id) & domains),
                    "note": "Only records below WARNING appear here, from integrations this access key "
                            "raised to INFO or DEBUG with set_integration_log_level since Home Assistant "
-                           "started, and only those written while it held the raise. Other access keys "
-                           "cannot read them. WARNING and above are in source system_log."},
+                           "started, and only those written while it held the raise. A level change made "
+                           "outside Phoenix ends the capture. Other access keys cannot read them. WARNING "
+                           "and above are in source system_log."},
         "count": len(entries), "has_more": has_more,
         "next_cursor": str(entries[-1]["sequence"]) if has_more and entries else None,
         "entries": entries,
@@ -823,9 +828,10 @@ def _capture_resumes(
     """Whether setting an unchanged INFO or DEBUG level would start capturing its records for `owner`.
 
     The capture is held in memory, so a restart or reload ends it while a lasting override
-    stays, and it belongs to the keys that raised it. Asking again for the same level is then a
-    fresh raise, gated like any other.
+    stays, and it belongs to the keys that raised it; a level changed outside Phoenix has ended
+    it too. Asking again for the same level is then a fresh raise, gated like any other.
     """
+    async_reconcile_debug_capture(hass)
     capture = hass.data.get(DEBUG_CAPTURE_RUNTIME_KEY)
     return (after is not None and after.level in ("DEBUG", "INFO")
             and capture is not None and not capture.captures_for(domain, owner))
@@ -904,11 +910,12 @@ async def _execute_set_integration_log_level(
         )
         effective = manager.adapter.effective_levels(loggers)
         current = manager.adapter.get_override(domain)
+        witness = manager.adapter.setting_witness(domain)
     except (LoggerControlUnavailable, OSError):
         _LOGGER.exception("set_integration_log_level failed for %s", domain)
         return _tool_error("Failed to update integration log level."), "invalid_request", f"integration:{domain}"
     # Only a level Phoenix itself raised is captured for source integration_debug.
-    async_update_debug_capture(hass, domain, current.level if current else None, access_key.id)
+    async_update_debug_capture(hass, domain, current.level if current else None, access_key.id, witness)
     timed = manager.active(domain)
     capture = hass.data.get(DEBUG_CAPTURE_RUNTIME_KEY)
     return _tool_success(json.dumps({

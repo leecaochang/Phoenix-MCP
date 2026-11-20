@@ -138,6 +138,8 @@ REGISTRY_ID_HINT_MAX = 50
 # Integration INFO/DEBUG records kept in memory for get_logs source=integration_debug.
 DEBUG_CAPTURE_CAPACITY = 1000
 DEBUG_CAPTURE_MAX_CHARS = 2000
+# How often a running capture checks that the level Phoenix raised is still the one Home Assistant holds.
+DEBUG_CAPTURE_RECHECK_SECONDS = 10
 LOG_DETAIL_STALE_MESSAGE = "Invalid or stale log detail reference. Restart the query."
 # call_service reports at most this many target states after the call.
 SERVICE_RESULT_STATES_MAX = 20

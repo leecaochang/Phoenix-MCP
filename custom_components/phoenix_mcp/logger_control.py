@@ -133,6 +133,15 @@ class LoggerCompatibilityAdapter:
             level=str(value.level), persistence=str(value.persistence)
         )
 
+    def setting_witness(self, domain: str) -> tuple[dict[str, Any], Any]:
+        """Home Assistant's stored integration settings and the object it holds for `domain` now.
+
+        Home Assistant stores a new object for every change, so a capture compares this one
+        by identity to notice a change made outside Phoenix, even to the same level.
+        """
+        _settings, logs = self._settings_and_logs()
+        return logs, logs.get(domain)
+
     async def declared_loggers(self, domain: str) -> set[str]:
         try:
             # Local: optional component, imported only when this path runs.
