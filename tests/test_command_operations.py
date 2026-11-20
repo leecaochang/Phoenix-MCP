@@ -13,6 +13,7 @@ from homeassistant.components.media_player import MediaPlayerEntityFeature
 from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.setup import async_setup_component
 
+from custom_components.phoenix_mcp.routing.routing_tables import CHAT_ROUTED_REPLY_KEY
 from custom_components.phoenix_mcp import agent_chat, tool_dispatch, voice_agent
 from custom_components.phoenix_mcp.llm import base as llm_base
 from custom_components.phoenix_mcp.tools import service as service_tools
@@ -105,7 +106,7 @@ async def test_exact_values_reach_existing_service_without_either_model(hass, nu
         assert result == reply
     else:
         assert result[0] == {"role": "user", "content": home.sentence.format(value=value)}
-        assert result[-1] == {"role": "assistant", "content": reply}
+        assert result[-1] == {"role": "assistant", "content": reply, CHAT_ROUTED_REPLY_KEY: True}
     assert not home.data.agent_recovery.records(home.access_key.id)
 
 
