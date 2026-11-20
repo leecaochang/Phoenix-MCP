@@ -9,7 +9,7 @@ Simple commands like "turn off the kitchen light" don't need a full AI model. Wh
 2. The decision provider, if you use one. It handles the commands sentence matching missed.
 3. Your AI model, for everything else, just as without command handling.
 
-Once a step carries out a command, the later steps aren't used. When sentence matching or the decision provider changes something, the reply names the action that ran, so you hear what happened.
+Once a step carries out a command, the later steps aren't used. When sentence matching or the decision provider changes something, the reply names the action that ran, so you hear what happened. When one reads a state, the reply names the device it read, such as "Desk lamp: Off."
 
 Before the decision provider carries out a command, Phoenix also asks it whether you asked for the action now. If it judges a command negated, quoted, put off, or conditional, the command goes to your AI model instead. For example, "don't turn on the bed light" goes to your AI model.
 
@@ -31,7 +31,7 @@ A follow-up that says "it" instead of naming the device, such as "Now turn it of
 
 The decision provider picks the action from your words. Phoenix checks that you named the device, but it can't check the action. So the decision provider only runs actions that are easy to undo, or that take their value from your words:
 
-- Reading a state or an attribute
+- Reading a state or an attribute of a device you name
 - Lights, switches, fans, and media players
 - Timers
 - Stopping a cover or valve, and pausing or docking a vacuum or mower

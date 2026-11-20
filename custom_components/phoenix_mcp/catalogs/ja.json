@@ -3321,7 +3321,7 @@
     "local_pending": "このコマンドには Phoenix MCP パネルでの承認が必要です。",
     "local_review": "コマンドを確認",
     "local_failed": "Phoenix MCP はこのコマンドを完了できませんでした。",
-    "local_state": "状態は {state} です。",
+    "local_state": "{name}：{state}。",
     "local_read_failed": "Phoenix MCP は状態を読み取れませんでした。",
     "local_cancelled": "キャンセルしました。",
     "local_unauthorized": "このアクセスキーは認可されなくなりました。",

@@ -3321,7 +3321,7 @@
     "local_pending": "Questo comando richiede l’approvazione nel pannello di Phoenix MCP.",
     "local_review": "Esamina comando",
     "local_failed": "Phoenix MCP non ha potuto completare questo comando.",
-    "local_state": "Lo stato è {state}.",
+    "local_state": "{name}: {state}.",
     "local_read_failed": "Phoenix MCP non ha potuto leggere lo stato.",
     "local_cancelled": "Annullato.",
     "local_unauthorized": "Questa chiave di accesso non è più autorizzata.",

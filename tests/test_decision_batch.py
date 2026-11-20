@@ -19,6 +19,7 @@ from custom_components.phoenix_mcp.routing.routing_tables import (
     DECISION_MAX_TARGET_BYTES, DECISION_BATCH_MAX_TARGET_BYTES, DECISION_GROUPED_MAX_TARGETS,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
+from custom_components.phoenix_mcp.routing import decision_batch
 from custom_components.phoenix_mcp.routing.decision_batch import async_preview_batch, capture_batch_targets
 from custom_components.phoenix_mcp.routing.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.routing.decision_types import DecisionError
@@ -598,7 +599,9 @@ async def test_categorical_catalog_bounds_follow_qualified_account(hass, batch_h
         assert all(len(criteria) <= 255 for criteria in partitions)
         assert {item['entity_id'] for item in wire_targets(payload).values()} == expected
         return wire_response(payload, 'state_query', 't0')
+    # Catalog bounds alone: every sensor shares one name, so the identity proof is lifted here.
     with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
+          patch.object(decision_batch, 'explicit_write_target', return_value=True),
           patch_readers('custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp') as dispatch):
         result = await preview(hass, batch_home)
     admitted = count <= (DECISION_GROUPED_MAX_TARGETS if qualified else DECISION_MAX_TARGETS)
@@ -649,7 +652,9 @@ async def test_large_operation_snapshot_uses_packed_budget_without_hiding_target
         payload = args[4]
         assert {target['entity_id'] for target in wire_targets(payload).values()} == expected
         return wire_response(payload, 'state_query', 't0')
-    with patch.object(DecisionProvider, '_request', side_effect=response) as request:
+    # The packed budget alone: the preview sentence names none of these sensors.
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
+          patch.object(decision_batch, 'explicit_write_target', return_value=True)):
         result = await preview(hass, batch_home)
     request.assert_awaited_once()
     assert result['reason'] == 'target_selected' and result['executed'] is False
@@ -759,7 +764,11 @@ async def test_grouped_catalog_prepares_plan_only_while_all_competitors_remain_c
     provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
     snapshot = capture_batch_targets(hass, access_key, extended=True)
     assert len(snapshot[0]) == 255
-    winner = list(snapshot[0])[-1]
+    # Named by an alias without digits: a number in the sentence would make it a numeric request.
+    winner_entity = snapshot[0][list(snapshot[0])[-1]]['entity_id']
+    registry.async_update_entity(winner_entity, aliases={'Reading nook'})
+    snapshot = capture_batch_targets(hass, access_key, extended=True)
+    winner = next(key for key, item in snapshot[0].items() if item['entity_id'] == winner_entity)
     async def response(*args):
         payload = args[4]
         result = wire_response(payload, 'state_query', 'none')
@@ -774,12 +783,13 @@ async def test_grouped_catalog_prepares_plan_only_while_all_competitors_remain_c
         if change == 'authority':
             access_key.permissions = PermissionTree()
         return result
+    sentence = 'Is the Reading nook on?'
     with patch.object(provider, '_request', side_effect=response) as request:
         if change:
             with pytest.raises(DecisionError, match='targets_changed|authority_changed'):
-                await async_prepare_batch(hass, authority, provider, None, 'Read the named lamp', 'en', 'chat')
+                await async_prepare_batch(hass, authority, provider, None, sentence, 'en', 'chat')
         else:
-            _, result = await async_prepare_batch(hass, authority, provider, None, 'Read the named lamp', 'en', 'chat')
+            _, result = await async_prepare_batch(hass, authority, provider, None, sentence, 'en', 'chat')
             assert result['reason'] == 'target_selected'
             assert result['_plan']['decision_batch']['catalog'] == batch_catalog_digest(snapshot)
             assert result['proposal']['entity_ids'] == [snapshot[0][winner]['entity_id']]

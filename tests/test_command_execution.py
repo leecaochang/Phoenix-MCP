@@ -78,7 +78,7 @@ async def test_local_voice_dispatches_exactly_once_without_model(hass, local_hom
 async def test_local_state_read_and_provider_fallback(hass, local_home):
     data, _, _ = local_home
     answer, build, _ = await run_voice(hass, data, "what is the state of the desk lamp", language="en")
-    assert answer == "The state is Off."
+    assert answer == "Desk lamp: Off."
     build.assert_not_called()
     answer, _, provider = await run_voice(hass, data, "why is the desk lamp off", language="en")
     assert answer == "Provider answer"
@@ -357,7 +357,7 @@ async def test_multilingual_voice_approval_rechecks_language_selection(hass, loc
     assert call.await_count == (0 if remove_language else 1)
 
 
-@pytest.mark.parametrize("language,expected", [("zh-Hans", "状态为 关闭。"), ("es", "El estado es Apagado.")])
+@pytest.mark.parametrize("language,expected", [("zh-Hans", "Desk lamp：关闭。"), ("es", "Desk lamp: Apagado.")])
 async def test_command_state_reply_localizes_prose_and_ha_state(hass, local_home, language, expected):
     data, access_key, entity_id = local_home
     await data.store.async_patch_settings(command_routing_languages=[language])
@@ -463,7 +463,7 @@ async def test_attribute_read_uses_existing_scrubbed_read_dispatch_and_no_write_
     authority = RoutingAuthority.capture(data, access_key)
     with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
         answer = await async_execute_local_command(hass, data, access_key, proposal, authority, '', language='en')
-    assert answer == 'The state is 36.9%.'
+    assert answer == 'light.test_desk: 36.9%.'
     call.assert_not_called()
     assert await async_execute_local_command(hass, data, access_key, {**proposal, 'value': 'access_token'}, authority, '') is None
     access_key.permissions.domains['light'].state = 'RED'
@@ -485,7 +485,7 @@ async def test_attribute_read_plan_rejects_removed_attribute_before_dispatch(has
 
 @pytest.mark.parametrize('value,expected', [
     (None, 'Home Assistant is not reporting a value for the requested property right now.'),
-    (0, 'The state is 0%.'),
+    (0, 'light.test_desk: 0%.'),
     ('invalid', 'Phoenix MCP could not read the state.'),
 ])
 async def test_attribute_read_distinguishes_absent_value_from_zero_and_invalid(hass, local_home, value, expected):

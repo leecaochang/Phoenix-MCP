@@ -3321,7 +3321,7 @@
     "local_pending": "Esta orden requiere aprobación en el panel de Phoenix MCP.",
     "local_review": "Revisar orden",
     "local_failed": "Phoenix MCP no pudo completar esta orden.",
-    "local_state": "El estado es {state}.",
+    "local_state": "{name}: {state}.",
     "local_read_failed": "Phoenix MCP no pudo leer el estado.",
     "local_cancelled": "Cancelado.",
     "local_unauthorized": "Esta clave de acceso ya no está autorizada.",

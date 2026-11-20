@@ -244,6 +244,9 @@ COMMAND_ROUTING_SHARED_SERVICES = frozenset(
 # Read selection reuses known public state projections, never writable service fields.
 _COMMAND_ROUTING_ENTITY_COMMANDS["attribute_read"] = ('', '', 'attribute', '__read_attributes__', '', '')
 COMMAND_ROUTING_READ_INTENTS = frozenset({"HassGetState", "PhoenixEntityAttributeRead", "PhoenixStateSummary"})
+# A collection summary says what it counted; a single-entity read needs the same proof of which entity
+# was meant as a write, since its answer names only a state.
+COMMAND_ROUTING_UNPROVEN_INTENTS = frozenset({"PhoenixStateSummary"})
 COMMAND_ROUTING_READ_PERCENT_SCALES = MappingProxyType({
     "brightness": (("light",), 255), "volume_level": (("media_player",), 1),
     "current_position": (("cover", "valve"), 100), "current_tilt_position": (("cover",), 100),

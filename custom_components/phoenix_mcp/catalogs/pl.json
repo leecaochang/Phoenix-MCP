@@ -21,7 +21,7 @@
     "local_pending": "To polecenie wymaga zatwierdzenia w panelu Phoenix MCP.",
     "local_review": "Sprawdź polecenie",
     "local_failed": "Phoenix MCP nie mógł wykonać tego polecenia.",
-    "local_state": "Stan to {state}.",
+    "local_state": "{name}: {state}.",
     "local_read_failed": "Phoenix MCP nie mógł odczytać stanu.",
     "local_cancelled": "Anulowano.",
     "local_unauthorized": "Ten klucz dostępu nie jest już autoryzowany.",

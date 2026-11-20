@@ -187,7 +187,7 @@ def test_backend_rendered_mismatch_keeps_the_english(tmp_path, monkeypatch, tran
     assert catalog_text.notification_text(_GermanHass(), "rate_limit.message", access_key="k1") == (
         "Phoenix MCP: access key 'k1' has hit its rate limit."
     )
-    assert catalog_text.voice_text("de", "local_state", state="an") == "The state is an."
+    assert catalog_text.voice_text("de", "local_state", name="Lampe", state="an") == "Lampe: an."
 
 
 def test_backend_rendered_matching_translation_is_used(tmp_path, monkeypatch) -> None:
@@ -197,13 +197,13 @@ def test_backend_rendered_matching_translation_is_used(tmp_path, monkeypatch) ->
         monkeypatch,
         de={
             "notification": {"rate_limit.message": "Schlüssel '{access_key}' am Limit."},
-            "voice": {"local_state": "Der Zustand ist {state}."},
+            "voice": {"local_state": "{name} ist {state}."},
         },
     )
     assert catalog_text.notification_text(_GermanHass(), "rate_limit.message", access_key="k1") == (
         "Schlüssel 'k1' am Limit."
     )
-    assert catalog_text.voice_text("de", "local_state", state="an") == "Der Zustand ist an."
+    assert catalog_text.voice_text("de", "local_state", name="Lampe", state="an") == "Lampe ist an."
 
 
 def test_a_plural_category_english_lacks_is_checked_against_its_other_form(tmp_path, monkeypatch) -> None:

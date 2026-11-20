@@ -459,7 +459,7 @@ VOICE_TEMPLATES: Mapping[str, str] = MappingProxyType({
     # Link label after a typed Assist reply that queued approvals (not spoken).
     "approval_link": "Approve in the Phoenix MCP panel",
     "local_failed": "Phoenix MCP could not complete this command.",
-    "local_state": "The state is {state}.",
+    "local_state": "{name}: {state}.",
     "local_state_unknown": "Unknown",
     "local_state_unavailable": "Unavailable",
     'local_summary_count': 'Entities exposed to Assist that I can access, with state {state}: {matched} of {total}. Unknown or unavailable: {unknown}.',

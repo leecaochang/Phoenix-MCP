@@ -3362,7 +3362,7 @@
     "local_pending": "Denne kommando kræver godkendelse i Phoenix MCP-panelet.",
     "local_read_failed": "Phoenix MCP kunne ikke læse tilstanden.",
     "local_review": "Gennemgå kommando",
-    "local_state": "Tilstanden er {state}.",
+    "local_state": "{name}: {state}.",
     "local_state_matched": "Home Assistant rapporterer den ønskede tilstand.",
     "local_state_unavailable": "Utilgængelig",
     "local_state_unconfirmed": "Kommandoen er sendt. Home Assistant har endnu ikke bekræftet den ønskede tilstand.",

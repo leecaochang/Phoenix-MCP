@@ -21,7 +21,7 @@ from .decision_batch import (
 from .decision_provider import registry_covers, revision_admitted, sequential_revision_admitted
 from .decision_targets import capture_sequential_targets
 from .routing_tables import (
-    COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_PLAN_KEY, COMMAND_ROUTING_READ_INTENTS,
+    COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_PLAN_KEY, COMMAND_ROUTING_READ_INTENTS, COMMAND_ROUTING_UNPROVEN_INTENTS,
     COMMAND_ROUTING_VALUE_INTENTS, DECISION_BATCH_EXECUTION_MODELS,
     DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_CONTEXT_EXECUTION_MODELS,
     DECISION_EXECUTION_CATEGORIES, DECISION_FOLLOWUP_EXECUTION_MODELS, DECISION_NUMERIC_CATEGORIES,
@@ -43,7 +43,7 @@ def _decision_plan_current(plan: dict, hass: HomeAssistant, data: Any, access_ke
     category = plan["decision_category"]
     if category in DECISION_PROVIDER_REFUSED_CATEGORIES:
         return False
-    if (plan["proposal"]["intent"] not in COMMAND_ROUTING_READ_INTENTS and "reference_review" not in plan
+    if (plan["proposal"]["intent"] not in COMMAND_ROUTING_UNPROVEN_INTENTS and "reference_review" not in plan
             and plan.get("decision_target_evidence") != _digest(plan["proposal"])):
         return False
     if category == 'state_summary' and 'decision_batch' not in plan:

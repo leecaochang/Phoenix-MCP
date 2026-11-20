@@ -66,7 +66,8 @@ async def _dispatch_command(hass: HomeAssistant, data: Any, access_key: Any, pla
         name = "get_state"
         field = "state" if proposal["intent"] == "HassGetState" else "attr." + proposal["value"]
         arguments = {"entity_id": proposal["entity_ids"][0], "projection": {
-            "kind": "fields", "fields": [field, "attr.unit_of_measurement", "attr.temperature_unit", "attr.device_class"]}}
+            "kind": "fields", "fields": [field, "attr.unit_of_measurement", "attr.temperature_unit", "attr.device_class",
+                                         "attr.friendly_name"]}}
     else:
         name = "call_service"
         service_args = service_arguments(proposal)
@@ -135,8 +136,12 @@ async def _dispatch_command(hass: HomeAssistant, data: Any, access_key: Any, pla
         current = authority.current(hass)
         if current is None or not plan_is_current(plan, hass, data, current):
             return LocalCommandReply(voice_text(language, "access_key_unavailable"), "unauthorized")
+        # The reply names what it read, so a pick of the wrong entity is heard.
+        label = attributes.get("friendly_name")
+        label = label if isinstance(label, str) and label.strip() and len(label) <= 255 else proposal["entity_ids"][0]
         if isinstance(state, str) and len(state) <= 1024:
-            return LocalCommandReply(voice_text(language, "local_state", state=state), allows_local_followup=True, statistics_completed=True)
+            return LocalCommandReply(voice_text(language, "local_state", name=label, state=state),
+                                     allows_local_followup=True, statistics_completed=True)
         return LocalCommandReply(voice_text(language, "local_read_failed"), "failed")
     if payload.get("partial") or payload.get("success") is not True:
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")

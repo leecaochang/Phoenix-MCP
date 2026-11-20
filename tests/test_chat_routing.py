@@ -306,7 +306,7 @@ async def test_chat_read_then_explicit_command_uses_local_routing(hass, executin
         provider, _, messages = await chat_turn(hass, executing_chat,
             [{'role': 'user', 'content': 'what is the state of the desk lamp'}])
         provider.stream_turn.assert_not_called()
-        assert messages[-1]['content'] == 'The state is Off.'
+        assert messages[-1]['content'] == 'Desk lamp: Off.'
         with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
               patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
             followup, _, result = await chat_turn(hass, executing_chat,
@@ -636,7 +636,7 @@ async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, 
     else:
         call.assert_not_called()
     assert messages[-1]['content'] == (
-        await decision_write_reply(hass, 'light', service, matched=service == 'turn_off') if service else 'The state is Off.')
+        await decision_write_reply(hass, 'light', service, matched=service == 'turn_off') if service else 'Desk lamp: Off.')
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
     assert data.agent_recovery.records(access_key.id) == []
     assert data.decision_shadow.summary()['chat_hybrid'] == {'evaluations': 1, 'reasons': {'plan_ready': 1}}
@@ -649,7 +649,7 @@ async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, 
 
 async def test_chat_hybrid_local_match_spends_no_decision_call(hass, hybrid_chat):
     provider, _, messages, remote = await decision_chat_turn(hass, hybrid_chat, sentence='what is the state of the desk lamp')
-    assert messages[-1]['content'] == 'The state is Off.'
+    assert messages[-1]['content'] == 'Desk lamp: Off.'
     provider.stream_turn.assert_not_called()
     remote.assert_not_called()
     assert hybrid_chat[0].decision_shadow.summary()['chat_hybrid']['evaluations'] == 0
@@ -1363,7 +1363,7 @@ async def test_qualified_jev_chat_uses_one_joint_request(hass, hybrid_chat, cate
         call.assert_awaited_once_with('light', service, {'entity_id': ['light.test_desk']}, blocking=True, return_response=False)
     else:
         call.assert_not_called()
-        assert messages[-1]['content'] == 'The state is Off.'
+        assert messages[-1]['content'] == 'Desk lamp: Off.'
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
 
@@ -1638,7 +1638,7 @@ async def test_categorical_followup_routes_with_more_than_common_catalog_limit(h
     assert not provider.stream_turn.called, data.decision_shadow.summary()
     assert seen[1]['state']['history'] == CONTEXT_HISTORY
     assert history[:2] == CONTEXT_HISTORY
-    assert history[-1]['content'] == 'The state is Off.'
+    assert history[-1]['content'] == 'Desk lamp: Off.'
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
 
 
@@ -1775,7 +1775,7 @@ async def test_repeated_references_use_exact_successful_subject_and_fresh_histor
             assert history[:len(previous)] == previous
             assert seen[-1]['state']['history'] == previous
             assert seen[-1]['state']['anchor']['source'] == 'verified_reply'
-            assert history[-1]['content'] == 'The state is Off.'
+            assert history[-1]['content'] == 'Desk lamp: Off.'
     assert remote.await_count == 6
     assert not data.command_routing.chat_history._entries
 

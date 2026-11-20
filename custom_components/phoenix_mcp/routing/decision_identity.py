@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from .routing_tables import (
-    COMMAND_ROUTING_READ_INTENTS, DECISION_TARGET_MENTION_LIMIT,
+    COMMAND_ROUTING_UNPROVEN_INTENTS, DECISION_TARGET_MENTION_LIMIT,
     DECISION_UNSEGMENTED_TARGET_LANGUAGES,
 )
 
@@ -67,14 +67,14 @@ def _mentions(text: str, entity_id: str, names: Iterable[str], unsegmented: bool
 
 def explicit_write_target(sentence: str, targets: dict, proposal: dict, language: str,
                           competitors: Iterable[tuple[str, Iterable[str]]]) -> bool:
-    """Require a unique literal identity; this is not complete intent recognition.
+    """Require a unique literal identity for a write or a single-entity read; not intent recognition.
 
     `competitors` are the names of entities outside the catalog (`identity_competitors`); one that
     covers a catalog mention refuses it, but one with exactly the mention's name only when it shares
     the chosen target's domain. Never fuzzy-match, translate names, or use area metadata.
     """
-    # Reads and independently reviewed conversation references have separate contracts.
-    if proposal['intent'] in COMMAND_ROUTING_READ_INTENTS:
+    # Collection summaries and independently reviewed conversation references have separate contracts.
+    if proposal['intent'] in COMMAND_ROUTING_UNPROVEN_INTENTS:
         return True
     ids = proposal.get('entity_ids', [])
     if len(ids) != 1:

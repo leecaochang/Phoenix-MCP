@@ -3321,7 +3321,7 @@
     "local_pending": "Dieser Befehl benötigt eine Genehmigung im Phoenix MCP-Panel.",
     "local_review": "Befehl prüfen",
     "local_failed": "Phoenix MCP konnte diesen Befehl nicht abschließen.",
-    "local_state": "Der Zustand ist {state}.",
+    "local_state": "{name}: {state}.",
     "local_read_failed": "Phoenix MCP konnte den Zustand nicht lesen.",
     "local_cancelled": "Abgebrochen.",
     "local_unauthorized": "Dieser Zugriffsschlüssel ist nicht mehr autorisiert.",

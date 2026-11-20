@@ -21,7 +21,7 @@
     "local_pending": "Для этой команды требуется одобрение в панели Phoenix MCP.",
     "local_review": "Проверить команду",
     "local_failed": "Phoenix MCP не удалось выполнить эту команду.",
-    "local_state": "Состояние: {state}.",
+    "local_state": "{name}: {state}.",
     "local_read_failed": "Phoenix MCP не удалось прочитать состояние.",
     "local_cancelled": "Отменено.",
     "local_unauthorized": "Этот ключ доступа больше не авторизован.",

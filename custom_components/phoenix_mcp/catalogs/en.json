@@ -3465,7 +3465,7 @@
     "local_pending": "This command needs approval in the Phoenix MCP panel.",
     "local_read_failed": "Phoenix MCP could not read the state.",
     "local_review": "Review command",
-    "local_state": "The state is {state}.",
+    "local_state": "{name}: {state}.",
     "local_state_matched": "Home Assistant reports the requested state.",
     "local_state_unavailable": "Unavailable",
     "local_state_unconfirmed": "Command sent. Home Assistant has not yet confirmed the requested state.",

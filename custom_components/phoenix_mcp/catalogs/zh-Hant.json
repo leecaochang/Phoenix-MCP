@@ -3321,7 +3321,7 @@
     "local_pending": "此指令需要在 Phoenix MCP 面板中核准。",
     "local_review": "檢視指令",
     "local_failed": "Phoenix MCP 未能完成此指令。",
-    "local_state": "狀態為 {state}。",
+    "local_state": "{name}：{state}。",
     "local_read_failed": "Phoenix MCP 未能讀取狀態。",
     "local_cancelled": "已取消。",
     "local_unauthorized": "此存取金鑰已不再獲得授權。",

@@ -21,7 +21,7 @@
     "local_pending": "Deze opdracht vereist goedkeuring in het Phoenix MCP-paneel.",
     "local_review": "Opdracht beoordelen",
     "local_failed": "Phoenix MCP kon deze opdracht niet voltooien.",
-    "local_state": "De status is {state}.",
+    "local_state": "{name}: {state}.",
     "local_read_failed": "Phoenix MCP kon de status niet lezen.",
     "local_cancelled": "Geannuleerd.",
     "local_unauthorized": "Deze toegangssleutel is niet langer geautoriseerd.",

@@ -69,7 +69,13 @@ def test_copied_text_value_is_not_target_identity_evidence():
 
 
 def test_identity_read_and_resource_bounds_are_explicit():
-    assert check('What is it doing?', intent='HassGetState')
+    # A single-entity read answers with a bare state, so it needs the same proof as a write.
+    assert not check('What is it doing?', intent='HassGetState')
+    assert not check('What is the battery level?', intent='PhoenixEntityAttributeRead')
+    assert check('Is Audit Lamp on?', intent='HassGetState')
+    assert check('What is the battery level of Audit Lamp?', intent='PhoenixEntityAttributeRead')
+    # A collection summary says what it counted.
+    assert check('How many lights are on?', intent='PhoenixStateSummary')
     assert not check('Audit Lamp ' * 257)
     assert not explicit_write_target('Audit Lamp', {}, {'intent': 'HassTurnOn', 'entity_ids': []}, 'en', [])
 

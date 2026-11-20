@@ -180,6 +180,7 @@ LITERALS: dict[str, tuple[str, ...]] = {
 # translated, which nothing at runtime would ever report.
 ALLOW_IDENTICAL = frozenset({
     "panel.common.labelValue",        # placeholders only: "{label}: {value}"
+    "voice.local_state",              # placeholders only: "{name}: {state}."
     "panel.settings.selectedOptionHelp",  # placeholders only: "{option}: {description}"
     "panel.settings.modelWithMode",   # "{model} ({mode})": placeholders and brackets only
     "panel.perms.colId",              # "ID"

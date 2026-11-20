@@ -127,10 +127,22 @@ async def test_state_query_uses_existing_scoped_read(hass, hybrid_home):
     access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
     with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
         answer, remote, provider = await run_voice(hass, hybrid_home, category="state_query")
-    assert answer == "The state is Off."
+    assert answer == "Desk lamp: Off."
     assert remote.await_count == 2
     call.assert_not_called()
     provider.assert_not_called()
+
+
+@pytest.mark.parametrize("sentence", ["Is it on right now?", "What is the state of the hallway light?"])
+async def test_a_state_query_whose_entity_is_not_named_goes_to_the_model(hass, hybrid_home, sentence):
+    """A read answers with a bare state, so the provider's pick needs the same naming proof as a write."""
+    _, access_key, *_ = hybrid_home
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
+    with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
+        answer, remote, provider = await run_voice(hass, hybrid_home, category="state_query", sentence=sentence)
+    assert answer == "Provider answer"
+    provider.assert_awaited_once()
+    call.assert_not_called()
 
 
 async def test_exact_local_match_spends_no_decision_request(hass, hybrid_home):
@@ -666,7 +678,7 @@ async def test_jev_joint_routes_one_request_through_existing_executor(hass, jev_
         assert "requested state" in answer
     else:
         call.assert_not_called()
-        assert answer == "The state is Off."
+        assert answer == "Desk lamp: Off."
     assert jev_hybrid_home[0].decision_shadow.summary()["hybrid"]["reasons"] == {"plan_ready": 1}
 
 
@@ -1612,7 +1624,7 @@ async def test_joint_attribute_read_reaches_scoped_read_tool_and_rechecks_change
     remote.assert_awaited_once()
     call.assert_not_called()
     if change == 'none':
-        assert answer == 'The state is 36.9%.'
+        assert answer == 'Desk lamp: 36.9%.'
         provider.assert_not_called()
     else:
         assert '36.9' not in answer
