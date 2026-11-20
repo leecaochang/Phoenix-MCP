@@ -17,7 +17,8 @@ from .command_routing import (
 )
 from .decision_shadow import async_preview_decision
 from .decision_context import async_prepare_chat_context, context_execution_eligible
-from .decision_history import context_history
+from .decision_history import context_history, without_routing_marks
+from .routing_tables import CHAT_ROUTED_REPLY_KEY
 from ..catalog_text import voice_text
 from ..home_companion import is_companion
 from ..llm.accounts import decision_account_fingerprint
@@ -43,7 +44,10 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
     assert isinstance(language, str)
     authority = RoutingAuthority.capture(data, access_key)
     binding = [access_key.id, access_key.access_key_hash, access_key.settings_version, language, authority.settings_values]
-    clarification_key = ['chat', messages[:-1]]
+    # Routing's own history checks read the transcript without the routed-reply marks; the caller's
+    # messages keep them, so the panel stores them and the conversation model gets those replies fenced.
+    plain = without_routing_marks(messages)
+    clarification_key = ['chat', plain[:-1]]
     clarification_scope = clarification_binding(hass, authority, language)
     pending = data.command_routing.clarifications.consume(clarification_key, clarification_scope) if execute else None
     followup = len(messages) != 1
@@ -51,8 +55,8 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
     if followup and pending is None:
         if not execute:
             return True
-        if not data.command_routing.chat_history.consume(messages[:-1], binding):
-            if not context_execution_eligible(hass, data, language) or context_history(messages[:-1], structured=True) is None:
+        if not data.command_routing.chat_history.consume(plain[:-1], binding):
+            if not context_execution_eligible(hass, data, language) or context_history(plain[:-1], structured=True) is None:
                 return True
             contextual = True
     snapshot = deepcopy(messages) if followup else None
@@ -69,16 +73,17 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
         else:
             if reply.pending:
                 await emit("approval_required", reply.pending)
-            messages.append({"role": "assistant", "content": reply.text})
+            messages.append({"role": "assistant", "content": reply.text, CHAT_ROUTED_REPLY_KEY: True})
+            plain.append({"role": "assistant", "content": reply.text})
             await emit("assistant_delta", {"text": reply.text})
         await emit("messages", {"messages": messages})
         await emit("done", {"stop_reason": "end_turn" if reply.outcome == "ok" else "error"})
         if (reply.allows_local_followup and reply.outcome == "ok" and not reply.pending
                 and not cancel.is_set() and authority.current(hass) is not None):
             if local:
-                data.command_routing.chat_history.remember(messages, binding)
+                data.command_routing.chat_history.remember(plain, binding)
             account = decision_account_fingerprint(hass, settings.decision_provider_id) if settings.decision_provider_id else None
-            data.command_routing.chat_history.remember_subject(messages, [binding, account], subject)
+            data.command_routing.chat_history.remember_subject(plain, [binding, account], subject)
         return False
 
     async def stop() -> bool:
@@ -114,11 +119,11 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
         request = result['_clarification']
         await finish(LocalCommandReply(clarification_prompt(language, request)), route='local')
         if not cancel.is_set() and authority.current(hass) is not None:
-            data.command_routing.clarifications.remember(['chat', messages], clarification_scope, request)
+            data.command_routing.clarifications.remember(['chat', plain], clarification_scope, request)
         return False
     if contextual:
         decision = await async_prepare_chat_context(hass, data, current, sentence, language,
-                                                    messages[:-1], result, cancel)
+                                                    plain[:-1], result, cancel)
         current = authority.current(hass)
         data.decision_shadow.observe_hybrid(decision, authority_changed=current is None, chat=True)
         if (current is None or cancel.is_set() or messages != snapshot
@@ -140,7 +145,7 @@ async def async_route_chat_command(hass: HomeAssistant, data: Any, access_key: A
                 return await stop()
         if followup and not result["proposal"] and context_execution_eligible(hass, data, language):
             decision = await async_prepare_chat_context(hass, data, current, sentence, language,
-                                                        messages[:-1], result, cancel)
+                                                        plain[:-1], result, cancel)
             current = authority.current(hass)
             data.decision_shadow.observe_hybrid(decision, authority_changed=current is None, chat=True)
             if (current is None or cancel.is_set() or messages != snapshot

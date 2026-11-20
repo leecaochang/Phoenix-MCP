@@ -11,6 +11,8 @@ Simple commands like "turn off the kitchen light" don't need a full AI model. Wh
 
 Once a step carries out a command, the later steps aren't used. When sentence matching or the decision provider changes something, the reply names the action that ran, so you hear what happened. When one reads a state, the reply names the device it read, such as "Desk lamp: Off."
 
+In Agent Chat, your AI model later reads such a reply as quoted Home Assistant data, not as its own words. So text from a device, such as a calendar title, can't act as an instruction to it.
+
 Before the decision provider carries out a command, Phoenix also asks it whether you asked for the action now. If it judges a command negated, quoted, put off, or conditional, the command goes to your AI model instead. For example, "don't turn on the bed light" goes to your AI model.
 
 Related: [Decision provider](guide:window.settingsProviders#decision-provider)

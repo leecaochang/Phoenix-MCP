@@ -254,7 +254,7 @@ Related: [Kill switch](guide:topic.killSwitch)
 | `model` | string | Optional. Overrides the account's model for this turn. |
 | `user` | string | The new message. Required unless you send `attachments` or `continue: true`. |
 | `attachments` | list | Images for this message. See [Images](guide:#chat-images). |
-| `messages` | list | The earlier turns. Phoenix doesn't keep the transcript: store the list from the `messages` event and send it back with the next turn. Each provider stores tool calls in its own format. When you change `instance_id`, start with an empty list, as Agent Chat does. |
+| `messages` | list | The earlier turns. Phoenix doesn't keep the transcript: store the list from the `messages` event and send it back with the next turn. Each provider stores tool calls in its own format. When you change `instance_id`, start with an empty list, as Agent Chat does. A reply Phoenix wrote for a routed command has `"phoenix_routed": true`. Keep it: the AI model then receives that reply as quoted data. |
 | `options` | object | Model options. See [Options](guide:#chat-options). |
 | `continue` | boolean | `true` resumes a turn paused at the round limit, without adding a message. |
 | `turn_started_at` | string | With `continue: true`, the `turn_started_at` from `continue_required`, so the model sees the same date and time as before the pause. Ignored if it isn't a past ISO 8601 time with a time zone. |

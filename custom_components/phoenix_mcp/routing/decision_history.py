@@ -7,7 +7,7 @@ import math
 from typing import Any
 
 from .routing_tables import (
-    DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES, DECISION_CONTEXT_MAX_DEPTH,
+    CHAT_ROUTED_REPLY_KEY, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES, DECISION_CONTEXT_MAX_DEPTH,
 )
 from ..policy_engine import is_sensitive_key
 
@@ -169,6 +169,14 @@ def _transcript(messages: list[dict], pending_calls: dict[str, str] | None = Non
     if pending_calls is not None:
         return bool(pending) and pending == pending_calls
     return expected == "user" and not pending
+
+
+def without_routing_marks(messages: Any) -> Any:
+    """A copy whose messages no longer carry CHAT_ROUTED_REPLY_KEY, for checks and providers."""
+    if not isinstance(messages, list):
+        return messages
+    return [{key: value for key, value in message.items() if key != CHAT_ROUTED_REPLY_KEY}
+            if isinstance(message, dict) else message for message in messages]
 
 
 def without_thinking(messages: Any) -> Any:

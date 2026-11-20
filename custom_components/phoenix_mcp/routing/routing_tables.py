@@ -36,6 +36,10 @@ COMMAND_CLARIFICATION_CANCEL = frozenset({'cancel', 'never mind', 'nevermind', '
 CHAT_ROUTING_HISTORY_TTL_SECONDS = 1800
 CHAT_ROUTING_HISTORY_MAX_MESSAGES = 128
 CHAT_ROUTING_HISTORY_MAX_BYTES = 65536
+# Marks an assistant message Phoenix wrote for a routed Agent Chat command. It carries device text
+# (a state, a calendar title), which the conversation model receives fenced as data and never as its
+# own words; routing's history checks and every provider see the message without the mark.
+CHAT_ROUTED_REPLY_KEY = "phoenix_routed"
 # Canonical routing tags map to the HA sentence variant; previews use the same set.
 _COMMAND_ROUTING_LANGUAGES = {language: language for language in _assist_languages()}
 _COMMAND_ROUTING_LANGUAGES.update({"zh-Hans": "zh-CN", "zh-Hant": "zh-TW"})

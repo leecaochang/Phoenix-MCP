@@ -18,7 +18,7 @@ from .agent_turn import (
     _after_dispatch_failure, _AGENT_CHAT_ADDENDUM, _agentcli_time_context,
     _agentcli_time_guidance, _clip_display, _consume_model_stream,
     _conversation_behavior_prompt, _current_dispatch_access_key, _DETAIL_INSTRUCTIONS,
-    _home_focus_output_contract, _kill_switch_on, _review_stop_error, _run_headless_turn,
+    _home_focus_output_contract, _kill_switch_on, _model_messages, _review_stop_error, _run_headless_turn,
     _run_tool_batch, _STYLE_INSTRUCTIONS, _with_time_context, HeadlessUsage, TURN_AUTHORITY_LOST,
     TURN_EXHAUSTED, TURN_OUTCOME_UNKNOWN, TURN_OUTPUT_LIMIT, TURN_PROVIDER_ERROR, TURN_TRUNCATED,
     UNTRUSTED_TOOL_DATA,
@@ -255,7 +255,7 @@ async def async_run_agent_turn(
             if (key := tuple(tool["name"] for tool in definitions)) != tools_key:
                 tools, tools_key = provider.format_tools(definitions), key
         call = await _consume_model_stream(
-            provider, session, system=system, messages=_with_time_context(messages, operator, time_note),
+            provider, session, system=system, messages=_with_time_context(_model_messages(messages), operator, time_note),
             tools=tools, options=options, cancel=cancel, emit=emit,
             usage_done_input=usage_done_input, usage_done_output=usage_done_output,
             context_tokens=context_tokens, usage_done_cache=usage_done_cache,
