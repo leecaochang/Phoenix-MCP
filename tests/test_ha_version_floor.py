@@ -89,6 +89,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     },
     "homeassistant.components.http.const": {
         "KEY_AUTHENTICATED": "0.0.0",
+        "KEY_HASS_REFRESH_TOKEN_ID": "0.0.0",
         "KEY_HASS_USER": "0.0.0",
     },
     "homeassistant.components.light": {

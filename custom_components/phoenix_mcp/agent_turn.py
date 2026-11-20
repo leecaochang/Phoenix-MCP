@@ -1071,6 +1071,7 @@ async def _stream_turn_resilient(
     first_reply_seconds: float | None = None,
     call_seconds: float | None = None,
     rate_limit_wait: float | None = None,
+    authority_stop: Callable[[], dict | None] | None = None,
 ) -> AsyncIterator[dict]:
     """Wrap provider.stream_turn with a bounded retry for a transient connection failure.
     Retries only before any content, until _CONNECT_RETRY_WINDOW_SECONDS, then surfaces the
@@ -1078,6 +1079,8 @@ async def _stream_turn_resilient(
     an HTTP 429 that names its wait, after a dispatch too, while the wait ends within that many
     seconds of the start. ``first_reply_seconds`` bounds the first attempt's first event, and
     ``call_seconds`` the whole call, retries included; either ends as provider_slow, not retried.
+    Before a retry, ``authority_stop`` names the error that ends a turn whose key may no longer
+    act, which is yielded instead of sending the request again.
     """
     loop_time = asyncio.get_running_loop().time
     started = loop_time()
@@ -1172,6 +1175,9 @@ async def _stream_turn_resilient(
             await asyncio.wait_for(cancel.wait(), timeout=backoff)
         except asyncio.TimeoutError:
             pass
+        if authority_stop is not None and (stop := authority_stop()) is not None:
+            yield {"type": EV_ERROR, "status": 0, "retryable": False, **stop}
+            return
 
 
 def _failure_detail(ev: dict) -> str:
@@ -1363,6 +1369,7 @@ async def _consume_model_stream(
     dispatch_started: bool = False,
     write_started: bool = False,
     status: dict | None = None,
+    authority_stop: Callable[[], dict | None] | None = None,
 ) -> _ModelCallResult:
     """Drain one model call's normalized event stream into a result.
 
@@ -1387,6 +1394,7 @@ async def _consume_model_stream(
             provider, session, system_prompt=system, messages=messages,
             tools=tools, options=options, cancel=cancel, dispatch_started=dispatch_started,
             write_started=write_started, rate_limit_wait=AGENT_CHAT_RATE_LIMIT_WAIT_SECONDS,
+            authority_stop=authority_stop,
         ):
             if line is not None:
                 await line.observe(ev)
@@ -2233,7 +2241,7 @@ async def _settle_headless_call(
         return None
     content = result.get("content", [])
     result_text = _flatten_text(content)
-    reference = count_source(dispatch_access_key, name)
+    reference = count_source(dispatch_access_key, name, dispatch_request_id)
     if reference is not None:
         result_text = _with_read_answer(result_text, reference)
     results.append({

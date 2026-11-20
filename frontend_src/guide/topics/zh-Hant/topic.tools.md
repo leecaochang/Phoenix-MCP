@@ -265,7 +265,7 @@
 
 YAML 設定讓智慧體讀取你的 YAML 檔案，名稱中含有 secret 的檔案、esphome 資料夾和隱藏檔案除外。檔名可以使用任何語言，但含有控制字元或改變文字方向的隱藏標記的檔名會被拒絕。
 
-名稱暗示機密的值以及提到機密的註解會顯示為 `<redacted>`，但使用普通名稱的密碼可見。有 YAML 錯誤的檔案不會顯示，智慧體只會得到需要修復的行號。沒有工具會寫入 YAML 設定。
+名稱暗示機密的值以及提到機密的註解會顯示為 `<redacted>`，命令中的密碼也是如此，例如 curl 的 `-u` 或 `Authorization` 標頭。使用普通名稱的密碼可見。有 YAML 錯誤的檔案不會顯示，智慧體只會得到需要修復的行號。沒有工具會寫入 YAML 設定。
 
 允許它的能力：[{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
 

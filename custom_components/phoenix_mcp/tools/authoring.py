@@ -29,7 +29,7 @@ from homeassistant.components.automation.config import async_validate_config_ite
 from homeassistant.components.homeassistant.scene import PLATFORM_SCHEMA as _SCENE_PLATFORM_SCHEMA
 from homeassistant.components.script.config import async_validate_config_item as _validate_script_config
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.core import HomeAssistant
 from homeassistant.core import Context, State
 
@@ -37,7 +37,7 @@ from ..authoring_validation import (
     async_template_refusal, async_validation_message, authoring_input_error, validation_message,
 )
 from ..const import APPROVAL_REVIEWED_HASH_KEY, CAP_DENY, DOMAIN, TRACE_SCOPE_MAX_DEPTH
-from ..template_scope import caller_template_strings
+from ..template_scope import HelperScopeError, caller_template_strings, is_template, template_entities
 from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
 from ..helpers import content_hash
@@ -1340,41 +1340,77 @@ _TRACE_ROOTS = {"trigger": ("triggers", "trigger"), "condition": ("conditions", 
 
 
 def _trace_step_node(config: Any, path: str) -> Any:
-    """The configuration a step path evaluated (condition/0/entity_id/0), or None when unmapped."""
+    """The configuration a step path evaluated, or None when its root is unmapped.
+
+    A path that goes below what the configuration spells out (condition/0/entity_id/0 over a
+    single entity_id) maps to the deepest mapping or list it reached, which holds that part.
+    """
     segments = path.split("/")
     if not isinstance(config, dict):
         return None
     node = next((config[key] for key in _TRACE_ROOTS.get(segments[0], ()) if key in config), None)
+    reached = node
     for segment in segments[1:]:
         if node is None:
-            return None
+            return reached
+        if isinstance(node, (dict, list)):
+            reached = node
         if segment.isdecimal():
             index = int(segment)
             if isinstance(node, list):
                 node = node[index] if index < len(node) else None
             elif not (isinstance(node, dict) and index == 0):
-                return None
+                return reached
         elif isinstance(node, dict):
             other = segment[:-1] if segment.endswith("s") else f"{segment}s"
             node = node.get(segment, node.get(other))
         else:
-            return None
-    return node
+            return reached
+    return node if node is not None else reached
 
 
-def _names_hidden_entity(node: Any, access_key: AccessKeyRecord, hass: HomeAssistant, depth: int = 0) -> bool:
-    """Whether configuration names an entity this key cannot read, bare or in a template."""
+# Variables Home Assistant gives every automation or script run, besides the ones it defines.
+_TRACE_RUN_VARIABLES = frozenset({"trigger", "this", "context", "repeat", "wait"})
+
+
+def _names_hidden_entity(
+    node: Any, access_key: AccessKeyRecord, hass: HomeAssistant, depth: int = 0,
+    data_names: frozenset[str] = _TRACE_RUN_VARIABLES,
+) -> bool:
+    """Whether configuration reaches an entity this key cannot read, or may.
+
+    An entity ID in any case, a registry ID, a device ID with such an entity, an ID in text, and
+    a template whose entities cannot be proven literal (``template_entities`` over ``data_names``)
+    all count, so a step whose configuration computes its entity keeps no result.
+    """
     if depth > TRACE_SCOPE_MAX_DEPTH:
         return True
     if isinstance(node, dict):
-        return any(_names_hidden_entity(key, access_key, hass, depth + 1)
-                   or _names_hidden_entity(item, access_key, hass, depth + 1) for key, item in node.items())
+        return any(_names_hidden_entity(key, access_key, hass, depth + 1, data_names)
+                   or _names_hidden_entity(item, access_key, hass, depth + 1, data_names)
+                   for key, item in node.items())
     if isinstance(node, (list, tuple)):
-        return any(_names_hidden_entity(item, access_key, hass, depth + 1) for item in node)
+        return any(_names_hidden_entity(item, access_key, hass, depth + 1, data_names) for item in node)
     if not isinstance(node, str):
         return False
+
+    def readable(entity_id: str) -> bool:
+        return resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+
+    if is_template(node):
+        try:
+            if not all(readable(entity_id) for entity_id in template_entities(node, data_names)):
+                return True
+        except HelperScopeError:
+            return True
+    text = node.strip().lower()
+    if (entry := er.async_get(hass).async_get(text)) is not None:
+        return not readable(entry.entity_id)
+    if (device := dr.async_get(hass).async_get(node.strip())) is not None:
+        return not all(readable(item.entity_id) for item in er.async_entries_for_device(
+            er.async_get(hass), device.id, include_disabled_entities=True))
     return redact_inaccessible_entity_ids_in_text(
-        node, access_key, hass, domains=instance_entity_domains(hass), keep=service_not_entity(hass)) != node
+        text, access_key, hass, domains=instance_entity_domains(hass), keep=service_not_entity(hass)) != text
 
 
 # Configuration keys that hold a mapping of variables (automation, trigger and step `variables`).
@@ -1417,11 +1453,20 @@ def _uses_variable(node: Any, names: set[str], depth: int = 0) -> bool:
     return isinstance(node, str) and any(word in names for word in _TRACE_WORD_RE.findall(node))
 
 
-def _hidden_variables(config: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> set[str]:
-    """Variables computed from an entity this key cannot read, directly or through another variable."""
-    definitions = [(name, value, _names_hidden_entity(value, access_key, hass))
+def _hidden_variables(
+    config: Any, access_key: AccessKeyRecord, hass: HomeAssistant, data_names: frozenset[str],
+) -> set[str]:
+    """Variables computed from an entity this key cannot read, directly or through another variable.
+
+    ``trigger`` is one when a trigger watches such an entity, since it carries that entity's states.
+    """
+    definitions = [(name, value, _names_hidden_entity(value, access_key, hass, data_names=data_names))
                    for name, value in _variable_definitions(config)]
     hidden = {name for name, _value, names_hidden in definitions if names_hidden}
+    roots = config if isinstance(config, list) else [config]
+    if any(isinstance(root, dict) and _names_hidden_entity(
+            [root.get("triggers"), root.get("trigger")], access_key, hass, data_names=data_names) for root in roots):
+        hidden.add("trigger")
     grown = True
     while grown:
         grown = False
@@ -1451,17 +1496,20 @@ def _scoped_run_detail(detail: dict, domain: str, access_key: AccessKeyRecord, h
     extended: dict = nested if isinstance(nested, dict) else detail
     webhook_run = _webhook_triggered(extended)
     config, inputs = extended.get("config"), extended.get("blueprint_inputs")
-    tainted = _hidden_variables([config, inputs], access_key, hass)
+    data_names = _TRACE_RUN_VARIABLES | {name for name, _value in _variable_definitions([config, inputs])}
+    tainted = _hidden_variables([config, inputs], access_key, hass, data_names)
     whole_hidden: bool | None = None
     trace: dict[str, Any] = {}
     for path, steps in (extended.get("trace") or {}).items():
         node = _trace_step_node(config, str(path))
         if node is None:
             if whole_hidden is None:
-                whole_hidden = _names_hidden_entity([config, inputs], access_key, hass) or bool(tainted)
+                whole_hidden = _names_hidden_entity(
+                    [config, inputs], access_key, hass, data_names=data_names) or bool(tainted)
             hidden = whole_hidden
         else:
-            hidden = _names_hidden_entity(node, access_key, hass) or _uses_variable(node, tainted)
+            hidden = (_names_hidden_entity(node, access_key, hass, data_names=data_names)
+                      or _uses_variable(node, tainted))
         trace[path] = [
             {**step, **{key: "<redacted>" for key in ("result", "changed_variables") if key in step}}
             if (hidden or _step_carries(step, tainted)) and isinstance(step, dict) else step

@@ -438,8 +438,9 @@ _ENTITY_ID_TEXT_RE = re.compile(r"(?<![\w.])([a-z0-9_]+\.[a-z0-9_]+)(?!\w|\.\w)"
 
 # A whole dotted chain (states.lock.door.state, lock.door.attributes.battery,
 # homeassistant.components.automation.morning). A two-part chain is a bare ID; a longer
-# one is searched window by window in _chain_windows.
-_DOTTED_CHAIN_RE = re.compile(r"(?<![\w.])\w++(?:\.\w++)++")
+# one is searched window by window in _chain_windows. ASCII only, so a Chinese or accented
+# letter beside an ID (门锁lock.door) bounds it instead of hiding it inside a longer word.
+_DOTTED_CHAIN_RE = re.compile(r"(?<![A-Za-z0-9_.])[A-Za-z0-9_]++(?:\.[A-Za-z0-9_]++)++")
 _ID_PART_RE = re.compile(r"[a-z0-9_]+")
 
 
@@ -589,14 +590,19 @@ def _redact_entity_ids(
             known.append(entity_domains(hass))
         return known[0]
 
-    def _bare(entity_id: str) -> str:
+    def _bare(text_id: str) -> str:
+        # Home Assistant reads an entity ID in any case. Upper case counts only in an entity
+        # domain of this home, as a longer chain's window does, so README.md stays.
+        entity_id = text_id.lower()
         if _ID_PART_RE.fullmatch(entity_id.replace(".", "_", 1)) is None:
-            return entity_id
+            return text_id
+        if entity_id != text_id and entity_id.split(".", 1)[0] not in _domains():
+            return text_id
         # Decimal literals are not entity references. Keep actual or registered
         # numeric-looking IDs under the normal scope check, including disabled ones.
         if all(part.isdecimal() for part in entity_id.split(".")) and not entity_exists(hass, entity_id):
-            return entity_id
-        return entity_id if is_visible(entity_id) else sentinel
+            return text_id
+        return text_id if is_visible(entity_id) else sentinel
 
     def _replacement(match: re.Match[str]) -> str:
         chain = match.group(0)
@@ -604,9 +610,10 @@ def _redact_entity_ids(
             parts = chain.split(".")
             if len(parts) == 2:
                 return _bare(chain)
+            lowered = [part.lower() for part in parts]
             out = list(parts)
-            for index in reversed(list(_chain_windows(parts, hass, _domains))):
-                entity_id = f"{parts[index]}.{parts[index + 1]}"
+            for index in reversed(list(_chain_windows(lowered, hass, _domains))):
+                entity_id = f"{lowered[index]}.{lowered[index + 1]}"
                 if not is_visible(entity_id):
                     out[index:index + 2] = [sentinel]
             return ".".join(out)

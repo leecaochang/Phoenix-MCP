@@ -15,6 +15,10 @@ from .routing_tables import (
 from ..entity_commands import finite_number
 
 _TOKENS = re.compile(r"\w+|[^\w\s]", re.UNICODE)
+# Characters people and input methods type as a minus sign besides "-" and U+2212 (dashes,
+# small, full-width, superscript and subscript minus). Read as a sign they would need a
+# guess, and dropped they would turn -18 into 18, so a number they touch is no evidence.
+_MINUS_LOOKALIKES = frozenset("\u2010\u2011\u2012\u2013\u2014\u2015\u2043\u207b\u208b\ufe58\ufe63\uff0d")
 
 
 def _tokens(sentence: str) -> list[str]:
@@ -109,7 +113,7 @@ def read_explicit_percentage(sentence: str, language: str) -> int | None:
     # common to refuse an ordinary single command such as "sæt lampen på 50
     # procent og sluk den"; the number words it joined are still checked.
     numeric_words = (words | DECISION_PERCENTAGE_EVIDENCE_MODIFIERS.get(language, frozenset())) - connectors
-    separators = connectors | {'-', '+', '.', '/', '\u2212'}
+    separators = connectors | {'-', '+', '.', '/', '\u2212'} | _MINUS_LOOKALIKES
     if language != 'en':
         separators = separators | {','}
 
@@ -193,7 +197,7 @@ def read_explicit_scalar(sentence: str, language: str) -> int | float | None:
     # The language's connector joins parts of a spelled number, so it is a
     # number word to RBNF but not a competing number by itself.
     forbidden = ((words | DECISION_PERCENTAGE_EVIDENCE_MODIFIERS.get(language, frozenset()))
-                 - DECISION_PERCENTAGE_EVIDENCE_CONNECTORS.get(language, frozenset())) | {'+', '-', '\u2212', '/'}
+                 - DECISION_PERCENTAGE_EVIDENCE_CONNECTORS.get(language, frozenset())) | {'+', '-', '\u2212', '/'} | _MINUS_LOOKALIKES
     if any(token in forbidden for index, token in enumerate(tokens) if index not in unit_tokens):
         return None
     before, after = sentence[:match.start()], sentence[match.end():]

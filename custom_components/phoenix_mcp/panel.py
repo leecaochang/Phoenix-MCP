@@ -149,6 +149,9 @@ async def async_sync_mesa_inject(hass: HomeAssistant) -> None:
         return
 
     url = await hass.async_add_executor_job(_inject_url_with_cache_bust)
+    if hass.data.get(DOMAIN) is not data or getattr(data, "shutting_down", False) is True:
+        return  # unloaded while the URL was built; registering now would outlive the entry
+    prior = hass.data.get(_INJECT_REGISTERED_URL_KEY)
     if prior == url:
         return  # already current
     # Remove every prior inject URL (tracked or orphaned) before adding, so HA only
@@ -240,6 +243,9 @@ async def async_sync_agentchat_inject(hass: HomeAssistant) -> None:
         return
 
     url = await hass.async_add_executor_job(_agentchat_url_with_cache_bust)
+    if hass.data.get(DOMAIN) is not data or getattr(data, "shutting_down", False) is True:
+        return  # unloaded while the URL was built; registering now would outlive the entry
+    prior = hass.data.get(_AGENTCHAT_REGISTERED_URL_KEY)
     if prior == url:
         return
     _remove_all_agentchat_urls(hass)

@@ -260,7 +260,9 @@ Read files lets an agent read text files in the www, themes, and custom_template
 
 YAML configuration lets an agent read your YAML files, apart from any file with secret in its name, the esphome folder, and hidden files. Names in any language work, but a file name with control characters or hidden marks that change the text direction is refused.
 
-Values under names that suggest a secret show as `<redacted>`, and so do comments that mention one. A password under an ordinary name is visible. A file with a YAML mistake isn't shown. The agent gets the line to fix instead. No tool writes YAML configuration.
+Values under names that suggest a secret show as `<redacted>`, and so do comments that mention one. So does a password in a command, such as curl's `-u` or an `Authorization` header. A password under an ordinary name is visible.
+
+A file with a YAML mistake isn't shown. The agent gets the line to fix instead. No tool writes YAML configuration.
 
 Allowed by: [{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem), [{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
 

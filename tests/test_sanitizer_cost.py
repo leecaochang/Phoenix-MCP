@@ -92,6 +92,10 @@ SHAPES = {
     "webhook paths": lambda n: "/api/webhook/" * (n // 13),
     "long dotted chain": lambda n: "a." * (n // 2) + "b",
     "colon runs after a key": lambda n: "a:" * (n // 2),
+    "command user flags": lambda n: "-u a" * (n // 4),
+    "command user without password": lambda n: "-u " + "a" * n,
+    "command header flags": lambda n: "-H a " * (n // 5),
+    "command header names": lambda n: "--header=" + "a" * n,
     "unicode space": lambda n: " " * n + "x",
 }
 

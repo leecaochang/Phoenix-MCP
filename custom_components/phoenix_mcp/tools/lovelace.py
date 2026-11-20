@@ -549,8 +549,14 @@ async def _card_warnings(payload: Any, data: PhoenixData, hass: HomeAssistant) -
 # templates of button-card and its kin ([[[ ]]]).
 _TEMPLATE_MARKERS = (("{{", "{{ }}"), ("{%", "{% %}"), ("[[[", "[[[ ]]]"))
 # An absolute or protocol-relative URL, which a viewer's browser fetches or follows; a relative
-# path stays on Home Assistant itself. javascript: runs where it is followed.
-_ACTIVE_URL_RE = re.compile(r"(?i)(?:\b[a-z][a-z0-9+.-]*:)?//[^\s/'\"<>()\[\]{}|\\^`]+|\bjavascript:")
+# path stays on Home Assistant itself. javascript: runs where it is followed. A web scheme with
+# no slashes (http:host) leaves the page when its scheme differs from the page's own. Matched
+# after _URL_SPELLING, as a browser reads a URL.
+_ACTIVE_URL_RE = re.compile(
+    r"(?i)(?:\b[a-z][a-z0-9+.-]*:)?//[^\s/'\"<>()\[\]{}|\\^`]+|\bjavascript:|\b(?:https?|wss?|ftp):(?!//)[^\s'\"<>]+")
+# A browser drops tab, newline and the other C0 controls inside a URL and reads a backslash as a
+# slash, so java<TAB>script: and /\host are javascript: and //host to it.
+_URL_SPELLING = {**{code: None for code in range(32)}, ord("\\"): "/"}
 _ACTIVE_CONTENT_SHOWN = 10
 
 
@@ -574,7 +580,7 @@ def _active_items(layout: Any) -> set[tuple[str, str]]:
             for marker, label in _TEMPLATE_MARKERS:
                 if marker in node:
                     found.add((label, node))
-            for match in _ACTIVE_URL_RE.finditer(node):
+            for match in _ACTIVE_URL_RE.finditer(node.translate(_URL_SPELLING)):
                 found.add((match.group(0)[:100], node))
     return found
 
@@ -686,10 +692,26 @@ async def _tool_edit_dashboard(
         "cap_lovelace_write", access_key, hass, data,
         tool_name="edit_dashboard", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_dashboard("Edit", args, hass),
+        review=await _opens_admin_dashboard(hass, args),
     )
     if blocked is not None:
         return blocked
     return await _execute_edit_dashboard(args, access_key, hass, data)
+
+
+async def _opens_admin_dashboard(hass: HomeAssistant, args: dict) -> bool:
+    """Whether an edit shows an administrator-only dashboard to everyone, an access decision.
+
+    True as well when the current row cannot be read, so the edit goes to a person.
+    """
+    config = args.get("config")
+    if not isinstance(config, dict) or "require_admin" not in config or config["require_admin"] is True:
+        return False
+    try:
+        before = await _dashboard_registry_snapshot(hass, str(args.get("dashboard_id") or "").strip())
+    except (WsDispatchError, ConfigurationRecoveryError):
+        return True
+    return bool((before.get("dashboard") or {}).get("require_admin"))
 
 
 @write_boundary

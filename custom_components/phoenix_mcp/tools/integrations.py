@@ -7,11 +7,12 @@ from datetime import datetime
 import hashlib
 import json
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from homeassistant.config_entries import SOURCE_RECONFIGURE, ConfigEntryDisabler, ConfigEntryState, support_entry_unload
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from ..access_key_store import AccessKeyRecord
 from ..authoring_validation import async_template_refusal
@@ -502,6 +503,27 @@ async def _integration_gate(
     return None
 
 
+def _readable_subentries(
+    hass: HomeAssistant, entry_id: str, subentries: Mapping[str, Any],
+    readable_entities: set[str], readable_devices: set[str], whole_entry: bool,
+) -> list[Any]:
+    """The subentries a key may see named: all when it reads the whole entry, else those with
+    a readable entity or device bound to them. A title can name a device or hold a secret topic.
+    """
+    if whole_entry:
+        return list(subentries.values())
+    entities = er.async_get(hass)
+    devices = dr.async_get(hass)
+    seen: set[str] = set()
+    for entity_id in readable_entities:
+        if (item := entities.async_get(entity_id)) is not None and item.config_subentry_id:
+            seen.add(item.config_subentry_id)
+    for device_id in readable_devices:
+        if (device := devices.async_get(device_id)) is not None:
+            seen.update(sub for sub in device.config_entries_subentries.get(entry_id, ()) if sub)
+    return [sub for sub in subentries.values() if sub.subentry_id in seen]
+
+
 async def _tool_list_integrations(
     args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
@@ -532,17 +554,17 @@ async def _tool_list_integrations(
             if context is None:
                 continue
             expose = assist_expose_check(access_key, hass)
-            accessible_entities = sum(
-                (expose is None or expose(entity_id)) and
-                resolve_registry_access(entity_id, access_key, hass)
+            readable_entities = {
+                entity_id for entity_id in context.entity_ids
+                if (expose is None or expose(entity_id))
+                and resolve_registry_access(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
+            }
+            readable_devices = {
+                device_id for device_id in context.device_ids
+                if resolve_device_registry_access(device_id, access_key, hass, snapshot=snapshot)
                 in (Permission.READ, Permission.WRITE)
-                for entity_id in context.entity_ids
-            )
-            accessible_devices = sum(
-                resolve_device_registry_access(device_id, access_key, hass, snapshot=snapshot)
-                in (Permission.READ, Permission.WRITE)
-                for device_id in context.device_ids
-            )
+            }
+            accessible_entities, accessible_devices = len(readable_entities), len(readable_devices)
             (
                 supports_reload,
                 supports_unload,
@@ -577,11 +599,17 @@ async def _tool_list_integrations(
                 row["serial_ports"] = serial_usage[entry.entry_id]
             if subentries := getattr(entry, "subentries", None):
                 # set_integration_subentry reconfigures one by its ID; titles get the title scrub.
+                shown = _readable_subentries(
+                    hass, entry.entry_id, subentries,
+                    readable_entities, readable_devices, accessible_entities == len(context.entity_ids)
+                    and accessible_devices == len(context.device_ids))
                 row["subentries"] = [
                     {"subentry_id": sub.subentry_id, "subentry_type": sub.subentry_type,
                      "title": redact_diagnostics(sub.title)}
-                    for sub in subentries.values()
+                    for sub in shown
                 ]
+                if withheld := len(subentries) - len(shown):
+                    row["subentries_withheld"] = withheld
             integrations.append(row)
     finally:
         devices.close()

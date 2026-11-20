@@ -179,6 +179,60 @@ async def test_a_slow_compile_is_refused_even_within_the_cpu_limit(hass):
     assert refusal is not None and "too long to compile" in refusal
 
 
+async def test_a_check_that_ran_out_of_memory_is_refused(hass):
+    async def exhausted(payload, hass, data):
+        return 0, b'{"compile_seconds": 0.001, "exhausted": true}'
+
+    with patch.object(template_render, "_run_worker", exhausted):
+        refusal = await async_template_refusal({"value_template": "{{ 1 }}"}, hass, _data())
+    assert refusal is not None and "more memory than a check allows" in refusal
+
+
+def _out_of_memory(*args, **kwargs):
+    raise MemoryError
+
+
+@pytest.mark.parametrize("template,patched", [
+    ("{{ '%400000000d' % 1 }}", ("binop", "%")),
+    ("{{ 'a' * 400000000 }}", ("binop", "*")),
+    ("{{ ([0] * 30000000) | length }}", ("binop", "*")),
+    ("{{ 'a' | center(400000000) }}", ("filter", "center")),
+    ("{% if 1 %}{{ 'a' * 400000000 }}{% endif %}", ("binop", "*")),
+])
+def test_a_fold_the_memory_limit_stops_is_reported_not_skipped(template, patched, monkeypatch):
+    """Jinja treats a MemoryError while folding as "not foldable"; Core, with no limit, completes the fold.
+
+    The allocation the worker's address-space limit refuses is replaced by a MemoryError, as
+    hosts without that limit cannot refuse it for real.
+    """
+    from jinja2 import defaults, nodes
+
+    kind, name = patched
+    monkeypatch.setitem(nodes._binop_to_func if kind == "binop" else defaults.DEFAULT_FILTERS, name, _out_of_memory)
+    assert template_worker._check([template]).get("exhausted") is True
+
+
+@pytest.mark.parametrize("template", ["{{ '%5d' % 1 }}", "{{ 1 / 0 }}", "{{ 'a' | center(4) }}", "{{ x * 3 }}"])
+def test_a_fold_that_is_impossible_for_another_reason_is_not_exhausted(template):
+    assert "exhausted" not in template_worker._check([template])
+
+
+def test_the_check_folder_repeats_jinjas_own():
+    """The check's folder copies Jinja's Optimizer.generic_visit; a Jinja change must be looked at."""
+    import hashlib
+    import inspect
+    from jinja2.optimizer import Optimizer
+
+    source = inspect.getsource(Optimizer.generic_visit)
+    assert hashlib.sha256(source.encode()).hexdigest()[:16] == "fc8593b452d4b6b2", source
+
+
+async def test_a_large_constant_fold_is_refused_by_the_real_worker(hass):
+    """Refused by the memory limit where the host applies it, else by the CPU budget."""
+    refusal = await async_template_refusal(_automation("{{ '%1000000000d' % 1 }}"), hass, _data())
+    assert refusal is not None and "Templates refused" in refusal
+
+
 async def test_more_templates_than_the_worker_takes_are_refused(hass):
     with patch.object(template_render, "_run_worker", side_effect=AssertionError("spawned")):
         refusal = await async_template_refusal(["{{ %d }}" % n for n in range(300)], hass, _data())

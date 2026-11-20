@@ -363,20 +363,25 @@ async def async_check_caller_templates(templates: list[str], hass: HomeAssistant
     """Compile and trial-render caller templates in the worker before Home Assistant compiles them.
 
     Raises TemplateRenderError when one holds a lone surrogate, when the worker dies, times out
-    or exceeds a limit, or when compiling one template takes longer than
-    TEMPLATE_CHECK_COMPILE_SECONDS; TemplateWorkerBusyError when no slot freed in time. Compile
-    and render errors are left for Home Assistant's own validation to report.
+    or exceeds a limit (a fold or trial render out of memory included), or when compiling one
+    template takes longer than TEMPLATE_CHECK_COMPILE_SECONDS; TemplateWorkerBusyError when no
+    slot freed in time. Compile and render errors are left for Home Assistant's own validation.
     """
     if not templates:
         return
     _bounded_templates(templates)
     code, stdout = await _run_worker({"mode": "check", "templates": templates}, hass, data)
     try:
-        seconds = json.loads(stdout)["compile_seconds"] if code == 0 else None
-    except (ValueError, KeyError, TypeError):
-        seconds = None
-    if not isinstance(seconds, (int, float)):
+        report = json.loads(stdout) if code == 0 else None
+    except ValueError:
+        report = None
+    seconds = report.get("compile_seconds") if isinstance(report, dict) else None
+    if not isinstance(report, dict) or not isinstance(seconds, (int, float)):
         raise TemplateRenderError(_WORKER_FAILED)
+    if report.get("exhausted"):
+        raise TemplateRenderError(
+            "A template needs more memory than a check allows. Reduce constant repetition, "
+            "padding and large powers in it.")
     if seconds > TEMPLATE_CHECK_COMPILE_SECONDS:
         raise TemplateRenderError(
             "A template takes too long to compile. Reduce constant arithmetic, repetition "

@@ -43,7 +43,7 @@ from .request_authority import AuthorityChangedError, request_authority, Request
 from .tool_common import _progress_ctx, _ProgressBus, _tool_success
 from .tool_dispatch import (
     _build_context_json, _build_context_plain, _dispatch_mcp, _jsonrpc_error, _jsonrpc_result,
-    _MCP_LEGACY_METHODS, _MCP_METHODS, _MCP_MODERN_METHODS,
+    _MCP_LEGACY_METHODS, _MCP_METHODS, _MCP_MODERN_METHODS, audited_method,
 )
 from .tool_input import parse_json_body
 from .view_base import PhoenixView
@@ -123,7 +123,7 @@ def _audit_mcp_transport(
         data,
         access_key,
         request_id=request_id,
-        method=method if isinstance(method, str) and method else "POST",
+        method=audited_method(method) if isinstance(method, str) and method else "POST",
         resource=resource,
         outcome=outcome,
         client_ip=client_ip,
@@ -345,13 +345,18 @@ async def _handle_streamable_batch(
     return resp
 
 
+def _batch_request_ids(items: list) -> list:
+    """The id of every item that carries one and is not a JSON-RPC response, as a reply names it."""
+    return [
+        _sanitize_jsonrpc_id(item["id"]) for item in items
+        if isinstance(item, dict) and "id" in item
+        and not (item.get("jsonrpc") == "2.0" and _classify_jsonrpc_message(item)[0] == "accepted")
+    ]
+
+
 def _batch_has_request(items: list) -> bool:
     """Return whether any item carries an id and is not a JSON-RPC response."""
-    return any(
-        isinstance(item, dict) and "id" in item
-        and not (item.get("jsonrpc") == "2.0" and _classify_jsonrpc_message(item)[0] == "accepted")
-        for item in items
-    )
+    return bool(_batch_request_ids(items))
 
 
 async def _dispatch_streamable_batch(
@@ -552,8 +557,8 @@ def _progress_token(method: str, params: dict) -> str | int | None:
     return None
 
 
-def _sse_frame(payload: dict) -> bytes:
-    """One SSE `message` event carrying a JSON-RPC object."""
+def _sse_frame(payload: dict | list) -> bytes:
+    """One SSE `message` event carrying a JSON-RPC object, or a batch's array of them."""
     return f"event: message\ndata: {json.dumps(payload, default=str)}\n\n".encode()
 
 
@@ -593,14 +598,15 @@ async def _mcp_sse_response(
     *,
     cancel_on_disconnect: bool,
     msg_id: Any = None,
+    batch_ids: list | None = None,
 ) -> web.StreamResponse:
     """Run ``dispatch`` and deliver its JSON-RPC result as a single SSE message.
 
     The payload matches the plain JSON path, with a frame every MCP_SSE_KEEPALIVE_SECONDS so
     an intermediary does not drop a held gate. Before each such frame the request's authority
     (not its OAuth token's hour) is checked; once it ends the stream closes with the result
-    withheld, cancelling modern dispatch as a disconnect does. Only this function writes to
-    the stream.
+    withheld, for ``msg_id`` or for each of a batch's ``batch_ids``, cancelling modern dispatch
+    as a disconnect does. Only this function writes to the stream.
     """
     authority = request_authority.get()
     resp = web.StreamResponse(
@@ -666,8 +672,11 @@ async def _mcp_sse_response(
                         pass
                     break
 
+        response_msg: dict | list | None
         try:
-            if authority_lost:
+            if authority_lost and batch_ids is not None:
+                response_msg = [_authority_withheld_reply(item_id, modern=False) for item_id in batch_ids]
+            elif authority_lost:
                 response_msg = None if msg_id is None else _authority_withheld_reply(msg_id, modern=cancel_on_disconnect)
             else:
                 response_msg = None if task.cancelled() else task.result()
@@ -1078,6 +1087,7 @@ async def _post_batch(
                 request_id=request_id,
             ),
             cancel_on_disconnect=False,
+            batch_ids=_batch_request_ids(parsed),
         ))
     batch_dispatch = _handle_streamable_batch(parsed, access_key, batch_rl, hass, data, request_id, client_ip, base_url=base_url)
     batch_task = asyncio.create_task(batch_dispatch)

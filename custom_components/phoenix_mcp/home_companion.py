@@ -42,6 +42,9 @@ class CompanionTurn:
     style: str = "direct"
     detail: str = "concise"
     evidence: ResponseEvidence = field(default_factory=ResponseEvidence)
+    # The evidence index each dispatched call was observed at, by request id, so parallel reads
+    # finishing in any order each name their own source.
+    sources: dict[str, int] = field(default_factory=dict)
     calls: int = 0
     write_started: bool = False
     # Control writes admitted and not yet refused before dispatch; write_started follows it.
@@ -130,9 +133,12 @@ def authorize_call(access_key: Any, name: str, arguments: Any) -> str | None:
 
 
 def record_outcome(access_key: Any, name: str, outcome: str, result: dict | None = None,
-                   arguments: dict | None = None, hass: HomeAssistant | None = None) -> None:
+                   arguments: dict | None = None, hass: HomeAssistant | None = None,
+                   request_id: str | None = None) -> None:
     turn = _turn.get()
     if internal_turn(access_key) and turn is not None:
+        if request_id is not None:
+            turn.sources[request_id] = turn.evidence.calls
         turn.outcomes.append({"tool": name, "outcome": outcome})
         if name in HOME_COMPANION_CONTROL_TOOLS and isinstance(result, RefusedBeforeWrite):
             # Refused before dispatch (a MESA or scope refusal): this one changed nothing.
@@ -296,12 +302,12 @@ def _one_edit(left: str, right: str) -> bool:
     return any(long[:i] + long[i + 1:] == short for i in range(len(long)))
 
 
-def count_source(access_key: Any, name: str) -> dict | None:
-    """Expose the server-recorded source index inside the private planner transcript."""
+def count_source(access_key: Any, name: str, request_id: str) -> dict | None:
+    """Expose the server-recorded source index of the call ``request_id`` dispatched."""
     turn = _turn.get()
     if not internal_turn(access_key) or turn is None or name != 'search_entities':
         return None
-    source = turn.evidence.calls - 1
+    source = turn.sources.get(request_id)
     return {'kind': 'count', 'source': source} if source in turn.evidence.search_totals else None
 
 

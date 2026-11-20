@@ -10,11 +10,14 @@ import json
 import logging
 import math
 import re
+from collections.abc import Callable
 from typing import Any, cast
 from urllib.parse import urlparse
 
 from aiohttp import ClientError, web
-from homeassistant.core import HomeAssistant
+from homeassistant.auth import EVENT_USER_REMOVED, EVENT_USER_UPDATED
+from homeassistant.components.http.const import KEY_HASS_REFRESH_TOKEN_ID, KEY_HASS_USER
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util.dt import utcnow
 
@@ -231,6 +234,8 @@ class PhoenixAgentCliChatView(PhoenixView):
                 pass
 
         heartbeat = self.hass.loop.create_task(_heartbeat())
+        unwatch = _watch_administrator(
+            self.hass, request[KEY_HASS_USER].id, request.get(KEY_HASS_REFRESH_TOKEN_ID), cancel)
         try:
             await emit("ready", {"provider": cfg.kind, "model": cfg.model, "access_key_id": access_key_id})
             await async_run_agent_turn(
@@ -251,11 +256,42 @@ class PhoenixAgentCliChatView(PhoenixView):
             await emit("error", {"code": "internal", "message": "Internal error."})
         finally:
             heartbeat.cancel()
+            unwatch()
             try:
                 await resp.write_eof()
             except (ConnectionResetError, ClientError, RuntimeError):
                 pass
         return cast(web.Response, resp)
+
+
+def _watch_administrator(
+    hass: HomeAssistant, user_id: str, refresh_token_id: str | None, cancel: asyncio.Event,
+) -> Callable[[], None]:
+    """Cancel a turn once the administrator who started it is removed, deactivated or demoted,
+    or the session it was started from is revoked.
+
+    Admission checked that user once; a turn can outlive that by many rounds and approval waits.
+    Returns the function that stops watching.
+    """
+    async def recheck() -> None:
+        user = await hass.auth.async_get_user(user_id)
+        if user is None or not user.is_active or not user.is_admin:
+            cancel.set()
+
+    @callback
+    def changed(event: Event) -> None:
+        if event.data.get("user_id") == user_id:
+            hass.async_create_task(recheck(), eager_start=True)
+
+    removers = [hass.bus.async_listen(name, changed) for name in (EVENT_USER_UPDATED, EVENT_USER_REMOVED)]
+    if refresh_token_id is not None:
+        # Deactivating a user revokes its sessions without a user event.
+        removers.append(hass.auth.async_register_revoke_token_callback(refresh_token_id, cancel.set))
+
+    def stop() -> None:
+        for remove in removers:
+            remove()
+    return stop
 
 
 def _continued_turn_start(body: dict) -> datetime | None:

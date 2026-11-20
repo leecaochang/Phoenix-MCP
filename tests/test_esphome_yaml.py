@@ -804,3 +804,20 @@ class TestSubstitutionsThroughPackages:
         files = {"common/wifi.yaml": "packages:\n  b: !include b.yaml\n", "common/b.yaml": "x: 1\n"}
         masked, _paths = redact_esphome_text(self.MAIN, None, _packages(files))
         assert "Kitchen" not in masked
+
+
+@pytest.mark.parametrize(("command", "hidden", "kept"), [
+    ('curl -H "X-Api-Token abcdef0123456789" https://x.example/a', "abcdef0123456789", "X-Api-Token"),
+    ("curl -u admin:SuperSecretPw https://x.example", "SuperSecretPw", "-u admin:"),
+    ("curl --user=bob:pw123 https://x.example", "pw123", "--user=bob:"),
+    ('curl --header="X-Auth-Key: k123" https://x.example', "k123", "X-Auth-Key:"),
+    ("curl -H 'Authorization: Basic YWJjOmRlZg==' https://x.example", "YWJjOmRlZg==", "Authorization:"),
+])
+def test_a_command_line_credential_is_masked(command, hidden, kept):
+    masked = mask_yaml_text(f"shell_command:\n  push: >-\n    {command}\n")
+    assert hidden not in masked and kept in masked
+
+
+def test_a_command_line_header_that_is_no_credential_stays():
+    command = "curl -H 'Content-Type: application/json' -u nobody https://x.example"
+    assert command in mask_yaml_text(f"shell_command:\n  push: >-\n    {command}\n")

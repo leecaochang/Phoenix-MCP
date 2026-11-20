@@ -202,9 +202,13 @@ async def test_a_count_reference_joins_every_shape_of_search_result(hass: HomeAs
     companion_turn.evidence.search_totals = {0: 2}
     answer = json.dumps({"status": "completed", "message": "Two."})
     provider = _Provider([_tool("search_entities"), _done("tool_use")], [_text(answer), _done()])
-    dispatch = AsyncMock(return_value=(
-        {"result": {"content": [{"type": "text", "text": text}]}}, "tools/call", "search_entities", "allowed"))
-    with patch.object(agent_turn, "dispatch_agent_tool", dispatch):
+
+    async def dispatched(*_args, request_id, **_kwargs):
+        # The real dispatch records the evidence index of the call it ran under its request id.
+        companion_turn.sources[request_id] = 0
+        return {"result": {"content": [{"type": "text", "text": text}]}}, "tools/call", "search_entities", "allowed"
+
+    with patch.object(agent_turn, "dispatch_agent_tool", AsyncMock(side_effect=dispatched)):
         result = await _run(hass, _data(), provider)
     assert result.outcome == agent_turn.TURN_OK
     results = next(row["tool_results"] for row in provider.sent if "tool_results" in row)

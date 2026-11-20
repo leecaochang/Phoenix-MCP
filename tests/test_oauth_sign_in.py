@@ -1379,6 +1379,29 @@ async def test_the_token_endpoint_rechecks_the_key_a_code_was_approved_for(oauth
     assert not data.oauth_grants.list_for_key(access_key.id)
 
 
+@pytest.mark.parametrize("event", ["rotate", "switch_off"])
+async def test_a_key_change_while_the_exchange_waits_for_the_grant_lock_issues_nothing(oauth, event):
+    """The code passed its check before the wait, so the check is made again once the lock is held."""
+    app, admin, data, _fetch = oauth
+    access_key, _raw = await _key(data)
+    verifier, challenge = _pkce()
+    code = await _approve(app, admin, challenge, access_key.id)
+    async with data.oauth_grants.lock:
+        exchange = asyncio.create_task(_token(
+            app, grant_type="authorization_code", code=code, code_verifier=verifier,
+            client_id=CLIENT_ID, redirect_uri=REDIRECT))
+        for _ in range(50):
+            await asyncio.sleep(0.01)
+        assert not exchange.done()
+        if event == "rotate":
+            await data.store.async_rotate_access_key(access_key.id)
+        else:
+            await data.store.async_patch_access_key(access_key.id, oauth_enabled=False)
+    response = await exchange
+    assert (await response.json())["error"] == "invalid_grant"
+    assert not data.oauth_grants.list_for_key(access_key.id)
+
+
 async def test_a_code_stays_bound_to_the_resource_it_was_approved_for(hass, oauth):
     """Approved through the external address, the code cannot be spent for the internal one."""
     app, admin, data, _fetch = oauth
@@ -1527,7 +1550,7 @@ async def test_sign_ins_persist_and_removal_deletes_their_file(hass, hass_storag
     key, _raw = await keys.async_create_access_key("phone", "admin", oauth_enabled=True)
     grants = store()
     await grants.async_load()
-    issued = await grants.async_create(access_key=key, client_id=CLIENT_ID, client_name="App",
+    issued = await grants.async_create(access_key=key, generation=key.oauth_generation, client_id=CLIENT_ID, client_name="App",
                                        redirect_host="app.example", created_by="admin")
     outcome, rotated, _grant = await grants.async_refresh(issued.refresh_token, CLIENT_ID, lambda _g: key)
     assert outcome == "issued" and rotated is not None
@@ -1552,10 +1575,10 @@ async def test_grant_caps_hold_at_create(hass):
     key, _raw = await keys.async_create_access_key("phone", "admin", oauth_enabled=True)
     grants = OAuthGrantStore()
     for _ in range(OAUTH_MAX_GRANTS_PER_ACCESS_KEY):
-        await grants.async_create(access_key=key, client_id=CLIENT_ID, client_name="App",
+        await grants.async_create(access_key=key, generation=key.oauth_generation, client_id=CLIENT_ID, client_name="App",
                                   redirect_host="app.example", created_by="admin")
     with pytest.raises(GrantLimitError):
-        await grants.async_create(access_key=key, client_id=CLIENT_ID, client_name="App",
+        await grants.async_create(access_key=key, generation=key.oauth_generation, client_id=CLIENT_ID, client_name="App",
                                   redirect_host="app.example", created_by="admin")
 
 
@@ -1563,7 +1586,7 @@ async def test_approval_refuses_a_key_at_its_sign_in_cap(oauth):
     app, admin, data, _fetch = oauth
     access_key, _raw = await _key(data)
     for _ in range(OAUTH_MAX_GRANTS_PER_ACCESS_KEY):
-        await data.oauth_grants.async_create(access_key=access_key, client_id=CLIENT_ID, client_name="App",
+        await data.oauth_grants.async_create(access_key=access_key, generation=access_key.oauth_generation, client_id=CLIENT_ID, client_name="App",
                                              redirect_host="app.example", created_by="admin")
     request_id = (await _authorize(app, _pkce()[1])).headers["Location"].rsplit("/", 1)[1]
     await admin.get(f"/api/phoenix-mcp/admin/oauth/requests/{request_id}")
@@ -1756,9 +1779,22 @@ async def test_removing_the_integration_deletes_the_sign_in_file(hass, hass_stor
     await hass.async_block_till_done()
     data = hass.data[DOMAIN]
     access_key, _raw = await data.store.async_create_access_key("phone", "admin", oauth_enabled=True)
-    await data.oauth_grants.async_create(access_key=access_key, client_id=CLIENT_ID, client_name="App",
+    await data.oauth_grants.async_create(access_key=access_key, generation=access_key.oauth_generation, client_id=CLIENT_ID, client_name="App",
                                          redirect_host="app.example", created_by="admin")
     assert OAUTH_GRANTS_STORAGE_KEY in hass_storage
     assert await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     assert OAUTH_GRANTS_STORAGE_KEY not in hass_storage
+
+
+@pytest.mark.parametrize("host", ["a:b", "a:99999999", "[::1]:x"])
+async def test_a_host_that_forms_no_url_keeps_sign_in_dark_and_answers_no_500(oauth, host):
+    """With sign-in offered, every request reads the public origin before its credential."""
+    app, _admin, data, _fetch = oauth
+    await _key(data)
+    metadata = await app.get("/.well-known/oauth-protected-resource/api/phoenix-mcp",
+                             headers={**HTTPS, "Host": host})
+    assert metadata.status == 404
+    unauthenticated = await app.post("/api/phoenix-mcp", json=_initialize(), headers={**HTTPS, "Host": host})
+    assert unauthenticated.status == 401
+    assert "resource_metadata" not in unauthenticated.headers.get("WWW-Authenticate", "")

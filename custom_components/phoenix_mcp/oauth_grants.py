@@ -195,6 +195,10 @@ class GrantLimitError(Exception):
     """The access key, or Phoenix as a whole, holds the most sign-ins it may."""
 
 
+class GrantStaleError(Exception):
+    """The access key changed after the code was approved: rotated, revoked or sign-in turned off."""
+
+
 class OAuthGrantStore:
     """The sign-ins Phoenix approved. A None store keeps them in memory only."""
 
@@ -295,16 +299,20 @@ class OAuthGrantStore:
             grant.last_used_at = when
 
     async def async_create(
-        self, *, access_key: AccessKeyRecord, client_id: str, client_name: str,
+        self, *, access_key: AccessKeyRecord, generation: int, client_id: str, client_name: str,
         redirect_host: str, created_by: str,
     ) -> IssuedTokens:
-        """Store a new sign-in for ``access_key`` and return its first tokens.
+        """Store a new sign-in for ``access_key`` at the ``generation`` its code was approved under.
 
-        Raises GrantLimitError at a cap and DurableStorageError when it could not be saved,
-        in which case nothing was issued.
+        Raises GrantStaleError when the key no longer has that generation or sign-in once the
+        lock is held, GrantLimitError at a cap and DurableStorageError when it could not be
+        saved; in each case nothing was issued.
         """
         async with self.lock:
-            if self.count_for_key(access_key.id, access_key.oauth_generation) >= OAUTH_MAX_GRANTS_PER_ACCESS_KEY:
+            if (access_key.oauth_generation != generation or not access_key.is_valid()
+                    or not access_key.oauth_enabled):
+                raise GrantStaleError
+            if self.count_for_key(access_key.id, generation) >= OAUTH_MAX_GRANTS_PER_ACCESS_KEY:
                 raise GrantLimitError("per_key")
             if len(self._grants) >= OAUTH_MAX_GRANTS:
                 raise GrantLimitError("total")
@@ -315,7 +323,7 @@ class OAuthGrantStore:
             grant = OAuthGrant(
                 id=str(uuid.uuid4()),
                 access_key_id=access_key.id,
-                generation=access_key.oauth_generation,
+                generation=generation,
                 client_id=client_id,
                 client_name=client_name,
                 redirect_host=redirect_host,

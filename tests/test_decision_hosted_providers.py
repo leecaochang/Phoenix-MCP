@@ -624,3 +624,15 @@ def test_microsoft_decision_acts_on_sequential_first_messages_only_and_only_as_d
                      DECISION_FOLLOWUP_EXECUTION_MODELS):
         assert decision_key(cfg) not in registry
         assert not revision_admitted(registry, cfg, "microsoft-decision-1")
+
+
+async def test_an_integer_past_the_digit_limit_is_a_malformed_answer(socket_enabled):
+    """Python refuses to read such an integer with a plain ValueError, not a JSON error."""
+    async def models(request):
+        return web.Response(text='{"data": [{"id": ' + "9" * 5000 + "}]}", content_type="application/json")
+    app = web.Application()
+    app.router.add_get("/models", models)
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = llm_accounts.ProviderConfig("typesafe", "m", str(server.make_url("")).rstrip("/"))
+        with pytest.raises(DecisionError, match="^malformed$"):
+            await DecisionProvider(cfg, "systemone").list_models(session)

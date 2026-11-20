@@ -182,7 +182,6 @@ async def _async_voice_answer(
         return voice_text(language, "not_configured")
 
     record_identity(access_key=access_key, config=cfg)
-    note_acting_model(cfg)
 
     if authority is not None and not is_companion(access_key):
         if authority.current(hass) is None:
@@ -251,6 +250,8 @@ async def _async_voice_answer(
                     hass, data, access_key, decision["_plan"], authority, _base_url(hass), language=language,
                 )
 
+    # Named only now: a command the local route or a decision provider ran had no model act.
+    note_acting_model(cfg)
     provider = build_provider(cfg)
     session = async_get_clientsession(hass)
     key_id = access_key.id

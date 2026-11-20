@@ -43,14 +43,66 @@ def _check_environment() -> Any:
     env = TemplateEnvironment(None)
     env.filters = _AnyName(env.filters)
     env.tests = _AnyName(env.tests)
+    env.code_generator_class = _exhaustion_aware_code_generator(env.code_generator_class)
     return env
+
+
+class FoldOutOfMemory(Exception):
+    """A constant fold ran out of memory, which Jinja would otherwise treat as not foldable."""
+
+
+def _out_of_memory(err: BaseException) -> bool:
+    """Whether a MemoryError is anywhere in the cause or context chain of ``err``."""
+    seen: set[int] = set()
+    current: BaseException | None = err
+    while current is not None and id(current) not in seen:
+        if isinstance(current, MemoryError):
+            return True
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _exhaustion_aware_code_generator(base: Any) -> Any:
+    """``base`` with Jinja's constant folder replaced by one that reports a fold out of memory.
+
+    Jinja's ``as_const`` turns every exception, MemoryError included, into ``Impossible``, so
+    under the worker's memory limit a fold Home Assistant would complete with gigabytes costs
+    nothing here. ``generic_visit`` repeats Jinja's ``Optimizer.generic_visit`` otherwise.
+    """
+    # Local: the worker imports Home Assistant and Jinja only after its limits apply.
+    from jinja2 import nodes
+    from jinja2.optimizer import Optimizer
+    from jinja2.visitor import NodeTransformer
+
+    class _Folder(Optimizer):
+        def generic_visit(self, node: Any, *args: Any, **kwargs: Any) -> Any:
+            node = NodeTransformer.generic_visit(self, node, *args, **kwargs)
+            if isinstance(node, nodes.Expr):
+                try:
+                    return nodes.Const.from_untrusted(
+                        node.as_const(args[0] if args else None),
+                        lineno=node.lineno, environment=self.environment)
+                except nodes.Impossible as err:
+                    if _out_of_memory(err):
+                        raise FoldOutOfMemory from None
+            return node
+
+    class _Generator(base):
+        def __init__(self, environment: Any, *args: Any, **kwargs: Any) -> None:
+            super().__init__(environment, *args, **kwargs)
+            if getattr(self, "optimizer", None) is not None:
+                self.optimizer: Any = _Folder(environment)
+
+    return _Generator
 
 
 def _check(templates: list[str]) -> dict:
     """Compile each template as Home Assistant would, then trial-render it.
 
-    Reports the compile CPU of the slowest single template. A template that does not compile or
-    fails its trial render is Home Assistant's to report.
+    Reports the compile CPU of the slowest single template, and ``exhausted`` when compiling or
+    trial-rendering one ran out of memory, which Home Assistant's unlimited process would not.
+    Any other compile or trial-render failure is Home Assistant's to report.
     """
     env = _check_environment()
     compiled = []
@@ -59,15 +111,21 @@ def _check(templates: list[str]) -> dict:
         started = time.process_time()
         try:
             compiled.append(env.from_string(source))
-        except Exception:  # Home Assistant reports the same failure from its own compile
-            pass
+        except (FoldOutOfMemory, MemoryError):
+            return {"compile_seconds": time.process_time() - started, "exhausted": True}
+        except Exception as err:  # Home Assistant reports the same failure from its own compile
+            if _out_of_memory(err):
+                return {"compile_seconds": time.process_time() - started, "exhausted": True}
         slowest = max(slowest, time.process_time() - started)
     for template in compiled:
         try:
             for _ in template.generate({}):
                 pass
-        except Exception:  # a trial render without its runtime variables may fail
-            continue
+        except MemoryError:
+            return {"compile_seconds": slowest, "exhausted": True}
+        except Exception as err:  # a trial render without its runtime variables may fail
+            if _out_of_memory(err):
+                return {"compile_seconds": slowest, "exhausted": True}
     return {"compile_seconds": slowest}
 
 

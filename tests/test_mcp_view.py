@@ -4298,3 +4298,25 @@ async def test_an_approved_inline_result_counts_as_dispatched(hass, status, star
     finally:
         dispatch_progress.reset(token)
     assert progress.started is started
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["approval/executed", "approval/approved", "foo/bar"])
+async def test_a_client_method_never_names_its_audit_row(method):
+    """The audit log picks the approval trail ring and its fold rule by method name."""
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+    from custom_components.phoenix_mcp.audit import AuditLog
+
+    access_key, _ = _make_access_key()
+    data = _make_data(access_key)
+    data.audit = AuditLog(maxlen=100)
+    data.store.get_settings.return_value = GlobalSettings()
+    hass = _make_hass(data)
+    for index in range(150):
+        _result, logged, _r, outcome = await _dispatch_mcp(
+            method, index, {}, access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local")
+        assert (logged, outcome) == ("unknown", "not_implemented")
+    rows = data.audit.query(limit=200)
+    assert rows and {row.method for row in rows} == {"unknown"}
+    # Folded like any other cheap refusal, and kept in the ordinary ring only.
+    assert len(rows) < 150

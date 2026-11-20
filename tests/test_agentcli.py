@@ -7433,3 +7433,125 @@ def test_cloudflare_error_envelope_is_read_and_account_limits_are_not_retried(st
     event = _http_failure("cloudflare", status, body, code=_http_failure_code(status), retryable=status == 429)
     assert (event["code"], event["retryable"]) == (expected, retryable)
     assert event["provider_detail"] == f"Cloudflare says {code}." and event["provider_code"] == str(code)
+
+
+class _KillOnRateLimit(_ScriptedProvider):
+    """A 429 naming a short wait, during which the operator turns the kill switch on."""
+
+    def __init__(self, turns, data):
+        super().__init__(turns)
+        self.data = data
+        self.requests_after_kill = 0
+
+    async def stream_turn(self, session, *, system_prompt, messages, tools, options):
+        if self.data.store.get_settings.return_value.kill_switch:
+            self.requests_after_kill += 1
+        async for ev in super().stream_turn(session, system_prompt=system_prompt, messages=messages,
+                                            tools=tools, options=options):
+            if ev.get("code") == "rate_limit":
+                self.data.store.get_settings.return_value = GlobalSettings(kill_switch=True)
+            yield ev
+
+
+@pytest.mark.asyncio
+async def test_a_rate_limit_wait_ending_after_the_kill_switch_sends_nothing_more(hass):
+    """The retry would resend the tool results already read; the turn ends as the switch says."""
+    data = _loop_data()
+    provider = _KillOnRateLimit([
+        [{"type": llm_base.EV_TOOL, "id": "tu1", "name": "get_state", "input": {"entity_id": "sensor.x"}}, _done("tool_use")],
+        [_rate_limited(0)],
+        [{"type": llm_base.EV_TEXT, "text": "answer built from the earlier tool result"}, _done("end_turn")],
+    ], data)
+    result = {"content": [{"type": "text", "text": json.dumps({"state": "21"})}]}
+    events = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    access_key = MagicMock()
+    access_key.id = "tid"
+    with patch("custom_components.phoenix_mcp.agent_turn._CONNECT_RETRY_BACKOFF_SECONDS", 0), \
+            patch("custom_components.phoenix_mcp.agent_turn._RATE_LIMIT_MARGIN_SECONDS", 0), \
+            patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._dispatch_mcp",
+                          AsyncMock(return_value=({"result": result}, "m", "r", "allowed"))):
+        await async_run_agent_turn(
+            hass=hass, data=data, access_key=access_key, provider=provider,
+            session=MagicMock(), messages=[], options={}, client_ip="agentcli",
+            base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        )
+    assert provider.requests_after_kill == 0 and provider.i == 2
+    assert [payload["code"] for name, payload in events if name == "error"] == ["kill_switch"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["demote", "deactivate", "remove", "sign_out", "rename"])
+async def test_an_agent_chat_turn_ends_when_its_administrator_loses_the_role(hass, change):
+    """Admission checked the administrator once; a turn outlives that by many rounds and waits."""
+    from custom_components.phoenix_mcp.agent_chat_views import _watch_administrator
+
+    owner = await hass.auth.async_create_user("Owner", group_ids=["system-admin"])
+    admin = await hass.auth.async_create_user("Second", group_ids=["system-admin"])
+    assert owner.is_owner and not admin.is_owner
+    session = await hass.auth.async_create_refresh_token(admin, "https://panel.example/")
+    cancel = asyncio.Event()
+    stop = _watch_administrator(hass, admin.id, session.id, cancel)
+    try:
+        if change == "demote":
+            await hass.auth.async_update_user(admin, group_ids=["system-users"])
+        elif change == "deactivate":
+            await hass.auth.async_deactivate_user(admin)
+        elif change == "remove":
+            await hass.auth.async_remove_user(admin)
+        elif change == "sign_out":
+            hass.auth.async_remove_refresh_token(session)
+        else:
+            await hass.auth.async_update_user(admin, name="Renamed")
+        await hass.async_block_till_done()
+        assert cancel.is_set() is (change != "rename")
+    finally:
+        stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("routed_locally", [True, False])
+async def test_a_command_the_local_route_runs_names_no_acting_model(hass, routed_locally):
+    """Audit rows and approvals name the model that acted; a local route calls none."""
+    from custom_components.phoenix_mcp import agent_chat
+    from custom_components.phoenix_mcp.request_authority import acting_model
+
+    seen: dict[str, object] = {}
+
+    async def route(*_args, **_kwargs):
+        seen["route"] = acting_model.get()
+        return not routed_locally
+
+    provider = _ScriptedProvider([[{"type": llm_base.EV_TEXT, "text": "ok"}, _done("end_turn")]])
+    provider.cfg = SimpleNamespace(kind="claude", model="conversation-model")
+    real_stream = provider.stream_turn
+
+    async def stream_turn(session, **kwargs):
+        seen["model"] = acting_model.get()
+        async for ev in real_stream(session, **kwargs):
+            yield ev
+
+    provider.stream_turn = stream_turn
+    access_key = MagicMock()
+    access_key.id = "tid"
+
+    async def emit(_name, _payload):
+        return None
+
+    with patch.object(agent_chat, "async_route_chat_command", route), \
+            patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list", return_value=[]), \
+            patch_readers("custom_components.phoenix_mcp.tool_dispatch._build_instructions", return_value="sys"):
+        await async_run_agent_turn(
+            hass=hass, data=_loop_data(), access_key=access_key, provider=provider, session=MagicMock(),
+            messages=[{"role": "user", "content": "turn on the kitchen light"}], options={},
+            client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event(),
+        )
+    assert seen["route"] is None
+    assert ("model" in seen) is (not routed_locally)
+    if not routed_locally:
+        assert seen["model"] == ("claude", "conversation-model")

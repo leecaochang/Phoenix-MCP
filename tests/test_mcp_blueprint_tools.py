@@ -57,6 +57,55 @@ async def test_unsafe_yaml_never_reaches_blueprint_approval(hass, bp_env, tool, 
     gate.assert_not_awaited()
 
 
+_HOST_SECRET = "host-secret-7f3a9c"
+_HOST_TAG_SHAPES = [
+    "description: !env_var PHX_BLUEPRINT_PROBE\n",
+    "description:\n  a: !env_var PHX_BLUEPRINT_PROBE\n",
+    "variables: !include {secret_file}\n",
+    "variables:\n  a: !include {secret_file}\n",
+    "variables: !<!include> {secret_file}\n",
+    "variables: !include_dir_named {secret_dir}\n",
+    "variables: !secret probe\n",
+]
+
+
+@pytest.mark.parametrize("tool", ["create_blueprint", "edit_blueprint"])
+@pytest.mark.parametrize("shape", _HOST_TAG_SHAPES)
+async def test_a_host_reading_tag_never_reaches_home_assistants_loader(hass, bp_env, tool, shape, monkeypatch):
+    """Home Assistant's loader resolves !include and !env_var, and blueprint/save writes the result."""
+    from homeassistant.util import yaml as yaml_util
+
+    monkeypatch.setenv("PHX_BLUEPRINT_PROBE", _HOST_SECRET)
+    secret_dir = bp_env / "outside"
+    secret_dir.mkdir()
+    (secret_dir / "probe.yaml").write_text(f"code: {_HOST_SECRET}\n", encoding="utf-8")
+    body = VALID + shape.format(secret_file=secret_dir / "probe.yaml", secret_dir=secret_dir)
+    if tool == "edit_blueprint":
+        _write_existing(bp_env, rel="author/tagged.yaml")
+    args = {"domain": "automation", "path": "author/tagged.yaml", "content": body}
+    with patch.object(blueprint_tools, "_gate", new_callable=AsyncMock) as gate, \
+            patch.object(yaml_util, "parse_yaml", wraps=yaml_util.parse_yaml) as parse:
+        result, outcome, _ = await _call(tool, args, _access_key(cap_blueprint_write="confirm"), hass)
+        assert not any(call.args and call.args[0] == body for call in parse.call_args_list)
+    assert outcome == "invalid_request", result
+    assert "is not allowed here" in _text(result)
+    assert _HOST_SECRET not in _text(result)
+    gate.assert_not_awaited()
+
+
+async def test_an_approved_tagged_blueprint_is_refused_at_execution(hass, bp_env, monkeypatch):
+    monkeypatch.setenv("PHX_BLUEPRINT_PROBE", _HOST_SECRET)
+    args = {"domain": "automation", "path": "author/tagged.yaml",
+            "content": VALID + "description: !env_var PHX_BLUEPRINT_PROBE\n"}
+    with _patch_ws() as ws:
+        result, outcome, _ = await blueprint_tools._execute_create_blueprint(
+            args, _access_key(), hass, _data()[0])
+    assert outcome == "invalid_request"
+    assert _HOST_SECRET not in _text(result)
+    ws.assert_not_awaited()
+    assert not os.path.exists(os.path.join(str(bp_env), "blueprints", "automation", "author", "tagged.yaml"))
+
+
 @pytest.mark.parametrize("tool", ["create_blueprint", "edit_blueprint"])
 @pytest.mark.parametrize("worker,expected", [
     (None, "lone surrogate"),

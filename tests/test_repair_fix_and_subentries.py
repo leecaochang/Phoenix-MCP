@@ -316,6 +316,36 @@ async def test_list_integrations_names_subentries(hass, agent_home):
     assert [(sub["subentry_type"], sub["title"]) for sub in row["subentries"]] == [("agent", "Kitchen agent")]
 
 
+async def test_list_integrations_names_only_subentries_the_key_sees_something_of(hass, agent_home):
+    """A subentry title can name a device out of scope, or be a notification topic."""
+    entry, entity_id = agent_home
+    lobby = config_entries.ConfigSubentry(data={}, subentry_type="agent", title="Lobby Thermometer", unique_id=None)
+    safe = config_entries.ConfigSubentry(data={}, subentry_type="agent", title="Master Bedroom Safe", unique_id=None)
+    hass.config_entries.async_add_subentry(entry, lobby)
+    hass.config_entries.async_add_subentry(entry, safe)
+    registry = er.async_get(hass)
+    registry.async_get_or_create("sensor", SUB, "lobby", config_entry=entry,
+                                 config_subentry_id=lobby.subentry_id, suggested_object_id="lobby_temp")
+    hidden = registry.async_get_or_create("lock", SUB, "safe", config_entry=entry,
+                                          config_subentry_id=safe.subentry_id, suggested_object_id="safe")
+    data, _ = await _data(hass)
+    key = _key(entity_id)
+    key.cap_integration_write = "allow"
+    content, outcome, _ = await _call_tool("list_integrations", {}, key, hass, data)
+    assert outcome == "allowed", content
+    [row] = [row for row in json.loads(_text(content))["integrations"] if row["entry_id"] == entry.entry_id]
+    assert [sub["title"] for sub in row["subentries"]] == ["Lobby Thermometer"]
+    assert row["subentries_withheld"] == 1 and "Master Bedroom Safe" not in _text(content)
+    hass.states.async_set(hidden.entity_id, "locked")
+    whole = _key(entity_id)
+    whole.cap_integration_write = "allow"
+    whole.permissions.domains["lock"] = PermissionNode(state="GREEN")
+    content, _, _ = await _call_tool("list_integrations", {}, whole, hass, data)
+    [row] = [row for row in json.loads(_text(content))["integrations"] if row["entry_id"] == entry.entry_id]
+    assert sorted(sub["title"] for sub in row["subentries"]) == ["Lobby Thermometer", "Master Bedroom Safe"]
+    assert "subentries_withheld" not in row
+
+
 async def test_a_subentry_change_without_approval_never_runs(hass, agent_home):
     entry, entity_id = agent_home
     data, pending = await _data(hass)

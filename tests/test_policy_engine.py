@@ -824,6 +824,12 @@ class TestScrubSensitiveAttributes:
         assert "entity_picture" not in result["attributes"]
         assert result["attributes"]["name"] == "Front"
 
+    def test_removes_a_media_players_tokenized_proxy_url(self, hass):
+        state = self._state("media_player.den", {
+            "entity_picture_local": "/api/media_player_proxy/media_player.den?token=PLAINTOKEN&cache=1", "volume_level": 0.3})
+        result = scrub_sensitive_attributes(state, _make_access_key(), hass)
+        assert "PLAINTOKEN" not in str(result) and result["attributes"]["volume_level"] == 0.3
+
     def test_removes_stream_url(self, hass):
         state = self._state("camera.front", {"stream_url": "rtsp://...", "name": "Cam"})
         result = scrub_sensitive_attributes(state, _make_access_key(), hass)

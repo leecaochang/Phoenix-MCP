@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from custom_components.phoenix_mcp.const import MAX_SEARCH_QUERY_LEN
-from custom_components.phoenix_mcp.routing.numeric_evidence import read_explicit_percentage, compare_percentage
+from custom_components.phoenix_mcp.routing.numeric_evidence import read_explicit_percentage, read_explicit_scalar, compare_percentage
 
 
 @pytest.mark.parametrize('language,text', [('en', 'two'), ('de', 'zwei'), ('es', 'dos'),
@@ -289,3 +289,17 @@ def test_phoenix_ui_languages_require_routing_and_number_evidence_support():
 def test_scalar_fallback_never_discards_refused_spelled_numeric_evidence(language, sentence):
     from custom_components.phoenix_mcp.routing.numeric_evidence import read_explicit_scalar
     assert read_explicit_scalar(sentence, language) is None
+
+
+@pytest.mark.parametrize("minus", ["‐", "‒", "–", "—", "―", "﹣", "－", "⁻"])
+@pytest.mark.parametrize("spaced", [False, True])
+def test_a_minus_look_alike_is_no_evidence_rather_than_a_positive_number(minus, spaced):
+    """Dropping the sign would turn -18 into 18; reading it would be a guess."""
+    sign = f"{minus} " if spaced else minus
+    assert read_explicit_scalar(f"set the freezer offset to {sign}18", "en") is None
+    assert read_explicit_percentage(f"set the light to {sign}50 percent", "en") is None
+
+
+def test_the_two_minus_signs_still_read_as_negative():
+    assert read_explicit_scalar("set the freezer offset to -18", "en") == -18
+    assert read_explicit_scalar("set the freezer offset to −18", "en") == -18

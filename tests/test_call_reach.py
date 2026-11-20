@@ -492,6 +492,24 @@ async def test_inputs_that_select_devices_or_areas_are_refused_by_name(hass):
     assert lock_calls == []
 
 
+async def test_a_renamed_script_entity_still_reads_its_own_declared_selectors(hass):
+    """Home Assistant keys a script's fields by its stored ID, which a renamed entity no longer shares."""
+    from homeassistant.helpers import entity_registry as er
+
+    data, _, lock_calls, _, _ = await _scripts(hass)
+    er.async_get(hass).async_update_entity("script.room", new_entity_id="script.kitchen_helper")
+    await hass.async_block_till_done()
+    assert await script_input_selectors(
+        hass, "script", "turn_on", {"variables": {"where": "kitchen"}}, "script.kitchen_helper") == ("where",)
+    key = _key({"script.kitchen_helper": "GREEN"}, cap_physical_control="deny")
+    args = _call("script", "turn_on", "script.kitchen_helper", {"variables": {"where": "kitchen"}})
+    result = await _call_tool("call_service", args, key, hass, data)
+    assert result[1] == "invalid_request", result
+    assert "where" in _text(result)
+    await hass.async_block_till_done()
+    assert lock_calls == []
+
+
 async def test_all_in_a_field_with_a_plain_selector_is_an_ordinary_word(hass):
     data, _, _, _, _ = await _scripts(hass)
     assert await script_input_selectors(hass, "script", "turn_on", {"variables": {"tone": "all"}}, "script.room") == ()

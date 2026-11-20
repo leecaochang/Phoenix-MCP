@@ -556,6 +556,8 @@ MESA_SUGGEST_MAX_EVIDENCE_IDS = 10
 
 SENSITIVE_ATTRIBUTES = frozenset({
     "entity_picture",
+    # A media player's proxy URL carrying its access token.
+    "entity_picture_local",
     "stream_url",
     "access_token",
     "still_image_url",

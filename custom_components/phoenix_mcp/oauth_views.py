@@ -41,7 +41,7 @@ from .oauth_flow import (
     issuer_url, oauth_offered, pkce_matches, public_origin, redirect_host, resource_matches, resource_url,
     valid_client_id, valid_code_challenge, valid_redirect_uri,
 )
-from .oauth_grants import GrantLimitError, IssuedTokens, secret_hash
+from .oauth_grants import GrantLimitError, GrantStaleError, IssuedTokens, secret_hash
 from .view_base import PhoenixView
 
 _LOGGER = logging.getLogger(__name__)
@@ -328,9 +328,12 @@ class PhoenixOAuthTokenView(PhoenixView):
             return refuse()
         try:
             tokens = await data.oauth_grants.async_create(
-                access_key=access_key, client_id=code.client_id, client_name=code.client_name,
-                redirect_host=redirect_host(code.redirect_uri), created_by=code.created_by,
+                access_key=access_key, generation=code.generation, client_id=code.client_id,
+                client_name=code.client_name, redirect_host=redirect_host(code.redirect_uri),
+                created_by=code.created_by,
             )
+        except GrantStaleError:
+            return refuse()
         except GrantLimitError:
             # Not transient: a retry within the code's minute would meet the same cap.
             _audit(data, request, rid, access_key, "denied", _code_app(code))

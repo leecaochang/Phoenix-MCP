@@ -103,6 +103,11 @@ _URL_USERINFO_RE = re.compile(r"://[^/\s@]{1,512}@")
 _URL_PARAM_RE = re.compile(r"([?&#;][\w.\-]{1,64}=)[^&#\s\"']+")
 _URL_CREDENTIAL_PARAM_RE = re.compile(r"(?i)(?:^|[_\-])key$|^(?:sig|signature|pass|passwd|pwd)$")
 _BEARER_RE = re.compile(r"(?i)\b(bearer\s{1,16})[A-Za-z0-9._~+/=\-]{8,}")
+# A command line's credentials: curl's -u user:password, and a -H header whose name is a
+# credential's (the value after its colon, or after a space when the colon is missing).
+_COMMAND_USER_RE = re.compile(r"""(?<![\w\-])(-u|--user)(\s{1,16}|=)(['"]?)([^\s'":]{1,256}:)[^\s'"]+""")
+_COMMAND_HEADER_RE = re.compile(
+    r"""(?<![\w\-])(-H|--header)(\s{1,16}|=)(['"]?)([\w\-]{1,128})(:\s{0,16}|\s{1,16})([^'"\n]+)""")
 _QUOTED_ASSIGNMENT_RE = re.compile(
     r"""(?<![\w\-])([A-Za-z_][\w\-]{0,127})"""
     r"""((?:["'\]]{0,3}\s{0,16}[:=]|\[\s{0,16}\w{0,16}\s{0,16}\]\s{0,16}=|\s{0,16}[({])\s{0,16}|\s{1,16})"""
@@ -361,6 +366,9 @@ def _scrubbed(text: str, secret_key: Callable[[str], bool]) -> str:
     out = _URL_USERINFO_RE.sub(f"://{REDACTION_SENTINEL}@", out)
     out = _URL_PARAM_RE.sub(parameter, out)
     out = _BEARER_RE.sub(lambda match: match[1] + REDACTION_SENTINEL, out)
+    out = _COMMAND_USER_RE.sub(lambda match: "".join(match.groups()) + REDACTION_SENTINEL, out)
+    out = _COMMAND_HEADER_RE.sub(
+        lambda match: "".join(match.groups()[:5]) + REDACTION_SENTINEL if secret_key(match[4]) else match[0], out)
     return _credential_call_arguments(_QUOTED_ASSIGNMENT_RE.sub(assignment, out), secret_key)
 
 

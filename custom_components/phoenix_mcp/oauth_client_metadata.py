@@ -107,7 +107,7 @@ async def async_fetch_client_verdict(client_id: str, redirect_uri: str) -> Clien
         if isinstance(exc.os_error, _BlockedAddressError):
             return ClientVerdict(False, problem="oauthClientAddressRefused")
         return ClientVerdict(False, problem="oauthClientDocumentUnavailable")
-    except (aiohttp.ClientError, asyncio.TimeoutError, OSError):
+    except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ValueError):  # UnicodeError: a host IDNA refuses
         return ClientVerdict(False, problem="oauthClientDocumentUnavailable")
     try:
         document = json.loads(body)

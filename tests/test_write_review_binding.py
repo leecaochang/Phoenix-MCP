@@ -364,6 +364,14 @@ class TestDashboardActiveContent:
         {"type": "picture", "image": "https://example.invalid/a.png"},
         {"type": "markdown", "content": "<img src=//example.invalid/a.png>"},
         {"type": "iframe", "url": "http://example.invalid/"},
+        # Spellings a browser normalizes to an external or javascript: URL.
+        {"type": "picture", "image": "/\\example.invalid/a.png"},
+        {"type": "picture", "image": "\\\\example.invalid/a.png"},
+        {"type": "picture", "image": "/\t/example.invalid/a.png"},
+        {"type": "iframe", "url": "http:\\\\example.invalid/"},
+        {"type": "iframe", "url": "http:example.invalid/"},
+        {"type": "button", "tap_action": {"action": "url", "url_path": "java\tscript:alert(1)"}},
+        {"type": "button", "tap_action": {"action": "url", "url_path": "java\nscript:alert(1)"}},
     ])
     async def test_active_card_waits_for_approval_under_allow(self, hass, card):
         await _seed_dashboard(hass, [dict(WEATHER)])
@@ -470,3 +478,26 @@ class TestDashboardActiveContent:
         _, outcome, _ = await _call_tool("restore_configuration", args, key, hass, data)
         assert outcome == "allowed" and store.pending == []
         assert WEATHER in (await async_get_lovelace_config(hass, None))["views"][0]["cards"]
+
+
+class TestDashboardAccess:
+    @pytest.mark.parametrize(("require_admin", "config", "outcome"), [
+        (True, {"require_admin": False}, "pending_approval"),
+        (True, {"title": "Renamed"}, "allowed"),
+        (False, {"require_admin": False}, "allowed"),
+        (False, {"require_admin": True}, "allowed"),
+    ])
+    async def test_showing_an_administrator_dashboard_to_everyone_waits_for_a_person(
+            self, hass, hass_admin_user, require_admin, config, outcome):
+        from custom_components.phoenix_mcp.ws_dispatch import async_ws_command
+
+        assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+        await async_ws_command(hass, "lovelace/dashboards/create",
+                               {"url_path": "admin-board", "title": "Admin", "require_admin": require_admin})
+        data, store = _data()
+        _, result, _ = await _call_tool("edit_dashboard", {"dashboard_id": "admin-board", "config": config},
+                                        _key(cap_lovelace_write="allow"), hass, data)
+        assert result == outcome
+        [row] = await async_ws_command(hass, "lovelace/dashboards/list", {})
+        if outcome == "pending_approval":
+            assert row["require_admin"] is True and store.pending

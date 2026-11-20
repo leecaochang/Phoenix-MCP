@@ -112,3 +112,23 @@ async def test_a_new_entity_domain_waits_for_a_refresh(hass, isolated_config_dir
     assert redact_inaccessible_entity_ids_in_text(text, _key(), hass) == f"homeassistant.components.{R}: reproducing"
     await hass.async_block_till_done(wait_background_tasks=True)
     assert redact_inaccessible_entity_ids_in_text(text, _key(), hass) == text
+
+
+@pytest.mark.parametrize(("text", "expected"), [
+    ("门锁lock.smart_lock状态", f"门锁{R}状态"),
+    ("检查lock.smart_lock", f"检查{R}"),
+    ("lock.smart_lock已锁", f"{R}已锁"),
+    ("lock.smart_locké", f"{R}é"),
+    ("LOCK.SMART_LOCK is locked", f"{R} is locked"),
+    ("LOCK.NO_SUCH is locked", f"{R} is locked"),
+    ("states.LOCK.Smart_Lock.state", f"states.{R}.state"),
+    ("门锁light.hall", "门锁light.hall"),
+    ("LIGHT.HALL is on", "LIGHT.HALL is on"),
+    ("see README.md and Node.js", "see README.md and Node.js"),
+])
+async def test_an_id_beside_other_letters_or_in_upper_case_is_judged_like_any_other(
+        hass, isolated_config_dir, text, expected):
+    _home(hass, isolated_config_dir)
+    key = _key("light")
+    loop, worker = await _both(hass, text, key, frozenset({"light.hall"}))
+    assert loop == worker == expected

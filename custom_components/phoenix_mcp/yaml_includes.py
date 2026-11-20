@@ -395,6 +395,29 @@ def load_tagged_lenient(text: str, *, allow_aliases: bool = True) -> Any:
         raise YamlParseError(yaml_error_detail(err)) from err
 
 
+def refuse_tags(text: str, allowed: frozenset[str]) -> None:
+    """Raise YamlParseError unless every explicit local tag in caller text is in ``allowed``.
+
+    Composes with the alias-refusing loader, so nothing is constructed or resolved. A tag
+    outside PyYAML's safe schema and ``allowed`` (``!include``, ``!env_var``, ``!secret``,
+    ``!include_dir_*``) reads the host when Home Assistant's own loader meets it.
+    """
+    try:
+        root = yaml.compose(text, Loader=PhoenixInputLoader)
+    except YAML_READ_ERRORS as err:
+        raise YamlParseError(yaml_error_detail(err)) from err
+    stack = [root] if root is not None else []
+    while stack:
+        node = stack.pop()
+        if node.tag not in allowed and node.tag not in yaml.SafeLoader.yaml_constructors:
+            names = ", ".join(sorted(allowed)) or "none"
+            raise YamlParseError(f"the YAML tag {node.tag[:40]} is not allowed here (allowed: {names})")
+        if isinstance(node, yaml.MappingNode):
+            stack.extend(child for pair in node.value for child in pair)
+        elif isinstance(node, yaml.SequenceNode):
+            stack.extend(node.value)
+
+
 def dump_tagged(data: Any) -> str:
     """Serialize with the tag-preserving dumper, style-matching HA's yaml.dump."""
     return yaml.dump(

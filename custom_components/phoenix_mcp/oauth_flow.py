@@ -338,10 +338,10 @@ def public_origin(hass: HomeAssistant, request: web.Request) -> str | None:
     if url is None:
         # A proxy that sends only X-Forwarded-Host: accept the forwarded origin when it is
         # one Home Assistant is configured with.
-        origin = str(request.url.origin())
         try:
+            origin = str(request.url.origin())
             url = origin if is_hass_url(hass, origin) else None
-        except ValueError:
+        except ValueError:  # a Host header that does not form a URL
             url = None
     if not url:
         return None

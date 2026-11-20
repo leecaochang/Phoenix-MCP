@@ -191,3 +191,50 @@ async def test_a_webhook_request_in_a_step_result_needs_the_authoring_capability
     author = _key({"automation": "YELLOW"}, **{**caps, "cap_automation_write": "confirm"})
     text, _detail = await _run_detail(hass, author, "automation.hook_result")
     assert "payload-marker" in text
+
+
+async def test_a_hidden_entity_reached_indirectly_keeps_its_steps_without_values(hass):
+    """Registry IDs, other cases, computed IDs and trigger data reach an entity without its plain ID."""
+    from homeassistant.helpers import entity_registry as er
+
+    registry = er.async_get(hass)
+    lock = registry.async_get_or_create("lock", "probe", "front", suggested_object_id="smart_lock")
+    sensor = registry.async_get_or_create("sensor", "probe", "temp", suggested_object_id="hidden_temp")
+    hass.states.async_set(lock.entity_id, "locked", {})
+    hass.states.async_set(sensor.entity_id, "23.7", {})
+    hass.states.async_set("binary_sensor.porch", "off", {})
+    conditions = [
+        {"condition": "state", "entity_id": lock.id, "state": "unlocked"},
+        {"condition": "state", "entity_id": "LOCK.SMART_LOCK", "state": "unlocked"},
+        {"condition": "numeric_state", "entity_id": sensor.id, "above": 30},
+        {"condition": "template", "value_template": "{{ is_state('lo' ~ 'ck.smart_lock', 'locked') }}"},
+        {"condition": "template", "value_template": "{{ expand(area_entities('kitchen')) | count > 0 }}"},
+    ]
+    assert await async_setup_component(hass, "automation", {"automation": [{
+        "id": f"indirect_{index}", "alias": f"Indirect {index}",
+        "triggers": [{"trigger": "state", "entity_id": "binary_sensor.porch"}],
+        "conditions": [condition], "actions": [],
+    } for index, condition in enumerate(conditions)] + [{
+        "id": "by_trigger", "alias": "By trigger",
+        "triggers": [{"trigger": "state", "entity_id": lock.entity_id}],
+        "conditions": [{"condition": "template", "value_template": "{{ trigger.to_state.state == 'unlocked' }}"}],
+        "actions": [],
+    }, {
+        "id": "readable", "alias": "Readable",
+        "triggers": [{"trigger": "state", "entity_id": "binary_sensor.porch"}],
+        "conditions": [{"condition": "template", "value_template": "{{ trigger.to_state.state == 'on' }}"}],
+        "actions": [],
+    }]})
+    await hass.async_block_till_done()
+    key = _key({"automation": "GREEN", "binary_sensor": "GREEN"})
+    hass.states.async_set("binary_sensor.porch", "on", {})
+    hass.states.async_set(lock.entity_id, "unlocked", {})
+    await hass.async_block_till_done()
+
+    for automation in [f"automation.indirect_{index}" for index in range(len(conditions))] + ["automation.by_trigger"]:
+        text, detail = await _run_detail(hass, key, automation)
+        assert '"locked"' not in text and "23.7" not in text, (automation, text)
+        steps = [step for path, steps in detail["trace"].items() if path.startswith("condition") for step in steps]
+        assert steps and all(step.get("result") in (None, "<redacted>") for step in steps), (automation, text)
+    _text, detail = await _run_detail(hass, key, "automation.readable")
+    assert detail["trace"]["condition/0"][0]["result"]["result"] is True

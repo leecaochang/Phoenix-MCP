@@ -1051,14 +1051,17 @@ def gated_area_moves(
         elif after is not None and runtime.store.get_area_profile(after) is not None:
             entries[entity_id] = after
     if entries:
-        gated.update(_loosening_entries(runtime, entries, get_area))
+        server_enforced = data.store.get_settings().mesa_mode == MESA_MODE_ENFORCED
+        gated.update(_loosening_entries(runtime, entries, get_area, server_enforced))
     return sorted(gated)
 
 
 def _loosening_entries(
-    runtime: MesaRuntime, entries: Mapping[str, str], get_area: Callable[[str], str | None]
+    runtime: MesaRuntime, entries: Mapping[str, str], get_area: Callable[[str], str | None],
+    server_enforced: bool = False,
 ) -> list[str]:
-    """The entering entities whose effective control mode is looser in the proposed area.
+    """The entering entities whose effective control mode is looser in the proposed area, or
+    whose enforced policy the area's declaration would make advisory (outside an enforced server).
 
     Resolves against a second store over the same profiles with only the area lookup changed.
     An entity that cannot be resolved either way counts, so the move is judged.
@@ -1075,12 +1078,14 @@ def _loosening_entries(
     loosening: list[str] = []
     for entity_id in entries:
         try:
-            before = current.get_effective(entity_id).operational_boundaries.control_mode
-            after = proposed.get_effective(entity_id).operational_boundaries.control_mode
+            before = current.get_effective(entity_id).operational_boundaries
+            after = proposed.get_effective(entity_id).operational_boundaries
         except _POLICY_READ_ERRORS:
             loosening.append(entity_id)
             continue
-        if CONTROL_MODE_RANK[after] < CONTROL_MODE_RANK[before]:
+        unenforced = (not server_enforced and getattr(before, "enforcement_mode", "advisory") == "enforced"
+                      and getattr(after, "enforcement_mode", "advisory") != "enforced")
+        if CONTROL_MODE_RANK[after.control_mode] < CONTROL_MODE_RANK[before.control_mode] or unenforced:
             loosening.append(entity_id)
     return loosening
 

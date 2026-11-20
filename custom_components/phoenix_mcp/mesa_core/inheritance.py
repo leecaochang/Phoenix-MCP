@@ -14,7 +14,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from custom_components.phoenix_mcp.mesa_core.conflict import ConflictResolver, FieldExplanation, Layer, _is_trusted_for
+from custom_components.phoenix_mcp.mesa_core.conflict import (
+    ConflictResolver,
+    FieldExplanation,
+    Layer,
+    _is_trusted_for,
+    control_reason_layers,
+)
 from custom_components.phoenix_mcp.mesa_core.exceptions import HostCallbackError
 from custom_components.phoenix_mcp.mesa_core.profile import (
     CONTROL_MODE_RANK,
@@ -278,8 +284,13 @@ class InheritanceResolver:
                     "floor; declare it at entity, device, or domain scope"
                 )
             effective.operational_boundaries.control_mode = floor
+            # The held-back layers' control_reason explained their own mode, not
+            # the floor, so it must not be reported as the reason for it.
+            reason_path = "operational_boundaries.control_reason"
             resolution.explanations = [
-                entry for entry in resolution.explanations if entry.field_path != control_path
+                entry
+                for entry in resolution.explanations
+                if entry.field_path not in (control_path, reason_path)
             ]
             resolution.explanations.append(
                 FieldExplanation(
@@ -288,6 +299,13 @@ class InheritanceResolver:
                     provided_by_level=floor_level,
                     provided_by_origin=floor_origin,
                 )
+            )
+            _, effective.operational_boundaries.control_reason = self._conflicts.resolve_rule_d(
+                control_reason_layers(layers, floor),
+                reason_path,
+                "control_reason",
+                "operational_boundaries",
+                resolution,
             )
 
         declared_paths = {e.field_path for e in resolution.explanations}

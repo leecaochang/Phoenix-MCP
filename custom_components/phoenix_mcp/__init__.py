@@ -373,7 +373,9 @@ async def _async_durable_state(hass: HomeAssistant) -> DurableState:
     conversations.configure(store.get_settings())
     await conversations.async_load()
 
-    versions = VersionStore(store=Store(hass, VERSION_STORAGE_VERSION, VERSION_STORAGE_KEY))
+    # Raw configuration, which can carry credentials: private, and serialized off the loop.
+    versions = VersionStore(store=Store(hass, VERSION_STORAGE_VERSION, VERSION_STORAGE_KEY, private=True,
+                                        atomic_writes=True, serialize_in_event_loop=False))
     await versions.async_load()
 
     card_catalog = CardCatalogStore(

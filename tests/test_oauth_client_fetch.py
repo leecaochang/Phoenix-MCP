@@ -166,3 +166,16 @@ async def test_the_bounded_reader_reads_to_the_end_and_stops_past_the_cap():
 
     with pytest.raises(TimeoutError):
         await read_bounded_body(_Stalls(), 10, 0.05)
+
+
+@pytest.mark.parametrize("host", ["a" * 64 + ".example.com", "ex..ample.com"])
+async def test_a_host_the_resolver_cannot_encode_is_unavailable(host):
+    """getaddrinfo IDNA-encodes the host first, which raises UnicodeError for such a label."""
+    class _EncodingResolver(_LocalResolver):
+        async def resolve(self, host, port=0, family=socket.AF_INET):
+            host.encode("idna")
+            raise AssertionError("encoded")
+
+    with patch.object(fetch, "ThreadedResolver", return_value=_EncodingResolver()):
+        verdict = await fetch.async_fetch_client_verdict(f"https://{host}/c.json", REDIRECT)
+    assert verdict.problem == "oauthClientDocumentUnavailable"

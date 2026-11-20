@@ -207,7 +207,7 @@ def test_manifest_records_the_immutable_release_source():
     manifest = json.loads(pathlib.Path(sync.MANIFEST).read_text(encoding="utf-8"))
 
     assert manifest["source_repository"] == "https://github.com/leecaochang/mesa-core.git"
-    assert manifest["source_revision"] == "a71b1cc1b187a726374ab3bb50a664c38448b059"
+    assert manifest["source_revision"] == "ed54d2b58264c74c2ada0d63b0f2c42af96e2bd6"
     assert manifest["source_tag"] == "v1.5.1"
 
 

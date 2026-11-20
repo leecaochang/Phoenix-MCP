@@ -685,7 +685,9 @@ class DecisionProvider:
                 raise DecisionError("timeout") from None
             except ClientError:
                 raise DecisionError("unavailable") from None
-            except (UnicodeError, json.JSONDecodeError, RecursionError):
+            except DecisionError:
+                raise
+            except (UnicodeError, ValueError, RecursionError):  # ValueError: past the integer digit limit too
                 raise DecisionError("malformed") from None
             finally:
                 receipt["response_received"] = parsed is not None

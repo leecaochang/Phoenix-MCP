@@ -265,7 +265,7 @@
 
 YAML 配置让智能体读取你的 YAML 文件，名称中含有 secret 的文件、esphome 文件夹和隐藏文件除外。文件名可以使用任何语言，但含有控制字符或改变文字方向的隐藏标记的文件名会被拒绝。
 
-名称暗示机密的值以及提到机密的注释显示为 `<redacted>`，但使用普通名称的密码可见。有 YAML 错误的文件不会显示，智能体只会得到需要修复的行号。没有工具会写入 YAML 配置。
+名称暗示机密的值以及提到机密的注释显示为 `<redacted>`，命令中的密码也是如此，例如 curl 的 `-u` 或 `Authorization` 标头。使用普通名称的密码可见。有 YAML 错误的文件不会显示，智能体只会得到需要修复的行号。没有工具会写入 YAML 配置。
 
 允许它的能力：[{{label:caps.cap_filesystem.label}}](guide:window.capabilities#filesystem)、[{{label:caps.cap_yaml_edit.label}}](guide:window.capabilities#yaml-edit)
 

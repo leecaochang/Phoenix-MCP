@@ -18,7 +18,7 @@ from .decision_batch import (
     batch_catalog_digest, batch_execution_eligible, capture_batch_targets,
     percentage_execution_eligible,
 )
-from .decision_provider import revision_admitted, sequential_revision_admitted
+from .decision_provider import registry_covers, revision_admitted, sequential_revision_admitted
 from .decision_targets import capture_sequential_targets
 from .routing_tables import (
     COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_PLAN_KEY, COMMAND_ROUTING_READ_INTENTS,
@@ -74,10 +74,16 @@ def _decision_plan_current(plan: dict, hass: HomeAssistant, data: Any, access_ke
             keys.add("context")
         if "reference_review" in plan:
             keys.add("reference")
-        qualified = DECISION_PERCENTAGE_EXECUTION_MODELS if numeric else DECISION_BATCH_EXECUTION_MODELS
+        # A reference follow-up is qualified as reference_execution_eligible planned it, which
+        # admits a local follow-up family that no batch registry names.
+        reference = "reference_review" in plan
+        qualified = (DECISION_REFERENCE_EXECUTION_MODELS if reference
+                     else DECISION_PERCENTAGE_EXECUTION_MODELS if numeric else DECISION_BATCH_EXECUTION_MODELS)
         if (not isinstance(review, dict) or set(review) != keys
                 or not all(isinstance(review[key], str) for key in keys - {"percentage", "catalog_numeric"})
-                or cfg is None or not batch_execution_eligible(cfg, review["language"])
+                or cfg is None
+                or not (review["language"] in DECISION_REFERENCE_LANGUAGES and registry_covers(qualified, cfg)
+                        if reference else batch_execution_eligible(cfg, review["language"]))
                 or not revision_admitted(qualified, cfg, review["model"])):
             return False
         if "context_review" in plan and review["context"] != _digest(plan["context_review"]):
@@ -96,7 +102,10 @@ def _decision_plan_current(plan: dict, hass: HomeAssistant, data: Any, access_ke
         if (temporal or typed) and (review["value"] != plan["proposal"].get("value")
                          or review["proposal"] != _digest(plan["proposal"]) or not _temporal_current(hass, plan["proposal"])):
             return False
-        snapshot = capture_batch_targets(hass, access_key, numeric_preview=numeric or review.get("catalog_numeric", False), extended=True, temporal=temporal)
+        # The reference planner captures the extended catalog only for a batch-qualified account.
+        extended = batch_execution_eligible(cfg, review["language"]) if reference else True
+        snapshot = capture_batch_targets(hass, access_key, numeric_preview=numeric or review.get("catalog_numeric", False),
+                                         extended=extended, temporal=temporal)
         if batch_catalog_digest(snapshot) != review["catalog"] or category not in snapshot[1]:
             return False
         catalog_digest = snapshot[1][category].digest()

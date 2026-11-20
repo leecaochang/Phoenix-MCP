@@ -55,7 +55,7 @@ from ..tool_common import (
     _version_content_payload,
 )
 from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command
-from ..yaml_includes import load_tagged_lenient, YamlParseError
+from ..yaml_includes import refuse_tags, YamlParseError
 from ..component_guard import require_component
 
 _LOGGER = logging.getLogger(__name__)
@@ -182,14 +182,30 @@ def _blueprint_consumers(hass: HomeAssistant, domain: str, path: str) -> list[st
         return []
 
 
+# The one tag caller blueprint source may carry. Home Assistant's loader resolves !include and
+# !env_var against the host and blueprint/save writes the resolved values into the file.
+_BLUEPRINT_TAGS = frozenset({"!input"})
+
+
+def _parse_blueprint_yaml(content: str) -> Any:
+    """Blueprint source parsed by Home Assistant's loader once every tag but !input is refused.
+
+    Raises YamlParseError for bad syntax, anchors or a refused tag, and HomeAssistantError
+    when Home Assistant's loader refuses the text.
+    """
+    # Local: not part of the recorded Home Assistant import floor.
+    from homeassistant.util import yaml as yaml_util
+
+    refuse_tags(content, _BLUEPRINT_TAGS)
+    return yaml_util.parse_yaml(content)
+
+
 def _validate_blueprint_source(domain: str, content: str) -> str | None:
     """Validate blueprint YAML the way HA's own save path will. Error text or None.
 
     Side-effect-free, so it runs pre-gate. Mirrors blueprint/save, including the generic
     BLUEPRINT_SCHEMA for every domain, the declared-domain check and !input definitions.
     """
-    # Local: not part of the recorded Home Assistant import floor.
-    from homeassistant.util import yaml as yaml_util
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.blueprint.models import Blueprint
     from homeassistant.components.blueprint.schemas import (
@@ -197,8 +213,7 @@ def _validate_blueprint_source(domain: str, content: str) -> str | None:
     )
 
     try:
-        load_tagged_lenient(content, allow_aliases=False)
-        data = yaml_util.parse_yaml(content)
+        data = _parse_blueprint_yaml(content)
     except (HomeAssistantError, YamlParseError, RecursionError) as err:
         return f"content is not valid YAML: {err}"
     if not isinstance(data, dict):
@@ -214,12 +229,9 @@ def _validate_blueprint_source(domain: str, content: str) -> str | None:
 
 
 def _parsed_blueprint(content: str) -> Any:
-    """Blueprint source as parsed YAML, or None when it does not parse."""
-    # Local: not part of the recorded Home Assistant import floor.
-    from homeassistant.util import yaml as yaml_util
-
+    """Blueprint source as parsed YAML, or None when it does not parse or carries a refused tag."""
     try:
-        return yaml_util.parse_yaml(content)
+        return _parse_blueprint_yaml(content)
     except (HomeAssistantError, YamlParseError, RecursionError):
         return None
 
@@ -358,14 +370,11 @@ def _blueprint_gate_cap(access_key: AccessKeyRecord, domain: Any) -> str:
 
 def _added_blueprint_actions(content: str, current: str | None) -> list[str]:
     """What this source adds that needs a person's review: every config built on it runs it."""
-    # Local: not part of the recorded Home Assistant import floor.
-    from homeassistant.util import yaml as yaml_util
-
     def actions(source: str | None) -> frozenset[str]:
         if source is None:
             return frozenset()
         try:
-            return reviewed_actions(yaml_util.parse_yaml(source))
+            return reviewed_actions(_parse_blueprint_yaml(source))
         except (HomeAssistantError, YamlParseError, RecursionError):
             return frozenset()
     return sorted(actions(content) - actions(current))
@@ -383,15 +392,12 @@ async def _read_blueprint_source(hass: HomeAssistant, target: str) -> str | None
 
 def _canonical_blueprint_source(domain: str, content: str) -> str:
     """Return the source HA's blueprint/save command will persist."""
-    # Local: not part of the recorded Home Assistant import floor.
-    from homeassistant.util import yaml as yaml_util
     # Local: optional component, imported only when this path runs.
     from homeassistant.components.blueprint.models import Blueprint
     from homeassistant.components.blueprint.schemas import BLUEPRINT_SCHEMA
 
     try:
-        load_tagged_lenient(content, allow_aliases=False)
-        parsed = yaml_util.parse_yaml(content)
+        parsed = _parse_blueprint_yaml(content)
     except (YamlParseError, RecursionError) as err:
         raise ConfigurationRecoveryError("Blueprint source is not safe YAML.") from err
     if not isinstance(parsed, dict):

@@ -118,6 +118,8 @@ Only legacy requests can be batches. When a batch has more than 50 items, more t
 
 Phoenix charges the whole batch against the rate limit before running it. When too little of the limit is left, the batch answers `429` with `rate_limited` and `Retry-After`, and nothing in it runs.
 
+If the key stops being valid while a streamed batch runs, each request in it gets a `-32000` reply. The reply says the result was withheld and the action might have run.
+
 ### Legacy sessions {#sessions}
 
 Under the legacy revision, `initialize` returns an `Mcp-Session-Id` header. Send it on every later request.

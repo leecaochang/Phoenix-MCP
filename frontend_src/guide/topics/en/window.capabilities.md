@@ -105,7 +105,7 @@ Reads, creates, edits, and deletes automations. Adding a call that runs code or 
 
 ### {{label:caps.cap_script_write.label}} {#script-write}
 
-Reads, creates, edits, and deletes scripts. The approval rule for automations applies here too.
+Reads, creates, edits, and deletes scripts. The approval rule for automations applies here too. Phoenix refuses YAML tags other than `!input` in a blueprint, such as `!include` or `!env_var`, because they read files and environment variables on the host.
 
 {{tools:cap_script_write}}
 
@@ -180,6 +180,8 @@ Reconfigures an integration, adds or changes its subentries, such as an AI agent
 Reads and changes dashboards. Without it, the agent can't read dashboards either.
 
 Cards run with the access of whoever opens the dashboard. So some changes wait for your approval, even on {{label:caps.modeAllow}}. These add a template, add or change any custom card, or add a picture or link from another site. An agent's restore of an earlier layout that brings such a card back waits too.
+
+Making an administrator-only dashboard visible to everyone also waits for your approval.
 
 A custom card already on the dashboard and left unchanged doesn't count. Built-in cards without any of these follow the mode you set.
 

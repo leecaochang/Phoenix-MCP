@@ -11,7 +11,7 @@ Select **{{label:shell.agentChat}}** on the toolbar. It appears once you have an
 
 With **{{label:settings.agentcliGlobalLabel}}** on (the default), Agent Chat stays open as you move around Home Assistant. With it off, Agent Chat opens only in the Phoenix panel. Leaving the panel ends a reply in progress.
 
-While the kill switch is on, Chat closes and can't be opened.
+While the kill switch is on, Chat closes and can't be opened. A running request also stops when you sign out, or when your account is removed, turned off, or no longer an administrator.
 
 ## The window {#window}
 

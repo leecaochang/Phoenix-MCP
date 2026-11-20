@@ -785,3 +785,50 @@ async def test_unload_cancels_a_model_catalog_refresh_still_running(hass, enable
     assert await hass.config_entries.async_unload(entry.entry_id)
     async with asyncio.timeout(3):
         await cancelled.wait()
+
+
+async def test_stores_holding_raw_configuration_are_private(hass, enable_custom_integrations):
+    """Version history keeps whole configurations, which can carry credentials."""
+    entry, data = await _setup_runtime(hass)
+    try:
+        for store in (data.versions._store, data.audit._store):
+            # Older Home Assistant keeps the flag on the Store, newer on its file writer.
+            assert getattr(store, "_io", store)._private is True
+    finally:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(("setting", "builder", "sync", "remove", "marker"), [
+    ("mesa_inject_enabled", "_inject_url_with_cache_bust", "async_sync_mesa_inject", "remove_mesa_inject",
+     "phoenix-mcp-inject"),
+    ("agentcli_global", "_agentchat_url_with_cache_bust", "async_sync_agentchat_inject", "remove_agentchat_inject",
+     "agentchat"),
+])
+async def test_an_inject_sync_finishing_after_unload_registers_nothing(
+        hass, enable_custom_integrations, monkeypatch, setting, builder, sync, remove, marker):
+    """The URL is built in the executor; an unload in that time has already removed it."""
+    import threading
+
+    from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
+    from custom_components.phoenix_mcp import panel
+
+    entry, data = await _setup_runtime(hass)
+    # The setting is turned on while the entry unloads, so nothing is registered yet.
+    getattr(panel, remove)(hass)
+    await data.store.async_patch_settings(**{setting: True})
+    gate, entered = threading.Event(), threading.Event()
+    real = getattr(panel, builder)
+
+    def slow():
+        entered.set()
+        gate.wait(5)
+        return real()
+
+    monkeypatch.setattr(panel, builder, slow)
+    task = hass.async_create_task(getattr(panel, sync)(hass))
+    while not entered.is_set():
+        await asyncio.sleep(0.01)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    gate.set()
+    await task
+    assert [url for url in hass.data[DATA_EXTRA_MODULE_URL].urls if marker in url] == []

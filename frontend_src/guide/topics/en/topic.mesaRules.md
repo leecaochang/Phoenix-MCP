@@ -104,7 +104,9 @@ When you rename an entity in Home Assistant, its profile follows it straight awa
 
 If the new ID already has a profile, Phoenix keeps both. The new ID takes the stricter control mode, enforcement, and privacy of the two and the limits of both. The other profile shows as an orphan for you to review. An agent's rename works the same way, after MESA has checked the rename itself.
 
-Moving something out of an area with a profile counts as a change, because it could lift a rule. Moving something into one counts as a change only when the area's profile would loosen its control mode, such as a switch moved into an {{label:mesa.modeAutonomous}} area. MESA checks the move against the control mode the entity has before it moves.
+Moving something out of an area with a profile counts as a change, because it could lift a rule. Moving something into one counts as a change only when the area's profile would loosen its control mode, such as a switch moved into an {{label:mesa.modeAutonomous}} area.
+
+A move also counts when the area's profile would stop a {{label:mesa.modeEnforced}} rule from being enforced. MESA checks the move against the control mode the entity has before it moves.
 
 ## If MESA can't read its profiles {#storage}
 

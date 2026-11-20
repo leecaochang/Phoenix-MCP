@@ -11,7 +11,7 @@
 
 **{{label:settings.agentcliGlobalLabel}}** 開啟時（預設），你在 Home Assistant 中移動時 Agent Chat 會保持開啟。關閉時，Agent Chat 只在 Phoenix 面板中開啟。離開面板會結束正在進行的回覆。
 
-緊急停止開關開啟時，Chat 會關閉且無法開啟。
+緊急停止開關開啟時，Chat 會關閉且無法開啟。當你登出，或你的帳戶被刪除、停用或不再是管理員時，正在執行的請求也會停止。
 
 ## 視窗 {#window}
 

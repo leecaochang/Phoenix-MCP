@@ -272,3 +272,28 @@ async def test_chat_cancellation_during_reference_wait_releases_slot(hass, refer
     with patch.object(DecisionProvider, '_request', side_effect=response):
         result = await prepare(hass, reference_home, cancel=cancel)
     assert result['reason'] == 'cancelled' and data.decision_shadow.task is None
+
+
+async def test_a_local_followup_family_plans_and_runs_its_reference_follow_up(hass, reference_home):
+    """Planning admits the local clef family for follow-ups, so dispatch must accept the same plan."""
+    from custom_components.phoenix_mcp.routing.command_execution import async_execute_chat_plan
+    from custom_components.phoenix_mcp.routing.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.routing.plan_currency import plan_is_current
+    from custom_components.phoenix_mcp.tools import service as service_tools
+
+    data, access_key, store, _account, entity_id = reference_home
+    hass.states.async_set(entity_id, 'on', {'friendly_name': 'Desk lamp'})
+    local = await store.add('local_decision', {'base_url': 'http://192.168.1.5:11434/v1', 'model': 'clef'})
+    await data.store.async_patch_settings(decision_provider_id=local, agentcli_routing_mode='hybrid', mesa_mode='off')
+    answer = {**wire(), 'model': 'clef'}
+    with patch.object(DecisionProvider, '_request', AsyncMock(return_value=answer)):
+        result = await prepare(hass, reference_home)
+    assert result['reason'] == 'plan_ready', result
+    plan = result['_plan']
+    assert plan_is_current(plan, hass, data, access_key)
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        reply = await async_execute_chat_plan(hass, data, access_key, plan, RoutingAuthority.capture(data, access_key),
+                                              'http://ha.local', '127.0.0.1', asyncio.Event(), language='en')
+    assert reply.outcome != 'unauthorized', reply
+    call.assert_awaited_once_with('light', 'turn_off', {'entity_id': [entity_id]}, blocking=True, return_response=False)

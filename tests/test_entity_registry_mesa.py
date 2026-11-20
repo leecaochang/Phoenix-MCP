@@ -647,6 +647,43 @@ async def test_an_entry_into_an_area_that_cannot_lift_a_prohibited_floor_is_not_
     assert data.mesa.store.get_effective(entity_id).operational_boundaries.control_mode.value == "prohibited"
 
 
+@pytest.mark.parametrize(("server_mode", "outcome"), [("advisory", "denied"), ("enforced", "allowed")])
+async def test_an_entry_that_makes_an_enforced_policy_advisory_is_judged(
+    hass: HomeAssistant, registry_entity, areas, server_mode, outcome,
+):
+    """The narrowest declared enforcement_mode wins, so an advisory area would lift a domain's enforcement.
+
+    Judged as move_area, which an enforced Prohibited entity refuses; an enforced server loses nothing.
+    """
+    entity_id, _device_id = registry_entity
+    vault, hall = areas
+    _place(hass, entity_id, hall)
+    data = await _data(hass, server_mode)
+    data.mesa.store.set_domain_profile("light", SemanticProfile.from_dict("light", {"semantic_profile": {
+        "operational_boundaries": {"control_mode": "prohibited", "enforcement_mode": "enforced"}}},
+        default_origin=MetadataOrigin.USER))
+    data.mesa.store.set_area_profile(vault, SemanticProfile.from_dict(vault, {"semantic_profile": {
+        "operational_boundaries": {"enforcement_mode": "advisory"}}}, default_origin=MetadataOrigin.USER))
+    create = AsyncMock(return_value=({}, "pending_approval", "approval"))
+
+    with patch("custom_components.phoenix_mcp.tools.registry._create_registry_mesa_approval", create):
+        _content, result, _ = await _call_tool(
+            "set_entity", {"entity_id": entity_id, "changes": {"area_id": vault}}, _access_key(), hass, data,
+        )
+
+    assert result == outcome
+    assert er.async_get(hass).async_get(entity_id).area_id == (hall if outcome == "denied" else vault)
+
+
+async def test_every_area_change_is_judged_while_the_mesa_runtime_is_unavailable(hass: HomeAssistant, registry_entity):
+    from custom_components.phoenix_mcp.mesa import gated_area_moves
+
+    entity_id, _device_id = registry_entity
+    data = await _data(hass, "advisory")
+    data.mesa = None
+    assert gated_area_moves(data, {entity_id: "kitchen", "light.other": None}) == sorted([entity_id, "light.other"])
+
+
 async def test_a_device_entry_that_loosens_its_entities_needs_approval(hass: HomeAssistant, registry_entity, areas):
     _entity_id, device_id = registry_entity
     vault, hall = areas

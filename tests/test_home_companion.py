@@ -1385,3 +1385,27 @@ async def test_half_a_character_in_model_text_does_not_end_the_request(hass, com
 def test_a_measured_size_counts_half_a_character_as_its_escape():
     assert home_companion._context_bytes('s', [{'role': 'user', 'content': '\ud83d'}]) > 0
     assert home_companion._byte_size('\ud83d') == len('\\ud83d')
+
+
+async def test_each_parallel_count_search_names_its_own_source(hass, companion, monkeypatch):
+    """Reads of one response run at once and finish in any order; each count keeps its own search."""
+    _, access_key, _, _ = companion
+    access_key.permissions.domains['light'] = PermissionNode('YELLOW')
+    access_key.permissions.domains['fan'] = PermissionNode('YELLOW')
+    for index in range(5):
+        hass.states.async_set(f'light.c{index}', 'off', {'friendly_name': f'Lamp {index}'})
+    hass.states.async_set('fan.c0', 'off', {'friendly_name': 'Fan 0'})
+    transcripts = []
+    scripted(monkeypatch, [
+        [('search_entities', {'domain': 'light', 'limit': 1}), ('search_entities', {'domain': 'fan', 'limit': 1})],
+        json.dumps({'status': 'completed', 'message': 'lights', 'read_answer': {'kind': 'count', 'source': 0}}),
+    ], transcripts=transcripts)
+    report = payload(await rpc(hass, companion, args={'request': 'how many lights and how many fans?'}))
+    references = []
+    for block in transcripts[1][-1]['content']:
+        body, _ = json.JSONDecoder().raw_decode(block['content'][0]['text'])
+        references.append((body['total'], body.get('read_answer')))
+    (lights, light_source), (fans, fan_source) = references
+    assert lights > fans, references
+    assert (light_source, fan_source) == ({'kind': 'count', 'source': 0}, {'kind': 'count', 'source': 1}), references
+    assert str(lights) in report['message'] and 'fan' not in report['message'].lower(), report

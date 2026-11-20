@@ -363,7 +363,7 @@ async def _call_tool_checked(
         raise
     if progress.tracked and not progress.started:
         result = _refused_before_write(result)
-    record_outcome(access_key, tool_name, result[1], result[0], arguments, hass)
+    record_outcome(access_key, tool_name, result[1], result[0], arguments, hass, request_id)
     return result
 
 
@@ -795,6 +795,15 @@ _MCP_MODERN_METHODS = _MCP_METHODS - {
 _MCP_LEGACY_METHODS = _MCP_METHODS - {"server/discover"}
 
 
+def audited_method(method: Any) -> str:
+    """The method an audit row names for a client message: one Phoenix serves, else unknown.
+
+    The audit log picks a row's ring and fold rule by method, so a client's own string never
+    reaches it.
+    """
+    return method if isinstance(method, str) and method in _MCP_METHODS else "unknown"
+
+
 async def _retain_unknown_outcome(data: PhoenixData, access_key_id: str, name: str, request_id: str) -> None:
     """Persist an unknown-outcome claim; the in-memory barrier survives a failed save."""
     try:
@@ -923,7 +932,7 @@ async def _dispatch_mcp(
             record_event(data, "notice", {"reason": "execution_unknown"}, outcome="unknown")
             await _retain_unknown_outcome(data, access_key.id, name, request_id)
             return _jsonrpc_error(msg_id, -32000, "Authority changed during dispatch. The action may already have executed. Do not repeat it. Check Home Assistant and review the action in the Needs Attention window of the Phoenix MCP panel before submitting another write."), method, name, "invalid_request"
-        _log(data, access_key, request_id=request_id, method=method, resource="/api/phoenix-mcp",
+        _log(data, access_key, request_id=request_id, method=audited_method(method), resource="/api/phoenix-mcp",
              outcome="denied", client_ip=client_ip)
         if isinstance(exc, PolicyChangedError) and method == "tools/call":
             refusal = _tool_error("Permissions changed while this tool was running. Its result was withheld. The conversation can continue using current permissions." if dispatch_entered else "Permissions changed before dispatch. No action was executed. The conversation can continue using current permissions.")
@@ -938,7 +947,7 @@ async def _dispatch_mcp(
         log_internal_failure(_LOGGER, "mcp_dispatch", exc)
         if write_entered:
             record_event(data, "notice", {"reason": "execution_unknown"}, outcome="unknown")
-        _log(data, access_key, request_id=request_id, method=method, resource="/api/phoenix-mcp",
+        _log(data, access_key, request_id=request_id, method=audited_method(method), resource="/api/phoenix-mcp",
              outcome="invalid_request", client_ip=client_ip)
         return _jsonrpc_error(msg_id, -32603, "Internal error."), method, "/api/phoenix-mcp", "invalid_request"
     finally:
@@ -1175,8 +1184,8 @@ async def _dispatch_mcp_authorized(
         return resp, "prompts/get", "/api/phoenix-mcp", "allowed"
 
     if msg_id is not None:
-        _log(data, access_key, request_id=request_id, method=method or "unknown",
+        _log(data, access_key, request_id=request_id, method="unknown",
              resource="/api/phoenix-mcp", outcome="not_implemented", client_ip=client_ip)
-        return _jsonrpc_error(msg_id, -32601, "Method not found."), method or "unknown", "/api/phoenix-mcp", "not_implemented"
+        return _jsonrpc_error(msg_id, -32601, "Method not found."), "unknown", "/api/phoenix-mcp", "not_implemented"
 
-    return None, method or "unknown", "/api/phoenix-mcp", "not_implemented"
+    return None, "unknown", "/api/phoenix-mcp", "not_implemented"

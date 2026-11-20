@@ -87,7 +87,6 @@ async def async_run_agent_turn(
     live in _consume_model_stream and _run_tool_batch; the iteration cap, output budget and
     turn ending stay here.
     """
-    note_acting_model(getattr(provider, "cfg", None))
     await data.agent_recovery.reconcile(data.store, access_key.id)
     if data.agent_recovery.needs_attention(access_key.id):
         await emit("error", {"code": "outcome_unknown", "retryable": False,
@@ -99,6 +98,8 @@ async def async_run_agent_turn(
     if not await async_route_chat_command(hass, data, access_key, messages, routing_language, cancel,
                                            base_url=base_url, client_ip=client_ip, emit=emit):
         return messages
+    # Named only now: a command the local route or a decision provider ran had no model act.
+    note_acting_model(getattr(provider, "cfg", None))
 
     if is_companion(access_key):
         request = messages[-1].get("content") if messages and messages[-1].get("role") == "user" else None
@@ -260,6 +261,7 @@ async def async_run_agent_turn(
             context_tokens=context_tokens, usage_done_cache=usage_done_cache,
             detect_focus_refusal=home_focused, dispatch_started=dispatch_started,
             write_started=write_started, status={"step": step, "tools": tools_run},
+            authority_stop=lambda: None if _current_dispatch_access_key(data, access_key_id) else _authority_stop(data),
         )
         flush_assistant()
         tool_calls = call.tool_calls

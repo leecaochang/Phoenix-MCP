@@ -1771,6 +1771,36 @@ async def test_a_stream_closes_once_its_authority_ends(env, hass, monkeypatch, e
                 await finished.wait()
 
 
+@pytest.mark.parametrize("ending", ["revoked", "kill-switch"])
+async def test_a_batch_stream_whose_authority_ends_answers_every_request(env, hass, monkeypatch, ending):
+    """Each request id gets the withheld reply a single request gets, not an empty stream."""
+    monkeypatch.setattr(mcp_transport, "MCP_SSE_KEEPALIVE_SECONDS", 0.02)
+    client, data = env
+    key, _raw, headers = await _session(client, data)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def held(_method, msg_id, *_args, **_kwargs):
+        entered.set()
+        await release.wait()
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"content": []}}, "tools/call", "get_state", "allowed"
+
+    batch = [{"jsonrpc": "2.0", "id": item_id, "method": "tools/call",
+              "params": {"name": "get_state", "arguments": {}}} for item_id in (1, "two")]
+    with patch.object(mcp_transport, "_dispatch_mcp", held):
+        response = await client.post(ROUTE, headers={**headers, **SSE_ACCEPT}, json=batch)
+        assert response.status == 200
+        async with asyncio.timeout(3):
+            await entered.wait()
+        await _end_authority(ending, hass, data, key)
+        async with asyncio.timeout(3):
+            rest = (await response.read()).decode()
+        release.set()
+    frames = [json.loads(line[len("data: "):]) for line in rest.splitlines() if line.startswith("data: ")]
+    [replies] = [frame for frame in frames if isinstance(frame, list)]
+    assert sorted(str(reply["id"]) for reply in replies) == ["1", "two"]
+    assert all(reply["error"]["code"] == -32000 and "withheld" in reply["error"]["message"] for reply in replies)
+
+
 async def test_a_stream_with_its_authority_intact_keeps_its_progress(env, monkeypatch):
     monkeypatch.setattr(mcp_transport, "MCP_SSE_KEEPALIVE_SECONDS", 0.02)
     client, data = env

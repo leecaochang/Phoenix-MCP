@@ -117,8 +117,12 @@ def log_request(
 ) -> None:
     """Record an audit entry and update in-memory access key counters.
 
-    ``uncertain`` marks a write that may have run, whose row is never folded.
+    ``uncertain`` marks a write that may have run, whose row is never folded. A key's request
+    never names an ``approval/`` method: those rows go to the approval trail, which only the
+    approval code writes, through ``AuditLog.record``.
     """
+    if method.startswith("approval/"):
+        method = "unknown"
     # Attribute the request to the access key's active settings preset, when one is
     # set. getattr-guarded for partial key objects.
     preset_name: str | None = None

@@ -378,6 +378,29 @@ def _capability_hint_mode(layer: Layer) -> tuple[ControlMode | None, str | None]
     return mode, None
 
 
+def control_reason_layers(layers: list[Layer], mode: ControlMode | None) -> list[Layer]:
+    """Layers that may supply ``control_reason`` for an effective ``mode``.
+
+    A reason explains the control_mode its profile chose (Spec 6.1), so a layer
+    that declared a different mode, as written, cannot explain ``mode``. A layer
+    declaring no mode keeps ordinary Rule D inheritance. An integration layer's
+    capability hint counts as its declaration when it has no
+    operational_boundaries control_mode, as in Rule A.
+    """
+    kept = []
+    for layer in layers:
+        declared: Any = None
+        if layer.profile.declared("operational_boundaries.control_mode"):
+            declared = layer.profile.operational_boundaries.control_mode
+        elif layer.level == "integration":
+            sp = layer.profile.raw.get("semantic_profile")
+            cs = (sp if isinstance(sp, dict) else layer.profile.raw).get("capability_semantics")
+            declared = cs.get("control_mode") if isinstance(cs, dict) else None
+        if declared is None or (mode is not None and declared in (mode, mode.value)):
+            kept.append(layer)
+    return kept
+
+
 def _coerced_triggers(layer: Layer, domain: str) -> tuple[TriggersAutomations, str | None]:
     """Apply the helper-domain coercion of Spec 5.4 Rule 9."""
     profile = layer.profile
@@ -800,7 +823,7 @@ class ConflictResolver:
 
         for attr in _OB_RULE_D_FIELDS:
             declared, value = self.resolve_rule_d(
-                layers,
+                control_reason_layers(layers, mode) if attr == "control_reason" else layers,
                 f"operational_boundaries.{attr}",
                 attr,
                 "operational_boundaries",

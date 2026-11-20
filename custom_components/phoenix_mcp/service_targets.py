@@ -370,14 +370,25 @@ def gate_entity_ids(
     return [*([entity_id] if isinstance(entity_id, str) else entity_id if isinstance(entity_id, list) else []), *named]
 
 
-def _scripts_run(domain: str, service: str, targets: object) -> list[str]:
-    """Return the object IDs of the scripts a call runs, read from its resolved targets."""
+def _scripts_run(hass: HomeAssistant, domain: str, service: str, targets: object) -> list[str]:
+    """Return the stored IDs of the scripts a call runs, read from its resolved targets.
+
+    Home Assistant keys a script's fields by its stored ID, the registry unique_id, which a
+    renamed entity no longer shares; an entity with no registry entry keeps its object ID.
+    """
     if domain != "script":
         return []
     if service not in SCRIPT_ENTITY_SERVICES:
         return [service]
     named = [targets] if isinstance(targets, str) else targets if isinstance(targets, list) else []
-    return [item.split(".", 1)[1] for item in named if isinstance(item, str) and item.startswith("script.")]
+    registry = er.async_get(hass)
+    scripts = []
+    for item in named:
+        if isinstance(item, str) and item.startswith("script."):
+            entry = registry.async_get(item)
+            scripts.append(entry.unique_id if entry is not None and entry.platform == "script"
+                           else item.split(".", 1)[1])
+    return scripts
 
 
 async def script_input_selectors(
@@ -392,7 +403,7 @@ async def script_input_selectors(
     inputs = script_inputs(domain, service, service_data)
     if not inputs:
         return ()
-    scripts = _scripts_run(domain, service, targets)
+    scripts = _scripts_run(hass, domain, service, targets)
     descriptions = await _service_descriptions(hass) if scripts else None
     services = descriptions.get("script") if descriptions is not None else None
     # Each script reads the same inputs through its own fields, so one declaration that
