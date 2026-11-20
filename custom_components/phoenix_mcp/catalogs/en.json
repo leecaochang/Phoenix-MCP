@@ -2151,6 +2151,8 @@
         "kill_switch": "The kill switch is on, so the agent stopped. Nothing more was run.",
         "unreachable": "Home Assistant was not reachable, so this did not finish. Anything waiting for your approval was cancelled.",
         "upstream": "The provider is temporarily unavailable.",
+        "too_many_tool_calls": "The AI model asked for more than {limit} actions in one reply, so nothing from that reply ran.",
+        "provider_account_changed": "The AI provider account was deleted or changed, so the agent stopped. Nothing more was sent to it.",
         "provider_slow": "The provider sent no reply within {seconds}s.",
         "result_withheld": "A {length}-byte result did not fit the request's context and was withheld from the model."
       },

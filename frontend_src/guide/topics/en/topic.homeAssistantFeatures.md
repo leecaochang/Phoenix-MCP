@@ -11,6 +11,8 @@ If you want Phoenix's own model and tools behind voice and Assist, use the Voice
 
 A reply stops at 8,000 characters and says it was cut. Assist shows the same text.
 
+In the Voice Agent and AI Task, a model reply that asks for more than 64 actions runs none of them.
+
 ## AI Task {#ai-task}
 
 Phoenix runs Home Assistant's AI Task actions for automations and scripts, with your account and model. It acts for the household, within its access key. If Home Assistant says who started a task, the task has only that person's rights.

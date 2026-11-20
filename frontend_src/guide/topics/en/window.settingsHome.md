@@ -43,11 +43,13 @@ A Home Companion key hands conversations to the companion, and hides **{{label:r
 
 The account whose model answers. Decision provider accounts aren't listed. Add an account in [{{label:workspace.aiProviders}}](guide:window.settingsProviders) first.
 
+If you delete or edit the account while the agent is answering, the agent stops and says the model could not answer.
+
 ### {{label:settings.model}} {#voice-model}
 
 The model that answers. Select the account first. If the provider retires the model, Phoenix switches to its [successor](guide:window.settingsProviders#change-model).
 
-The agent waits up to 30 seconds for the model to start answering, except on a local Ollama or OpenAI-compatible server. After that, it waits up to 3 minutes for anything new. Each reply can take up to 10 minutes, or up to an hour on a local server.
+The agent waits up to 30 seconds for the model to start answering, except on a local Ollama or OpenAI-compatible server. After that, it waits up to 3 minutes for anything new. Each reply can take up to 10 minutes, or up to an hour on a local server. The whole answer, with all its steps, has the same limit.
 
 ### {{label:routing.enableVoice}} {#voice-commands}
 
@@ -97,11 +99,11 @@ The access key that decides what AI Task can do. It works the same as the [Voice
 
 ### {{label:settings.providerAccount}} {#ai-task-provider}
 
-The account whose model runs the tasks.
+The account whose model runs the tasks. If you delete or edit the account while a task is running, the task stops and fails.
 
 ### {{label:settings.model}} {#ai-task-model}
 
-The model that runs the tasks. A task fails if one reply from the model takes over 10 minutes, or over an hour on a local Ollama or OpenAI-compatible server. It also fails if the model sends nothing new for 3 minutes.
+The model that runs the tasks. A task fails if one reply from the model takes over 10 minutes, or over an hour on a local Ollama or OpenAI-compatible server. It also fails if the model sends nothing new for 3 minutes. The whole task, with all its steps, has the same 10-minute or one-hour limit.
 
 ### {{label:settings.conversationStyle}} {#ai-task-style}
 

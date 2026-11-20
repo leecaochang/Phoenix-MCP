@@ -710,3 +710,60 @@ async def test_a_call_is_vetted_then_claimed_then_dispatched(hass: HomeAssistant
             patch.object(agent_turn, "dispatch_agent_tool", dispatch):
         await _run(hass, _data(), provider)
     assert order == ["vetted", "claimed", "dispatch"]
+
+
+async def test_a_response_with_too_many_tool_calls_runs_none_of_them(hass: HomeAssistant):
+    """A broken or hostile endpoint can send thousands of calls in one reply; the turn ends instead."""
+    from custom_components.phoenix_mcp.provider_constants import AGENT_MAX_TOOL_CALLS_PER_RESPONSE
+    calls = [_tool("get_state", f"c{index}", entity_id="light.a") for index in range(AGENT_MAX_TOOL_CALLS_PER_RESPONSE + 1)]
+    provider = _Provider([*calls, _done("tool_use")])
+    dispatch = AsyncMock()
+    with patch.object(agent_turn, "dispatch_agent_tool", dispatch):
+        result = await _run(hass, _data(), provider)
+    assert result.outcome == agent_turn.TURN_PROVIDER_ERROR
+    assert result.detail_code == "too_many_tool_calls"
+    dispatch.assert_not_awaited()
+
+
+async def test_a_response_at_the_tool_call_limit_still_runs(hass: HomeAssistant):
+    from custom_components.phoenix_mcp.provider_constants import AGENT_MAX_TOOL_CALLS_PER_RESPONSE
+    calls = [_tool("get_state", f"c{index}", entity_id="light.a") for index in range(AGENT_MAX_TOOL_CALLS_PER_RESPONSE)]
+    provider = _Provider([*calls, _done("tool_use")], [_text("done"), _done()])
+    with patch.object(agent_turn, "dispatch_agent_tool", _answered()) as dispatch:
+        result = await _run(hass, _data(), provider)
+    assert result.outcome == agent_turn.TURN_OK
+    assert dispatch.await_count == AGENT_MAX_TOOL_CALLS_PER_RESPONSE
+
+
+async def test_a_deleted_or_edited_provider_account_stops_the_turn(hass: HomeAssistant):
+    """Deleting an account whose key leaked takes effect at once, not when the turn finishes."""
+    current = {"value": True}
+    provider = _Provider([_tool("get_state", entity_id="light.a"), _done("tool_use")], [_text("late"), _done()])
+
+    async def read(*_args, **_kwargs):
+        current["value"] = False
+        return _answered().return_value
+
+    with patch.object(agent_turn, "dispatch_agent_tool", AsyncMock(side_effect=read)):
+        result = await _run(hass, _data(), provider, account_current=lambda: current["value"])
+    assert result.outcome == agent_turn.TURN_AUTHORITY_LOST
+    assert result.detail_code == "provider_account_changed"
+    assert provider.requests == 1
+
+
+async def test_a_whole_turn_past_its_time_ends_as_provider_slow(hass: HomeAssistant, monkeypatch):
+    """Each call is bounded, and so is the turn: many slow rounds cannot hold an automation for hours."""
+    clock = {"now": 0.0}
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(loop, "time", lambda: clock["now"])
+    provider = _Provider([_tool("get_state", entity_id="light.a"), _done("tool_use")], [_text("late"), _done()])
+
+    async def slow_read(*_args, **_kwargs):
+        clock["now"] += 601
+        return _answered().return_value
+
+    with patch.object(agent_turn, "dispatch_agent_tool", AsyncMock(side_effect=slow_read)):
+        result = await _run(hass, _data(), provider, turn_seconds=600)
+    assert result.outcome == agent_turn.TURN_PROVIDER_ERROR
+    assert result.detail_code == "provider_slow"
+    assert provider.requests == 1

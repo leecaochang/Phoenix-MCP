@@ -338,7 +338,7 @@ Phoenix sends a `: keepalive` comment every 15 seconds. Once the stream starts, 
 | `usage` | `input_tokens`, `output_tokens`, `context_tokens`, `cache_read_tokens`, `cache_write_tokens` | The provider's totals for the turn so far, only when it reports usage. |
 | `notice` | `code`, `message` | `code` is `bad_tool_call_retry`, `max_tokens_stop`, or `empty_turn`. |
 | `continue_required` | `iterations`, `turn_started_at` | The turn paused at the round limit. Send the next request with `continue: true` and this `turn_started_at`. |
-| `error` | `code`, `message`; optional `retryable`, `outcome`, `diagnostic`, `message_params`, `provider_detail`, `provider_code`, `rate_limit`, `refused` | `code` includes `cancelled`, `internal`, `kill_switch`, `unauthorized`, `review_changed`, `outcome_unknown`, `output_limit`, `invalid_request`, and the provider's own codes. |
+| `error` | `code`, `message`; optional `retryable`, `outcome`, `diagnostic`, `message_params`, `provider_detail`, `provider_code`, `rate_limit`, `refused` | `code` includes `cancelled`, `internal`, `kill_switch`, `unauthorized`, `provider_account_changed`, `too_many_tool_calls`, `review_changed`, `outcome_unknown`, `output_limit`, `invalid_request`, and the provider's own codes. |
 | `messages` | `messages` | The full updated transcript. Keep it for the next turn. |
 | `done` | `stop_reason` | The last event, unless the turn ends with an `internal` error. `stop_reason` is `error` after a failed turn. |
 

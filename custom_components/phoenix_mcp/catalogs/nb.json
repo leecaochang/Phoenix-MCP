@@ -528,6 +528,8 @@
         "kill_switch": "Nødstoppet er slått på, så agenten stoppet. Ingenting mer ble kjørt.",
         "unreachable": "Home Assistant var ikke tilgjengelig, så dette ble ikke fullført. Alt som ventet på godkjenningen din, ble avbrutt.",
         "upstream": "Leverandøren er midlertidig utilgjengelig.",
+        "too_many_tool_calls": "AI-modellen ba om mer enn {limit} handlinger i ett svar, så ingenting fra det svaret ble utført.",
+        "provider_account_changed": "AI-leverandørkontoen ble slettet eller endret, så agenten stoppet. Ingenting mer ble sendt til den.",
         "provider_slow": "Leverandøren svarte ikke innen {seconds} s.",
         "result_withheld": "Et resultat på {length} byte fikk ikke plass i forespørselens kontekst og ble ikke sendt til modellen.",
         "request_over_minute_limit": "Denne forespørselen er større enn tokengrensen per minutt for denne Groq-kontoen, så det hjelper ikke å vente. Groqs gratisnivå er for lite for Phoenix: bruk et betalt Groq-nivå eller en annen leverandør. Detaljene gir Groqs tall. Det blir ikke forsøkt på nytt."

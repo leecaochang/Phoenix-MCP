@@ -291,8 +291,7 @@ async def test_the_wrappers_bind_the_turn_to_their_surface(hass: HomeAssistant):
         seen["ai_task"] = still_bound
         return "ok"
 
-    config = type("Cfg", (), {"model": "m"})()
-    store = type("Store", (), {"resolve": lambda self, *a, **k: config})()
+    store = _Accounts()
     await data.store.async_patch_settings(voice_agent_provider_id="p", ai_task_provider_id="p", ai_task_model="m")
     with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=store)), \
             patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=_Provider()), \
@@ -321,3 +320,142 @@ async def test_an_agent_chat_turn_names_its_provider_and_model_on_its_audit_rows
     reads = [row for row in data.audit.query() if row.method == "get_state"]
     assert reads and all((row.provider, row.model) == ("claude", "claude-sonnet-5-5") for row in reads)
     assert acting_model.get() is None
+
+
+class _Accounts:
+    """A provider-account store whose get returns a copy, as AgentCliStore does."""
+
+    def __init__(self) -> None:
+        self.rows = {"acct": {"kind": "test", "api_key": "k1", "model": "m"}}
+        self.config = type("Cfg", (), {"model": "m"})()
+
+    def get(self, account_id):
+        row = self.rows.get(account_id)
+        return dict(row) if row is not None else None
+
+    def resolve(self, *_args, **_kwargs):
+        return self.config
+
+
+@pytest.mark.parametrize("change", ["delete", "edit"])
+async def test_an_agent_chat_turn_stops_when_its_provider_account_changes(hass: HomeAssistant, change):
+    """A leaked key or a runaway bill is stopped by deleting or editing the account, mid-turn."""
+    data, key, _ = await _environment(hass)
+    real = tool_dispatch._dispatch_mcp
+    accounts = _Accounts()
+    events: list[tuple[str, dict]] = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    async def dispatch_then_change(*args, **kwargs):
+        result = await real(*args, **kwargs)
+        if change == "delete":
+            accounts.rows.pop("acct")
+        else:
+            accounts.rows["acct"]["api_key"] = "k2"
+        return result
+
+    provider = _Provider(_read("c1"), _answer("The lamp is on."))
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list",
+                       return_value=[tool_dispatch._TOOL_DEFS_BY_NAME["get_state"]]), \
+            patch.object(agent_chat, "_get_secret_store", AsyncMock(return_value=accounts)), \
+            patch.object(agent_turn, "_dispatch_mcp", dispatch_then_change):
+        await agent_chat.async_run_agent_turn(
+            hass=hass, data=data, access_key=key, provider=provider, session=None,
+            messages=[{"role": "user", "content": "hi"}], options={}, client_ip="agentcli",
+            base_url="http://h", emit=emit, cancel=asyncio.Event(), max_iterations=4, account=("acct", None))
+    assert provider.requests == 1
+    assert [p["code"] for n, p in events if n == "error"] == ["provider_account_changed"]
+
+
+async def test_an_unchanged_provider_account_lets_the_agent_chat_turn_finish(hass: HomeAssistant):
+    data, key, _ = await _environment(hass)
+    events: list[tuple[str, dict]] = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    provider = _Provider(_read("c1"), _answer("The lamp is on."))
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list",
+                       return_value=[tool_dispatch._TOOL_DEFS_BY_NAME["get_state"]]), \
+            patch.object(agent_chat, "_get_secret_store", AsyncMock(return_value=_Accounts())):
+        await agent_chat.async_run_agent_turn(
+            hass=hass, data=data, access_key=key, provider=provider, session=None,
+            messages=[{"role": "user", "content": "hi"}], options={}, client_ip="agentcli",
+            base_url="http://h", emit=emit, cancel=asyncio.Event(), max_iterations=4, account=("acct", None))
+    assert provider.requests == 2
+    assert not [p for n, p in events if n == "error"]
+
+
+async def test_voice_and_ai_task_follow_their_provider_account(hass: HomeAssistant):
+    """The wrappers pass an account check that turns false once the account is deleted or edited."""
+    data, key, _ = await _environment(hass)
+    accounts = _Accounts()
+    seen = {}
+
+    async def capture(surface):
+        async def run(*args, account_current=None, **kwargs):
+            seen[surface] = account_current
+            return "ok"
+        return run
+
+    await data.store.async_patch_settings(voice_agent_provider_id="acct", ai_task_provider_id="acct", ai_task_model="m")
+    with patch_readers("custom_components.phoenix_mcp.llm.accounts._get_secret_store", AsyncMock(return_value=accounts)), \
+            patch_readers("custom_components.phoenix_mcp.llm.factory.build_provider", return_value=_Provider()), \
+            patch.object(voice_agent, "async_run_voice_turn", await capture("voice")), \
+            patch.object(ai_task, "async_run_ai_task", await capture("ai_task")):
+        await voice_agent.async_voice_answer(hass, data, "hi")
+        await ai_task.async_generate_ai_task_data(hass, data, "task", None)
+    assert seen["voice"]() and seen["ai_task"]()
+    accounts.rows["acct"]["model"] = "other"
+    assert not seen["voice"]() and not seen["ai_task"]()
+
+
+async def test_a_voice_turn_whose_account_was_deleted_answers_provider_unavailable(hass: HomeAssistant):
+    data, key, _ = await _environment(hass)
+    current = {"value": True}
+    real = tool_dispatch._dispatch_mcp
+
+    async def dispatch_then_delete(*args, **kwargs):
+        result = await real(*args, **kwargs)
+        current["value"] = False
+        return result
+
+    provider = _Provider(_read("c1"), _answer("late"))
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list",
+                       return_value=[tool_dispatch._TOOL_DEFS_BY_NAME["get_state"]]), \
+            patch.object(agent_turn, "_dispatch_mcp", dispatch_then_delete):
+        answer = await agent_chat.async_run_voice_turn(
+            hass, data, agent_turn._zero_inline_wait(key), provider, None, "http://h", "hi", max_iterations=4,
+            account_current=lambda: current["value"])
+        provider.calls = [_read("c2"), _answer("late")]
+        current["value"] = True
+        with pytest.raises(agent_chat.AiTaskError, match="account was deleted or changed"):
+            await agent_chat.async_run_ai_task(hass, data, agent_turn._zero_inline_wait(key), provider, None,
+                                               "http://h", "task", max_iterations=4,
+                                               account_current=lambda: current["value"])
+    assert answer == voice_text(None, "provider_unavailable")
+    assert provider.requests == 2
+
+
+async def test_an_agent_chat_reply_with_too_many_tool_calls_runs_none(hass: HomeAssistant):
+    from custom_components.phoenix_mcp.provider_constants import AGENT_MAX_TOOL_CALLS_PER_RESPONSE
+    data, key, _ = await _environment(hass)
+    events: list[tuple[str, dict]] = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    flood = [_read(f"c{index}")[0] for index in range(AGENT_MAX_TOOL_CALLS_PER_RESPONSE + 1)]
+    provider = _Provider([*flood, _read("end")[1]])
+    with patch_readers("custom_components.phoenix_mcp.tool_catalog.build_mcp_tool_list",
+                       return_value=[tool_dispatch._TOOL_DEFS_BY_NAME["get_state"]]):
+        await agent_chat.async_run_agent_turn(
+            hass=hass, data=data, access_key=key, provider=provider, session=None,
+            messages=[{"role": "user", "content": "hi"}], options={}, client_ip="agentcli",
+            base_url="http://h", emit=emit, cancel=asyncio.Event(), max_iterations=4)
+    assert _allowed_reads(data) == 0
+    errors = [p for n, p in events if n == "error"]
+    assert [p["code"] for p in errors] == ["too_many_tool_calls"]
+    assert errors[0]["message_params"] == {"limit": str(AGENT_MAX_TOOL_CALLS_PER_RESPONSE)}

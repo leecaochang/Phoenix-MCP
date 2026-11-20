@@ -649,6 +649,8 @@
         "kill_switch": "비상 킬 스위치가 켜져 있어 에이전트가 멈췄습니다. 더 이상 실행된 것은 없습니다.",
         "unreachable": "Home Assistant에 연결할 수 없어 완료되지 않았습니다. 승인을 기다리던 항목은 취소되었습니다.",
         "upstream": "제공업체를 일시적으로 사용할 수 없습니다.",
+        "too_many_tool_calls": "AI 모델이 한 번의 응답에서 {limit}개를 넘는 작업을 요청해서 그 응답의 내용은 아무것도 실행되지 않았습니다.",
+        "provider_account_changed": "AI 공급자 계정이 삭제되거나 변경되어 에이전트가 중지되었습니다. 더 이상 아무것도 보내지 않았습니다.",
         "provider_slow": "제공업체가 {seconds}초 안에 응답하지 않았습니다.",
         "result_withheld": "{length}바이트 결과가 요청 컨텍스트에 맞지 않아 모델에 전달되지 않았습니다.",
         "request_over_minute_limit": "이 요청은 이 Groq 계정의 분당 토큰 한도보다 커서 기다려도 해결되지 않습니다. Groq의 무료 등급은 Phoenix에 너무 작습니다. Groq 유료 등급이나 다른 제공업체를 사용하세요. 세부 정보에 Groq의 수치가 있습니다. 다시 시도하지 않습니다."

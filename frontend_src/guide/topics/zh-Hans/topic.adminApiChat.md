@@ -338,7 +338,7 @@ Phoenix 每 15 秒发送一条 `: keepalive` 注释。流开始后，问题会�
 | `usage` | `input_tokens`、`output_tokens`、`context_tokens`、`cache_read_tokens`、`cache_write_tokens` | 提供商到此轮次为止的总量，仅在报告用量时。 |
 | `notice` | `code`、`message` | `code` 为 `bad_tool_call_retry`、`max_tokens_stop` 或 `empty_turn`。 |
 | `continue_required` | `iterations`、`turn_started_at` | 轮次在限制处暂停。使用 `continue: true` 和这个 `turn_started_at` 发送下一个请求。 |
-| `error` | `code`、`message`；可选 `retryable`、`outcome`、`diagnostic`、`message_params`、`provider_detail`、`provider_code`、`rate_limit`、`refused` | `code` 包括 `cancelled`、`internal`、`kill_switch`、`unauthorized`、`review_changed`、`outcome_unknown`、`output_limit`、`invalid_request` 以及提供商自己的代码。 |
+| `error` | `code`、`message`；可选 `retryable`、`outcome`、`diagnostic`、`message_params`、`provider_detail`、`provider_code`、`rate_limit`、`refused` | `code` 包括 `cancelled`、`internal`、`kill_switch`、`unauthorized`、`provider_account_changed`、`too_many_tool_calls`、`review_changed`、`outcome_unknown`、`output_limit`、`invalid_request` 以及提供商自己的代码。 |
 | `messages` | `messages` | 完整更新后的转录。保留它用于下一轮次。 |
 | `done` | `stop_reason` | 最后一个事件，除非轮次以 `internal` 错误结束。失败的轮次后，`stop_reason` 为 `error`。 |
 

@@ -60,7 +60,7 @@ from .provider_constants import (
     AGENT_CHAT_MAX_TURN_OUTPUT_BYTES, AGENT_CHAT_PROGRESS_INTERVAL_SECONDS,
     AGENT_CHAT_RATE_LIMIT_WAIT_SECONDS, AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS, AGENT_CHAT_STATUS_INTERVAL_SECONDS,
     AGENT_CHAT_TOOL_RESULT_MAX_CHARS, AGENT_HEADLESS_CALL_SECONDS, AGENT_HEADLESS_LOCAL_CALL_SECONDS,
-    AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_PARALLEL_READ_LIMIT,
+    AGENT_CHAT_LOCAL_SERVER_KINDS, AGENT_MAX_TOOL_CALLS_PER_RESPONSE, AGENT_PARALLEL_READ_LIMIT,
 )
 from .request_authority import AuthorityChangedError, household_authority
 from .routing.routing_statistics import provider_events
@@ -1110,7 +1110,8 @@ async def _stream_turn_resilient(
     seconds of the start. ``first_reply_seconds`` bounds the first attempt's first event, and
     ``call_seconds`` the whole call, retries included; either ends as provider_slow, not retried.
     Before a retry, ``authority_stop`` names the error that ends a turn whose key may no longer
-    act, which is yielded instead of sending the request again.
+    act, which is yielded instead of sending the request again. A response carrying more than
+    AGENT_MAX_TOOL_CALLS_PER_RESPONSE tool calls ends as too_many_tool_calls, none of them run.
     """
     loop_time = asyncio.get_running_loop().time
     started = loop_time()
@@ -1136,6 +1137,7 @@ async def _stream_turn_resilient(
         limit = AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS if attempt > 1 else first_reply_seconds
         if attempt > 1 and first_reply_seconds is not None:
             limit = min(AGENT_CHAT_RETRY_FIRST_REPLY_SECONDS, first_reply_seconds)
+        calls = 0
         try:
             async with first_reply, aclosing(events):
                 if limit is not None:
@@ -1143,6 +1145,15 @@ async def _stream_turn_resilient(
                 async for ev in events:
                     first_reply.reschedule(None)
                     etype = ev.get("type")
+                    calls += 1 if etype == EV_TOOL else len(ev.get("results") or ()) if etype == EV_INVALID_TOOLS else 0
+                    if calls > AGENT_MAX_TOOL_CALLS_PER_RESPONSE:
+                        # A turn runs its tools only after a complete response, so none of these ran.
+                        too_many = {"type": EV_ERROR, "status": 0, "code": "too_many_tool_calls", "retryable": False,
+                                    "message": (f"The AI model asked for more than {AGENT_MAX_TOOL_CALLS_PER_RESPONSE} "
+                                                "actions in one reply, so nothing from that reply ran."),
+                                    "message_params": {"limit": str(AGENT_MAX_TOOL_CALLS_PER_RESPONSE)}}
+                        yield _after_dispatch_failure(too_many, write_started) if dispatch_started else too_many
+                        return
                     # A provider that names its own wait (Retry-After, Google's
                     # RetryInfo) is retried only after it, and only when that fits
                     # the window; an earlier retry is refused again.
@@ -1893,6 +1904,10 @@ class _HeadlessRun:
     # The surface's own grant, read live: whether it is still on and still bound to this key.
     # None for a surface that has no binding (a Home Companion turn).
     still_bound: Callable[[], bool] | None = None
+    # Whether the provider account the turn started with is still stored unchanged.
+    account_current: Callable[[], bool] | None = None
+    # The loop time by which the whole turn ends, or None for a surface with its own deadline.
+    deadline: float | None = None
     final_text: str = ""
     review_urls: list[str] = dataclasses.field(default_factory=list)
     # Bound the TOTAL provider output retained across the turn, matching
@@ -1992,6 +2007,8 @@ def _headless_authority_held(run: _HeadlessRun) -> bool:
         return False
     if run.still_bound is not None and not run.still_bound():
         return False
+    if run.account_current is not None and not run.account_current():
+        return False
     household = household_authority.get()
     try:
         if household is not None:
@@ -2002,9 +2019,34 @@ def _headless_authority_held(run: _HeadlessRun) -> bool:
 
 
 def _headless_authority_lost(run: _HeadlessRun) -> _HeadlessTurnResult:
-    """End a turn whose key lost authority before a model call, sending the provider nothing more."""
+    """End a turn whose key lost authority before a model call, sending the provider nothing more.
+
+    ``detail_code`` is provider_account_changed when the provider account was deleted or edited.
+    """
+    account_changed = run.account_current is not None and not run.account_current()
     return _HeadlessTurnResult(run.final_text, run.review_urls, outcome=TURN_AUTHORITY_LOST,
-                               focus_declined=run.focus_declined)
+                               focus_declined=run.focus_declined,
+                               detail_code="provider_account_changed" if account_changed else "")
+
+
+def _turn_seconds_left(run: _HeadlessRun) -> float | None:
+    """What is left of the turn's deadline, or None when the surface sets its own."""
+    return None if run.deadline is None else run.deadline - asyncio.get_running_loop().time()
+
+
+def _round_call_seconds(run: _HeadlessRun) -> float:
+    """The longest this round's model call may take: its own bound, cut to what is left of the turn."""
+    bound = _headless_call_seconds(run.provider)
+    left = _turn_seconds_left(run)
+    return bound if left is None else min(bound, max(left, 0.001))
+
+
+def _turn_deadline_failure(run: _HeadlessRun, seconds: float) -> _HeadlessTurnResult:
+    """End a turn whose whole time ran out between model calls, as a call that ran too long does."""
+    slow = {"type": EV_ERROR, "status": 0, "code": "provider_slow", "retryable": False,
+            "message": f"The AI model did not finish this request within {seconds:g}s.",
+            "message_params": {"seconds": f"{seconds:g}"}}
+    return _headless_stream_failure(run, _after_dispatch_failure(slow, run.write_started) if run.dispatch_started else slow)
 
 
 async def _watch_headless_authority(run: _HeadlessRun) -> None:
@@ -2063,7 +2105,7 @@ async def _read_headless_round(
         tools=tools, options={"tool_choice": "none"} if final_note else {}, cancel=run.cancel,
         dispatch_started=run.dispatch_started,
         write_started=run.write_started, first_reply_seconds=run.first_reply_seconds,
-        call_seconds=_headless_call_seconds(run.provider),
+        call_seconds=_round_call_seconds(run),
     ):
         etype = ev["type"]
         if etype == EV_INVALID_TOOLS:
@@ -2407,12 +2449,16 @@ async def _run_headless_turn(
     response_only: bool = False,
     first_reply_seconds: float | None = None,
     still_bound: Callable[[], bool] | None = None,
+    account_current: Callable[[], bool] | None = None,
+    turn_seconds: float | None = None,
 ) -> _HeadlessTurnResult:
     """Run one headless model and tool turn to completion, for Voice and AI Task.
     Emits no events and never waits on a confirm gate: a pending approval comes back as a
     "queued_for_approval" tool result and the turn continues. The key and ``still_bound`` are
     rechecked before every model call, during it and before every dispatch; a failed check ends
-    the turn as authority lost. Surface policy stays in the wrappers.
+    the turn as authority lost, as does a change to the provider account ``account_current``
+    watches. ``turn_seconds`` bounds the whole turn; past it the turn ends as provider_slow.
+    Surface policy stays in the wrappers.
     """
 
     await data.agent_recovery.reconcile(data.store, access_key.id)
@@ -2441,6 +2487,8 @@ async def _run_headless_turn(
         routing_language=routing_language, first_reply_seconds=first_reply_seconds, loader=loader,
         review_state=review_state, agent_tools=agent_tools, messages=[{"role": "user", "content": seed}],
         access_key_id=access_key.id, cancel=asyncio.Event(), still_bound=still_bound,
+        account_current=account_current,
+        deadline=None if turn_seconds is None else asyncio.get_running_loop().time() + turn_seconds,
     )
 
     for iteration in range(max_iterations):
@@ -2460,6 +2508,8 @@ async def _run_headless_turn(
             # The kill switch, a revoked key or an unbound surface sends the provider nothing
             # more, not even the round that would let the model say so.
             return _headless_authority_lost(run)
+        if turn_seconds is not None and (left := _turn_seconds_left(run)) is not None and left <= 0:
+            return _turn_deadline_failure(run, turn_seconds)
         if (usage := headless_usage.get()) is not None:
             usage.start_call()
         if loader is not None and not final_round:

@@ -2016,6 +2016,8 @@
         "kill_switch": "紧急停止开关已开启，因此代理已停止。没有再执行任何操作。",
         "unreachable": "无法连接 Home Assistant，因此未能完成。等待你批准的内容已取消。",
         "upstream": "提供商暂时不可用。",
+        "too_many_tool_calls": "AI 模型在一次回复中请求了超过 {limit} 个操作，因此该回复中的任何内容都没有执行。",
+        "provider_account_changed": "AI 提供商账户已被删除或更改，因此智能体已停止。没有再向它发送任何内容。",
         "provider_slow": "提供商在 {seconds} 秒内没有回复。",
         "result_withheld": "{length} 字节的结果超出了请求的上下文容量，未提供给模型。",
         "request_over_minute_limit": "此请求超出了该 Groq 账户每分钟的 Token 上限，等待也无济于事。Groq 的免费套餐对 Phoenix 来说太小：请使用 Groq 的付费套餐或其他提供商。详细信息中有 Groq 给出的数值。不会重试。"

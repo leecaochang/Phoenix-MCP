@@ -997,6 +997,8 @@
         "kill_switch": "De noodstop staat aan, dus de agent is gestopt. Er is verder niets uitgevoerd.",
         "unreachable": "Home Assistant was niet bereikbaar, dus dit is niet afgerond. Alles wat op je goedkeuring wachtte, is geannuleerd.",
         "upstream": "De provider is tijdelijk niet beschikbaar.",
+        "too_many_tool_calls": "Het AI-model vroeg om meer dan {limit} acties in één antwoord, dus niets uit dat antwoord is uitgevoerd.",
+        "provider_account_changed": "Het account van de AI-provider is verwijderd of gewijzigd, dus de agent is gestopt. Er is niets meer naartoe gestuurd.",
         "provider_slow": "De provider heeft niet binnen {seconds} s geantwoord.",
         "result_withheld": "Een resultaat van {length} bytes paste niet in de context van het verzoek en is niet aan het model doorgegeven.",
         "request_over_minute_limit": "Dit verzoek is groter dan de tokenlimiet per minuut van dit Groq-account, dus wachten helpt niet. De gratis laag van Groq is te klein voor Phoenix: gebruik een betaalde Groq-laag of een andere provider. De details geven de cijfers van Groq. Er wordt niet opnieuw geprobeerd."

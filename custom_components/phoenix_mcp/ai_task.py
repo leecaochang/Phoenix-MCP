@@ -13,6 +13,8 @@ guarded, and async_generate_ai_task_data does not touch the base class.
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 import logging
 from collections.abc import Callable
 from typing import Any, NamedTuple
@@ -479,6 +481,12 @@ async def _async_generate_ai_task_data(
     provider = build_provider(cfg)
     session = async_get_clientsession(hass)
     key_id = access_key.id
+    account = settings.ai_task_provider_id
+    account_snapshot = deepcopy(store.get(account))
+
+    def account_current() -> bool:
+        # Deleting or editing the provider account (a leaked key, a runaway bill) stops the task.
+        return store.get(account) == account_snapshot
 
     def still_bound() -> bool:
         # The binding is the grant: switching the AI Task entity off or rebinding it stops this key.
@@ -490,7 +498,7 @@ async def _async_generate_ai_task_data(
             hass, data, access_key, provider, session, _base_url(hass), instructions,
             structure_json=structure_json,
             max_iterations=data.store.get_settings().agentcli_max_iterations,
-            still_bound=still_bound,
+            still_bound=still_bound, account_current=account_current,
         )
     except AiTaskError as err:
         raise HomeAssistantError(f"The Phoenix MCP AI Task could not be completed: {err}") from err

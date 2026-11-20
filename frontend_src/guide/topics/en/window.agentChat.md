@@ -11,7 +11,7 @@ Select **{{label:shell.agentChat}}** on the toolbar. It appears once you have an
 
 With **{{label:settings.agentcliGlobalLabel}}** on (the default), Agent Chat stays open as you move around Home Assistant. With it off, Agent Chat opens only in the Phoenix panel. Leaving the panel ends a reply in progress.
 
-While the kill switch is on, Chat closes and can't be opened. A running request also stops when you sign out, or when your account is removed, turned off, or no longer an administrator.
+While the kill switch is on, Chat closes and can't be opened. A running request also stops when you sign out, or when your account is removed, turned off, or no longer an administrator. It stops too when you delete or edit the AI provider account it uses.
 
 ## The window {#window}
 
@@ -51,6 +51,8 @@ Changing the access key or provider starts a new conversation. While a reply is 
 ## Talking to the agent {#conversation}
 
 Press Enter to send, or Shift+Enter for a new line. While the agent works, a line shows what it's doing and how long it has waited for the provider. **{{label:agentchat.stop}}** ends the reply and puts your message back in the box.
+
+If the model asks for more than 64 actions in one reply, none of them run and the reply stops. A working model needs far fewer.
 
 If the connection drops during a reply, a grey notice tells you. Your message comes back only if nothing had arrived yet, because the agent might already have acted.
 

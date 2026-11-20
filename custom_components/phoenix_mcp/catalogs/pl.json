@@ -1011,6 +1011,8 @@
         "kill_switch": "Awaryjny wyłącznik jest włączony, więc agent się zatrzymał. Nic więcej nie zostało wykonane.",
         "unreachable": "Home Assistant był nieosiągalny, więc to się nie zakończyło. Wszystko, co czekało na Twoje zatwierdzenie, zostało anulowane.",
         "upstream": "Dostawca jest tymczasowo niedostępny.",
+        "too_many_tool_calls": "Model AI poprosił o więcej niż {limit} działań w jednej odpowiedzi, więc nic z tej odpowiedzi nie zostało wykonane.",
+        "provider_account_changed": "Konto dostawcy AI zostało usunięte lub zmienione, więc agent się zatrzymał. Nic więcej do niego nie wysłano.",
         "provider_slow": "Dostawca nie odpowiedział w ciągu {seconds} s.",
         "result_withheld": "Wynik o rozmiarze {length} B nie zmieścił się w kontekście żądania i nie został przekazany modelowi.",
         "request_over_minute_limit": "To żądanie przekracza minutowy limit tokenów tego konta Groq, więc czekanie nie pomoże. Darmowy plan Groq jest za mały dla Phoenix: użyj płatnego planu Groq lub innego dostawcy. Szczegóły podają liczby Groq. Nie zostanie ponowione."

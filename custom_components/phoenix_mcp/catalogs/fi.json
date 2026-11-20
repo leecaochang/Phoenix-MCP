@@ -528,6 +528,8 @@
         "kill_switch": "Hätäkatkaisu on päällä, joten agentti pysähtyi. Mitään muuta ei suoritettu.",
         "unreachable": "Home Assistantiin ei saatu yhteyttä, joten tämä ei valmistunut. Kaikki hyväksyntääsi odottanut peruutettiin.",
         "upstream": "Palveluntarjoaja ei ole tilapäisesti käytettävissä.",
+        "too_many_tool_calls": "Tekoälymalli pyysi yhdessä vastauksessa yli {limit} toimintoa, joten mitään siitä vastauksesta ei suoritettu.",
+        "provider_account_changed": "Tekoälypalvelun tili poistettiin tai sitä muutettiin, joten agentti pysähtyi. Sille ei lähetetty enää mitään.",
         "provider_slow": "Palveluntarjoaja ei vastannut {seconds} sekunnin kuluessa.",
         "result_withheld": "{length} tavun tulos ei mahtunut pyynnön kontekstiin, eikä sitä annettu mallille.",
         "request_over_minute_limit": "Tämä pyyntö on suurempi kuin tämän Groq-tilin minuuttikohtainen tunnusraja, joten odottaminen ei auta. Groqin ilmainen taso on liian pieni Phoenixille: käytä Groqin maksullista tasoa tai toista palveluntarjoajaa. Tiedoissa on Groqin luvut. Yritystä ei toisteta."

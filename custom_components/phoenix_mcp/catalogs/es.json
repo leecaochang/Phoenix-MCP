@@ -828,6 +828,8 @@
         "kill_switch": "El interruptor de emergencia está activado, así que el agente se detuvo. No se ejecutó nada más.",
         "unreachable": "No se pudo contactar con Home Assistant, así que esto no terminó. Todo lo que esperaba tu aprobación se canceló.",
         "upstream": "El proveedor no está disponible temporalmente.",
+        "too_many_tool_calls": "El modelo de IA pidió más de {limit} acciones en una sola respuesta, así que no se ejecutó nada de esa respuesta.",
+        "provider_account_changed": "La cuenta del proveedor de IA se eliminó o cambió, así que el agente se detuvo. No se le envió nada más.",
         "provider_slow": "El proveedor no respondió en {seconds} s.",
         "result_withheld": "Un resultado de {length} bytes no cabía en el contexto de la solicitud y no se entregó al modelo.",
         "request_over_minute_limit": "Esta solicitud supera el límite de tokens por minuto de esta cuenta de Groq, así que esperar no servirá. El nivel gratuito de Groq es demasiado pequeño para Phoenix: usa un nivel de pago de Groq u otro proveedor. Los detalles indican las cifras de Groq. No se volverá a intentar."

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 import json
 import logging
 from datetime import datetime
@@ -18,7 +19,7 @@ from .agent_turn import (
     _after_dispatch_failure, _AGENT_CHAT_ADDENDUM, _agentcli_time_context,
     _agentcli_time_guidance, _clip_display, _consume_model_stream,
     _conversation_behavior_prompt, _current_dispatch_access_key, _DETAIL_INSTRUCTIONS,
-    _home_focus_output_contract, _kill_switch_on, _model_messages, _review_stop_error, _run_headless_turn,
+    _headless_call_seconds, _home_focus_output_contract, _kill_switch_on, _model_messages, _review_stop_error, _run_headless_turn,
     _run_tool_batch, _STYLE_INSTRUCTIONS, _with_time_context, HeadlessUsage, TURN_AUTHORITY_LOST,
     TURN_EXHAUSTED, TURN_OUTCOME_UNKNOWN, TURN_OUTPUT_LIMIT, TURN_PROVIDER_ERROR, TURN_TRUNCATED,
     UNTRUSTED_TOOL_DATA,
@@ -33,6 +34,7 @@ from .data import PhoenixData
 from .catalog_text import spoken_sentences, voice_text
 from .home_companion import is_companion, internal_turn
 from .home_companion_turn import async_delegate
+from .llm.accounts import _get_secret_store
 from .llm.base import (
     _invalid_tools_error, _local_tool_results, _merged_results, _operator_message_index,
     _tool_limit_problem, _tool_loader, _tool_search,
@@ -53,6 +55,10 @@ from .tool_loading import without_tool_search
 from .tool_dispatch import _build_instructions
 
 _LOGGER = logging.getLogger(__name__)
+
+
+_ACCOUNT_STOP = {"code": "provider_account_changed",
+                 "message": "The AI provider account was deleted or changed, so the agent stopped. Nothing more was sent to it."}
 
 
 def _authority_stop(data: PhoenixData) -> dict:
@@ -198,6 +204,17 @@ async def async_run_agent_turn(
     write_started = False
     saw_text = False
     turn_errored = False
+    # The provider account the turn started with: deleting or editing it (a leaked key, a runaway
+    # bill) sends the provider nothing more.
+    accounts = await _get_secret_store(hass) if account is not None else None
+    account_snapshot = deepcopy(accounts.get(account[0])) if accounts is not None and account is not None else None
+
+    def stop_error() -> dict | None:
+        if _current_dispatch_access_key(data, access_key_id) is None:
+            return _authority_stop(data)
+        if accounts is not None and account is not None and accounts.get(account[0]) != account_snapshot:
+            return dict(_ACCOUNT_STOP)
+        return None
     # Bound the TOTAL provider-generated output retained across the whole turn.
     # The per-response _sse_lines cap bounds one stream, but a full turn of
     # iterations would still let messages[] accumulate a large multiple; this shared budget
@@ -242,10 +259,10 @@ async def async_run_agent_turn(
         if cancel.is_set():
             await emit("error", {"code": "cancelled", "message": "Cancelled."})
             break
-        if _current_dispatch_access_key(data, access_key_id) is None:
-            # Checked before every model call, so the kill switch or a revoked key sends the
-            # provider nothing more, not even the tool results already read.
-            await emit("error", _authority_stop(data))
+        if (stopped_by := stop_error()) is not None:
+            # Checked before every model call, so the kill switch, a revoked key or a removed
+            # provider account sends the provider nothing more, not even the tool results already read.
+            await emit("error", stopped_by)
             turn_errored = True
             stop_reason = "error"
             break
@@ -261,7 +278,7 @@ async def async_run_agent_turn(
             context_tokens=context_tokens, usage_done_cache=usage_done_cache,
             detect_focus_refusal=home_focused, dispatch_started=dispatch_started,
             write_started=write_started, status={"step": step, "tools": tools_run},
-            authority_stop=lambda: None if _current_dispatch_access_key(data, access_key_id) else _authority_stop(data),
+            authority_stop=stop_error,
         )
         flush_assistant()
         tool_calls = call.tool_calls
@@ -439,6 +456,7 @@ async def async_run_voice_turn(
     include_review_hint: bool = False,
     language: object = None,
     still_bound: Callable[[], bool] | None = None,
+    account_current: Callable[[], bool] | None = None,
 ) -> str:
     """Run one conversation-agent turn to completion; return the spoken answer.
     Headless through _run_headless_turn. ``include_review_hint`` adds where to approve, as a
@@ -481,7 +499,7 @@ async def async_run_voice_turn(
         # only the silent-stream bound applies there.
         first_reply_seconds=(None if getattr(provider, "kind", "") in AGENT_CHAT_LOCAL_SERVER_KINDS
                              else VOICE_FIRST_REPLY_SECONDS),
-        still_bound=still_bound,
+        still_bound=still_bound, account_current=account_current, turn_seconds=_headless_call_seconds(provider),
     )
     voice_result(turn.outcome, bool(turn.review_urls), bool(turn.text.strip()))
     # Never raise at a microphone: every ending becomes something sayable, in the
@@ -505,8 +523,10 @@ async def async_run_voice_turn(
     if turn.outcome == TURN_AUTHORITY_LOST:
         # A closing round after a refused call can produce a sentence ("I could not do that");
         # say it. A key that may no longer act gets no closing round.
+        account_gone = turn.detail_code == "provider_account_changed"
         return turn.text.strip() or voice_text(
-            language, "unavailable" if _kill_switch_on(data) else "access_key_unavailable")
+            language, "unavailable" if _kill_switch_on(data)
+            else "provider_unavailable" if account_gone else "access_key_unavailable")
     if turn.outcome == TURN_EXHAUSTED:
         # By construction there is no partial answer here: the round that runs out
         # of steps is a tool round, which has already reset the text.
@@ -577,6 +597,7 @@ async def async_run_ai_task(
     structure_json: dict | None = None,
     max_iterations: int = AGENT_CHAT_MAX_ITERATIONS,
     still_bound: Callable[[], bool] | None = None,
+    account_current: Callable[[], bool] | None = None,
 ) -> str:
     """Run one AI Task (ai_task.generate_data) to completion; return the final text.
     Headless, with the same gated loop as Voice; a confirm gate is fed back as
@@ -619,6 +640,7 @@ async def async_run_ai_task(
         system=system, seed=instructions, client_ip=AI_TASK_CLIENT_IP,
         max_iterations=1 if companion_authority is not None else max_iterations, routing_surface="ai_task", routing_language=hass.config.language,
         response_only=companion_authority is not None, still_bound=still_bound,
+        account_current=account_current, turn_seconds=_headless_call_seconds(provider),
     )
     if companion_authority is not None and companion_authority.current(hass) is None:
         raise AiTaskError(voice_text(hass.config.language, "access_key_unavailable"))
@@ -634,6 +656,8 @@ async def async_run_ai_task(
         raise AiTaskError(turn.detail)
     if turn.outcome == TURN_OUTPUT_LIMIT:
         raise AiTaskError("the model produced too much output this turn")
+    if turn.outcome == TURN_AUTHORITY_LOST and turn.detail_code == "provider_account_changed":
+        raise AiTaskError("the AI provider account was deleted or changed mid-task, so the task stopped")
     if turn.outcome == TURN_AUTHORITY_LOST:
         raise AiTaskError(
             "the access key lost authority mid-task (revoked, expired, no longer bound to the "

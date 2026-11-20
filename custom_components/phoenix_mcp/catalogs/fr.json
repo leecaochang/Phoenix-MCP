@@ -1771,6 +1771,8 @@
         "kill_switch": "Le coupe-circuit d’urgence est activé, l’agent s’est donc arrêté. Rien d’autre n’a été exécuté.",
         "unreachable": "Home Assistant était injoignable, donc ceci n'a pas abouti. Tout ce qui attendait votre approbation a été annulé.",
         "upstream": "Le fournisseur est temporairement indisponible.",
+        "too_many_tool_calls": "Le modèle d’IA a demandé plus de {limit} actions dans une seule réponse ; rien de cette réponse n’a été exécuté.",
+        "provider_account_changed": "Le compte du fournisseur d’IA a été supprimé ou modifié ; l’agent s’est donc arrêté. Plus rien ne lui a été envoyé.",
         "provider_slow": "Le fournisseur n'a pas répondu dans un délai de {seconds} s.",
         "result_withheld": "Un résultat de {length} octets ne tenait pas dans le contexte de la requête et n'a pas été transmis au modèle.",
         "request_over_minute_limit": "Cette requête dépasse la limite de jetons par minute de ce compte Groq, donc attendre n’y changera rien. L’offre gratuite de Groq est trop petite pour Phoenix : utilisez une offre payante de Groq ou un autre fournisseur. Les détails donnent les chiffres de Groq. Aucune nouvelle tentative ne sera faite."

@@ -43,11 +43,13 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 其模型負責回答的帳戶。決策提供者帳戶不會列出。請先在[{{label:workspace.aiProviders}}](guide:window.settingsProviders)中新增帳戶。
 
+如果你在智慧體回答時刪除或編輯該帳戶，智慧體會停止，並說明模型無法回答。
+
 ### {{label:settings.model}} {#voice-model}
 
 負責回答的模型。請先選擇帳戶。如果提供者停用該模型，Phoenix 會切換到其[後續模型](guide:window.settingsProviders#change-model)。
 
-智慧體最多等待 30 秒讓模型開始回答，本機 Ollama 或 OpenAI 相容伺服器除外。之後它最多等待 3 分鐘接收新內容。每次回覆最多可用 10 分鐘，在本機伺服器上最多可用一小時。
+智慧體最多等待 30 秒讓模型開始回答，本機 Ollama 或 OpenAI 相容伺服器除外。之後它最多等待 3 分鐘接收新內容。每次回覆最多可用 10 分鐘，在本機伺服器上最多可用一小時。整個回答連同它的所有步驟也受同樣的限制。
 
 ### {{label:routing.enableVoice}} {#voice-commands}
 
@@ -97,11 +99,11 @@ Home Companion 金鑰會把對話交給 Home Companion 處理，並隱藏 **{{la
 
 ### {{label:settings.providerAccount}} {#ai-task-provider}
 
-其模型執行任務的帳戶。
+其模型執行任務的帳戶。如果你在任務執行時刪除或編輯該帳戶，任務會停止並失敗。
 
 ### {{label:settings.model}} {#ai-task-model}
 
-執行任務的模型。如果模型的一次回覆超過 10 分鐘（在本機 Ollama 或 OpenAI 相容伺服器上為超過一小時），任務就會失敗。如果模型 3 分鐘內沒有傳送新內容，任務也會失敗。
+執行任務的模型。如果模型的一次回覆超過 10 分鐘（在本機 Ollama 或 OpenAI 相容伺服器上為超過一小時），任務就會失敗。如果模型 3 分鐘內沒有傳送新內容，任務也會失敗。整個任務連同它的所有步驟也受同樣的 10 分鐘或一小時限制。
 
 ### {{label:settings.conversationStyle}} {#ai-task-style}
 

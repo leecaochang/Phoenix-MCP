@@ -338,7 +338,7 @@ Phoenix 每 15 秒傳送一條 `: keepalive` 註解。串流開始後，問題�
 | `usage` | `input_tokens`、`output_tokens`、`context_tokens`、`cache_read_tokens`、`cache_write_tokens` | 提供者到此輪次為止的總量，僅在回報用量時。 |
 | `notice` | `code`、`message` | `code` 為 `bad_tool_call_retry`、`max_tokens_stop` 或 `empty_turn`。 |
 | `continue_required` | `iterations`、`turn_started_at` | 輪次在限制處暫停。使用 `continue: true` 和這個 `turn_started_at` 傳送下一個請求。 |
-| `error` | `code`、`message`；選填 `retryable`、`outcome`、`diagnostic`、`message_params`、`provider_detail`、`provider_code`、`rate_limit`、`refused` | `code` 包括 `cancelled`、`internal`、`kill_switch`、`unauthorized`、`review_changed`、`outcome_unknown`、`output_limit`、`invalid_request` 以及提供者自己的代碼。 |
+| `error` | `code`、`message`；選填 `retryable`、`outcome`、`diagnostic`、`message_params`、`provider_detail`、`provider_code`、`rate_limit`、`refused` | `code` 包括 `cancelled`、`internal`、`kill_switch`、`unauthorized`、`provider_account_changed`、`too_many_tool_calls`、`review_changed`、`outcome_unknown`、`output_limit`、`invalid_request` 以及提供者自己的代碼。 |
 | `messages` | `messages` | 完整更新後的逐字稿。保留它用於下一輪次。 |
 | `done` | `stop_reason` | 最後一個事件，除非輪次以 `internal` 錯誤結束。失敗的輪次後，`stop_reason` 為 `error`。 |
 

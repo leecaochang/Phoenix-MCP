@@ -10,6 +10,8 @@ and model are GlobalSettings.voice_agent_*.
 """
 from __future__ import annotations
 
+from copy import deepcopy
+
 import logging
 import re
 from typing import Any, Literal
@@ -255,6 +257,12 @@ async def _async_voice_answer(
     provider = build_provider(cfg)
     session = async_get_clientsession(hass)
     key_id = access_key.id
+    account = settings.voice_agent_provider_id
+    account_snapshot = deepcopy(store.get(account))
+
+    def account_current() -> bool:
+        # Deleting or editing the provider account (a leaked key, a runaway bill) stops the turn.
+        return store.get(account) == account_snapshot
 
     def still_bound() -> bool:
         # The binding is the grant, as on Assist: switching Voice off or rebinding it stops this key.
@@ -266,7 +274,7 @@ async def _async_voice_answer(
             hass, data, access_key, provider, session, _base_url(hass), user_text,
             include_review_hint=include_review_hint,
             max_iterations=data.store.get_settings().agentcli_max_iterations,
-            language=language, still_bound=still_bound,
+            language=language, still_bound=still_bound, account_current=account_current,
         )
     except Exception:  # a provider/loop failure must not raise
         _LOGGER.exception("Phoenix MCP voice agent turn failed")
