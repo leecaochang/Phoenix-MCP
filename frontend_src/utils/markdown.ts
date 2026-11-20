@@ -56,7 +56,7 @@ export function flagsUnsafeContent(raw: string): boolean {
 }
 
 function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // Inline transforms. Input MUST already be HTML-escaped.
@@ -133,7 +133,8 @@ function inline(s: string, opts: MarkdownOptions = {}): string {
     // https:// host, so a bare "/" allow-rule would let it through. Require a
     // single leading slash not followed by a slash or backslash.
     if (/^(https?:\/\/|\/(?![\/\\]))/i.test(url)) {
-      const safe = url.replace(/"/g, "%22");
+      // esc() already turned each double quote into &quot;; an address carries it percent-encoded.
+      const safe = url.replace(/&quot;|"/g, "%22");
       return hold(`<a href="${safe}" target="_blank" rel="noopener noreferrer">${emphasize(text)}</a>`);
     }
     const topic = opts.guideLinks ? GUIDE_TOPIC_RE.exec(url) : null;

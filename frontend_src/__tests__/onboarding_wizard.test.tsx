@@ -60,7 +60,7 @@ const press = (name: string | RegExp) => fireEvent.click(screen.getByRole("butto
 
 /** From the choice to the Access step, creating the key on the way. */
 async function toAccess(path: "Agent Chat in Home Assistant (Recommended)" | "Connect an External App") {
-  press(new RegExp(`^${path.replace(/[()]/g, "\\$&")}`));
+  press(new RegExp(`^${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   press("Next");
   press("Create Access Key");
   await waitFor(() => expect(heading()).toBe("Grant Access to One Light"));

@@ -71,6 +71,11 @@ describe("renderMarkdown", () => {
     expect(html).not.toContain('onmouseover="alert');
   });
 
+  it("escapes double quotes in text and keeps them percent-encoded in an href", () => {
+    expect(renderMarkdown('say "hi"')).toBe("<p>say &quot;hi&quot;</p>");
+    expect(renderMarkdown('[x](/a"b)')).toContain('href="/a%22b"');
+  });
+
   it("renders a GFM table into a real table (not one run-together paragraph)", () => {
     const src = [
       "| Entity ID | State |",
