@@ -37,8 +37,10 @@ from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config,
 
 REAL_TEMPLATE_WORKER = True
 
-# Folded while compiling: a constant power that takes seconds of CPU.
-POWER = "{{ (9 ** (9 ** 7)) > 0 }}"
+# Folded while compiling: a constant power that takes far more CPU than the work budget on any
+# runner. The smaller 9 ** (9 ** 7) took about 3 s, which a fast runner could finish within the
+# budget plus its rounding, so the worker sometimes answered instead of refusing.
+POWER = "{{ (9 ** (9 ** 8)) > 0 }}"
 # A lone surrogate computed at render time, which ciso8601 cannot survive.
 COMPUTED_SURROGATE = "{{ as_timestamp('%c' % 55296, 0) > 0 }}"
 
