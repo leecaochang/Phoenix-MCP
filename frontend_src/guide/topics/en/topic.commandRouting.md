@@ -27,16 +27,20 @@ Later messages in a conversation can go to the decision provider too. Each one i
 
 A follow-up that says "it" instead of naming the device, such as "Now turn it off", works for one light. It can turn the light on or off, or ask whether it's on.
 
-## Actions the decision provider never runs {#risky-actions}
+## Actions the decision provider runs {#risky-actions}
 
-The decision provider picks the action from your words. Phoenix checks that you named the device, but it can't check the action. So the decision provider never runs these actions:
+The decision provider picks the action from your words. Phoenix checks that you named the device, but it can't check the action. So the decision provider only runs actions that are easy to undo, or that take their value from your words:
 
-- Unlocking or opening a lock
-- Opening or toggling a cover, garage door, or valve
-- Turning on or toggling a siren
-- Disarming or triggering an alarm
+- Reading a state or an attribute
+- Lights, switches, fans, and media players
+- Timers
+- Stopping a cover or valve, and pausing or docking a vacuum or mower
+- Climate fan, preset, and swing modes, and humidifier modes
+- Stepping a counter or number helper up or down, and turning a remote on or off
+- A number you say, such as a brightness, temperature, or cover position
+- A text you put in quotes, and a select option you name
 
-These commands go to your AI model instead, just as when the decision provider isn't sure. Your access key's permissions and approvals still apply there.
+Everything else goes to your AI model instead, just as when the decision provider isn't sure. That includes locks, sirens, alarms, cameras, automations, scripts, and scenes, and opening or closing covers and valves. Your access key's permissions and approvals still apply there.
 
 ## Limits {#limits}
 

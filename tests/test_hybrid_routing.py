@@ -1170,6 +1170,16 @@ def entity_command_wire(payload, entity_id, category, value=None):
         for question, spec in payload['questions'].items()}}
 
 
+def every_category_allowed():
+    """Lift the allowlist for a test of dispatch mechanics rather than of which categories may run."""
+    from contextlib import ExitStack
+    from custom_components.phoenix_mcp.routing import decision_batch, decision_shadow, plan_currency
+    stack = ExitStack()
+    for module in (decision_batch, decision_shadow, plan_currency):
+        stack.enter_context(patch.object(module, 'DECISION_PROVIDER_REFUSED_CATEGORIES', frozenset()))
+    return stack
+
+
 @pytest.mark.parametrize('entity_command_home', [
     ('input_boolean_on', None), ('counter_increment', None), ('timer_cancel', None),
     ('input_button_press', None), ('cover_close', None), ('vacuum_return_to_base', None),
@@ -1180,13 +1190,37 @@ async def test_entity_commands_reach_guarded_dispatch(hass, entity_command_home)
     home, category, value, intent, (domain, service, field) = entity_command_home
     async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
     sentence = f'Please perform {category} for Test helper' + (f' using "{value}"' if value else '')
-    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (every_category_allowed(), patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond, sentence=sentence)
     remote.assert_awaited_once()
     provider.assert_not_called()
     call.assert_awaited_once_with(domain, service, {'entity_id': [home[-1]], **({field: value} if field else {})},
                                  blocking=True, return_response=False)
+
+
+@pytest.mark.parametrize('entity_command_home', [('select_option', 'Away'), ('input_select_option', 'Away')], indirect=True)
+@pytest.mark.parametrize(('sentence', 'runs'), [
+    ('Set Test helper to Away', True),
+    ('Set Test helper to away please', True),
+    ('Set Test helper to the other one', False),
+    ('Set Test helper from Home to Away', False),
+    ('Set Test helper to Awayish', False),
+])
+async def test_a_select_option_runs_only_when_the_sentence_names_it(hass, entity_command_home, sentence, runs):
+    """The option is the provider's pick from the entity's list; the sentence must name exactly that one."""
+    home, category, value, _, (domain, service, field) = entity_command_home
+    async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
+    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, _, provider = await run_voice(hass, home, request=respond, sentence=sentence)
+    if runs:
+        provider.assert_not_called()
+        call.assert_awaited_once_with(domain, service, {'entity_id': [home[-1]], field: 'Away'},
+                                     blocking=True, return_response=False)
+    else:
+        provider.assert_awaited_once()
+        call.assert_not_called()
 
 
 _OPPOSITE_SENTENCES = {
@@ -1197,26 +1231,42 @@ _OPPOSITE_SENTENCES = {
 }
 
 
+def _buildable(category: str) -> bool:
+    """Whether entity_command_home can build an entity for the category: its feature flag must be known."""
+    from custom_components.phoenix_mcp.entity_commands import _FEATURES
+    from custom_components.phoenix_mcp.routing.routing_tables import COMMAND_ROUTING_ENTITY_COMMANDS
+    domain, _service, _field, _options, feature, _ = COMMAND_ROUTING_ENTITY_COMMANDS[category]
+    return not feature or domain in _FEATURES
+
+
 @pytest.mark.parametrize('mesa_mode', ['off', 'advisory'])
-@pytest.mark.parametrize('entity_command_home', [(category, None) for category in sorted(DECISION_PROVIDER_REFUSED_CATEGORIES)],
+@pytest.mark.parametrize('entity_command_home', [(category, 'Away' if category.endswith('_option') else None)
+                                                 for category in sorted(DECISION_PROVIDER_REFUSED_CATEGORIES)
+                                                 if _buildable(category)],
                          indirect=True)
-async def test_joint_decision_never_runs_a_risky_operation(hass, entity_command_home, mesa_mode):
-    """The user said close, lock, silence or arm; a decision for the opposite goes to the conversation model."""
+async def test_joint_decision_never_runs_a_category_outside_the_allowlist(hass, entity_command_home, mesa_mode):
+    """Only listed categories run from a decision; the user said close, lock, silence or arm, or anything else."""
+    from custom_components.phoenix_mcp.entity_commands import _FEATURES
     home, category, value, _, (domain, _, _) = entity_command_home
     data = home[0]
-    if category.endswith('_toggle'):
+    flags = ('OPEN', 'CLOSE') if domain in ('cover', 'valve') else ('TURN_ON', 'TURN_OFF')
+    if category.endswith('_toggle') and all(hasattr(_FEATURES.get(domain), flag) for flag in flags):
         # A toggle needs both directions, so it is offered only for a device that can open and close.
-        from custom_components.phoenix_mcp.entity_commands import _FEATURES
-        flags = ('OPEN', 'CLOSE') if domain in ('cover', 'valve') else ('TURN_ON', 'TURN_OFF')
         features = int(getattr(_FEATURES[domain], flags[0]) | getattr(_FEATURES[domain], flags[1]))
         hass.states.async_set(home[-1], 'off', {'friendly_name': 'Test helper', 'supported_features': features})
     if mesa_mode == 'advisory':
         await data.store.async_patch_settings(mesa_mode='advisory')
         data.mesa = await async_setup_mesa(hass, 'advisory')
-    async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
+    offered = []
+    async def respond(*args):
+        offered.append(category in args[4]['questions']['route']['criteria'])
+        return entity_command_wire(args[4], home[-1], category, value)
     with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        answer, remote, provider = await run_voice(hass, home, request=respond, sentence=_OPPOSITE_SENTENCES[category])
+        answer, remote, provider = await run_voice(hass, home, request=respond,
+                                                   sentence=_OPPOSITE_SENTENCES.get(category, 'Test helper, Away, please'))
+    if offered != [True]:
+        pytest.skip(f'the test entity is not offered {category}')
     remote.assert_awaited_once()
     call.assert_not_called()
     provider.assert_awaited_once()
@@ -1231,6 +1281,21 @@ def test_sequential_classifier_cannot_offer_a_risky_operation():
     )
     assert not DECISION_PROVIDER_REFUSED_CATEGORIES & (DECISION_ROUTE_CHOICES.keys() | DECISION_PERCENTAGE_PREVIEW_CHOICES.keys())
     assert DECISION_PROVIDER_REFUSED_CATEGORIES <= DECISION_ENTITY_CATEGORIES.keys()
+
+
+def test_a_category_runs_from_a_decision_only_when_listed():
+    """The allowlist names real categories, and every other one, a future one included, is refused."""
+    from custom_components.phoenix_mcp.routing.routing_tables import (
+        DECISION_EXECUTION_CATEGORIES, DECISION_OPTION_EVIDENCE_CATEGORIES, DECISION_PROVIDER_ACTION_CATEGORIES,
+    )
+    assert DECISION_PROVIDER_ACTION_CATEGORIES <= DECISION_EXECUTION_CATEGORIES
+    assert DECISION_OPTION_EVIDENCE_CATEGORIES <= DECISION_PROVIDER_ACTION_CATEGORIES
+    assert DECISION_PROVIDER_REFUSED_CATEGORIES == DECISION_EXECUTION_CATEGORIES - DECISION_PROVIDER_ACTION_CATEGORIES
+    for risky in ('lock_lock', 'lock_unlock', 'cover_open', 'cover_close', 'valve_open', 'valve_close', 'siren_off',
+                  'alarm_disarm', 'alarm_custom_bypass', 'camera_motion_off', 'automation_off', 'script_on',
+                  'scene_activate', 'button_press', 'input_boolean_off', 'select_next', 'input_select_first',
+                  'climate_off', 'climate_hvac', 'vacuum_start', 'lawn_mower_start_mowing', 'update_skip'):
+        assert risky in DECISION_PROVIDER_REFUSED_CATEGORIES, risky
 
 
 @pytest.mark.parametrize('prepare', [True, False])
@@ -1259,7 +1324,7 @@ async def test_a_same_named_contact_sensor_does_not_block_its_device(hass, entit
     hass.states.async_set(sensor.entity_id, 'off', {'friendly_name': 'Test helper', 'device_class': 'garage_door'})
     assert async_should_expose(hass, 'conversation', sensor.entity_id)
     async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
-    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (every_category_allowed(), patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, _, provider = await run_voice(hass, home, request=respond,
                                          sentence='Please shut Test helper' if domain == 'cover' else 'Please secure Test helper')
@@ -1305,7 +1370,7 @@ async def test_saved_plan_for_a_risky_operation_is_never_current(hass, entity_co
 async def test_reply_after_a_decision_write_names_the_operation(hass, entity_command_home):
     home, category, value, _, (domain, service, _) = entity_command_home
     async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
-    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (every_category_allowed(), patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock)):
         answer, _, _ = await run_voice(hass, home, request=respond, sentence='Please shut Test helper')
     assert answer == await decision_write_reply(hass, domain, service, matched=False)
@@ -1493,7 +1558,7 @@ async def test_timer_recognition_wait_rechecks_account_before_disclosing_to_prov
 async def test_fixed_controls_dispatch_exact_native_fields(hass, entity_command_home, expected):
     home, category, value, _, (domain, service, _) = entity_command_home
     async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
-    with (patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+    with (every_category_allowed(), patch.object(service_tools, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond,
                                              sentence=f'Please perform {category} for Test helper')

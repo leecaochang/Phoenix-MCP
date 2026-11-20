@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import unicodedata
 from typing import Any, TypeGuard
 
 from homeassistant.components.alarm_control_panel import AlarmControlPanelEntityFeature
@@ -27,7 +28,8 @@ from .routing.routing_tables import (
     COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_ENTITY_VALUE_LIMIT,
     COMMAND_ROUTING_FIXED_INTENT_DATA, COMMAND_ROUTING_READ_INTENTS,
     COMMAND_ROUTING_READ_ATTRIBUTES, COMMAND_ROUTING_READ_PERCENT_SCALES,
-    DECISION_ENTITY_VALUE_QUESTIONS, COMMAND_ROUTING_REQUIRED_STATES, COMMAND_ROUTING_PROOF_FIELDS,
+    DECISION_ENTITY_VALUE_QUESTIONS, DECISION_OPTION_EVIDENCE_CATEGORIES, COMMAND_ROUTING_REQUIRED_STATES,
+    COMMAND_ROUTING_PROOF_FIELDS,
 )
 
 _FEATURES = {'alarm_control_panel': AlarmControlPanelEntityFeature, 'light': LightEntityFeature, 'climate': ClimateEntityFeature, 'cover': CoverEntityFeature, 'fan': FanEntityFeature,
@@ -133,6 +135,34 @@ def literal_text(sentence: str) -> str | None:
     return next(value for value in matches[0].groups() if value is not None)
 
 
+def named_option(sentence: str, options: list[str]) -> str | None:
+    """The one option the sentence names, compared case-folded, or None for none or several.
+
+    An ASCII letter or digit beside a match makes it part of a longer word; a match inside a
+    longer matching option counts as that option.
+    """
+    def fold(text: str) -> str:
+        return unicodedata.normalize("NFKC", text).casefold()
+
+    text = fold(sentence)
+    spans: list[tuple[int, int, str]] = []
+    for option in options:
+        needle = fold(option)
+        if not needle:
+            continue
+        start = text.find(needle)
+        while start != -1:
+            end = start + len(needle)
+            before, after = text[start - 1:start], text[end:end + 1]
+            if not ((before.isascii() and before.isalnum() and needle[0].isascii() and needle[0].isalnum())
+                    or (after.isascii() and after.isalnum() and needle[-1].isascii() and needle[-1].isalnum())):
+                spans.append((start, end, option))
+            start = text.find(needle, start + 1)
+    named = {option for start, end, option in spans
+             if not any(s <= start and end <= e and (s, e) != (start, end) for s, e, _ in spans)}
+    return next(iter(named)) if len(named) == 1 else None
+
+
 def value_choices(sentence: str, targets: dict, question: str = "value") -> dict[str, str]:
     """Opaque choices contain only known options or one independently copied text literal."""
     values = set()
@@ -170,6 +200,8 @@ def chosen_entity_value(answer: dict, sentence: str, targets: dict, descriptor: 
     if metadata.get('kind') == 'color' and value not in COLORS:
         return None
     if metadata.get('kind') in ('option', 'attribute') and value not in metadata.get('options', []):
+        return None
+    if category in DECISION_OPTION_EVIDENCE_CATEGORIES and named_option(sentence, list(metadata.get('options', []))) != value:
         return None
     return value
 

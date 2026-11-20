@@ -649,13 +649,33 @@ DECISION_ACT_NOW_CHOICES = MappingProxyType({
 DECISION_ACT_NOW_MIN_PROBABILITY = 0.75
 # Adding a preview category must not automatically authorize an execution path.
 DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query", *DECISION_ENTITY_CATEGORIES})
-# Nothing checks a model-chosen operation against the sentence, so one that opens, unlocks, disarms or
-# sounds something never runs from a decision. A confident pick of one goes to the conversation model,
-# as a low-confidence decision does, where the key's scope, physical control and MESA gates apply.
-DECISION_PROVIDER_REFUSED_CATEGORIES = frozenset({
-    "lock_unlock", "lock_open", "cover_open", "cover_toggle", "valve_open", "valve_toggle",
-    "siren_on", "siren_toggle", "alarm_disarm", "alarm_trigger",
+# Nothing checks a model-chosen operation against the sentence, so only these categories run from a
+# decision: each touches one device, is easy to undo, or carries a value the sentence itself supplies
+# (a quoted text, or a select option named in it, see DECISION_OPTION_EVIDENCE_CATEGORIES). Every other
+# category, a new one included, goes to the conversation model as a low-confidence decision does, where
+# the key's scope, physical control and MESA gates apply. Numeric and temporal
+# categories carry independent evidence and are judged apart.
+DECISION_PROVIDER_ACTION_CATEGORIES = frozenset({
+    "state_query", "attribute_read",
+    "light_on", "light_off", "light_toggle", "light_color", "light_effect", "light_flash_short", "light_flash_long",
+    "switch_on", "switch_off", "switch_toggle",
+    "fan_on", "fan_off", "fan_toggle", "fan_increase", "fan_decrease", "fan_preset",
+    "fan_oscillate_on", "fan_oscillate_off", "fan_direction_forward", "fan_direction_reverse",
+    "media_play", "media_pause", "media_play_pause", "media_stop", "media_next_track", "media_previous_track",
+    "media_mute", "media_unmute", "media_volume_up", "media_volume_down", "media_shuffle_on", "media_shuffle_off",
+    "media_repeat_all", "media_repeat_one", "media_repeat_off", "media_clear_playlist", "media_unjoin",
+    "media_sound", "media_source", "media_player_on", "media_player_off", "media_player_toggle",
+    "timer_start", "timer_pause", "timer_cancel", "timer_finish",
+    "cover_stop", "cover_stop_tilt", "valve_stop",
+    "vacuum_pause", "vacuum_stop", "vacuum_return_to_base", "vacuum_locate", "lawn_mower_pause", "lawn_mower_dock",
+    "climate_fan", "climate_preset", "climate_swing", "climate_swing_horizontal", "humidifier_mode",
+    "counter_increment", "counter_decrement", "counter_reset", "input_number_increment", "input_number_decrement",
+    "remote_on", "remote_off", "remote_toggle",
+    "text_value", "input_text_value", "select_option", "input_select_option",
 })
+# A select option is chosen from the entity's list, so it runs only when the sentence names it.
+DECISION_OPTION_EVIDENCE_CATEGORIES = frozenset({"select_option", "input_select_option"})
+DECISION_PROVIDER_REFUSED_CATEGORIES = DECISION_EXECUTION_CATEGORIES - DECISION_PROVIDER_ACTION_CATEGORIES
 # Bound independent identity checks without assuming whitespace in every language.
 DECISION_TARGET_MENTION_LIMIT = 256
 DECISION_UNSEGMENTED_TARGET_LANGUAGES = frozenset({'zh', 'ja', 'ko', 'th', 'lo', 'km', 'my'})
